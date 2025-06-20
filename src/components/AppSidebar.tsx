@@ -1,5 +1,4 @@
-
-import { Upload, FileText, BarChart3, User, Lightbulb, BookOpen, Settings } from 'lucide-react';
+import { Upload, FileText, BarChart3, User, Lightbulb, Settings } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -47,12 +46,6 @@ const menuItems = [
     icon: Lightbulb,
     section: 'insights' as ActiveSection,
     description: 'AI-powered match insights'
-  },
-  {
-    title: 'Saved Comparisons',
-    icon: BookOpen,
-    section: 'saved-comparisons' as ActiveSection,
-    description: 'Previous evaluations and reports'
   },
   {
     title: 'Settings',

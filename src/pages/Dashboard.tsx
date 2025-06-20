@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
@@ -9,7 +8,7 @@ import { CandidateDeepDive } from '@/components/CandidateDeepDive';
 import { SmartInsights } from '@/components/SmartInsights';
 import { Header } from '@/components/Header';
 
-export type ActiveSection = 'job-upload' | 'resume-upload' | 'match-scorecard' | 'candidate-dive' | 'insights' | 'saved-comparisons' | 'settings';
+export type ActiveSection = 'job-upload' | 'resume-upload' | 'match-scorecard' | 'candidate-dive' | 'insights' | 'settings';
 
 const Dashboard = () => {
   const [activeSection, setActiveSection] = useState<ActiveSection>('job-upload');
@@ -27,13 +26,6 @@ const Dashboard = () => {
         return <CandidateDeepDive candidateId={selectedCandidate} />;
       case 'insights':
         return <SmartInsights />;
-      case 'saved-comparisons':
-        return (
-          <div className="p-6">
-            <h2 className="text-2xl font-bold mb-4 text-primary-800">Saved Comparisons</h2>
-            <p className="text-muted-foreground">Your previous job uploads and candidate matches will appear here.</p>
-          </div>
-        );
       case 'settings':
         return (
           <div className="p-6">
