@@ -22,7 +22,7 @@ export const Header = () => {
       <div className="flex items-center gap-4">
         <SidebarTrigger />
         <div>
-          <h1 className="text-xl font-semibold text-primary-800">RecruitAI Dashboard</h1>
+          <h1 className="text-xl font-semibold text-primary-800">Provaluate Dashboard</h1>
           <p className="text-sm text-muted-foreground">Smart Resume Evaluation Platform</p>
         </div>
       </div>

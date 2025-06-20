@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
@@ -48,7 +49,7 @@ const Dashboard = () => {
             {renderMainContent()}
           </main>
           <footer className="bg-white border-t px-6 py-4 text-center text-sm text-muted-foreground">
-            © RecruitAI 2025 | Privacy Policy | Terms | Contact | Powered by AI
+            © Provaluate 2025 | Privacy Policy | Terms | Contact | Powered by AI
           </footer>
         </div>
       </div>
