@@ -4,22 +4,32 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, FileText, Grid, Save } from 'lucide-react';
+import { Upload, FileText, Grid, Save, Plus, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+
+interface CriteriaItem {
+  id: string;
+  parameter: string;
+  weightage: number;
+  notes: string;
+}
 
 export const JobUploadSection = () => {
   const [jobTitle, setJobTitle] = useState('');
   const [jobDescription, setJobDescription] = useState('');
-  const [criteriaData, setCriteriaData] = useState([
-    { parameter: 'Technical Skills', weightage: 30, notes: 'Programming languages, frameworks' },
-    { parameter: 'Experience Level', weightage: 25, notes: 'Years of relevant experience' },
-    { parameter: 'Education', weightage: 15, notes: 'Degree relevance and institution' },
-    { parameter: 'Soft Skills', weightage: 20, notes: 'Communication, leadership, teamwork' },
-    { parameter: 'Certifications', weightage: 10, notes: 'Industry-relevant certifications' }
+  const [criteriaData, setCriteriaData] = useState<CriteriaItem[]>([
+    { id: '1', parameter: 'Technical Skills', weightage: 30, notes: 'Programming languages, frameworks' },
+    { id: '2', parameter: 'Experience Level', weightage: 25, notes: 'Years of relevant experience' },
+    { id: '3', parameter: 'Education', weightage: 15, notes: 'Degree relevance and institution' },
+    { id: '4', parameter: 'Soft Skills', weightage: 20, notes: 'Communication, leadership, teamwork' },
+    { id: '5', parameter: 'Certifications', weightage: 10, notes: 'Industry-relevant certifications' }
   ]);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const criteriaFileInputRef = useRef<HTMLInputElement>(null);
+
+  const totalPercentage = criteriaData.reduce((sum, item) => sum + item.weightage, 0);
+  const isValidTotal = totalPercentage === 0 || totalPercentage === 100;
 
   const handleJobDescriptionUpload = () => {
     toast({
@@ -29,6 +39,15 @@ export const JobUploadSection = () => {
   };
 
   const handleCriteriaUpload = () => {
+    if (!isValidTotal) {
+      toast({
+        title: "Invalid Criteria Weightage",
+        description: "Total percentage must be either 0% (no criteria) or 100%.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     toast({
       title: "Criteria Grid Saved",
       description: "Your evaluation criteria has been saved and is ready to use.",
@@ -49,6 +68,26 @@ export const JobUploadSection = () => {
       console.log('Selected files:', files);
       // Handle file upload logic here
     }
+  };
+
+  const updateCriteria = (id: string, field: keyof CriteriaItem, value: string | number) => {
+    setCriteriaData(prev => prev.map(item => 
+      item.id === id ? { ...item, [field]: value } : item
+    ));
+  };
+
+  const addCriteria = () => {
+    const newCriteria: CriteriaItem = {
+      id: Date.now().toString(),
+      parameter: 'New Parameter',
+      weightage: 0,
+      notes: 'Add description here'
+    };
+    setCriteriaData(prev => [...prev, newCriteria]);
+  };
+
+  const deleteCriteria = (id: string) => {
+    setCriteriaData(prev => prev.filter(item => item.id !== id));
   };
 
   return (
@@ -124,17 +163,62 @@ export const JobUploadSection = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-3">
-              {criteriaData.map((criteria, index) => (
-                <div key={index} className="bg-gray-50 p-3 rounded-lg">
+              {criteriaData.map((criteria) => (
+                <div key={criteria.id} className="bg-gray-50 p-3 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-sm">{criteria.parameter}</span>
-                    <span className="bg-primary-100 text-primary-800 px-2 py-1 rounded text-xs font-medium">
-                      {criteria.weightage}%
-                    </span>
+                    <Input
+                      value={criteria.parameter}
+                      onChange={(e) => updateCriteria(criteria.id, 'parameter', e.target.value)}
+                      className="font-medium text-sm bg-transparent border-none p-0 h-auto focus:bg-white focus:border focus:px-2 focus:py-1"
+                    />
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center">
+                        <Input
+                          type="number"
+                          value={criteria.weightage}
+                          onChange={(e) => updateCriteria(criteria.id, 'weightage', parseInt(e.target.value) || 0)}
+                          className="w-16 h-8 text-xs text-center bg-primary-100 border-primary-200"
+                          min="0"
+                          max="100"
+                        />
+                        <span className="text-xs font-medium text-primary-800 ml-1">%</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => deleteCriteria(criteria.id)}
+                        className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">{criteria.notes}</p>
+                  <Input
+                    value={criteria.notes}
+                    onChange={(e) => updateCriteria(criteria.id, 'notes', e.target.value)}
+                    className="text-xs text-muted-foreground bg-transparent border-none p-0 h-auto focus:bg-white focus:border focus:px-2 focus:py-1"
+                    placeholder="Add description..."
+                  />
                 </div>
               ))}
+            </div>
+
+            <Button
+              variant="outline"
+              onClick={addCriteria}
+              className="w-full border-dashed"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Parameter
+            </Button>
+
+            <div className="flex items-center justify-between p-3 bg-gray-100 rounded-lg">
+              <span className="font-medium text-sm">Total Weightage:</span>
+              <span className={`font-bold text-sm ${isValidTotal ? 'text-green-600' : 'text-red-600'}`}>
+                {totalPercentage}%
+                {isValidTotal && totalPercentage > 0 && <span className="ml-2 text-xs">✓ Ready</span>}
+                {!isValidTotal && <span className="ml-2 text-xs">⚠ Must be 0% or 100%</span>}
+              </span>
             </div>
             
             <div 
@@ -155,7 +239,12 @@ export const JobUploadSection = () => {
               className="hidden"
             />
             
-            <Button onClick={handleCriteriaUpload} className="w-full" variant="outline">
+            <Button 
+              onClick={handleCriteriaUpload} 
+              className="w-full" 
+              variant="outline"
+              disabled={!isValidTotal}
+            >
               <Save className="w-4 h-4 mr-2" />
               Save Criteria Template
             </Button>
