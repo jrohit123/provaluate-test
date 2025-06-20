@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,8 @@ export const JobUploadSection = () => {
     { parameter: 'Certifications', weightage: 10, notes: 'Industry-relevant certifications' }
   ]);
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const criteriaFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleJobDescriptionUpload = () => {
     toast({
@@ -31,6 +33,22 @@ export const JobUploadSection = () => {
       title: "Criteria Grid Saved",
       description: "Your evaluation criteria has been saved and is ready to use.",
     });
+  };
+
+  const handleJobDescriptionClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleCriteriaClick = () => {
+    criteriaFileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      console.log('Selected files:', files);
+      // Handle file upload logic here
+    }
   };
 
   return (
@@ -69,12 +87,23 @@ export const JobUploadSection = () => {
               />
             </div>
             
-            <div className="border-2 border-dashed border-primary-200 rounded-lg p-6 text-center hover:border-primary-400 transition-colors cursor-pointer">
+            <div 
+              className="border-2 border-dashed border-primary-200 rounded-lg p-6 text-center hover:border-primary-400 transition-colors cursor-pointer"
+              onClick={handleJobDescriptionClick}
+            >
               <Upload className="w-8 h-8 text-primary-400 mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">
                 Drop PDF/DOC files here or click to browse
               </p>
             </div>
+            
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx"
+              onChange={handleFileChange}
+              className="hidden"
+            />
             
             <Button onClick={handleJobDescriptionUpload} className="w-full">
               Process Job Description
@@ -108,12 +137,23 @@ export const JobUploadSection = () => {
               ))}
             </div>
             
-            <div className="border-2 border-dashed border-accent-200 rounded-lg p-4 text-center hover:border-accent-400 transition-colors cursor-pointer">
+            <div 
+              className="border-2 border-dashed border-accent-200 rounded-lg p-4 text-center hover:border-accent-400 transition-colors cursor-pointer"
+              onClick={handleCriteriaClick}
+            >
               <Upload className="w-6 h-6 text-accent-500 mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">
                 Upload Excel/CSV criteria file
               </p>
             </div>
+            
+            <input
+              ref={criteriaFileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleFileChange}
+              className="hidden"
+            />
             
             <Button onClick={handleCriteriaUpload} className="w-full" variant="outline">
               <Save className="w-4 h-4 mr-2" />
