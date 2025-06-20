@@ -1,14 +1,22 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const Index = () => {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
-    </div>
-  );
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check if user is authenticated
+    const isAuthenticated = localStorage.getItem('recruitai_auth') === 'true';
+    if (isAuthenticated) {
+      navigate('/dashboard');
+    } else {
+      // Redirect to login since this is the main entry point
+      navigate('/');
+    }
+  }, [navigate]);
+
+  return null; // This component will redirect immediately
 };
 
 export default Index;
