@@ -1,73 +1,150 @@
-# Welcome to your Lovable project
+# ProValuate - AI-Powered Recruitment Assessment Platform
 
-## Project info
+ProValuate is a sophisticated recruitment assessment platform that leverages AI to streamline the hiring process by evaluating job descriptions and candidate resumes to find the best matches.
 
-**URL**: https://lovable.dev/projects/f9024ec3-fb08-46bc-9633-8d1f9d146bb4
+## 🚀 Features
 
-## How can I edit this code?
+- **Job Description Management**
+  - Upload and analyze job descriptions
+  - Extract key requirements and skills
+  - Create custom evaluation criteria
 
-There are several ways of editing your application.
+- **Resume Processing**
+  - Upload and parse candidate resumes
+  - AI-powered candidate evaluation
+  - Score matching against job requirements
 
-**Use Lovable**
+- **Smart Insights**
+  - Detailed candidate scorecards
+  - Match percentage calculations
+  - Automated skill gap analysis
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/f9024ec3-fb08-46bc-9633-8d1f9d146bb4) and start prompting.
+- **Multi-user Support**
+  - Company-based organization
+  - Role-based access control
+  - Team collaboration features
 
-Changes made via Lovable will be committed automatically to this repo.
+## 🛠️ Technology Stack
 
-**Use your preferred IDE**
+- **Frontend**
+  - React with TypeScript
+  - Vite for build tooling
+  - Tailwind CSS for styling
+  - Shadcn UI components
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- **Backend**
+  - Supabase for backend services
+  - PostgreSQL database
+  - Real-time subscriptions
+  - Secure authentication
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## 📋 Database Schema
 
-Follow these steps:
+### Core Tables
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+1. **Companies**
+   - Company profile management
+   - Subscription tracking
+   - Usage monitoring
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+2. **Users**
+   - User authentication
+   - Role management
+   - Company association
 
-# Step 3: Install the necessary dependencies.
-npm i
+3. **Job Descriptions**
+   - Job posting details
+   - Evaluation criteria
+   - Company/user associations
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+4. **Resumes**
+   - Candidate information
+   - CV file storage
+   - Evaluation scores
+
+5. **Criteria**
+   - Custom evaluation parameters
+   - Weightage configuration
+   - Calculation rules
+
+6. **Plans**
+   - Subscription tiers
+   - Usage limits
+   - Pricing information
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js (v16 or higher)
+- npm or Bun package manager
+- Supabase account
+
+### Installation
+
+1. Clone the repository:
+\`\`\`bash
+git clone [repository-url]
+cd provaluate
+\`\`\`
+
+2. Install dependencies:
+\`\`\`bash
+npm install
+# or
+bun install
+\`\`\`
+
+3. Set up environment variables:
+\`\`\`bash
+cp .env.example .env
+\`\`\`
+
+4. Update the .env file with your Supabase credentials:
+\`\`\`env
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+\`\`\`
+
+5. Start the development server:
+\`\`\`bash
 npm run dev
-```
+# or
+bun dev
+\`\`\`
 
-**Edit a file directly in GitHub**
+## 🔒 Security
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- Secure authentication via Supabase
+- Row Level Security (RLS) policies
+- Data encryption at rest
+- Secure file storage
 
-**Use GitHub Codespaces**
+## 📦 Project Structure
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+\`\`\`
+src/
+├── components/         # Reusable UI components
+├── hooks/             # Custom React hooks
+├── integrations/      # External service integrations
+├── lib/              # Utility functions
+└── pages/            # Application pages
+\`\`\`
 
-## What technologies are used for this project?
+## 🤝 Contributing
 
-This project is built with:
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Open a Pull Request
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## 📄 License
 
-## How can I deploy this project?
+This project is licensed under the [MIT License](LICENSE).
 
-Simply open [Lovable](https://lovable.dev/projects/f9024ec3-fb08-46bc-9633-8d1f9d146bb4) and click on Share -> Publish.
+## 🙏 Acknowledgments
 
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+- [Supabase](https://supabase.com/) for backend services
+- [Shadcn UI](https://ui.shadcn.com/) for UI components
+- [Tailwind CSS](https://tailwindcss.com/) for styling
