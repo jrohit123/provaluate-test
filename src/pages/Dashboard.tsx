@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
@@ -8,8 +7,9 @@ import { MatchScorecardSection } from '@/components/MatchScorecardSection';
 import { CandidateDeepDive } from '@/components/CandidateDeepDive';
 import { SmartInsights } from '@/components/SmartInsights';
 import { Header } from '@/components/Header';
+import { ContractsSection } from '@/components/ContractsSection';
 
-export type ActiveSection = 'job-upload' | 'resume-upload' | 'match-scorecard' | 'candidate-dive' | 'insights' | 'settings';
+export type ActiveSection = 'job-upload' | 'resume-upload' | 'match-scorecard' | 'candidate-dive' | 'insights' | 'settings' | 'contracts';
 
 const Dashboard = () => {
   const [activeSection, setActiveSection] = useState<ActiveSection>('job-upload');
@@ -34,6 +34,8 @@ const Dashboard = () => {
             <p className="text-muted-foreground">Configure your preferences and scoring logic here.</p>
           </div>
         );
+      case 'contracts':
+        return <ContractsSection />;
       default:
         return <JobUploadSection />;
     }

@@ -1,4 +1,4 @@
-import { Upload, FileText, BarChart3, User, Lightbulb, Settings } from 'lucide-react';
+import { Upload, FileText, BarChart3, User, Lightbulb, Settings, FileSignature } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -48,6 +48,12 @@ const menuItems = [
     description: 'AI-powered match insights'
   },
   {
+    title: 'Contracts',
+    icon: FileSignature,
+    section: 'contracts' as ActiveSection,
+    description: 'Manage client contracts'
+  },
+  {
     title: 'Settings',
     icon: Settings,
     section: 'settings' as ActiveSection,
@@ -71,7 +77,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                     onClick={() => onSectionChange(item.section)}
                     isActive={activeSection === item.section}
                     className="group relative"
-                    tooltip={item.description}
+                    tooltip={item.title}
                   >
                     <item.icon className="w-4 h-4" />
                     <span className="font-medium">{item.title}</span>

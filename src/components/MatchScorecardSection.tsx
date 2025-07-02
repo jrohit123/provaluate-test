@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -20,6 +19,8 @@ interface Candidate {
 
 interface MatchScorecardSectionProps {
   onCandidateSelect: (candidateId: string) => void;
+  selectedCandidateId?: string;
+  onClose?: () => void;
 }
 
 const candidatesData: Candidate[] = [
@@ -64,7 +65,7 @@ const candidatesData: Candidate[] = [
   }
 ];
 
-export const MatchScorecardSection = ({ onCandidateSelect }: MatchScorecardSectionProps) => {
+export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, onClose }: MatchScorecardSectionProps) => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'excellent':

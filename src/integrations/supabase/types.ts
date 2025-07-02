@@ -6,10 +6,217 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export type Database = {
+export interface Database {
   public: {
     Tables: {
-      [_ in never]: never
+      companies: {
+        Row: {
+          company_id: string
+          company_name: string
+          email_domain: string | null
+          selected_plan: string | null
+          subscription_status: string | null
+          subscription_start: string | null
+          subscription_end: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          company_id?: string
+          company_name: string
+          email_domain?: string | null
+          selected_plan?: string | null
+          subscription_status?: string | null
+          subscription_start?: string | null
+          subscription_end?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          company_name?: string
+          email_domain?: string | null
+          selected_plan?: string | null
+          subscription_status?: string | null
+          subscription_start?: string | null
+          subscription_end?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      users: {
+        Row: {
+          user_id: string
+          company_id: string | null
+          email: string
+          first_name: string | null
+          last_name: string | null
+          role: string | null
+          user_status: string | null
+          created_at: string
+        }
+        Insert: {
+          user_id?: string
+          company_id?: string | null
+          email: string
+          first_name?: string | null
+          last_name?: string | null
+          role?: string | null
+          user_status?: string | null
+          created_at?: string
+        }
+        Update: {
+          user_id?: string
+          company_id?: string | null
+          email?: string
+          first_name?: string | null
+          last_name?: string | null
+          role?: string | null
+          user_status?: string | null
+          created_at?: string
+        }
+      }
+      job_descriptions: {
+        Row: {
+          jd_id: string
+          company_id: string | null
+          user_id: string | null
+          title: string | null
+          description: string | null
+          jd_file: string | null
+          criteria_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          jd_id?: string
+          company_id?: string | null
+          user_id?: string | null
+          title?: string | null
+          description?: string | null
+          jd_file?: string | null
+          criteria_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          jd_id?: string
+          company_id?: string | null
+          user_id?: string | null
+          title?: string | null
+          description?: string | null
+          jd_file?: string | null
+          criteria_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      resumes: {
+        Row: {
+          resume_id: string
+          company_id: string | null
+          user_id: string | null
+          candidate_name: string
+          cv_file: string | null
+          evaluation_scores: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          resume_id?: string
+          company_id?: string | null
+          user_id?: string | null
+          candidate_name: string
+          cv_file?: string | null
+          evaluation_scores?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          resume_id?: string
+          company_id?: string | null
+          user_id?: string | null
+          candidate_name?: string
+          cv_file?: string | null
+          evaluation_scores?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      criteria: {
+        Row: {
+          criteria_id: string
+          criteria_name: string
+          parameter: string
+          weightage: number
+          calc_note: string | null
+          created_by: string | null
+          company_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          criteria_id?: string
+          criteria_name: string
+          parameter: string
+          weightage: number
+          calc_note?: string | null
+          created_by?: string | null
+          company_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          criteria_id?: string
+          criteria_name?: string
+          parameter?: string
+          weightage?: number
+          calc_note?: string | null
+          created_by?: string | null
+          company_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      plans: {
+        Row: {
+          plan_id: string
+          plan_name: string | null
+          plan_cost: number | null
+          max_token: number | null
+          active_jobs: number | null
+          max_cvs: number | null
+          max_users: number | null
+        }
+        Insert: {
+          plan_id?: string
+          plan_name?: string | null
+          plan_cost?: number | null
+          max_token?: number | null
+          active_jobs?: number | null
+          max_cvs?: number | null
+          max_users?: number | null
+        }
+        Update: {
+          plan_id?: string
+          plan_name?: string | null
+          plan_cost?: number | null
+          max_token?: number | null
+          active_jobs?: number | null
+          max_cvs?: number | null
+          max_users?: number | null
+        }
+      }
+      clients: {
+        Row: Client;
+        Insert: Omit<Client, 'id'>;
+        Update: Partial<Omit<Client, 'id'>>;
+      }
+      contracts: {
+        Row: Contract;
+        Insert: Omit<Contract, 'id' | 'created_at'>;
+        Update: Partial<Omit<Contract, 'id' | 'created_at'>>;
+      }
     }
     Views: {
       [_ in never]: never
@@ -136,3 +343,22 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
+export type Client = {
+  id: string;
+  client_name: string;
+};
+
+export type Contract = {
+  id: string;
+  client_id: string;
+  contact_person: string | null;
+  contact_no: string | null;
+  email: string | null;
+  pricing_method: 'fixed' | 'per_weight';
+  fixed_price: number | null;
+  price_per_kg: number | null;
+  valid_from: string;
+  valid_till: string;
+  created_at: string;
+};
