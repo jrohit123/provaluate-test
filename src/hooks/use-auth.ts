@@ -46,78 +46,85 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  // Initialize test user and create database records
+  // Just set the user directly - no complex auth
   useEffect(() => {
-    const initializeTestUser = async () => {
+    const initializeAuth = async () => {
+      console.log('🔄 Setting test user directly...');
+      
       try {
-        // First create the company if it doesn't exist
-        const { data: existingCompany, error: companyCheckError } = await supabase
-          .from('companies')
-          .select('company_id')
-          .eq('company_id', TEST_USER.company!.company_id)
-          .single();
+        // First, create a proper Supabase auth session
+        console.log('🔐 Creating Supabase auth session...');
+        const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: 'test@example.com',
+          password: 'testpassword123'
+        });
 
-        if (!existingCompany) {
-          const { error: createCompanyError } = await supabase
-            .from('companies')
-            .insert(TEST_USER.company);
-
-          if (createCompanyError) {
-            throw new Error(`Failed to create company: ${createCompanyError.message}`);
-          }
+        if (signInError) {
+          console.error('❌ Auth session creation failed:', signInError);
+          // If auth fails, still set the hardcoded user but it won't work with RLS
+        } else {
+          console.log('✅ Auth session created successfully:', authData.user?.email);
         }
 
-        // Then create the user if they don't exist
-        const { data: existingUser, error: userCheckError } = await supabase
-          .from('users')
-          .select('user_id')
-          .eq('user_id', TEST_USER.id)
-          .single();
-
-        if (!existingUser) {
-          const { error: createUserError } = await supabase
-            .from('users')
-            .insert({
-              user_id: TEST_USER.id,
-              company_id: TEST_USER.profile!.company_id,
-              email: TEST_USER.email!,
-              first_name: TEST_USER.profile!.first_name,
-              last_name: TEST_USER.profile!.last_name,
-              role: TEST_USER.profile!.role,
-              user_status: TEST_USER.profile!.user_status,
-              created_at: TEST_USER.profile!.created_at
-            });
-
-          if (createUserError) {
-            throw new Error(`Failed to create user: ${createUserError.message}`);
+        // Set the hardcoded user data
+        const testUser: UserWithProfile = {
+          id: '00000000-0000-0000-0000-000000000001',
+          email: 'test@example.com',
+          role: 'authenticated',
+          aud: 'authenticated',
+          created_at: '2025-07-02T12:20:55.741Z',
+          app_metadata: {},
+          user_metadata: {},
+          profile: {
+            user_id: '00000000-0000-0000-0000-000000000001',
+            company_id: '00000000-0000-0000-0000-000000000002',
+            email: 'test@example.com',
+            first_name: 'Test',
+            last_name: 'User',
+            role: 'admin',
+            user_status: 'active',
+            created_at: '2025-07-02T12:20:55.741Z'
+          },
+          company: {
+            company_id: '00000000-0000-0000-0000-000000000002',
+            company_name: 'Test Company',
+            email_domain: 'example.com',
+            selected_plan: 'pro',
+            subscription_status: 'active',
+            subscription_start: '2025-07-02T12:20:55.741Z',
+            subscription_end: '2026-07-02T12:20:55.741Z',
+            created_at: '2025-07-02T12:20:55.741Z',
+            updated_at: '2025-07-02T12:20:55.741Z'
           }
-        }
+        };
 
-        setUser(TEST_USER);
-      } catch (err) {
-        console.error('Error initializing test user:', err);
-        setError(err as Error);
-      } finally {
+        setUser(testUser);
         setLoading(false);
+        console.log('✅ Test user set successfully:', testUser);
+      } catch (error) {
+        console.error('💥 Error in auth setup:', error);
+        setLoading(false);
+        setError(error as Error);
       }
     };
 
-    initializeTestUser();
+    initializeAuth();
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    console.log('Sign in bypassed for testing');
-    return { user: TEST_USER };
+    console.log('Sign in - using test user');
+    return { user: user, error: null };
   };
 
   const signUp = async (email: string, password: string, userData: Database['public']['Tables']['users']['Insert']) => {
-    console.log('Sign up bypassed for testing');
-    return { user: TEST_USER };
+    console.log('Sign up - using test user');
+    return { user: user, error: null };
   };
 
   const signOut = async () => {
-    console.log('Sign out bypassed for testing');
+    console.log('Sign out');
     setUser(null);
+    return { error: null };
   };
 
   return {

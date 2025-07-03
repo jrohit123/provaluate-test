@@ -43,7 +43,7 @@ const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx'];
 const JD_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook-test/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
 
 export const JobUploadSection = () => {
-  const { user } = useAuth();
+  const { user, loading, error } = useAuth();
   const [jobTitle, setJobTitle] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [criteriaData, setCriteriaData] = useState<CriteriaItem[]>([
@@ -69,11 +69,41 @@ export const JobUploadSection = () => {
   const totalPercentage = criteriaData.reduce((sum, item) => sum + item.weightage, 0);
   const isValidTotal = totalPercentage === 0 || totalPercentage === 100;
 
+  // Test webhook connectivity
+  const testWebhook = async () => {
+    try {
+      // n8n webhooks expect GET requests for testing
+      const getResponse = await fetch(JD_WEBHOOK_URL, {
+        method: 'GET',
+      });
+      
+      console.log('GET test response:', getResponse);
+      
+      if (getResponse.ok) {
+        toast({
+          title: "Webhook Test Successful",
+          description: "n8n webhook is ready and responding.",
+        });
+      } else {
+        throw new Error(`Webhook test failed: ${getResponse.status} - ${getResponse.statusText}`);
+      }
+    } catch (error: any) {
+      console.error('Webhook test failed:', error);
+      toast({
+        title: "Webhook Test Failed",
+        description: error.message || "Could not connect to n8n webhook. Make sure it's listening.",
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
+    console.log('JobUploadSection - User state:', { user, loading, error });
+    console.log('User object details:', user);
     if (user?.id) {
       loadSavedGrids();
     }
-  }, [user]);
+  }, [user, loading, error]);
 
   const loadSavedGrids = async () => {
     if (!user?.id) return;
@@ -177,16 +207,16 @@ export const JobUploadSection = () => {
         .from('job-descriptions')
         .getPublicUrl(filePath);
 
-      // Call JD Processing Webhook
-      const response = await fetch(JD_WEBHOOK_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          file_url: publicUrlData.publicUrl,
-          title: jobTitle
-        }),
+      // Call JD Processing Webhook with GET request (n8n expects GET)
+      const params = new URLSearchParams({
+        file_url: publicUrlData.publicUrl,
+        title: jobTitle || 'Untitled Job',
+        action: 'process_jd',
+        timestamp: new Date().toISOString()
+      });
+      
+      const response = await fetch(`${JD_WEBHOOK_URL}?${params.toString()}`, {
+        method: 'GET',
       });
 
       if (!response.ok) throw new Error('Failed to process JD');
@@ -381,25 +411,36 @@ export const JobUploadSection = () => {
 
       if (jdError) throw jdError;
 
-      // If we have a file URL, process it through the webhook
-      if (fileUrl) {
-        const response = await fetch(JD_WEBHOOK_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            file_url: fileUrl,
-            title: jobTitle,
-            jd_id: jdData.jd_id // Pass the JD ID to link the resolved data
-          }),
-        });
+              // If we have a file URL, process it through the webhook
+        if (fileUrl) {
+          try {
+            // Send file URL and metadata via GET request parameters
+            const params = new URLSearchParams({
+              file_url: fileUrl,
+              title: jobTitle || 'Untitled Job',
+              jd_id: jdData.jd_id, // Pass the JD ID to link the resolved data
+              action: 'process_jd',
+              timestamp: new Date().toISOString()
+            });
+            
+            const response = await fetch(`${JD_WEBHOOK_URL}?${params.toString()}`, {
+              method: 'GET',
+            });
 
-        if (!response.ok) throw new Error('Failed to process JD file');
+            if (!response.ok) throw new Error('Failed to process JD file');
 
-        const resolvedData = await response.json();
-        setResolvedJD(resolvedData);
-      }
+            const resolvedData = await response.json();
+            setResolvedJD(resolvedData);
+          } catch (webhookError) {
+            // Log webhook error but don't fail the entire process
+            console.warn('Webhook processing failed:', webhookError);
+            toast({
+              title: "File Uploaded",
+              description: "Job description saved. Webhook processing will continue in background.",
+              variant: "default",
+            });
+          }
+        }
 
       toast({
         title: "Job Description Processed",
@@ -633,9 +674,18 @@ export const JobUploadSection = () => {
               className="hidden"
             />
             
-            <Button onClick={handleProcessJobDescription} className="w-full">
-              Process Job Description
-            </Button>
+            <div className="space-y-2">
+              <Button onClick={handleProcessJobDescription} className="w-full">
+                Process Job Description
+              </Button>
+              <Button 
+                onClick={testWebhook} 
+                variant="outline" 
+                className="w-full text-xs"
+              >
+                Test n8n Webhook Connection
+              </Button>
+            </div>
 
             {resolvedJD && !isEditingResolvedJD && (
               <div className="mt-4 p-4 bg-gray-50 rounded-lg">

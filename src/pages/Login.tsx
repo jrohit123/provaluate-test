@@ -8,7 +8,7 @@ import { useAuth } from '@/hooks/use-auth';
 
 // Test credentials
 const TEST_EMAIL = 'test@example.com';
-const TEST_PASSWORD = 'test123';
+const TEST_PASSWORD = 'testpassword123';
 
 const Login = () => {
   const [email, setEmail] = useState('');
