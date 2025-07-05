@@ -41,13 +41,13 @@ const Login = () => {
           });
         } else {
           await signIn(email, password);
-          localStorage.setItem('recruitai_auth', 'true');
-          toast({
+    localStorage.setItem('recruitai_auth', 'true');
+    toast({
             title: "Welcome back!",
-            description: "You've been logged in successfully.",
-          });
+      description: "You've been logged in successfully.",
+    });
         }
-        navigate('/dashboard');
+    navigate('/dashboard');
       } else {
         throw new Error('Invalid credentials. Please use the test account.');
       }

@@ -10,6 +10,8 @@ import { DatabaseService } from '@/integrations/supabase/db';
 import * as XLSX from 'xlsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/use-auth';
+import { Document, Page, pdfjs } from 'react-pdf';
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.js`;
 
 interface CriteriaItem {
   id: string;
@@ -45,7 +47,10 @@ const JD_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook-t
 export const JobUploadSection = () => {
   const { user, loading, error } = useAuth();
   const [jobTitle, setJobTitle] = useState('');
-  const [jobDescription, setJobDescription] = useState('');
+  const [jobDescriptions, setJobDescriptions] = useState<any[]>([]);
+  const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => sessionStorage.getItem('selectedJDId') || '');
+  const [selectedJDContent, setSelectedJDContent] = useState<string>('');
+  const [selectedJDFileType, setSelectedJDFileType] = useState<string>('');
   const [criteriaData, setCriteriaData] = useState<CriteriaItem[]>([
     { id: '1', parameter: 'Technical Skills', weightage: 30, notes: 'Programming languages, frameworks' },
     { id: '2', parameter: 'Experience Level', weightage: 25, notes: 'Years of relevant experience' },
@@ -62,9 +67,11 @@ export const JobUploadSection = () => {
   const [resolvedJD, setResolvedJD] = useState<ResolvedJD | null>(null);
   const [isEditingResolvedJD, setIsEditingResolvedJD] = useState(false);
   const [savedGrids, setSavedGrids] = useState<SavedCriteriaGrid[]>([]);
-  const [selectedGridId, setSelectedGridId] = useState<string>('');
+  const [selectedGridId, setSelectedGridId] = useState<string>(() => sessionStorage.getItem('selectedCriteriaGridId') || '');
   const [gridName, setGridName] = useState('');
   const [processingStatus, setProcessingStatus] = useState<'idle' | 'processing' | 'completed' | 'failed'>('idle');
+  const [numPages, setNumPages] = useState<number>(1);
+  const [pageNumber, setPageNumber] = useState<number>(1);
 
   const totalPercentage = criteriaData.reduce((sum, item) => sum + item.weightage, 0);
   const isValidTotal = totalPercentage === 0 || totalPercentage === 100;
@@ -102,8 +109,40 @@ export const JobUploadSection = () => {
     console.log('User object details:', user);
     if (user?.id) {
       loadSavedGrids();
+      loadJobDescriptions();
     }
   }, [user, loading, error]);
+
+  useEffect(() => {
+    if (selectedJobDescriptionId && jobDescriptions.length > 0) {
+      const jd = jobDescriptions.find(jd => jd.jd_id === selectedJobDescriptionId);
+      if (jd && jd.jd_file) {
+        const ext = jd.jd_file.split('.').pop().toLowerCase();
+        setSelectedJDFileType(ext);
+        if (ext === 'pdf') {
+          setSelectedJDContent(jd.jd_file); // store URL for PDF
+        } else {
+          fetch(jd.jd_file)
+            .then(async (res) => {
+              const contentType = res.headers.get('Content-Type') || '';
+              if (contentType.includes('text') || jd.jd_file.endsWith('.txt')) {
+                return res.text();
+              } else if (jd.jd_file.endsWith('.doc') || jd.jd_file.endsWith('.docx')) {
+                return '[Preview not available for DOC/DOCX files]';
+              } else {
+                return '[Preview not available for this file type]';
+              }
+            })
+            .then(setSelectedJDContent)
+            .catch(() => setSelectedJDContent('[Unable to load file content]'));
+        }
+      } else {
+        setSelectedJDContent('');
+      }
+    } else {
+      setSelectedJDContent('');
+    }
+  }, [selectedJobDescriptionId, jobDescriptions]);
 
   const loadSavedGrids = async () => {
     if (!user?.id) return;
@@ -164,6 +203,25 @@ export const JobUploadSection = () => {
         title: "Error Loading Grids",
         description: "Failed to load saved evaluation criteria.",
         variant: "destructive"
+      });
+    }
+  };
+
+  const loadJobDescriptions = async () => {
+    if (!user?.profile?.company_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('job_descriptions')
+        .select('jd_id, title, jd_file, created_at')
+        .eq('company_id', user.profile.company_id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setJobDescriptions(data || []);
+    } catch (error) {
+      toast({
+        title: 'Error Loading Job Descriptions',
+        description: 'Failed to load job descriptions from the database.',
+        variant: 'destructive',
       });
     }
   };
@@ -288,7 +346,6 @@ export const JobUploadSection = () => {
       const file = e.dataTransfer.files[0];
       setUploadedFile(file);
       setJobTitle('');
-      setJobDescription('');
       setIsJobFieldsDisabled(true);
     }
   };
@@ -303,7 +360,6 @@ export const JobUploadSection = () => {
     if (files && files.length > 0) {
       setUploadedFile(files[0]);
       setJobTitle('');
-      setJobDescription('');
       setIsJobFieldsDisabled(true);
     }
   };
@@ -376,88 +432,151 @@ export const JobUploadSection = () => {
       return;
     }
 
-    try {
-      let fileUrl = null;
-      if (uploadedFile) {
-        // Upload to Supabase Storage
-        const filePath = `jd-files/${Date.now()}_${uploadedFile.name}`;
-        const { data, error } = await supabase.storage
-          .from('job-descriptions')
-          .upload(filePath, uploadedFile);
-        
-        if (error) throw error;
-        
-        // Get public URL
-        const { data: publicUrlData } = supabase.storage
-          .from('job-descriptions')
-          .getPublicUrl(filePath);
-        fileUrl = publicUrlData.publicUrl;
-      }
+    if (!user.profile?.company_id) {
+      toast({
+        title: "Profile Error",
+        description: "Company profile is not properly set up.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-      // Save job description in DB with proper user context
-      const { data: jdData, error: jdError } = await supabase
+    try {
+      setProcessingStatus('processing');
+      let fileUrl = null;
+      let jdData = null;
+
+      // First, create the job description record
+      const { data: createdJD, error: jdError } = await supabase
         .from('job_descriptions')
         .insert({
           title: jobTitle,
-          description: jobDescription,
-          jd_file: fileUrl,
           user_id: user.id,
-          company_id: user.profile?.company_id,
+          company_id: user.profile.company_id,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
         .select()
         .single();
 
-      if (jdError) throw jdError;
+      if (jdError) {
+        console.error('DB error:', jdError);
+        throw jdError;
+      }
 
-              // If we have a file URL, process it through the webhook
-        if (fileUrl) {
+      jdData = createdJD;
+      // Store the new JD ID in sessionStorage
+      setSelectedJobDescriptionId(jdData.jd_id);
+      sessionStorage.setItem('selectedJDId', jdData.jd_id);
+
+      // Then handle file upload if present
+      if (uploadedFile) {
+        const timestamp = Date.now();
+        const safeFileName = uploadedFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const filePath = `${user.profile.company_id}/${jdData.jd_id}/${timestamp}_${safeFileName}`;
+        
+        console.log('Attempting to upload file:', {
+          fileName: safeFileName,
+          filePath,
+          fileSize: uploadedFile.size,
+          fileType: uploadedFile.type,
+          userId: user.id,
+          companyId: user.profile.company_id
+        });
+
+        // Upload to Supabase Storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('job-descriptions')
+          .upload(filePath, uploadedFile, {
+            cacheControl: '3600',
+            contentType: uploadedFile.type
+          });
+
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          // Don't throw here, we'll still have the JD without the file
+          toast({
+            title: "File Upload Warning",
+            description: "Job description saved but file upload failed. Please try uploading the file again.",
+            variant: "default",
+          });
+        } else if (uploadData?.path) {
+          // Get public URL
+          const { data: publicUrlData } = supabase.storage
+            .from('job-descriptions')
+            .getPublicUrl(uploadData.path);
+          
+          fileUrl = publicUrlData.publicUrl;
+
+          // Update the job description with the file URL
+          const { error: updateError } = await supabase
+            .from('job_descriptions')
+            .update({ jd_file: fileUrl })
+            .eq('jd_id', jdData.jd_id);
+
+          if (updateError) {
+            console.error('Error updating JD with file URL:', updateError);
+          }
+
+          // Process through webhook
           try {
-            // Send file URL and metadata via GET request parameters
-            const params = new URLSearchParams({
+            const webhookPayload = {
               file_url: fileUrl,
-              title: jobTitle || 'Untitled Job',
-              jd_id: jdData.jd_id, // Pass the JD ID to link the resolved data
-              action: 'process_jd',
-              timestamp: new Date().toISOString()
-            });
-            
-            const response = await fetch(`${JD_WEBHOOK_URL}?${params.toString()}`, {
+              title: jobTitle,
+              jd_id: jdData.jd_id,
+              user_id: user.id,
+              company_id: user.profile.company_id
+            };
+
+            console.log('Sending webhook payload (GET):', webhookPayload);
+
+            // Build query string
+            const params = new URLSearchParams(webhookPayload as any).toString();
+            const webhookUrlWithParams = `${JD_WEBHOOK_URL}?${params}`;
+
+            const response = await fetch(webhookUrlWithParams, {
               method: 'GET',
             });
 
-            if (!response.ok) throw new Error('Failed to process JD file');
-
-            const resolvedData = await response.json();
-            setResolvedJD(resolvedData);
+            if (!response.ok) {
+              console.error('Webhook error:', await response.text());
+              toast({
+                title: "Processing Warning",
+                description: "Job description saved but processing failed. The file will be processed later.",
+                variant: "default",
+              });
+            } else {
+              const resolvedData = await response.json();
+              setResolvedJD(resolvedData);
+            }
           } catch (webhookError) {
-            // Log webhook error but don't fail the entire process
-            console.warn('Webhook processing failed:', webhookError);
+            console.error('Webhook error:', webhookError);
             toast({
-              title: "File Uploaded",
-              description: "Job description saved. Webhook processing will continue in background.",
+              title: "Processing Warning",
+              description: "Job description saved but processing failed. The file will be processed later.",
               variant: "default",
             });
           }
         }
+      }
 
+      setProcessingStatus('completed');
       toast({
-        title: "Job Description Processed",
-        description: "Job description and file saved successfully.",
+        title: "Job Description Saved",
+        description: fileUrl 
+          ? "Job description and file saved successfully."
+          : "Job description saved successfully.",
       });
 
       // Reset form
       setJobTitle('');
-      setJobDescription('');
       setUploadedFile(null);
       setIsJobFieldsDisabled(false);
-      setProcessingStatus('completed');
     } catch (err: any) {
-      setProcessingStatus('failed');
       console.error('Error processing job description:', err);
+      setProcessingStatus('failed');
       toast({
-        title: "Error Processing Job Description",
+        title: "Error Saving Job Description",
         description: err.message || "An error occurred.",
         variant: "destructive",
       });
@@ -560,33 +679,29 @@ export const JobUploadSection = () => {
         criteriaData
       });
 
-      // Insert the criteria
-      const promises = criteriaData.map(item => 
-        supabase
-          .from('criteria')
-          .insert({
-            criteria_name: gridName,
-            parameter: item.parameter,
-            weightage: item.weightage,
-            calc_note: item.notes,
-            created_by: user.id,
-            company_id: user.profile.company_id,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .select()
-      );
+      // Only save parameter, weightage, calc_note in the grid JSON
+      const grid = criteriaData.map(item => ({
+        parameter: item.parameter,
+        weightage: item.weightage,
+        calc_note: item.notes
+      }));
 
-      const results = await Promise.all(promises);
-      
-      // Check for any errors in the results
-      const errors = results.filter(result => result.error).map(result => result.error);
-      if (errors.length > 0) {
-        console.error('Errors saving criteria:', errors);
-        throw new Error(errors[0].message);
+      const { data, error } = await supabase
+        .from('criteria')
+        .insert({
+          criteria_name: gridName,
+          grid,
+          created_by: user.id,
+          company_id: user.profile.company_id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select();
+      if (error) {
+        console.error('Error saving criteria:', error);
+        throw error;
       }
-
-      console.log('Save results:', results);
+      console.log('Save result:', data);
 
       toast({
         title: "Criteria Grid Saved",
@@ -595,6 +710,9 @@ export const JobUploadSection = () => {
 
       setGridName('');
       await loadSavedGrids();
+      // Store the new grid name in sessionStorage
+      setSelectedGridId(gridName);
+      sessionStorage.setItem('selectedCriteriaGridId', gridName);
     } catch (err: any) {
       console.error('Error saving grid:', err);
       toast({
@@ -606,11 +724,23 @@ export const JobUploadSection = () => {
   };
 
   const handleGridSelect = async (gridId: string) => {
+    setSelectedGridId(gridId);
+    sessionStorage.setItem('selectedCriteriaGridId', gridId);
     const selected = savedGrids.find(grid => grid.id === gridId);
     if (selected) {
       setCriteriaData(selected.criteria);
-      setSelectedGridId(gridId);
     }
+  };
+
+  // When a JD is selected from dropdown, store in sessionStorage
+  const handleJDSelect = (jdId: string) => {
+    setSelectedJobDescriptionId(jdId);
+    sessionStorage.setItem('selectedJDId', jdId);
+  };
+
+  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+    setNumPages(numPages);
+    setPageNumber(1);
   };
 
   return (
@@ -629,7 +759,7 @@ export const JobUploadSection = () => {
               Job Description
             </CardTitle>
             <CardDescription>
-              Upload or paste your job description
+              Upload your job description file or select an existing one
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -642,15 +772,64 @@ export const JobUploadSection = () => {
                 className="mb-3"
                 disabled={isJobFieldsDisabled}
               />
-              <Textarea
-                placeholder="Paste your job description here or upload a file..."
-                value={jobDescription}
-                onChange={(e) => setJobDescription(e.target.value)}
-                className="min-h-32 mb-3"
-                disabled={isJobFieldsDisabled}
-              />
             </div>
-            
+
+            {/* Dropdown to select existing Job Description */}
+            <div className="mb-3">
+              <Select value={selectedJobDescriptionId} onValueChange={handleJDSelect}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select existing Job Description..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {jobDescriptions.map(jd => (
+                    <SelectItem key={jd.jd_id} value={jd.jd_id}>
+                      {jd.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Job Description Content Preview */}
+            {/*
+            {selectedJDContent && (
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Job Description Content Preview</label>
+                {selectedJDFileType === 'pdf' ? (
+                  <div className="border rounded bg-gray-100 p-2 flex flex-col items-center">
+                    <Document
+                      file={selectedJDContent}
+                      onLoadSuccess={onDocumentLoadSuccess}
+                      loading={<span>Loading PDF...</span>}
+                      error={<span>Failed to load PDF.</span>}
+                    >
+                      <Page pageNumber={pageNumber} width={400} />
+                    </Document>
+                    <div className="flex gap-2 mt-2 items-center">
+                      <button
+                        onClick={() => setPageNumber(p => Math.max(1, p - 1))}
+                        disabled={pageNumber <= 1}
+                        className="px-2 py-1 text-xs border rounded disabled:opacity-50"
+                      >Prev</button>
+                      <span className="text-xs">Page {pageNumber} of {numPages}</span>
+                      <button
+                        onClick={() => setPageNumber(p => Math.min(numPages, p + 1))}
+                        disabled={pageNumber >= numPages}
+                        className="px-2 py-1 text-xs border rounded disabled:opacity-50"
+                      >Next</button>
+                    </div>
+                  </div>
+                ) : (
+                  <textarea
+                    className="w-full min-h-32 p-2 border rounded bg-gray-100 text-xs"
+                    value={selectedJDContent}
+                    readOnly
+                  />
+                )}
+              </div>
+            )}
+            */}
+
             <div 
               className="border-2 border-dashed border-primary-200 rounded-lg p-6 text-center hover:border-primary-400 transition-colors cursor-pointer"
               onClick={handleJobDescriptionClick}
@@ -765,17 +944,8 @@ export const JobUploadSection = () => {
                 </SelectContent>
               </Select>
             </CardTitle>
-            <CardDescription className="flex items-center justify-between">
-              <span>Configure your evaluation parameters and weights</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDownloadTemplate}
-                className="flex items-center gap-1 text-xs"
-              >
-                <Download className="w-3 h-3" />
-                Template
-              </Button>
+            <CardDescription>
+              Configure your evaluation parameters and weights
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -837,7 +1007,17 @@ export const JobUploadSection = () => {
                 {!isValidTotal && <span className="ml-2 text-xs">⚠ Must be 0% or 100%</span>}
               </span>
             </div>
-            
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadTemplate}
+              className="flex items-center gap-1 text-xs mb-2"
+            >
+              <Download className="w-3 h-3" />
+              Template
+            </Button>
+
             <div 
               className="border-2 border-dashed border-accent-200 rounded-lg p-4 text-center hover:border-accent-400 transition-colors cursor-pointer"
               onClick={handleCriteriaClick}
