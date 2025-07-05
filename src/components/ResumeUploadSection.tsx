@@ -29,11 +29,12 @@ interface SavedCriteriaGrid {
 
 const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
 const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx'];
-const CV_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook-test/c32aade7-564b-4cc7-a832-b6b094418132";
-
+//const CV_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook-test/c32aade7-564b-4cc7-a832-b6b094418132";
+const CV_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook/c32aade7-564b-4cc7-a832-b6b094418132";
 
 export const ResumeUploadSection = () => {
   const [resumes, setResumes] = useState<ResumeData[]>([]);
+  const [newlyUploadedIds, setNewlyUploadedIds] = useState<Set<string>>(new Set()); // Track newly uploaded resumes
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
   const [showScorecard, setShowScorecard] = useState(false);
@@ -300,6 +301,9 @@ export const ResumeUploadSection = () => {
               }
             : resume
         ));
+        
+        // Track this as newly uploaded
+        setNewlyUploadedIds(prev => new Set(prev).add(resumeRecord.resume_id));
 
         toast({
           title: "Resume Uploaded",
@@ -412,6 +416,181 @@ export const ResumeUploadSection = () => {
     });
   };
 
+  // Shared function to send resumes to webhook
+  const sendResumesToWebhook = async (resumeUrls: any[], selectedJDId: string, selectedCriteriaGridId: string, actionType: string) => {
+    // Prepare GET request with optimized parameters for n8n
+    const params = new URLSearchParams({
+      action: actionType === 'new_resumes' ? 'process_new_resumes' : 'process_all_resumes',
+      company_id: user?.profile?.company_id || '',
+      user_id: user?.id || '',
+      job_description_id: selectedJDId,
+      criteria_grid_id: selectedCriteriaGridId,
+      resume_count: resumeUrls.length.toString(),
+      timestamp: new Date().toISOString()
+    });
+
+    // Check if we have too many resumes for a single GET request
+    const maxResumesPerRequest = 5; // Safe limit to avoid URL length issues
+    
+    if (resumeUrls.length > maxResumesPerRequest) {
+      // Send in batches
+      console.log(`Too many resumes (${resumeUrls.length}). Sending in batches of ${maxResumesPerRequest}.`);
+      
+      for (let i = 0; i < resumeUrls.length; i += maxResumesPerRequest) {
+        const batch = resumeUrls.slice(i, i + maxResumesPerRequest);
+        const batchNumber = Math.floor(i / maxResumesPerRequest) + 1;
+        const totalBatches = Math.ceil(resumeUrls.length / maxResumesPerRequest);
+        
+        console.log(`Sending batch ${batchNumber}/${totalBatches} with ${batch.length} resumes`);
+        
+        const batchParams = new URLSearchParams({
+          action: 'process_resume_batch',
+          company_id: user?.profile?.company_id || '',
+          user_id: user?.id || '',
+          job_description_id: selectedJDId,
+          criteria_grid_id: selectedCriteriaGridId,
+          batch_number: batchNumber.toString(),
+          total_batches: totalBatches.toString(),
+          resume_count: batch.length.toString(),
+          batch_type: actionType, // 'new_resumes' or 'all_resumes'
+          timestamp: new Date().toISOString()
+        });
+
+        // Add only this batch's resume data
+        batch.forEach((resume, index) => {
+          batchParams.append(`resume_${index}_id`, resume.resume_id);
+          batchParams.append(`resume_${index}_name`, resume.candidate_name);
+          batchParams.append(`resume_${index}_url`, resume.cv_file_url);
+        });
+
+        const batchUrl = `${CV_WEBHOOK_URL}?${batchParams.toString()}`;
+        console.log(`Batch ${batchNumber} URL length:`, batchUrl.length);
+
+        const batchResponse = await fetch(batchUrl, {
+          method: 'GET',
+          mode: 'no-cors', // Avoid CORS preflight
+        });
+
+        console.log(`Batch ${batchNumber} sent successfully (no-cors mode)`);
+        
+        // Small delay between batches to avoid overwhelming the server
+        if (i + maxResumesPerRequest < resumeUrls.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      console.log('All batches sent successfully');
+      
+    } else {
+      // Send all resumes in a single request (small number)
+      resumeUrls.forEach((resume, index) => {
+        params.append(`resume_${index}_id`, resume.resume_id);
+        params.append(`resume_${index}_name`, resume.candidate_name);
+        params.append(`resume_${index}_url`, resume.cv_file_url);
+      });
+
+      const fullUrl = `${CV_WEBHOOK_URL}?${params.toString()}`;
+      
+      console.log('Sending resumes to webhook via GET:', {
+        webhookUrl: CV_WEBHOOK_URL,
+        resumeCount: resumeUrls.length,
+        actionType,
+        jobDescriptionId: selectedJDId,
+        criteriaGridId: selectedCriteriaGridId,
+        urlLength: fullUrl.length
+      });
+
+      // Check URL length and warn if it might be too long
+      if (fullUrl.length > 8000) {
+        console.warn('URL is very long:', fullUrl.length, 'characters. This might cause issues.');
+        throw new Error(`URL too long (${fullUrl.length} chars). Please reduce the number of resumes or contact support.`);
+      }
+
+      const response = await fetch(fullUrl, {
+        method: 'GET',
+        mode: 'no-cors', // Avoid CORS preflight
+      });
+
+      console.log('Resumes sent successfully (no-cors mode)');
+    }
+  };
+
+  // Send only newly uploaded resumes (from current session) to n8n webhook
+  const handleProcessNewResumes = async () => {
+    if (!user?.profile?.company_id) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to process resumes.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Get only resumes that were uploaded in this session
+    const newResumes = resumes.filter(resume => newlyUploadedIds.has(resume.id) && resume.fileUrl);
+
+    if (newResumes.length === 0) {
+      toast({
+        title: "No New Resumes",
+        description: "No new resumes found to process. Upload some resumes first.",
+        variant: "default",
+      });
+      return;
+    }
+
+    try {
+      setIsEvaluating(true);
+
+      // Get selected job description and criteria grid from session storage
+      const selectedJDId = sessionStorage.getItem('selectedJDId') || '';
+      const selectedCriteriaGridId = sessionStorage.getItem('selectedCriteriaGridId') || '';
+
+      // Validation checks
+      if (!selectedJDId) {
+        toast({
+          title: "No Job Description Selected",
+          description: "Please select a job description from the dropdown above first.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!selectedCriteriaGridId) {
+        toast({
+          title: "No Criteria Grid Selected",
+          description: "Please select an evaluation criteria grid from the dropdown above first.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Format resume data for webhook
+      const resumeUrls = newResumes.map(resume => ({
+        resume_id: resume.id,
+        candidate_name: resume.name,
+        cv_file_url: resume.fileUrl,
+        created_at: new Date().toISOString()
+      }));
+
+      await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'new_resumes');
+
+      toast({
+        title: "Processing Started",
+        description: `Successfully sent ${resumeUrls.length} new resumes to n8n for processing.`,
+      });
+
+    } catch (error: any) {
+      console.error('Error processing new resumes:', error);
+      toast({
+        title: "Processing Failed",
+        description: error.message || "Failed to send new resumes to n8n webhook.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+
   // Send all uploaded resume URLs to n8n webhook for processing
   const handleProcessAllResumes = async () => {
     if (!user?.profile?.company_id) {
@@ -476,103 +655,7 @@ export const ResumeUploadSection = () => {
         return;
       }
 
-      // Prepare GET request with optimized parameters for n8n
-      const params = new URLSearchParams({
-        action: 'process_all_resumes',
-        company_id: user.profile.company_id,
-        user_id: user.id,
-        job_description_id: selectedJDId,
-        criteria_grid_id: selectedCriteriaGridId,
-        resume_count: resumeUrls.length.toString(),
-        timestamp: new Date().toISOString()
-      });
-
-      // Check if we have too many resumes for a single GET request
-      const maxResumesPerRequest = 5; // Safe limit to avoid URL length issues
-      
-      if (resumeUrls.length > maxResumesPerRequest) {
-        // Send in batches
-        console.log(`Too many resumes (${resumeUrls.length}). Sending in batches of ${maxResumesPerRequest}.`);
-        
-        for (let i = 0; i < resumeUrls.length; i += maxResumesPerRequest) {
-          const batch = resumeUrls.slice(i, i + maxResumesPerRequest);
-          const batchNumber = Math.floor(i / maxResumesPerRequest) + 1;
-          const totalBatches = Math.ceil(resumeUrls.length / maxResumesPerRequest);
-          
-          console.log(`Sending batch ${batchNumber}/${totalBatches} with ${batch.length} resumes`);
-          
-          const batchParams = new URLSearchParams({
-            action: 'process_resume_batch',
-            company_id: user.profile.company_id,
-            user_id: user.id,
-            job_description_id: selectedJDId,
-            criteria_grid_id: selectedCriteriaGridId,
-            batch_number: batchNumber.toString(),
-            total_batches: totalBatches.toString(),
-            resume_count: batch.length.toString(),
-            timestamp: new Date().toISOString()
-          });
-
-          // Add only this batch's resume data
-          batch.forEach((resume, index) => {
-            batchParams.append(`resume_${index}_id`, resume.resume_id);
-            batchParams.append(`resume_${index}_name`, resume.candidate_name);
-            batchParams.append(`resume_${index}_url`, resume.cv_file_url);
-          });
-
-          const batchUrl = `${CV_WEBHOOK_URL}?${batchParams.toString()}`;
-          console.log(`Batch ${batchNumber} URL length:`, batchUrl.length);
-
-          const batchResponse = await fetch(batchUrl, {
-            method: 'GET',
-            mode: 'no-cors', // Avoid CORS preflight
-          });
-
-          // Note: With no-cors mode, we can't read response status or body
-          // But the request will still be sent to the webhook
-          console.log(`Batch ${batchNumber} sent successfully (no-cors mode)`);
-          
-          // Small delay between batches to avoid overwhelming the server
-          if (i + maxResumesPerRequest < resumeUrls.length) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-        }
-        
-        console.log('All batches sent successfully');
-        
-      } else {
-        // Send all resumes in a single request (small number)
-        resumeUrls.forEach((resume, index) => {
-          params.append(`resume_${index}_id`, resume.resume_id);
-          params.append(`resume_${index}_name`, resume.candidate_name);
-          params.append(`resume_${index}_url`, resume.cv_file_url);
-        });
-
-        const fullUrl = `${CV_WEBHOOK_URL}?${params.toString()}`;
-        
-        console.log('Sending all resumes to webhook via GET:', {
-          webhookUrl: CV_WEBHOOK_URL,
-          resumeCount: resumeUrls.length,
-          jobDescriptionId: selectedJDId,
-          criteriaGridId: selectedCriteriaGridId,
-          urlLength: fullUrl.length
-        });
-
-        // Check URL length and warn if it might be too long
-        if (fullUrl.length > 8000) {
-          console.warn('URL is very long:', fullUrl.length, 'characters. This might cause issues.');
-          throw new Error(`URL too long (${fullUrl.length} chars). Please reduce the number of resumes or contact support.`);
-        }
-
-        const response = await fetch(fullUrl, {
-          method: 'GET',
-          mode: 'no-cors', // Avoid CORS preflight
-        });
-
-        // Note: With no-cors mode, we can't read response status or body
-        // But the request will still be sent to the webhook
-        console.log('All resumes sent successfully (no-cors mode)');
-      }
+      await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'all_resumes');
 
       toast({
         title: "Processing Started",
@@ -780,7 +863,21 @@ export const ResumeUploadSection = () => {
       </Card>
 
       {/* Action Buttons */}
-      <div className="flex justify-center gap-4">
+      <div className="flex justify-center gap-4 flex-wrap">
+        {/* Send New Resumes Button - Only shows if there are resumes in current session */}
+        {resumes.filter(r => newlyUploadedIds.has(r.id) && r.fileUrl).length > 0 && (
+          <Button
+            onClick={handleProcessNewResumes}
+            disabled={isEvaluating}
+            variant="outline"
+            className="border-blue-600 text-blue-600 hover:bg-blue-50"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            {isEvaluating ? 'Processing...' : `Send New (${resumes.filter(r => newlyUploadedIds.has(r.id) && r.fileUrl).length})`}
+          </Button>
+        )}
+
+        {/* Send All Resumes Button - Shows if there are any resumes in database */}
         {resumes.length > 0 && (
           <Button
             onClick={handleProcessAllResumes}
@@ -789,7 +886,7 @@ export const ResumeUploadSection = () => {
             className="border-primary-600 text-primary-600 hover:bg-primary-50"
           >
             <Upload className="w-4 h-4 mr-2" />
-            {isEvaluating ? 'Processing...' : 'Send to n8n'}
+            {isEvaluating ? 'Processing...' : 'Send All to n8n'}
           </Button>
         )}
         

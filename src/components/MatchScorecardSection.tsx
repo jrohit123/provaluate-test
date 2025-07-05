@@ -2,7 +2,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { BarChart3, User, Eye, Download } from 'lucide-react';
+import { BarChart3, User, Eye, Download, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/use-auth';
+import { useToast } from '@/hooks/use-toast';
 
 interface Candidate {
   id: string;
@@ -14,7 +18,10 @@ interface Candidate {
     weightage: number;
     maxScore: number;
   }[];
-  status: 'excellent' | 'good' | 'fair';
+  status: 'excellent' | 'good' | 'fair' | 'processing';
+  recommendation?: string;
+  detailedAssessment?: string;
+  resumeUrl?: string;
 }
 
 interface MatchScorecardSectionProps {
@@ -23,49 +30,152 @@ interface MatchScorecardSectionProps {
   onClose?: () => void;
 }
 
-const candidatesData: Candidate[] = [
-  {
-    id: '1',
-    name: 'Sarah Johnson',
-    overallScore: 92,
-    status: 'excellent',
-    scores: [
-      { parameter: 'Technical Skills', score: 95, weightage: 30, maxScore: 100 },
-      { parameter: 'Experience Level', score: 90, weightage: 25, maxScore: 100 },
-      { parameter: 'Education', score: 85, weightage: 15, maxScore: 100 },
-      { parameter: 'Soft Skills', score: 95, weightage: 20, maxScore: 100 },
-      { parameter: 'Certifications', score: 100, weightage: 10, maxScore: 100 }
-    ]
-  },
-  {
-    id: '2',
-    name: 'Michael Chen',
-    overallScore: 87,
-    status: 'good',
-    scores: [
-      { parameter: 'Technical Skills', score: 90, weightage: 30, maxScore: 100 },
-      { parameter: 'Experience Level', score: 85, weightage: 25, maxScore: 100 },
-      { parameter: 'Education', score: 95, weightage: 15, maxScore: 100 },
-      { parameter: 'Soft Skills', score: 80, weightage: 20, maxScore: 100 },
-      { parameter: 'Certifications', score: 85, weightage: 10, maxScore: 100 }
-    ]
-  },
-  {
-    id: '3',
-    name: 'Emily Rodriguez',
-    overallScore: 79,
-    status: 'good',
-    scores: [
-      { parameter: 'Technical Skills', score: 80, weightage: 30, maxScore: 100 },
-      { parameter: 'Experience Level', score: 75, weightage: 25, maxScore: 100 },
-      { parameter: 'Education', score: 90, weightage: 15, maxScore: 100 },
-      { parameter: 'Soft Skills', score: 85, weightage: 20, maxScore: 100 },
-      { parameter: 'Certifications', score: 60, weightage: 10, maxScore: 100 }
-    ]
-  }
-];
-
 export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, onClose }: MatchScorecardSectionProps) => {
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const { toast } = useToast();
+
+  // Parse scoring text to extract individual scores
+  const parseScoringText = (scoringText: string) => {
+    const scores: { parameter: string; score: number; weightage: number; maxScore: number }[] = [];
+    let overallScore = 0;
+
+    if (!scoringText) return { scores, overallScore };
+
+    const lines = scoringText.split('\n');
+    let totalWeightedScore = 0;
+    let totalWeightage = 0;
+
+    lines.forEach(line => {
+      // Parse lines like "Technical Skills: 8 x 30 = 240"
+      const match = line.match(/^(.+?):\s*(\d+)\s*x\s*(\d+)\s*=\s*(\d+)$/);
+      if (match) {
+        const [, parameter, scoreStr, weightageStr, weightedScoreStr] = match;
+        const score = parseInt(scoreStr);
+        const weightage = parseInt(weightageStr);
+        const weightedScore = parseInt(weightedScoreStr);
+
+        scores.push({
+          parameter: parameter.trim(),
+          score,
+          weightage,
+          maxScore: 10 // Assuming scores are out of 10
+        });
+
+        totalWeightedScore += weightedScore;
+        totalWeightage += weightage;
+      }
+
+      // Parse final score line like "Final Score = 520"
+      const finalMatch = line.match(/Final Score\s*=\s*(\d+)/);
+      if (finalMatch) {
+        const finalScore = parseInt(finalMatch[1]);
+        // Convert to percentage (assuming max possible score is total weightage * 10)
+        if (totalWeightage > 0) {
+          overallScore = Math.round((finalScore / (totalWeightage * 10)) * 100);
+        }
+      }
+    });
+
+    return { scores, overallScore };
+  };
+
+  // Fetch assessment reports from Supabase
+  const fetchAssessmentReports = useCallback(async () => {
+    if (!user?.profile?.company_id) {
+      console.log('No company_id available, skipping fetch');
+      console.log('User object:', user);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      console.log('Current user:', user);
+      console.log('Company ID:', user.profile.company_id);
+      
+      // Join with criteria table to filter by company_id since assessment_reports doesn't have company_id directly
+      const { data: reports, error } = await supabase
+        .from('assessment_reports')
+        .select(`
+          *,
+          criteria!inner(company_id)
+        `)
+        .eq('criteria.company_id', user.profile.company_id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Query error:', error);
+        throw error;
+      }
+      
+      console.log('Fetched reports:', reports);
+      console.log('Number of reports:', reports?.length || 0);
+
+      const formattedCandidates: Candidate[] = (reports || []).map(report => {
+        console.log('Processing report:', report.id, report.candidate_name);
+        console.log('Report scoring field:', report.scoring);
+        console.log('Report scoring type:', typeof report.scoring);
+        
+        // Handle scoring field - it might be a string or jsonb
+        let scoringText = '';
+        if (typeof report.scoring === 'string') {
+          scoringText = report.scoring;
+        } else if (report.scoring && typeof report.scoring === 'object') {
+          // If it's a JSON object, try to extract text or convert to string
+          scoringText = JSON.stringify(report.scoring);
+        }
+        
+        const { scores, overallScore } = parseScoringText(scoringText);
+        console.log('Parsed scores:', scores);
+        console.log('Overall score:', overallScore);
+        
+        // Determine status based on overall score
+        let status: 'excellent' | 'good' | 'fair' | 'processing' = 'processing';
+        if (report.status === 'completed' || overallScore > 0) {
+          if (overallScore >= 85) status = 'excellent';
+          else if (overallScore >= 70) status = 'good';
+          else status = 'fair';
+        }
+
+        return {
+          id: report.id,
+          name: report.candidate_name || 'Unknown Candidate',
+          overallScore,
+          scores,
+          status,
+          recommendation: report.recommendation,
+          detailedAssessment: report.detailed_assessment,
+          resumeUrl: report.resume_url
+        };
+      });
+
+      setCandidates(formattedCandidates);
+    } catch (error) {
+      console.error('Error fetching assessment reports:', error);
+      toast({
+        title: "Error Loading Assessment Reports",
+        description: "Failed to load candidate evaluation data.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.profile?.company_id, toast]);
+
+  useEffect(() => {
+    console.log('useEffect triggered, user:', user);
+    console.log('Company ID:', user?.profile?.company_id);
+    
+    if (user?.profile?.company_id) {
+      console.log('Calling fetchAssessmentReports...');
+      fetchAssessmentReports();
+    } else {
+      console.log('No company_id, not fetching reports');
+    }
+  }, [user?.profile?.company_id, fetchAssessmentReports]);
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'excellent':
@@ -74,37 +184,80 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
         return 'bg-yellow-100 text-yellow-800';
       case 'fair':
         return 'bg-orange-100 text-orange-800';
+      case 'processing':
+        return 'bg-blue-100 text-blue-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
   };
 
   const getProgressColor = (score: number) => {
-    if (score >= 90) return 'bg-accent-500';
-    if (score >= 75) return 'bg-yellow-500';
+    if (score >= 9) return 'bg-accent-500';
+    if (score >= 7) return 'bg-yellow-500';
     return 'bg-orange-500';
   };
+
+  const handleExportReport = () => {
+    toast({
+      title: "Export Feature",
+      description: "Report export functionality will be implemented soon.",
+    });
+  };
+
+  const handleTopFiveOnly = () => {
+    const topFive = candidates.slice(0, 5);
+    setCandidates(topFive);
+    toast({
+      title: "Filtered Results",
+      description: `Showing top ${topFive.length} candidates only.`,
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+          <span className="ml-2 text-muted-foreground">Loading assessment reports...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (candidates.length === 0) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="text-center py-12">
+          <User className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-muted-foreground mb-2">No Assessment Reports Found</h3>
+          <p className="text-muted-foreground">
+            No candidate evaluations have been completed yet. Upload resumes and run evaluations to see results here.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-primary-800 mb-2">Match Scorecard</h2>
-          <p className="text-muted-foreground">Candidate evaluation results and rankings</p>
+          <p className="text-muted-foreground">Candidate evaluation results and rankings ({candidates.length} candidates)</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={handleExportReport}>
             <Download className="w-4 h-4 mr-2" />
             Export Report
           </Button>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={handleTopFiveOnly}>
             Top 5 Only
           </Button>
         </div>
       </div>
 
       <div className="grid gap-6">
-        {candidatesData.map((candidate) => (
+        {candidates.map((candidate) => (
           <Card key={candidate.id} className="animate-fade-in hover:shadow-lg transition-shadow">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -119,11 +272,12 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                 </div>
                 <div className="flex items-center gap-3">
                   <Badge className={getStatusColor(candidate.status)}>
-                    {candidate.status.charAt(0).toUpperCase() + candidate.status.slice(1)} Match
+                    {candidate.status === 'processing' ? 'Processing' : 
+                     `${candidate.status.charAt(0).toUpperCase() + candidate.status.slice(1)} Match`}
                   </Badge>
                   <div className="text-right">
                     <div className="text-2xl font-bold text-primary-800">
-                      {candidate.overallScore}%
+                      {candidate.status === 'processing' ? '...' : `${candidate.overallScore}%`}
                     </div>
                     <div className="text-sm text-muted-foreground">Overall Score</div>
                   </div>
@@ -132,29 +286,42 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
             </CardHeader>
             
             <CardContent className="space-y-4">
-              <div className="grid gap-3">
-                {candidate.scores.map((score, index) => (
-                  <div key={index} className="flex items-center gap-4">
-                    <div className="w-32 text-sm font-medium text-gray-700">
-                      {score.parameter}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Progress 
-                          value={score.score} 
-                          className="flex-1 h-2"
-                        />
-                        <span className="text-sm font-medium w-12 text-right">
-                          {score.score}%
-                        </span>
+              {candidate.scores.length > 0 ? (
+                <div className="grid gap-3">
+                  {candidate.scores.map((score, index) => (
+                    <div key={index} className="flex items-center gap-4">
+                      <div className="w-32 text-sm font-medium text-gray-700">
+                        {score.parameter}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Progress 
+                            value={(score.score / score.maxScore) * 100} 
+                            className="flex-1 h-2"
+                          />
+                          <span className="text-sm font-medium w-12 text-right">
+                            {score.score}/{score.maxScore}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-xs text-muted-foreground w-16 text-right">
+                        Weight: {score.weightage}%
                       </div>
                     </div>
-                    <div className="text-xs text-muted-foreground w-16 text-right">
-                      Weight: {score.weightage}%
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">
+                  {candidate.status === 'processing' ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Evaluation in progress...</span>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ) : (
+                    'No detailed scoring available'
+                  )}
+                </div>
+              )}
               
               <div className="flex gap-2 pt-4 border-t">
                 <Button
@@ -162,11 +329,12 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                   size="sm"
                   onClick={() => onCandidateSelect(candidate.id)}
                   className="flex-1"
+                  disabled={candidate.status === 'processing'}
                 >
                   <Eye className="w-4 h-4 mr-2" />
                   Deep Dive Analysis
                 </Button>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" disabled={candidate.status === 'processing'}>
                   <BarChart3 className="w-4 h-4 mr-2" />
                   Compare
                 </Button>

@@ -42,8 +42,8 @@ interface SavedCriteriaGrid {
 
 const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
 const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx'];
-const JD_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook-test/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
-
+//const JD_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook-test/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
+const JD_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
 export const JobUploadSection = () => {
   const { user, loading, error } = useAuth();
   const [jobTitle, setJobTitle] = useState('');
