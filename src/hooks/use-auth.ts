@@ -46,65 +46,73 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  // Just set the user directly - no complex auth
+  // Simple direct auth setup that matches JobUploadSection pattern
   useEffect(() => {
     const initializeAuth = async () => {
       console.log('🔄 Setting test user directly...');
       
       try {
-        // First, create a proper Supabase auth session
+        // Create a simple auth session without complex error handling
         console.log('🔐 Creating Supabase auth session...');
         const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
           email: 'test@example.com',
           password: 'testpassword123'
         });
 
+        // If auth fails, just use the test user data directly
         if (signInError) {
-          console.error('❌ Auth session creation failed:', signInError);
-          // If auth fails, still set the hardcoded user but it won't work with RLS
-        } else {
-          console.log('✅ Auth session created successfully:', authData.user?.email);
+          console.log('❌ Auth failed, using test user directly:', signInError.message);
+          console.log('✅ Setting test user directly...');
+          setUser(TEST_USER);
+          setLoading(false);
+          return;
         }
 
-        // Set the hardcoded user data
-        const testUser: UserWithProfile = {
-          id: '00000000-0000-0000-0000-000000000001',
-          email: 'test@example.com',
-          role: 'authenticated',
-          aud: 'authenticated',
-          created_at: '2025-07-02T12:20:55.741Z',
-          app_metadata: {},
-          user_metadata: {},
-          profile: {
-            user_id: '00000000-0000-0000-0000-000000000001',
-            company_id: '00000000-0000-0000-0000-000000000002',
-            email: 'test@example.com',
-            first_name: 'Test',
-            last_name: 'User',
-            role: 'admin',
-            user_status: 'active',
-            created_at: '2025-07-02T12:20:55.741Z'
-          },
-          company: {
-            company_id: '00000000-0000-0000-0000-000000000002',
-            company_name: 'Test Company',
-            email_domain: 'example.com',
-            selected_plan: 'pro',
-            subscription_status: 'active',
-            subscription_start: '2025-07-02T12:20:55.741Z',
-            subscription_end: '2026-07-02T12:20:55.741Z',
-            created_at: '2025-07-02T12:20:55.741Z',
-            updated_at: '2025-07-02T12:20:55.741Z'
-          }
+        console.log('✅ Auth session created successfully:', authData.user?.email);
+        console.log('Auth user ID:', authData.user?.id);
+
+        // Fetch user profile from database
+        const { data: userProfile, error: profileError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('user_id', authData.user.id)
+          .single();
+
+        if (profileError) {
+          console.log('❌ Profile fetch failed, using test user:', profileError.message);
+          setUser(TEST_USER);
+          setLoading(false);
+          return;
+        }
+
+        // Fetch company data
+        const { data: companyData, error: companyError } = await supabase
+          .from('companies')
+          .select('*')
+          .eq('company_id', userProfile.company_id)
+          .single();
+
+        if (companyError) {
+          console.log('❌ Company fetch failed, using test user:', companyError.message);
+          setUser(TEST_USER);
+          setLoading(false);
+          return;
+        }
+
+        // Create user object with real auth data
+        const userWithProfile: UserWithProfile = {
+          ...authData.user,
+          profile: userProfile,
+          company: companyData
         };
 
-        setUser(testUser);
+        setUser(userWithProfile);
         setLoading(false);
-        console.log('✅ Test user set successfully:', testUser);
+        console.log('✅ User set successfully:', userWithProfile);
       } catch (error) {
-        console.error('💥 Error in auth setup:', error);
+        console.log('💥 Error in auth setup, using test user:', error);
+        setUser(TEST_USER);
         setLoading(false);
-        setError(error as Error);
       }
     };
 
