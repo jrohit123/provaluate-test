@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Upload, FileText, User, CheckCircle, Play, Briefcase, Grid } from 'lucide-react';
+import { Upload, FileText, User, CheckCircle, Play, Briefcase, Grid, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -42,6 +42,8 @@ export const ResumeUploadSection = () => {
   const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => sessionStorage.getItem('selectedJDId') || '');
   const [criteriaGrids, setCriteriaGrids] = useState<SavedCriteriaGrid[]>([]);
   const [selectedCriteriaGridId, setSelectedCriteriaGridId] = useState<string>(() => sessionStorage.getItem('selectedCriteriaGridId') || '');
+  const [assessmentReports, setAssessmentReports] = useState<any[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -175,6 +177,37 @@ export const ResumeUploadSection = () => {
       loadCriteriaGrids();
     }
   }, [user?.profile?.company_id, loadResumes, loadJobDescriptions, loadCriteriaGrids]);
+
+  // Fetch assessment reports filtered by selected JD and criteria
+  useEffect(() => {
+    const fetchReports = async () => {
+      if (!user?.profile?.company_id || !selectedJobDescriptionId || !selectedCriteriaGridId) {
+        setAssessmentReports([]);
+        return;
+      }
+      setLoadingReports(true);
+      try {
+        const { data, error } = await supabase
+          .from('assessment_reports')
+          .select('*')
+          .eq('job_description_id', selectedJobDescriptionId)
+          .eq('criteria_id', selectedCriteriaGridId)
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        setAssessmentReports(data || []);
+      } catch (err) {
+        setAssessmentReports([]);
+        toast({
+          title: 'Error Loading Reports',
+          description: 'Could not load assessment reports.',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoadingReports(false);
+      }
+    };
+    fetchReports();
+  }, [user?.profile?.company_id, selectedJobDescriptionId, selectedCriteriaGridId, toast]);
 
   const getScoreColor = (score: number) => {
     if (score >= 90) return 'text-accent-600';
@@ -890,7 +923,7 @@ export const ResumeUploadSection = () => {
           </Button>
         )}
         
-        {hasProcessedResumes && (
+      {hasProcessedResumes && (
           <Button
             onClick={handleEvaluation}
             disabled={isEvaluating}
@@ -900,19 +933,28 @@ export const ResumeUploadSection = () => {
             {isEvaluating ? 'Evaluating...' : 'Provaluate'}
           </Button>
         )}
-      </div>
+        </div>
 
-      {/* Resume List */}
+      {/* Resume List (now Assessment Reports) */}
       <div className="grid gap-4">
         <h3 className="text-lg font-semibold text-primary-800">
-          Candidate Pool ({resumes.length})
+          Candidate Pool ({assessmentReports.length})
         </h3>
-        
-        {resumes.map((resume) => (
+        {loadingReports ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
+            <span className="ml-2 text-muted-foreground">Loading assessment reports...</span>
+          </div>
+        ) : assessmentReports.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            No candidates found for the selected Job Description and Criteria.
+          </div>
+        ) : (
+          assessmentReports.map((report) => (
           <Card 
-            key={resume.id} 
+              key={report.id}
             className="animate-fade-in hover:shadow-md transition-shadow cursor-pointer"
-            onClick={() => resume.status === 'processed' && handleCandidateClick(resume.id)}
+              // Optionally, you can add onClick to show more details
           >
             <CardContent className="p-4">
               <div className="flex items-start justify-between">
@@ -920,44 +962,45 @@ export const ResumeUploadSection = () => {
                   <div className="bg-primary-100 p-2 rounded-lg">
                     <User className="w-5 h-5 text-primary-600" />
                   </div>
-                  
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <h4 className="font-semibold text-primary-800">{resume.name}</h4>
-                      {resume.status === 'processed' && (
-                        <CheckCircle className="w-4 h-4 text-accent-500" />
-                      )}
+                        <h4 className="font-semibold text-primary-800">{report.candidate_name || 'Unknown'}</h4>
                     </div>
-                    
                     <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
                       <FileText className="w-4 h-4" />
-                      {resume.fileName}
-                    </p>
-                    
-                    {resume.status === 'uploading' && (
-                      <div className="space-y-2">
-                        <Progress value={resume.uploadProgress} className="w-full" />
-                        <p className="text-sm text-muted-foreground">
-                          Processing... {resume.uploadProgress}%
-                        </p>
+                        {report.resume_url ? report.resume_url.split('/').pop() : 'No file'}
+                      </p>
+                      <p className="text-sm text-gray-700">{report.summary || report.recommendation || ''}</p>
+                    </div>
                       </div>
-                    )}
-                    
-                    {resume.status === 'processed' && (
-                      <p className="text-sm text-gray-700">{resume.summary}</p>
-                    )}
+                  <div className="px-3 py-1 rounded-full text-sm font-medium bg-accent-100 text-accent-600">
+                    {report.overall_score ? `${report.overall_score}% Match` : 'No Score'}
                   </div>
                 </div>
-                
-                {resume.status === 'processed' && (
-                  <div className={`px-3 py-1 rounded-full text-sm font-medium ${getScoreBgColor(resume.initialScore)} ${getScoreColor(resume.initialScore)}`}>
-                    {resume.initialScore}% Match
+                {/* Optionally, show detailed scores if available */}
+                {report.scores && Array.isArray(report.scores) && report.scores.length > 0 && (
+                  <div className="mt-4">
+                    {report.scores.map((score: any, idx: number) => (
+                      <div key={idx} className="flex items-center gap-4 mb-2">
+                        <div className="w-40 font-medium">{score.parameter}</div>
+                        <div className="flex-1">
+                          <div className="relative w-full h-3 bg-gray-200 rounded-full">
+                            <div
+                              className="absolute top-0 left-0 h-3 rounded-full bg-blue-900"
+                              style={{ width: `${score.score}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div className="w-12 text-right font-semibold">{score.score}%</div>
+                        <div className="w-20 text-right text-xs text-muted-foreground">Weight: {score.weightage}%</div>
+                      </div>
+                    ))}
                   </div>
                 )}
-              </div>
             </CardContent>
           </Card>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Scorecard Dialog */}

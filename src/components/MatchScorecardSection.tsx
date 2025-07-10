@@ -258,88 +258,67 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
 
       <div className="grid gap-6">
         {candidates.map((candidate) => (
-          <Card key={candidate.id} className="animate-fade-in hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-primary-100 p-2 rounded-lg">
-                    <User className="w-5 h-5 text-primary-600" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg">{candidate.name}</CardTitle>
-                    <CardDescription>Overall Match Assessment</CardDescription>
-                  </div>
+          <Card key={candidate.id} className="p-6 mb-6 shadow-md rounded-xl">
+            <div className="flex justify-between items-center mb-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <User className="w-6 h-6 text-primary-600" />
+                  <span className="text-2xl font-bold">{candidate.name}</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <Badge className={getStatusColor(candidate.status)}>
-                    {candidate.status === 'processing' ? 'Processing' : 
-                     `${candidate.status.charAt(0).toUpperCase() + candidate.status.slice(1)} Match`}
-                  </Badge>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold text-primary-800">
-                      {candidate.status === 'processing' ? '...' : `${candidate.overallScore}%`}
-                    </div>
-                    <div className="text-sm text-muted-foreground">Overall Score</div>
-                  </div>
+                <div className="text-muted-foreground text-sm">Overall Match Assessment</div>
+              </div>
+              <div className="flex flex-col items-end">
+                <span className={
+                  candidate.status === 'good'
+                    ? 'bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-semibold mb-2'
+                    : candidate.status === 'excellent'
+                    ? 'bg-accent-100 text-accent-800 px-3 py-1 rounded-full text-xs font-semibold mb-2'
+                    : 'bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-xs font-semibold mb-2'
+                }>
+                  {candidate.status === 'good'
+                    ? 'Good Match'
+                    : candidate.status === 'excellent'
+                    ? 'Excellent Match'
+                    : candidate.status === 'fair'
+                    ? 'Fair Match'
+                    : 'Processing'}
+                </span>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-bold text-primary-800">{candidate.status === 'processing' ? '...' : `${candidate.overallScore}%`}</span>
+                  <span className="text-muted-foreground text-sm">Overall Score</span>
                 </div>
               </div>
-            </CardHeader>
-            
-            <CardContent className="space-y-4">
-              {candidate.scores.length > 0 ? (
-                <div className="grid gap-3">
-                  {candidate.scores.map((score, index) => (
-                    <div key={index} className="flex items-center gap-4">
-                      <div className="w-32 text-sm font-medium text-gray-700">
-                        {score.parameter}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Progress 
-                            value={(score.score / score.maxScore) * 100} 
-                            className="flex-1 h-2"
-                          />
-                          <span className="text-sm font-medium w-12 text-right">
-                            {score.score}/{score.maxScore}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-xs text-muted-foreground w-16 text-right">
-                        Weight: {score.weightage}%
-                      </div>
+            </div>
+            <div className="space-y-4 my-4">
+              {candidate.scores.map((score, idx) => (
+                <div key={idx} className="flex items-center gap-4">
+                  <div className="w-40 font-medium">{score.parameter}</div>
+                  <div className="flex-1">
+                    <div className="relative w-full h-3 bg-gray-200 rounded-full">
+                      <div
+                        className="absolute top-0 left-0 h-3 rounded-full bg-blue-900"
+                        style={{ width: `${score.score}%` }}
+                      />
                     </div>
-                  ))}
+                  </div>
+                  <div className="w-12 text-right font-semibold">{score.score}%</div>
+                  <div className="w-20 text-right text-xs text-muted-foreground">Weight: {score.weightage}%</div>
                 </div>
-              ) : (
-                <div className="text-center py-4 text-muted-foreground">
-                  {candidate.status === 'processing' ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Evaluation in progress...</span>
-                    </div>
-                  ) : (
-                    'No detailed scoring available'
-                  )}
-                </div>
-              )}
-              
-              <div className="flex gap-2 pt-4 border-t">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onCandidateSelect(candidate.id)}
-                  className="flex-1"
-                  disabled={candidate.status === 'processing'}
-                >
-                  <Eye className="w-4 h-4 mr-2" />
-                  Deep Dive Analysis
-                </Button>
-                <Button variant="outline" size="sm" disabled={candidate.status === 'processing'}>
-                  <BarChart3 className="w-4 h-4 mr-2" />
-                  Compare
-                </Button>
-              </div>
-            </CardContent>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-6">
+              <Button
+                variant="outline"
+                className="flex-1 flex items-center justify-center gap-2"
+                onClick={() => onCandidateSelect(candidate.id)}
+                disabled={candidate.status === 'processing'}
+              >
+                <Eye className="w-4 h-4" /> Deep Dive Analysis
+              </Button>
+              <Button variant="outline" className="flex-1 flex items-center justify-center gap-2" disabled={candidate.status === 'processing'}>
+                <BarChart3 className="w-4 h-4" /> Compare
+              </Button>
+            </div>
           </Card>
         ))}
       </div>

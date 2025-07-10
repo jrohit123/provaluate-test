@@ -1,150 +1,161 @@
-# ProValuate - AI-Powered Recruitment Assessment Platform
+# ProValuate Project Overview
 
-ProValuate is a sophisticated recruitment assessment platform that leverages AI to streamline the hiring process by evaluating job descriptions and candidate resumes to find the best matches.
+## 🚀 Project Purpose
+ProValuate is an AI-powered recruitment assessment platform that streamlines hiring by evaluating job descriptions and candidate resumes to find the best matches. It supports job description management, resume uploads, AI-driven candidate evaluation, and detailed scorecards.
 
-## 🚀 Features
+---
 
-- **Job Description Management**
-  - Upload and analyze job descriptions
-  - Extract key requirements and skills
-  - Create custom evaluation criteria
-
-- **Resume Processing**
-  - Upload and parse candidate resumes
-  - AI-powered candidate evaluation
-  - Score matching against job requirements
-
-- **Smart Insights**
-  - Detailed candidate scorecards
-  - Match percentage calculations
-  - Automated skill gap analysis
-
-- **Multi-user Support**
-  - Company-based organization
-  - Role-based access control
-  - Team collaboration features
-
-## 🛠️ Technology Stack
-
-- **Frontend**
-  - React with TypeScript
-  - Vite for build tooling
-  - Tailwind CSS for styling
-  - Shadcn UI components
-
-- **Backend**
-  - Supabase for backend services
-  - PostgreSQL database
-  - Real-time subscriptions
-  - Secure authentication
-
-## 📋 Database Schema
-
-### Core Tables
-
-1. **Companies**
-   - Company profile management
-   - Subscription tracking
-   - Usage monitoring
-
-2. **Users**
-   - User authentication
-   - Role management
-   - Company association
-
-3. **Job Descriptions**
-   - Job posting details
-   - Evaluation criteria
-   - Company/user associations
-
-4. **Resumes**
-   - Candidate information
-   - CV file storage
-   - Evaluation scores
-
-5. **Criteria**
-   - Custom evaluation parameters
-   - Weightage configuration
-   - Calculation rules
-
-6. **Plans**
-   - Subscription tiers
-   - Usage limits
-   - Pricing information
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Node.js (v16 or higher)
-- npm or Bun package manager
-- Supabase account
-
-### Installation
-
-1. Clone the repository:
-\`\`\`bash
-git clone [repository-url]
-cd provaluate
-\`\`\`
-
-2. Install dependencies:
-\`\`\`bash
-npm install
-# or
-bun install
-\`\`\`
-
-3. Set up environment variables:
-\`\`\`bash
-cp .env.example .env
-\`\`\`
-
-4. Update the .env file with your Supabase credentials:
-\`\`\`env
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-\`\`\`
-
-5. Start the development server:
-\`\`\`bash
-npm run dev
-# or
-bun dev
-\`\`\`
-
-## 🔒 Security
-
-- Secure authentication via Supabase
-- Row Level Security (RLS) policies
-- Data encryption at rest
-- Secure file storage
-
-## 📦 Project Structure
-
-\`\`\`
+## 🗂️ Project Structure
+```
 src/
-├── components/         # Reusable UI components
-├── hooks/             # Custom React hooks
-├── integrations/      # External service integrations
-├── lib/              # Utility functions
-└── pages/            # Application pages
-\`\`\`
+├── components/         # Reusable UI components (cards, forms, sections)
+├── hooks/             # Custom React hooks (auth, toast, etc.)
+├── integrations/      # Supabase and external service integrations
+├── lib/               # Utility functions
+├── pages/             # Main application pages (Dashboard, Login, etc.)
+├── App.tsx            # App entry point
+├── main.tsx           # React root and routing
+```
 
-## 🤝 Contributing
+---
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
+## 🧩 Main Components
+- **AppSidebar**: Navigation sidebar for main app sections
+- **Header**: Top bar with user/company info and logout
+- **JobUploadSection**: Upload and manage job descriptions, configure evaluation criteria
+- **ResumeUploadSection**: Upload resumes, select job/criteria, send to n8n, view candidate pool
+- **MatchScorecardSection**: View candidate scores and rankings from assessment reports
+- **CandidateDeepDive**: Detailed analysis of a candidate's evaluation
+- **SmartInsights**: AI-powered insights and analytics
+- **ContractsSection**: Manage client contracts
+- **UI Components**: Cards, buttons, forms, dialogs, select, progress, etc. (in `components/ui/`)
 
-## 📄 License
+---
 
-This project is licensed under the [MIT License](LICENSE).
+## 🪝 Key Hooks
+- **useAuth**: Handles authentication, user profile, and company context
+- **useToast**: Toast notification system
+- **use-mobile**: Responsive/mobile detection
 
-## 🙏 Acknowledgments
+---
 
-- [Supabase](https://supabase.com/) for backend services
-- [Shadcn UI](https://ui.shadcn.com/) for UI components
-- [Tailwind CSS](https://tailwindcss.com/) for styling
+## 🔗 Integrations
+- **Supabase**: Auth, database, storage, and RLS policies
+- **n8n Webhooks**: For AI resume/job description processing
+- **Shadcn UI**: Modern UI component library
+- **Tailwind CSS**: Utility-first styling
+
+---
+
+## 🗄️ Supabase Database Tables
+
+### 1. `companies`
+| Column              | Type      | Description                  |
+|---------------------|-----------|------------------------------|
+| company_id          | uuid      | Primary key                  |
+| company_name        | string    | Name of the company          |
+| email_domain        | string    | Email domain (optional)      |
+| selected_plan       | string    | Subscription plan            |
+| subscription_status | string    | Plan status                  |
+| created_at, updated_at | timestamp | Timestamps                |
+
+### 2. `users`
+| Column        | Type      | Description                  |
+|---------------|-----------|------------------------------|
+| user_id       | uuid      | Primary key (matches Auth)   |
+| company_id    | uuid      | FK to companies              |
+| email         | string    | User email                   |
+| first_name    | string    | User first name              |
+| last_name     | string    | User last name               |
+| role          | string    | User role                    |
+| user_status   | string    | Status (active, etc.)        |
+| created_at    | timestamp | Creation time                |
+
+### 3. `job_descriptions`
+| Column         | Type      | Description                  |
+|--------------- |-----------|------------------------------|
+| jd_id          | uuid      | Primary key                  |
+| company_id     | uuid      | FK to companies              |
+| user_id        | uuid      | FK to users                  |
+| title          | string    | Job title                    |
+| description    | string    | Job description text         |
+| jd_file        | string    | File URL (Supabase Storage)  |
+| criteria_id    | uuid      | FK to criteria grid          |
+| created_at, updated_at | timestamp | Timestamps            |
+
+### 4. `resumes`
+| Column           | Type      | Description                  |
+|------------------|-----------|------------------------------|
+| resume_id        | uuid      | Primary key                  |
+| company_id       | uuid      | FK to companies              |
+| user_id          | uuid      | FK to users                  |
+| candidate_name   | string    | Candidate's name             |
+| cv_file          | string    | Resume file URL              |
+| evaluation_scores| json      | AI evaluation results        |
+| created_at, updated_at | timestamp | Timestamps            |
+
+### 5. `criteria`
+| Column         | Type      | Description                  |
+|--------------- |-----------|------------------------------|
+| criteria_id    | uuid      | Primary key                  |
+| criteria_name  | string    | Name of the criteria grid    |
+| parameter      | string    | Parameter name               |
+| weightage      | number    | Weight for this parameter    |
+| calc_note      | string    | Notes                        |
+| created_by     | uuid      | FK to users                  |
+| company_id     | uuid      | FK to companies              |
+| created_at, updated_at | timestamp | Timestamps            |
+
+### 6. `assessment_reports`
+| Column             | Type      | Description                  |
+|--------------------|-----------|------------------------------|
+| id                 | uuid      | Primary key                  |
+| candidate_name     | string    | Candidate's name             |
+| job_description_id | uuid      | FK to job_descriptions       |
+| criteria_id        | uuid      | FK to criteria               |
+| resume_url         | string    | Resume file URL              |
+| scoring            | json/text | Detailed scoring breakdown   |
+| overall_score      | number    | Overall match %              |
+| recommendation     | string    | AI recommendation            |
+| detailed_assessment| string    | Full assessment text         |
+| status             | string    | Status (processing, completed)|
+| created_at         | timestamp | Creation time                |
+
+### 7. `plans`, `clients`, `contracts`
+- **plans**: Subscription plans, usage limits, pricing
+- **clients**: Client companies (for contracts)
+- **contracts**: Contract details, pricing, validity, client association
+
+---
+
+## 🔒 Security & RLS
+- Supabase Auth for user authentication
+- Row Level Security (RLS) enabled on all sensitive tables
+- Policies allow users to access only their own/company data
+
+---
+
+## 📝 Key Flows
+- **Job Upload**: Upload JD file → AI analysis (n8n) → Save JD & criteria
+- **Resume Upload**: Upload resume → Save to DB → Send to n8n for AI evaluation
+- **Scorecard**: Fetch assessment reports for selected JD/criteria → Show candidate pool & scores
+- **Deep Dive**: View detailed AI assessment for a candidate
+
+---
+
+## 🛠️ Setup & Development
+- See README.md for setup, environment, and run instructions
+- All environment variables (Supabase URL, anon key) in `.env`
+- Main entry: `src/main.tsx` (routing, protected routes)
+- Dashboard: `src/pages/Dashboard.tsx` (section switching)
+
+---
+
+## 📚 Useful References
+- [Supabase Docs](https://supabase.com/docs)
+- [Shadcn UI](https://ui.shadcn.com/)
+- [Tailwind CSS](https://tailwindcss.com/)
+
+---
+
+*This file provides a high-level context for onboarding, debugging, and extending the ProValuate project.* 
