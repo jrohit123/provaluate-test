@@ -48,7 +48,6 @@ export interface Database {
         Row: {
           user_id: string
           company_id: string | null
-          email: string
           first_name: string | null
           last_name: string | null
           role: string | null
@@ -58,7 +57,6 @@ export interface Database {
         Insert: {
           user_id?: string
           company_id?: string | null
-          email: string
           first_name?: string | null
           last_name?: string | null
           role?: string | null
@@ -68,7 +66,6 @@ export interface Database {
         Update: {
           user_id?: string
           company_id?: string | null
-          email?: string
           first_name?: string | null
           last_name?: string | null
           role?: string | null

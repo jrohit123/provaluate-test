@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/hooks/use-auth';
+import { supabase } from '@/integrations/supabase/client';
 
 // Test credentials
 const TEST_EMAIL = 'test@example.com';
@@ -15,41 +15,49 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [isSignup, setIsSignup] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { signIn, signUp } = useAuth();
+  // Remove useAuth import and usage, use Supabase directly
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      // For testing, accept only test credentials
-      if (email === TEST_EMAIL && password === TEST_PASSWORD) {
-        if (isSignup) {
-          await signUp(email, password, {
-            email,
-            first_name: '',
-            last_name: '',
-            role: 'user',
-            user_status: 'active'
-          });
-          localStorage.setItem('recruitai_auth', 'true');
-          toast({
-            title: "Account created successfully!",
-            description: "Welcome to Provaluate.",
-          });
-        } else {
-          await signIn(email, password);
-    localStorage.setItem('recruitai_auth', 'true');
-    toast({
-            title: "Welcome back!",
-      description: "You've been logged in successfully.",
-    });
-        }
-    navigate('/dashboard');
+      if (isSignup) {
+        // Sign up with Supabase Auth
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+        if (error) throw error;
+        toast({
+          title: "Confirmation Email Sent!",
+          description: `An email has been sent to ${email}. Please confirm the email ID to proceed.`,
+        });
+        setIsSignup(false); // Switch to login view
+        setEmail("");
+        setPassword("");
+        setIsLoading(false);
+        return;
       } else {
-        throw new Error('Invalid credentials. Please use the test account.');
+        // Sign in with Supabase Auth
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+        localStorage.setItem('recruitai_auth', 'true');
+        toast({
+          title: "Welcome back!",
+          description: "You've been logged in successfully.",
+        });
+        navigate('/dashboard');
       }
     } catch (error: any) {
       toast({
@@ -60,6 +68,20 @@ const Login = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetMessage('');
+    setResetError('');
+    setResetLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail);
+    if (error) {
+      setResetError(error.message);
+    } else {
+      setResetMessage('Password reset email sent! Please check your inbox.');
+    }
+    setResetLoading(false);
   };
 
   return (
@@ -83,43 +105,81 @@ const Login = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
+            {!showReset ? (
+              <>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Input
+                      type="email"
+                      placeholder="Email address"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      className="h-11"
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Input
+                      type="password"
+                      placeholder="Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="h-11"
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <Button 
+                    type="submit" 
+                    className="w-full h-11 bg-primary-800 hover:bg-primary-900"
+                    disabled={isLoading}
+                  >
+                    {isLoading 
+                      ? 'Please wait...' 
+                      : isSignup 
+                        ? 'Create Account' 
+                        : 'Sign In'
+                    }
+                  </Button>
+                </form>
+                <div className="mt-2 text-center">
+                  <button
+                    type="button"
+                    className="text-blue-600 underline text-sm"
+                    onClick={() => setShowReset(true)}
+                    disabled={isLoading}
+                  >
+                    Forgot your password?
+                  </button>
+                </div>
+              </>
+            ) : (
+              <form onSubmit={handlePasswordReset} className="flex flex-col gap-2 mt-4">
                 <Input
                   type="email"
-                  placeholder="Email address"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
                   required
                   className="h-11"
-                  disabled={isLoading}
+                  disabled={resetLoading}
                 />
-              </div>
-              <div className="space-y-2">
-                <Input
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="h-11"
-                  disabled={isLoading}
-                />
-              </div>
-              <Button 
-                type="submit" 
-                className="w-full h-11 bg-primary-800 hover:bg-primary-900"
-                disabled={isLoading}
-              >
-                {isLoading 
-                  ? 'Please wait...' 
-                  : isSignup 
-                    ? 'Create Account' 
-                    : 'Sign In'
-                }
-              </Button>
-            </form>
-            
+                <Button type="submit" className="w-full h-11 bg-primary-800 hover:bg-primary-900" disabled={resetLoading}>
+                  {resetLoading ? 'Sending...' : 'Send Password Reset Email'}
+                </Button>
+                <button
+                  type="button"
+                  className="text-gray-600 underline text-sm"
+                  onClick={() => setShowReset(false)}
+                  disabled={resetLoading}
+                >
+                  Back to login
+                </button>
+                {resetMessage && <div className="text-green-600 text-sm">{resetMessage}</div>}
+                {resetError && <div className="text-red-600 text-sm">{resetError}</div>}
+              </form>
+            )}
             <div className="mt-6 text-center">
               <button
                 onClick={() => setIsSignup(!isSignup)}
@@ -133,11 +193,7 @@ const Login = () => {
               </button>
             </div>
 
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg text-sm">
-              <p className="font-medium text-gray-600">Test Account Credentials:</p>
-              <p>Email: {TEST_EMAIL}</p>
-              <p>Password: {TEST_PASSWORD}</p>
-            </div>
+            {/* Remove the test account credentials display at the bottom */}
           </CardContent>
         </Card>
         

@@ -32,15 +32,7 @@ export class DatabaseService {
   }
 
   // Users
-  static async getUserByEmail(email: string) {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*, companies(*)')
-      .eq('email', email)
-      .single();
-    if (error) throw error;
-    return data;
-  }
+  // getUserByEmail is deprecated: email is not in users table. Use Supabase Auth instead.
 
   static async createUser(userData: TableInsert<'users'>) {
     const { data, error } = await supabase
@@ -140,7 +132,7 @@ export class DatabaseService {
   ) {
     const { data, error } = await supabase
       .from(table)
-      .select('*')
+      .select('user_id, company_id, first_name, last_name, role, user_status, created_at')
       .eq(idField as string, id)
       .single();
     if (error) throw error;

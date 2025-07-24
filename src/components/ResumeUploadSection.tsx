@@ -30,7 +30,7 @@ interface SavedCriteriaGrid {
 const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
 const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx'];
 //const CV_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook-test/c32aade7-564b-4cc7-a832-b6b094418132";
-const CV_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook/c32aade7-564b-4cc7-a832-b6b094418132";
+const CV_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook-test/c32aade7-564b-4cc7-a832-b6b094418132";
 
 export const ResumeUploadSection = () => {
   const [resumes, setResumes] = useState<ResumeData[]>([]);
@@ -366,7 +366,7 @@ export const ResumeUploadSection = () => {
       
       for (const resume of processedResumes) {
         const response = await fetch(CV_WEBHOOK_URL, {
-          method: 'POST',
+          method: 'GET',
           headers: {
             'Content-Type': 'application/json',
           },

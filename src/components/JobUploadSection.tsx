@@ -42,7 +42,7 @@ interface SavedCriteriaGrid {
 
 const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
 const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx'];
-//const JD_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook-test/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
+const JD_WEBHOOK_TEST_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook-test/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
 const JD_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
 export const JobUploadSection = () => {
   const { user, loading, error } = useAuth();
@@ -61,8 +61,8 @@ export const JobUploadSection = () => {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const criteriaFileInputRef = useRef<HTMLInputElement>(null);
+  const jobTitleInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [isJobFieldsDisabled, setIsJobFieldsDisabled] = useState(false);
   const [criteriaUploading, setCriteriaUploading] = useState(false);
   const [resolvedJD, setResolvedJD] = useState<ResolvedJD | null>(null);
   const [isEditingResolvedJD, setIsEditingResolvedJD] = useState(false);
@@ -346,7 +346,7 @@ export const JobUploadSection = () => {
       const file = e.dataTransfer.files[0];
       setUploadedFile(file);
       setJobTitle('');
-      setIsJobFieldsDisabled(true);
+      // setIsJobFieldsDisabled(true); // Removed as per edit hint
     }
   };
   const handleJobDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -360,7 +360,7 @@ export const JobUploadSection = () => {
     if (files && files.length > 0) {
       setUploadedFile(files[0]);
       setJobTitle('');
-      setIsJobFieldsDisabled(true);
+      // setIsJobFieldsDisabled(true); // Removed as per edit hint
     }
   };
 
@@ -441,6 +441,16 @@ export const JobUploadSection = () => {
       return;
     }
 
+    if (!jobTitle.trim()) {
+      toast({
+        title: "Job Title Required",
+        description: "Please enter a job title before processing the job description.",
+        variant: "destructive",
+      });
+      jobTitleInputRef.current?.focus();
+      return;
+    }
+
     try {
       setProcessingStatus('processing');
       let fileUrl = null;
@@ -450,7 +460,7 @@ export const JobUploadSection = () => {
       const { data: createdJD, error: jdError } = await supabase
         .from('job_descriptions')
         .insert({
-          title: jobTitle,
+          title: jobTitle, // Ensure jobTitle is saved
           user_id: user.id,
           company_id: user.profile.company_id,
           created_at: new Date().toISOString(),
@@ -508,10 +518,10 @@ export const JobUploadSection = () => {
           
           fileUrl = publicUrlData.publicUrl;
 
-          // Update the job description with the file URL
+          // Update the job description with the file URL and title (in case it needs to be updated)
           const { error: updateError } = await supabase
             .from('job_descriptions')
-            .update({ jd_file: fileUrl })
+            .update({ jd_file: fileUrl, title: jobTitle })
             .eq('jd_id', jdData.jd_id);
 
           if (updateError) {
@@ -571,7 +581,7 @@ export const JobUploadSection = () => {
       // Reset form
       setJobTitle('');
       setUploadedFile(null);
-      setIsJobFieldsDisabled(false);
+      // setIsJobFieldsDisabled(false); // Removed as per edit hint
     } catch (err: any) {
       console.error('Error processing job description:', err);
       setProcessingStatus('failed');
@@ -770,7 +780,7 @@ export const JobUploadSection = () => {
                 value={jobTitle}
                 onChange={(e) => setJobTitle(e.target.value)}
                 className="mb-3"
-                disabled={isJobFieldsDisabled}
+                ref={jobTitleInputRef}
               />
             </div>
 

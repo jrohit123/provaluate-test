@@ -8,11 +8,12 @@ import { CandidateDeepDive } from '@/components/CandidateDeepDive';
 import { SmartInsights } from '@/components/SmartInsights';
 import { Header } from '@/components/Header';
 import { ContractsSection } from '@/components/ContractsSection';
+import AdminUserManagement from '@/components/AdminUserManagement';
 
 export type ActiveSection = 'job-upload' | 'resume-upload' | 'match-scorecard' | 'candidate-dive' | 'insights' | 'settings' | 'contracts';
 
 const Dashboard = () => {
-  const [activeSection, setActiveSection] = useState<ActiveSection>('job-upload');
+  //const [activeSection, setActiveSection] = useState<ActiveSection>('job-upload');
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
 
   const renderMainContent = () => {
@@ -30,6 +31,7 @@ const Dashboard = () => {
       case 'settings':
         return (
           <div className="p-6">
+            <AdminUserManagement />
             <h2 className="text-2xl font-bold mb-4 text-primary-800">Settings</h2>
             <p className="text-muted-foreground">Configure your preferences and scoring logic here.</p>
           </div>

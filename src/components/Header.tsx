@@ -12,6 +12,7 @@ export const Header = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('recruitai_auth');
+    localStorage.removeItem('onboarding_complete');
     toast({
       title: "Logged out successfully",
       description: "You've been logged out of your account.",
