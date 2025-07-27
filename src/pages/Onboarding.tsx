@@ -29,13 +29,13 @@ export default function Onboarding() {
         return;
       }
       setUser(authUser);
-      // Check if user already has a profile
+      // Check if user already has completed onboarding
       const { data: userProfile } = await supabase
         .from('users')
-        .select('*')
+        .select('onboarding_complete')
         .eq('user_id', authUser.id)
         .single();
-      if (userProfile) {
+      if (userProfile && userProfile.onboarding_complete) {
         navigate('/dashboard');
         return;
       }
@@ -117,11 +117,11 @@ export default function Onboarding() {
           last_name: lastName,
           role: 'admin',
           user_status: 'active',
+          onboarding_complete: true,
           created_at: now.toISOString(),
         });
       if (userDbError) throw userDbError;
       toast.success('Onboarding complete! You can now access your dashboard.');
-      localStorage.setItem('onboarding_complete', 'true');
       console.log('User profile created!');
       setTimeout(() => window.location.replace('/dashboard'), 500);
     } catch (err) {

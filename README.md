@@ -24,10 +24,11 @@ src/
 - **Header**: Top bar with user/company info and logout
 - **JobUploadSection**: Upload and manage job descriptions, configure evaluation criteria
 - **ResumeUploadSection**: Upload resumes, select job/criteria, send to n8n, view candidate pool
-- **MatchScorecardSection**: View candidate scores and rankings from assessment reports
-- **CandidateDeepDive**: Detailed analysis of a candidate's evaluation
-- **SmartInsights**: AI-powered insights and analytics
-- **ContractsSection**: Manage client contracts
+- **MatchScorecardSection**: Display evaluation results with rankings
+- **CandidateDeepDive**: Detailed candidate analysis and insights
+- **SmartInsights**: AI-powered matching insights and recommendations
+- **Header**: Navigation and user interface elements
+- **AdminUserManagement**: User management for organizations
 - **UI Components**: Cards, buttons, forms, dialogs, select, progress, etc. (in `components/ui/`)
 
 ---

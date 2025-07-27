@@ -1,4 +1,4 @@
-import { Upload, FileText, BarChart3, User, Lightbulb, Settings, FileSignature } from 'lucide-react';
+import { Upload, FileText, BarChart3, User, Lightbulb, Settings } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -10,6 +10,7 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { ActiveSection } from '@/pages/Dashboard';
+import { useAuth } from '@/hooks/use-auth';
 
 interface AppSidebarProps {
   activeSection: ActiveSection;
@@ -39,19 +40,15 @@ const menuItems = [
     title: 'Candidate Deep Dive',
     icon: User,
     section: 'candidate-dive' as ActiveSection,
-    description: 'Detailed candidate analysis'
+    description: 'Detailed candidate analysis',
+    hidden: true // Hide this option
   },
   {
     title: 'Smart Insights',
     icon: Lightbulb,
     section: 'insights' as ActiveSection,
-    description: 'AI-powered match insights'
-  },
-  {
-    title: 'Contracts',
-    icon: FileSignature,
-    section: 'contracts' as ActiveSection,
-    description: 'Manage client contracts'
+    description: 'AI-powered match insights',
+    hidden: true // Hide this option
   },
   {
     title: 'Settings',
@@ -62,6 +59,18 @@ const menuItems = [
 ];
 
 export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) {
+  const { user } = useAuth();
+  
+  // Filter menu items based on hidden flags
+  const visibleMenuItems = menuItems.filter(item => {
+    // Hide items marked as hidden
+    if (item.hidden) {
+      return false;
+    }
+    
+    return true;
+  });
+
   return (
     <Sidebar className="border-r bg-white">
       <SidebarContent>
@@ -71,7 +80,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
+              {visibleMenuItems.map((item) => (
                 <SidebarMenuItem key={item.section}>
                   <SidebarMenuButton
                     onClick={() => onSectionChange(item.section)}

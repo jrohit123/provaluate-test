@@ -42,7 +42,7 @@ interface SavedCriteriaGrid {
 
 const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
 const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx'];
-const JD_WEBHOOK_TEST_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook-test/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
+//const JD_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook-test/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
 const JD_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
 export const JobUploadSection = () => {
   const { user, loading, error } = useAuth();
@@ -52,11 +52,11 @@ export const JobUploadSection = () => {
   const [selectedJDContent, setSelectedJDContent] = useState<string>('');
   const [selectedJDFileType, setSelectedJDFileType] = useState<string>('');
   const [criteriaData, setCriteriaData] = useState<CriteriaItem[]>([
-    { id: '1', parameter: 'Technical Skills', weightage: 30, notes: 'Programming languages, frameworks' },
+    { id: '1', parameter: 'Technical Skills', weightage: 30, notes: 'Check the relevant experience in the given programming languages, frameworks, tools' },
     { id: '2', parameter: 'Experience Level', weightage: 25, notes: 'Years of relevant experience' },
     { id: '3', parameter: 'Education', weightage: 15, notes: 'Degree relevance and institution' },
     { id: '4', parameter: 'Soft Skills', weightage: 20, notes: 'Communication, leadership, teamwork' },
-    { id: '5', parameter: 'Certifications', weightage: 10, notes: 'Industry-relevant certifications' }
+    { id: '5', parameter: 'Stability', weightage: 10, notes: 'Calculate the Stability Score based on the average years spent in each of the previous companies.' }
   ]);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -66,6 +66,7 @@ export const JobUploadSection = () => {
   const [criteriaUploading, setCriteriaUploading] = useState(false);
   const [resolvedJD, setResolvedJD] = useState<ResolvedJD | null>(null);
   const [isEditingResolvedJD, setIsEditingResolvedJD] = useState(false);
+  const [resolvedJDId, setResolvedJDId] = useState<string | null>(null);
   const [savedGrids, setSavedGrids] = useState<SavedCriteriaGrid[]>([]);
   const [selectedGridId, setSelectedGridId] = useState<string>(() => sessionStorage.getItem('selectedCriteriaGridId') || '');
   const [gridName, setGridName] = useState('');
@@ -76,33 +77,7 @@ export const JobUploadSection = () => {
   const totalPercentage = criteriaData.reduce((sum, item) => sum + item.weightage, 0);
   const isValidTotal = totalPercentage === 0 || totalPercentage === 100;
 
-  // Test webhook connectivity
-  const testWebhook = async () => {
-    try {
-      // n8n webhooks expect GET requests for testing
-      const getResponse = await fetch(JD_WEBHOOK_URL, {
-        method: 'GET',
-      });
-      
-      console.log('GET test response:', getResponse);
-      
-      if (getResponse.ok) {
-        toast({
-          title: "Webhook Test Successful",
-          description: "n8n webhook is ready and responding.",
-        });
-      } else {
-        throw new Error(`Webhook test failed: ${getResponse.status} - ${getResponse.statusText}`);
-      }
-    } catch (error: any) {
-      console.error('Webhook test failed:', error);
-      toast({
-        title: "Webhook Test Failed",
-        description: error.message || "Could not connect to n8n webhook. Make sure it's listening.",
-        variant: "destructive",
-      });
-    }
-  };
+
 
   useEffect(() => {
     console.log('JobUploadSection - User state:', { user, loading, error });
@@ -112,6 +87,17 @@ export const JobUploadSection = () => {
       loadJobDescriptions();
     }
   }, [user, loading, error]);
+
+  // Load resolved JD when a JD is selected
+  useEffect(() => {
+    console.log('Selected JD ID changed:', selectedJobDescriptionId);
+    if (selectedJobDescriptionId) {
+      loadResolvedJD(selectedJobDescriptionId);
+    } else {
+      setResolvedJD(null);
+      setResolvedJDId(null);
+    }
+  }, [selectedJobDescriptionId]);
 
   useEffect(() => {
     if (selectedJobDescriptionId && jobDescriptions.length > 0) {
@@ -150,10 +136,10 @@ export const JobUploadSection = () => {
     try {
       console.log('Loading saved grids for user:', user.id);
       
-      // Get all criteria grouped by criteria_name
+      // Get unique criteria grids by criteria_name with their grid JSON data and criteria_id
       const { data: grids, error } = await supabase
         .from('criteria')
-        .select('*')
+        .select('criteria_id, criteria_name, grid, created_at')
         .eq('created_by', user.id)
         .eq('company_id', user.profile?.company_id)
         .order('created_at', { ascending: false });
@@ -171,29 +157,36 @@ export const JobUploadSection = () => {
         return;
       }
 
-      // Group criteria by name
-      const groupedGrids = grids.reduce((acc: { [key: string]: CriteriaItem[] }, curr) => {
-        const key = curr.criteria_name;
-        if (!acc[key]) {
-          acc[key] = [];
+      // Get unique grids by criteria_name (latest entry for each name)
+      const uniqueGrids = grids.reduce((acc: { [key: string]: any }, curr) => {
+        if (!acc[curr.criteria_name] || new Date(curr.created_at) > new Date(acc[curr.criteria_name].created_at)) {
+          acc[curr.criteria_name] = curr;
         }
-        acc[key].push({
-          id: curr.criteria_id,
-          parameter: curr.parameter,
-          weightage: curr.weightage,
-          notes: curr.calc_note || ''
-        });
         return acc;
       }, {});
 
-      console.log('Grouped grids:', groupedGrids);
+      console.log('Unique grids:', uniqueGrids);
 
-      // Convert to SavedCriteriaGrid format
-      const formattedGrids: SavedCriteriaGrid[] = Object.entries(groupedGrids).map(([name, criteria]: [string, CriteriaItem[]]) => ({
-        id: name, // Use the criteria_name as the grid ID for uniqueness
-        name,
-        criteria
-      }));
+      // Convert to SavedCriteriaGrid format using grid JSON data
+      const formattedGrids: SavedCriteriaGrid[] = Object.values(uniqueGrids).map((grid: any) => {
+        let criteria: CriteriaItem[] = [];
+        
+        // Parse grid JSON data
+        if (grid.grid && Array.isArray(grid.grid)) {
+          criteria = grid.grid.map((item: any, index: number) => ({
+            id: `${Date.now()}_${index}`, // Generate unique ID
+            parameter: item.parameter || '',
+            weightage: item.weightage || 0,
+            notes: item.calc_note || ''
+          }));
+        }
+
+        return {
+          id: grid.criteria_id, // Use actual criteria_id from database
+          name: grid.criteria_name,
+          criteria
+        };
+      });
 
       console.log('Formatted grids:', formattedGrids);
       setSavedGrids(formattedGrids);
@@ -222,6 +215,89 @@ export const JobUploadSection = () => {
         title: 'Error Loading Job Descriptions',
         description: 'Failed to load job descriptions from the database.',
         variant: 'destructive',
+      });
+    }
+  };
+
+  const loadResolvedJD = async (jdId: string) => {
+    try {
+      // First get the JD file URL from job_descriptions table
+      const { data: jdData, error: jdError } = await supabase
+        .from('job_descriptions')
+        .select('jd_file')
+        .eq('jd_id', jdId)
+        .single();
+
+      if (jdError || !jdData?.jd_file) {
+        console.log('No JD file found for ID:', jdId);
+        setResolvedJD(null);
+        setResolvedJDId(null);
+        return;
+      }
+
+      // Then look up resolved JD by file URL
+      const { data, error } = await supabase
+        .from('resolved_jd')
+        .select('*')
+        .eq('referenced_jd', jdData.jd_file)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+        console.error('Error loading resolved JD:', error);
+        throw error;
+      }
+
+      if (data) {
+        setResolvedJD(data.parameter); // parameter field contains the JSON data
+        setResolvedJDId(data.resolved_jd_id);
+        console.log('Loaded resolved JD:', data);
+      } else {
+        console.log('No resolved JD found for file URL:', jdData.jd_file);
+        setResolvedJD(null);
+        setResolvedJDId(null);
+      }
+    } catch (error) {
+      console.error('Error loading resolved JD:', error);
+      // Don't show toast for missing resolved JD, it's normal
+    }
+  };
+
+  const updateResolvedJD = async () => {
+    if (!resolvedJDId || !resolvedJD || !user?.id) {
+      toast({
+        title: "Update Error",
+        description: "Cannot update resolved JD. Missing required data.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('resolved_jd')
+        .update({
+          parameter: resolvedJD,
+          updated_at: new Date().toISOString(),
+          updated_by: user.id
+        })
+        .eq('resolved_jd_id', resolvedJDId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Resolved JD Updated",
+        description: "Your changes have been saved successfully.",
+      });
+
+      setIsEditingResolvedJD(false);
+    } catch (error: any) {
+      console.error('Error updating resolved JD:', error);
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update resolved JD.",
+        variant: "destructive",
       });
     }
   };
@@ -266,21 +342,29 @@ export const JobUploadSection = () => {
         .getPublicUrl(filePath);
 
       // Call JD Processing Webhook with GET request (n8n expects GET)
-      const params = new URLSearchParams({
+      const webhookParams = {
         file_url: publicUrlData.publicUrl,
         title: jobTitle || 'Untitled Job',
         action: 'process_jd',
         timestamp: new Date().toISOString()
-      });
+      };
+
+      console.log('handleFileUpload - Webhook parameters:', webhookParams);
+      console.log('handleFileUpload - File URL being sent:', publicUrlData.publicUrl);
+
+      const params = new URLSearchParams(webhookParams);
+      const fullWebhookUrl = `${JD_WEBHOOK_URL}?${params.toString()}`;
       
-      const response = await fetch(`${JD_WEBHOOK_URL}?${params.toString()}`, {
+      console.log('handleFileUpload - Final webhook URL:', fullWebhookUrl);
+      console.log('handleFileUpload - Query parameters:', params.toString());
+      
+      const response = await fetch(fullWebhookUrl, {
         method: 'GET',
       });
 
       if (!response.ok) throw new Error('Failed to process JD');
 
-      const resolvedData = await response.json();
-      setResolvedJD(resolvedData);
+      // Webhook successful, but we'll load resolved JD from database instead
       setProcessingStatus('completed');
 
       toast({
@@ -345,7 +429,7 @@ export const JobUploadSection = () => {
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
       setUploadedFile(file);
-      setJobTitle('');
+      // setJobTitle('');
       // setIsJobFieldsDisabled(true); // Removed as per edit hint
     }
   };
@@ -359,7 +443,7 @@ export const JobUploadSection = () => {
     const files = event.target.files;
     if (files && files.length > 0) {
       setUploadedFile(files[0]);
-      setJobTitle('');
+      // setJobTitle('');
       // setIsJobFieldsDisabled(true); // Removed as per edit hint
     }
   };
@@ -517,6 +601,7 @@ export const JobUploadSection = () => {
             .getPublicUrl(uploadData.path);
           
           fileUrl = publicUrlData.publicUrl;
+          console.log(fileUrl);
 
           // Update the job description with the file URL and title (in case it needs to be updated)
           const { error: updateError } = await supabase
@@ -539,10 +624,21 @@ export const JobUploadSection = () => {
             };
 
             console.log('Sending webhook payload (GET):', webhookPayload);
+            console.log('File URL being sent:', fileUrl);
 
-            // Build query string
-            const params = new URLSearchParams(webhookPayload as any).toString();
-            const webhookUrlWithParams = `${JD_WEBHOOK_URL}?${params}`;
+            // Build query string - ensure all values are strings
+            const stringPayload: Record<string, string> = {};
+            Object.entries(webhookPayload).forEach(([key, value]) => {
+              if (value !== null && value !== undefined) {
+                stringPayload[key] = String(value);
+              }
+            });
+
+            const params = new URLSearchParams(stringPayload);
+            const webhookUrlWithParams = `${JD_WEBHOOK_URL}?${params.toString()}`;
+            
+            console.log('Final webhook URL:', webhookUrlWithParams);
+            console.log('Query parameters:', params.toString());
 
             const response = await fetch(webhookUrlWithParams, {
               method: 'GET',
@@ -556,8 +652,10 @@ export const JobUploadSection = () => {
                 variant: "default",
               });
             } else {
-              const resolvedData = await response.json();
-              setResolvedJD(resolvedData);
+              // Webhook was successful, wait a moment then reload resolved JD from database
+              setTimeout(() => {
+                loadResolvedJD(jdData.jd_id);
+              }, 2000); // Wait 2 seconds for n8n to process and save to database
             }
           } catch (webhookError) {
             console.error('Webhook error:', webhookError);
@@ -620,11 +718,11 @@ export const JobUploadSection = () => {
     // Create sample data
     const sampleData = [
       ['Parameter', 'Weightage', 'Notes'],
-      ['Technical Skills', 30, 'Programming languages, frameworks, tools'],
+      ['Technical Skills', 30, 'Check the relevant experience in the given Programming languages, frameworks, tools'],
       ['Experience Level', 25, 'Years of relevant experience in similar roles'],
       ['Education', 15, 'Degree relevance and institution quality'],
       ['Soft Skills', 20, 'Communication, leadership, teamwork abilities'],
-      ['Certifications', 10, 'Industry-relevant professional certifications']
+      ['Stability', 10, 'Calculate the Stability Score based on the average years spent in each of the previous companies.']
     ];
     
     // Convert to worksheet
@@ -706,7 +804,8 @@ export const JobUploadSection = () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
-        .select();
+        .select('criteria_id')
+        .single();
       if (error) {
         console.error('Error saving criteria:', error);
         throw error;
@@ -720,9 +819,11 @@ export const JobUploadSection = () => {
 
       setGridName('');
       await loadSavedGrids();
-      // Store the new grid name in sessionStorage
-      setSelectedGridId(gridName);
-      sessionStorage.setItem('selectedCriteriaGridId', gridName);
+      // Store the new grid's criteria_id in sessionStorage
+      if (data?.criteria_id) {
+        setSelectedGridId(data.criteria_id);
+        sessionStorage.setItem('selectedCriteriaGridId', data.criteria_id);
+      }
     } catch (err: any) {
       console.error('Error saving grid:', err);
       toast({
@@ -867,19 +968,12 @@ export const JobUploadSection = () => {
               <Button onClick={handleProcessJobDescription} className="w-full">
                 Process Job Description
               </Button>
-              <Button 
-                onClick={testWebhook} 
-                variant="outline" 
-                className="w-full text-xs"
-              >
-                Test n8n Webhook Connection
-              </Button>
             </div>
 
             {resolvedJD && !isEditingResolvedJD && (
               <div className="mt-4 p-4 bg-gray-50 rounded-lg">
                 <div className="flex justify-between items-center mb-3">
-                  <h4 className="font-semibold">Resolved Job Description</h4>
+                  <h4 className="font-semibold text-left">Resolved Job Description</h4>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -890,13 +984,13 @@ export const JobUploadSection = () => {
                   </Button>
                 </div>
                 
-                <div className="space-y-2 text-sm">
+                <div className="space-y-2 text-sm text-left">
                   {Object.entries(resolvedJD).map(([key, value]) => (
-                    <div key={key} className="flex">
-                      <span className="font-medium w-1/3 capitalize">
+                    <div key={key} className="flex flex-col space-y-1">
+                      <span className="font-medium capitalize text-left">
                         {key.replace(/_/g, ' ')}:
                       </span>
-                      <span className="flex-1">{value || 'N/A'}</span>
+                      <span className="text-left pl-2">{String(value) || 'N/A'}</span>
                     </div>
                   ))}
                 </div>
@@ -911,23 +1005,33 @@ export const JobUploadSection = () => {
                     <label className="text-sm font-medium capitalize">
                       {key.replace(/_/g, ' ')}
                     </label>
-                    <Input
-                      value={value || ''}
+                    <Textarea
+                      value={String(value) || ''}
                       onChange={(e) => 
                         setResolvedJD(prev => ({
                           ...prev!,
                           [key]: e.target.value
                         }))
                       }
+                      className="min-h-[60px]"
                     />
                   </div>
                 ))}
-                <Button
-                  onClick={() => setIsEditingResolvedJD(false)}
-                  className="w-full"
-                >
-                  Save Changes
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={updateResolvedJD}
+                    className="flex-1"
+                  >
+                    Save Changes
+                  </Button>
+                  <Button
+                    onClick={() => setIsEditingResolvedJD(false)}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>

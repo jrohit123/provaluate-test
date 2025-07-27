@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
@@ -18,6 +18,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -31,17 +32,17 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
         return;
       }
       setIsAuthenticated(true);
-      // Check if user has a profile in users table
+      // Check if user has completed onboarding
       const { data: userProfile } = await supabase
         .from('users')
-        .select('*')
+        .select('onboarding_complete')
         .eq('user_id', user.id)
         .single();
-      setOnboardingComplete(!!userProfile);
+      setOnboardingComplete(userProfile?.onboarding_complete === true);
       setLoading(false);
     };
     checkAuth();
-  }, []);
+  }, [location.pathname]); // Re-check when location changes
 
   if (loading) return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   if (!isAuthenticated) return <Navigate to="/login" replace />;

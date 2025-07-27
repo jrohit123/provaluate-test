@@ -25,12 +25,12 @@ export function useAuth() {
           setLoading(false);
           return;
         }
-        // Fetch user profile
-        const { data: userProfile, error: profileError } = await supabase
-          .from('users')
-          .select('user_id, company_id, first_name, last_name, role, user_status, created_at')
-          .eq('user_id', authUser.id)
-          .single();
+                    // Fetch user profile
+            const { data: userProfile, error: profileError } = await supabase
+              .from('users')
+              .select('user_id, company_id, first_name, last_name, role, user_status, onboarding_complete, created_at')
+              .eq('user_id', authUser.id)
+              .single();
         if (profileError || !userProfile) {
           setUser(null);
           setLoading(false);

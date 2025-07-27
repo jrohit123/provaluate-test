@@ -4,17 +4,16 @@ import { AppSidebar } from '@/components/AppSidebar';
 import { JobUploadSection } from '@/components/JobUploadSection';
 import { ResumeUploadSection } from '@/components/ResumeUploadSection';
 import { MatchScorecardSection } from '@/components/MatchScorecardSection';
-import { CandidateDeepDive } from '@/components/CandidateDeepDive';
-import { SmartInsights } from '@/components/SmartInsights';
 import { Header } from '@/components/Header';
-import { ContractsSection } from '@/components/ContractsSection';
 import AdminUserManagement from '@/components/AdminUserManagement';
+import { useAuth } from '@/hooks/use-auth';
 
-export type ActiveSection = 'job-upload' | 'resume-upload' | 'match-scorecard' | 'candidate-dive' | 'insights' | 'settings' | 'contracts';
+export type ActiveSection = 'job-upload' | 'resume-upload' | 'match-scorecard' | 'settings';
 
 const Dashboard = () => {
-  //const [activeSection, setActiveSection] = useState<ActiveSection>('job-upload');
+  const [activeSection, setActiveSection] = useState<ActiveSection>('job-upload');
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
+  const { user } = useAuth();
 
   const renderMainContent = () => {
     switch (activeSection) {
@@ -24,10 +23,6 @@ const Dashboard = () => {
         return <ResumeUploadSection />;
       case 'match-scorecard':
         return <MatchScorecardSection onCandidateSelect={setSelectedCandidate} />;
-      case 'candidate-dive':
-        return <CandidateDeepDive candidateId={selectedCandidate} />;
-      case 'insights':
-        return <SmartInsights />;
       case 'settings':
         return (
           <div className="p-6">
@@ -36,8 +31,6 @@ const Dashboard = () => {
             <p className="text-muted-foreground">Configure your preferences and scoring logic here.</p>
           </div>
         );
-      case 'contracts':
-        return <ContractsSection />;
       default:
         return <JobUploadSection />;
     }
@@ -53,7 +46,7 @@ const Dashboard = () => {
             {renderMainContent()}
           </main>
           <footer className="bg-white border-t px-6 py-4 text-center text-sm text-muted-foreground">
-            © Provaluate 2025 | Privacy Policy | Terms | Contact | Powered by AI
+            © Provaluate 2025 | Privacy Policy | Terms | Contact | Powered by <a href="http://aitamate.com" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-700">aitamate</a>
           </footer>
         </div>
       </div>
