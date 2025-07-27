@@ -121,7 +121,7 @@ export default function Onboarding() {
           created_at: now.toISOString(),
         });
       if (userDbError) throw userDbError;
-      toast.success('Onboarding complete! You can now access your dashboard.');
+      toast.success('Onboarding complete! Redirecting to your dashboard.');
       console.log('User profile created!');
       setTimeout(() => window.location.replace('/dashboard'), 500);
     } catch (err) {

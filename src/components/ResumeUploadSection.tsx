@@ -78,7 +78,34 @@ const clearSessionUploadedFiles = () => {
   }
 };
 
-// Add helper function at the top level of the component
+// Add helper function to extract recommendation status (same logic as MatchScorecardSection)
+const extractRecommendationStatus = (recommendation: string | undefined): string => {
+  if (!recommendation) return 'Under Review';
+  
+  // Look for specific phrases in the recommendation text
+  const lowerCaseRec = recommendation.toLowerCase();
+  if (lowerCaseRec.includes('to be interviewed')) return 'To Be Interviewed';
+  if (lowerCaseRec.includes('candidature rejected')) return 'Candidature Rejected';
+  if (lowerCaseRec.includes('review further')) return 'Review Further';
+  
+  return 'Under Review';
+};
+
+// Add helper function to get status style (same logic as MatchScorecardSection)
+const getRecommendationStyle = (status: string): string => {
+  switch (status) {
+    case 'To Be Interviewed':
+      return 'bg-green-100 text-green-700';
+    case 'Candidature Rejected':
+      return 'bg-red-100 text-red-700';
+    case 'Review Further':
+      return 'bg-yellow-100 text-yellow-700';
+    default:
+      return 'bg-blue-100 text-blue-700';
+  }
+};
+
+// Keep the old score-based function for fallback if needed
 const getMatchStatus = (score: number) => {
   if (score >= 85) return { status: 'excellent', text: 'Excellent Match', className: 'bg-green-100 text-green-700' };
   if (score >= 70) return { status: 'good', text: 'Good Match', className: 'bg-yellow-100 text-yellow-700' };
@@ -1494,16 +1521,7 @@ export const ResumeUploadSection = () => {
           <h3 className="text-lg font-semibold text-primary-800">
             Candidate Pool ({assessmentReports.length})
           </h3>
-          {assessmentReports.length > 0 && (
-            <Button
-              onClick={handleExportReport}
-              variant="outline"
-              className="flex items-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Export Report
-            </Button>
-          )}
+          {assessmentReports.length > 0}
         </div>
         {loadingReports ? (
           <div className="flex items-center justify-center py-8">
@@ -1515,51 +1533,53 @@ export const ResumeUploadSection = () => {
             No candidates found for the selected Job Description and Criteria.
           </div>
         ) : (
-          assessmentReports.map((report) => (
-          <Card 
-            key={report.id}
-            className="animate-fade-in hover:shadow-md transition-shadow cursor-pointer"
-            onClick={() => handleCandidateClick(report.id)}
-          >
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-4 flex-1">
-                  <div className="bg-primary-100 p-2 rounded-lg">
-                    <User className="w-5 h-5 text-primary-600" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-semibold text-primary-800">{report.candidate_name || 'Unknown'}</h4>
+          assessmentReports.map((report) => {
+            // Extract recommendation status for this report
+            const recommendationStatus = extractRecommendationStatus(report.recommendation);
+            
+            return (
+            <Card 
+              key={report.id}
+              className="animate-fade-in hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => handleCandidateClick(report.id)}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-4 flex-1">
+                    <div className="bg-primary-100 p-2 rounded-lg">
+                      <User className="w-5 h-5 text-primary-600" />
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
-                      <FileText className="w-4 h-4" />
-                      {report.resume_url ? (
-                        <a 
-                          href={report.resume_url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 underline hover:underline"
-                        >
-                          View Candidate
-                        </a>
-                      ) : (
-                        'No file'
-                      )}
-                    </p>
-                      <p className="text-sm text-gray-700">{report.summary || report.recommendation || ''}</p>
-                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-semibold text-primary-800">{report.candidate_name || 'Unknown'}</h4>
                       </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      getMatchStatus(report.final_match ? report.final_match * 10 : 0).className
-                    }`}>
-                      {getMatchStatus(report.final_match ? report.final_match * 10 : 0).text}
-                    </div>
-                    <div className="text-lg font-bold text-gray-900">
-                      {report.final_match ? `${Math.round(report.final_match * 10)}%` : 'No Score'}
+                      <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+                        <FileText className="w-4 h-4" />
+                        {report.resume_url ? (
+                          <a 
+                            href={report.resume_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 underline hover:underline"
+                          >
+                            View Candidate
+                          </a>
+                        ) : (
+                          'No file'
+                        )}
+                      </p>
+                        <p className="text-sm text-gray-700">{report.summary || report.recommendation || ''}</p>
+                      </div>
+                        </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <div className={`px-3 py-1 rounded-full text-xs font-medium ${getRecommendationStyle(recommendationStatus)}`}>
+                        {recommendationStatus}
+                      </div>
+                      <div className="text-lg font-bold text-gray-900">
+                        {report.final_match ? `${Math.round(report.final_match * 10)}%` : 'No Score'}
+                      </div>
                     </div>
                   </div>
-                </div>
                 {/* Optionally, show detailed scores if available */}
                 {report.scores && Array.isArray(report.scores) && report.scores.length > 0 && (
                   <div className="mt-4">
@@ -1582,7 +1602,8 @@ export const ResumeUploadSection = () => {
                 )}
             </CardContent>
           </Card>
-          ))
+          );
+          })
         )}
       </div>
 

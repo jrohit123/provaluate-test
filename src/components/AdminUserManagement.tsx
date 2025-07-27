@@ -6,18 +6,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/use-auth';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 export default function AdminUserManagement() {
   // All hooks must be called unconditionally
   const { user } = useAuth();
+  const { toast } = useToast();
   const [company, setCompany] = useState<any>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [plan, setPlan] = useState<any>(null);
+  const [availablePlans, setAvailablePlans] = useState<any[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [planChangeOpen, setPlanChangeOpen] = useState(false);
+  const [selectedNewPlan, setSelectedNewPlan] = useState<string>('');
   const [inviteForm, setInviteForm] = useState({ firstName: '', lastName: '', email: '', role: 'user' });
   const [inviteError, setInviteError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [allPlans, setAllPlans] = useState<any[]>([]); // Track all plans for warning
+  const [changingPlan, setChangingPlan] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState('');
 
   // Compute admin status after all hooks
@@ -35,12 +40,14 @@ export default function AdminUserManagement() {
           .eq('company_id', user.profile.company_id)
           .single();
         setCompany(companyData);
-        // Fetch and log all plans for debugging
-        const { data: allPlansData } = await supabase
+        // Fetch available plans for plan changes (plan_cost > 0 and status = 'Active')
+        const { data: availablePlansData } = await supabase
           .from('plans')
-          .select('*');
-        setAllPlans(allPlansData || []);
-        console.log('All plans:', allPlansData);
+          .select('*')
+          .gt('plan_cost', 0)
+          .eq('status', 'Active');
+        setAvailablePlans(availablePlansData || []);
+        console.log('Available plans:', availablePlansData);
         // Fetch plan info
         if (companyData?.selected_plan) {
           const { data: planData } = await supabase
@@ -83,6 +90,25 @@ export default function AdminUserManagement() {
       setLoading(false);
       return;
     }
+    
+    // Validate email domain matches the logged-in user's domain
+    if (user?.email && inviteForm.email) {
+      const userDomain = user.email.split('@')[1]?.toLowerCase();
+      const inviteDomain = inviteForm.email.split('@')[1]?.toLowerCase();
+      
+      if (!userDomain || !inviteDomain) {
+        setInviteError('Invalid email format.');
+        setLoading(false);
+        return;
+      }
+      
+      if (userDomain !== inviteDomain) {
+        setInviteError(`Email domain must match your domain (@${userDomain}). Cannot invite users from different domains.`);
+        setLoading(false);
+        return;
+      }
+    }
+    
     if (slotsLeft <= 0) {
       setInviteError('User limit reached for your plan.');
       setLoading(false);
@@ -120,6 +146,51 @@ export default function AdminUserManagement() {
     }
   };
 
+  const handlePlanChange = async () => {
+    if (!selectedNewPlan || !company) {
+      toast({
+        title: "Error",
+        description: "Please select a plan to change to.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setChangingPlan(true);
+    try {
+      const { error } = await supabase
+        .from('companies')
+        .update({ selected_plan: selectedNewPlan })
+        .eq('company_id', company.company_id);
+
+      if (error) throw error;
+
+      // Update local state
+      setCompany(prev => ({ ...prev, selected_plan: selectedNewPlan }));
+      
+      // Fetch updated plan data
+      const selectedPlanData = availablePlans.find(p => p.plan_name === selectedNewPlan);
+      setPlan(selectedPlanData);
+      
+      setPlanChangeOpen(false);
+      setSelectedNewPlan('');
+      
+      toast({
+        title: "Plan Updated",
+        description: `Successfully updated to ${selectedNewPlan} plan.`,
+      });
+    } catch (error: any) {
+      console.error('Error updating plan:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update plan. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setChangingPlan(false);
+    }
+  };
+
   // Only render UI if admin
   if (!isAdmin) return null;
 
@@ -136,17 +207,75 @@ export default function AdminUserManagement() {
             <span className="text-red-600">No plan information available for this company.</span>
           )}
         </div>
-        {allPlans.length === 0 && (
-          <div className="text-yellow-600 text-xs mt-1">Warning: No plans found in the system. Please check your Supabase data and RLS policies.</div>
+        {availablePlans.length === 0 && (
+          <div className="text-yellow-600 text-xs mt-1">Warning: No active plans with cost greater than 0 found. Please check your plan configuration.</div>
         )}
       </CardHeader>
       <CardContent>
         <div className="flex justify-between items-center mb-4">
           <div className="font-semibold text-lg">Company Users</div>
-          <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-            <DialogTrigger asChild>
-              <Button disabled={slotsLeft <= 0}>Invite User</Button>
-            </DialogTrigger>
+          <div className="flex gap-2">
+            <Dialog open={planChangeOpen} onOpenChange={setPlanChangeOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">Change Plan</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Change Company Plan</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Current Plan: <strong>{plan?.plan_name || 'None'}</strong>
+                    </p>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Select a new plan from the available options below:
+                    </p>
+                  </div>
+                  <Select value={selectedNewPlan} onValueChange={setSelectedNewPlan}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select new plan..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availablePlans.map(availablePlan => (
+                        <SelectItem key={availablePlan.plan_name} value={availablePlan.plan_name}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{availablePlan.plan_name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              INR {availablePlan.plan_cost}/month • Max {availablePlan.max_users} users
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={handlePlanChange} 
+                      disabled={!selectedNewPlan || changingPlan}
+                      className="flex-1"
+                    >
+                      {changingPlan ? 'Updating...' : 'Update Plan'}
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setPlanChangeOpen(false);
+                        setSelectedNewPlan('');
+                      }}
+                      className="flex-1"
+                      disabled={changingPlan}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+              <DialogTrigger asChild>
+                <Button disabled={slotsLeft <= 0}>Invite User</Button>
+              </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Invite New User</DialogTitle>
@@ -155,7 +284,7 @@ export default function AdminUserManagement() {
                 <Input
                   name="email"
                   type="email"
-                  placeholder="Email"
+                  placeholder={user?.email ? `Email (must be @${user.email.split('@')[1]})` : "Email"}
                   value={inviteForm.email}
                   onChange={handleInviteChange}
                   required
@@ -176,6 +305,7 @@ export default function AdminUserManagement() {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm border">
