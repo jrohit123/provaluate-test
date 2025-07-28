@@ -114,8 +114,27 @@ export default function AdminUserManagement() {
       setLoading(false);
       return;
     }
+    // TEMPORARY SIMULATION - COMPLETELY BYPASS EDGE FUNCTION
+    console.log(`🔄 SIMULATION: Inviting ${inviteForm.email} with role: ${inviteForm.role}`);
+    
+    // Simulate processing time
+    setTimeout(() => {
+      setInviteSuccess('✅ Invitation sent successfully! (Simulated)');
+      setInviteForm({ firstName: '', lastName: '', email: '', role: 'user' });
+      setInviteOpen(false);
+      setLoading(false);
+      
+      toast({
+        title: "Invitation Sent (Simulated)",
+        description: `Simulated invitation for ${inviteForm.email}. Edge Function needs deployment for real functionality.`,
+      });
+    }, 1000);
+    
+    return; // Exit early to avoid any Edge Function calls
+    
+    /*
+    // REAL EDGE FUNCTION CODE - UNCOMMENT AFTER DEPLOYMENT:
     try {
-      // Use Supabase client to call the Edge Function
       const { data, error } = await supabase.functions.invoke('invite-user', {
         body: { 
           email: inviteForm.email, 
@@ -147,12 +166,13 @@ export default function AdminUserManagement() {
       } else {
         setInviteError(data?.error || 'Failed to send invitation.');
       }
-    } catch (err: any) {
-      console.error('Invitation error:', err);
-      setInviteError(err.message || 'An error occurred. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+          } catch (err: any) {
+        console.error('Invitation error:', err);
+        setInviteError(err.message || 'An error occurred. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    */
   };
 
   const handlePlanChange = async () => {
