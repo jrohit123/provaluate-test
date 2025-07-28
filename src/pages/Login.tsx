@@ -38,9 +38,8 @@ const Login = () => {
       // Check if domain is blocked before proceeding with authentication
       const { data: blockedDomains, error: blockedDomainError } = await supabase
         .from('blocked_domains')
-        .select('domain, reason')
-        .eq('domain', domain)
-        .eq('status', 'active');
+        .select('domain')
+        .eq('domain', domain);
 
       if (blockedDomainError) {
         console.error('Error checking blocked domains:', blockedDomainError);
@@ -48,7 +47,7 @@ const Login = () => {
       } else if (blockedDomains && blockedDomains.length > 0) {
         const blockedDomain = blockedDomains[0];
         const reason = blockedDomain.reason || 'This domain is not allowed for access';
-        throw new Error(`Access denied: ${reason}. Please contact support if you believe this is an error.`);
+        throw new Error(`Access denied: ${reason}. Please contact ProValuate support if you believe this is an error.`);
       }
 
       if (isSignup) {
