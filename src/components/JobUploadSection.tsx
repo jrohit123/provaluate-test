@@ -894,16 +894,6 @@ export const JobUploadSection = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <Input
-                type="text"
-                placeholder="Job Title (e.g., Senior Software Engineer)"
-                value={jobTitle}
-                onChange={(e) => setJobTitle(e.target.value)}
-                className="mb-3"
-                ref={jobTitleInputRef}
-              />
-            </div>
 
             {/* Dropdown to select existing Job Description */}
             <div className="mb-3">
@@ -919,6 +909,17 @@ export const JobUploadSection = () => {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div>
+              <Input
+                type="text"
+                placeholder="Job Title (e.g., Senior Software Engineer)"
+                value={jobTitle}
+                onChange={(e) => setJobTitle(e.target.value)}
+                className="mb-3"
+                ref={jobTitleInputRef}
+              />
             </div>
 
             {/* Job Description Content Preview */}

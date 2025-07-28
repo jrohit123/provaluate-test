@@ -26,12 +26,17 @@ export default function Signup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [freeTrialEligible, setFreeTrialEligible] = useState(false);
+  const [domainBlocked, setDomainBlocked] = useState(false);
+  const [domainBlockReason, setDomainBlockReason] = useState('');
 
-  // Fetch plans and check free trial eligibility
+  // Fetch plans, check free trial eligibility, and check domain blocking
   useEffect(() => {
-    const fetchPlans = async () => {
+    const fetchPlansAndCheckDomain = async () => {
       setLoading(true);
       setError('');
+      setDomainBlocked(false);
+      setDomainBlockReason('');
+      
       try {
         // Fetch all paid plans
         const { data: paidPlans, error: plansError } = await supabase
@@ -41,24 +46,42 @@ export default function Signup() {
         if (plansError) throw plansError;
         let plansList = paidPlans || [];
 
-        // Check free trial eligibility if email is entered
+        // Check domain blocking and free trial eligibility if email is entered
         let trialEligible = false;
         if (email) {
           const domain = email.split('@')[1]?.toLowerCase();
           if (domain) {
-            // Check if any company with this domain has used FreeTrial-30
-            const { data: companiesWithTrial, error: trialError } = await supabase
-              .from('companies')
-              .select('company_id')
-              .eq('email_domain', domain)
-              .eq('selected_plan', 'FreeTrial-30');
-            if (trialError) throw trialError;
-            trialEligible = !companiesWithTrial || companiesWithTrial.length === 0;
+            // Check if domain is blocked
+            const { data: blockedDomains, error: blockedDomainError } = await supabase
+              .from('blocked_domains')
+              .select('domain, reason')
+              .eq('domain', domain)
+              .eq('status', 'active');
+            
+            if (blockedDomainError) {
+              console.error('Error checking blocked domains:', blockedDomainError);
+            } else if (blockedDomains && blockedDomains.length > 0) {
+              const blockedDomain = blockedDomains[0];
+              setDomainBlocked(true);
+              setDomainBlockReason(blockedDomain.reason || 'This domain is not allowed for registration');
+              // Don't check free trial eligibility for blocked domains
+            } else {
+              // Check if any company with this domain has used FreeTrial-30
+              const { data: companiesWithTrial, error: trialError } = await supabase
+                .from('companies')
+                .select('company_id')
+                .eq('email_domain', domain)
+                .eq('selected_plan', 'FreeTrial-30');
+              if (trialError) throw trialError;
+              trialEligible = !companiesWithTrial || companiesWithTrial.length === 0;
+            }
           }
         }
+        
         setFreeTrialEligible(trialEligible);
-        // Fetch FreeTrial-30 plan if eligible
-        if (trialEligible) {
+        
+        // Fetch FreeTrial-30 plan if eligible and domain not blocked
+        if (trialEligible && !domainBlocked) {
           const { data: freeTrialPlan, error: freeTrialError } = await supabase
             .from('plans')
             .select('*')
@@ -67,6 +90,7 @@ export default function Signup() {
           if (freeTrialError) throw freeTrialError;
           if (freeTrialPlan) plansList = [freeTrialPlan, ...plansList];
         }
+        
         setPlans(plansList);
         if (plansList.length > 0) setSelectedPlanId(plansList[0].plan_id);
       } catch (err: any) {
@@ -75,7 +99,8 @@ export default function Signup() {
         setLoading(false);
       }
     };
-    fetchPlans();
+    
+    fetchPlansAndCheckDomain();
     // Only re-run when email changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email]);
@@ -83,6 +108,13 @@ export default function Signup() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    
+    // Prevent submission if domain is blocked
+    if (domainBlocked) {
+      setError('Cannot register with a blocked domain. Please use a different email address.');
+      return;
+    }
+    
     if (!firstName || !lastName || !email || !password || !companyName || !selectedPlanId) {
       setError('All fields are required.');
       return;
@@ -92,6 +124,25 @@ export default function Signup() {
       // Extract domain
       const domain = email.split('@')[1]?.toLowerCase();
       if (!domain) throw new Error('Invalid email address.');
+      
+      // Check if domain is blocked
+      const { data: blockedDomains, error: blockedDomainError } = await supabase
+        .from('blocked_domains')
+        .select('domain, reason')
+        .eq('domain', domain)
+        .eq('status', 'active');
+      
+      if (blockedDomainError) {
+        console.error('Error checking blocked domains:', blockedDomainError);
+        // Continue with signup if we can't check blocked domains (don't block due to system error)
+      } else if (blockedDomains && blockedDomains.length > 0) {
+        const blockedDomain = blockedDomains[0];
+        const reason = blockedDomain.reason || 'This domain is not allowed for registration';
+        setError(`Registration not allowed: ${reason}. Please contact support if you believe this is an error.`);
+        setLoading(false);
+        return;
+      }
+      
       // Check if company exists by domain
       const { data: existingCompanies, error: companyError } = await supabase
         .from('companies')
@@ -181,13 +232,22 @@ export default function Signup() {
               onChange={e => setLastName(e.target.value)}
               required
             />
-            <Input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-            />
+            <div>
+              <Input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                className={domainBlocked ? 'border-red-500 focus:border-red-500' : ''}
+              />
+              {domainBlocked && (
+                <div className="text-red-600 text-sm mt-1 flex items-center">
+                  <span className="mr-1">⚠️</span>
+                  {domainBlockReason}
+                </div>
+              )}
+            </div>
             <Input
               type="password"
               placeholder="Password"
@@ -213,8 +273,12 @@ export default function Signup() {
                 ))}
               </SelectContent>
             </Select>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Signing Up...' : 'Sign Up'}
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={loading || domainBlocked}
+            >
+              {loading ? 'Signing Up...' : domainBlocked ? 'Domain Not Allowed' : 'Sign Up'}
             </Button>
             {error && <div className="text-red-600 text-sm text-center mt-2">{error}</div>}
             <div className="text-center text-sm mt-2">

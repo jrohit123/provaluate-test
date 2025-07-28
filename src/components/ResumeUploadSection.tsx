@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Upload, FileText, User, CheckCircle, Play, Briefcase, Grid, Loader2, Download, X } from 'lucide-react';
+import { Upload, FileText, User, CheckCircle, Play, Briefcase, Grid, Loader2, Download, X, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -293,70 +293,85 @@ export const ResumeUploadSection = () => {
   }, [criteriaGrids, selectedCriteriaGridId, toast]);
 
   // Fetch assessment reports filtered by selected JD and criteria
-  useEffect(() => {
-    const fetchReports = async () => {
-      if (!user?.profile?.company_id || !selectedJobDescriptionId || !selectedCriteriaGridId) {
+  const fetchAssessmentReports = useCallback(async () => {
+    if (!user?.profile?.company_id || !selectedJobDescriptionId || !selectedCriteriaGridId) {
+      setAssessmentReports([]);
+      return;
+    }
+    setLoadingReports(true);
+    try {
+      // First, get the resolved_jd_id for the selected job description
+      console.log('Looking for JD with ID:', selectedJobDescriptionId);
+      const { data: jdData, error: jdError } = await supabase
+        .from('job_descriptions')
+        .select('jd_file')
+        .eq('jd_id', selectedJobDescriptionId)
+        .single();
+
+      if (jdError || !jdData?.jd_file) {
+        console.log('No JD file found for ID:', selectedJobDescriptionId);
         setAssessmentReports([]);
+        setLoadingReports(false);
         return;
       }
-      setLoadingReports(true);
-      try {
-        // First, get the resolved_jd_id for the selected job description
-        console.log('Looking for JD with ID:', selectedJobDescriptionId);
-        const { data: jdData, error: jdError } = await supabase
-          .from('job_descriptions')
-          .select('jd_file')
-          .eq('jd_id', selectedJobDescriptionId)
-          .single();
 
-        if (jdError || !jdData?.jd_file) {
-          console.log('No JD file found for ID:', selectedJobDescriptionId);
-          setAssessmentReports([]);
-          setLoadingReports(false);
-          return;
-        }
+      console.log('Found JD file URL:', jdData.jd_file);
 
-        console.log('Found JD file URL:', jdData.jd_file);
+      // Then get the resolved_jd_id using the file URL
+      const { data: resolvedJdData, error: resolvedJdError } = await supabase
+        .from('resolved_jd')
+        .select('resolved_jd_id')
+        .eq('referenced_jd', jdData.jd_file)
+        .single();
 
-        // Then get the resolved_jd_id using the file URL
-        const { data: resolvedJdData, error: resolvedJdError } = await supabase
-          .from('resolved_jd')
-          .select('resolved_jd_id')
-          .eq('referenced_jd', jdData.jd_file)
-          .single();
-
-        if (resolvedJdError || !resolvedJdData?.resolved_jd_id) {
-          console.log('No resolved JD found for file URL:', jdData.jd_file);
-          setAssessmentReports([]);
-          setLoadingReports(false);
-          return;
-        }
-
-        console.log('Found resolved_jd_id:', resolvedJdData.resolved_jd_id);
-        console.log('Using criteria_id:', selectedCriteriaGridId);
-
-        // Finally, fetch assessment reports using resolved_jd_id and criteria_id
-        const { data, error } = await supabase
-          .from('assessment_reports')
-          .select('*')
-          .eq('resolved_jd_id', resolvedJdData.resolved_jd_id)
-          .eq('criteria_id', selectedCriteriaGridId)
-          .order('created_at', { ascending: false });
-        
-        if (error) throw error;
-        
-        console.log('Found assessment reports:', data?.length || 0);
-        setAssessmentReports(data || []);
-      } catch (err) {
-        console.log('No assessment reports found for the selected criteria:', err);
+      if (resolvedJdError || !resolvedJdData?.resolved_jd_id) {
+        console.log('No resolved JD found for file URL:', jdData.jd_file);
         setAssessmentReports([]);
-        // No error toast - this is normal when no reports exist yet
-      } finally {
         setLoadingReports(false);
+        return;
       }
-    };
-    fetchReports();
+
+      console.log('Found resolved_jd_id:', resolvedJdData.resolved_jd_id);
+      console.log('Using criteria_id:', selectedCriteriaGridId);
+
+      // Finally, fetch assessment reports using resolved_jd_id and criteria_id
+      const { data, error } = await supabase
+        .from('assessment_reports')
+        .select('*')
+        .eq('resolved_jd_id', resolvedJdData.resolved_jd_id)
+        .eq('criteria_id', selectedCriteriaGridId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      console.log('Found assessment reports:', data?.length || 0);
+      setAssessmentReports(data || []);
+    } catch (err) {
+      console.log('No assessment reports found for the selected criteria:', err);
+      setAssessmentReports([]);
+      // No error toast - this is normal when no reports exist yet
+    } finally {
+      setLoadingReports(false);
+    }
   }, [user?.profile?.company_id, selectedJobDescriptionId, selectedCriteriaGridId]);
+
+  useEffect(() => {
+    fetchAssessmentReports();
+  }, [fetchAssessmentReports]);
+
+  // Handle manual refresh of assessment reports
+  const handleRefreshReports = async () => {
+    console.log('🔄 Manual refresh triggered');
+    toast({
+      title: "Refreshing...",
+      description: "Checking for updated evaluation results.",
+    });
+    await fetchAssessmentReports();
+    toast({
+      title: "Refreshed",
+      description: `Found ${assessmentReports.length} candidate${assessmentReports.length === 1 ? '' : 's'}.`,
+    });
+  };
 
   const getScoreColor = (score: number) => {
     if (score >= 90) return 'text-accent-600';
@@ -1351,6 +1366,11 @@ export const ResumeUploadSection = () => {
                         ? "Upload resumes to get started"
                         : "Ready to evaluate resumes"}
                     </p>
+                    {(selectedJobDescriptionId && selectedCriteriaGridId && !hasNewlyUploadedResumes) && (
+                      <p className="text-xs text-gray-500 italic mt-1">
+                        Disclaimer: AI can make mistakes. Please use the tool judiciously.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -1522,7 +1542,16 @@ export const ResumeUploadSection = () => {
           <h3 className="text-lg font-semibold text-primary-800">
             Candidate Pool ({assessmentReports.length})
           </h3>
-          {assessmentReports.length > 0}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefreshReports}
+            disabled={loadingReports}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`w-4 h-4 ${loadingReports ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
         </div>
         {loadingReports ? (
           <div className="flex items-center justify-center py-8">
