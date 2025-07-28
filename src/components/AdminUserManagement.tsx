@@ -115,32 +115,41 @@ export default function AdminUserManagement() {
       return;
     }
     try {
-      const session = await supabase.auth.getSession();
-      const jwt = session.data.session?.access_token;
-      if (!jwt) {
-        setInviteError('You must be logged in.');
-        setLoading(false);
-        return;
-      }
-      const res = await fetch('/functions/v1/invite-user', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${jwt}`,
-        },
-        body: JSON.stringify({ email: inviteForm.email, role: inviteForm.role }),
+      // Use Supabase client to call the Edge Function
+      const { data, error } = await supabase.functions.invoke('invite-user', {
+        body: { 
+          email: inviteForm.email, 
+          role: inviteForm.role 
+        }
       });
-      const data = await res.json();
-      if (data.success) {
-        setInviteSuccess('Invitation sent!');
+
+      if (error) {
+        console.error('Edge function error:', error);
+        throw error;
+      }
+
+      if (data?.success) {
+        setInviteSuccess('Invitation sent successfully!');
         setInviteForm({ firstName: '', lastName: '', email: '', role: 'user' });
         setInviteOpen(false);
-        // Optionally refresh users/invitations here
+        
+        // Refresh users list
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('user_id, company_id, first_name, last_name, role, user_status, created_at')
+          .eq('company_id', user.profile.company_id);
+        setUsers(usersData || []);
+        
+        toast({
+          title: "Invitation Sent",
+          description: `Successfully invited ${inviteForm.email}`,
+        });
       } else {
-        setInviteError(data.error || 'Failed to send invitation.');
+        setInviteError(data?.error || 'Failed to send invitation.');
       }
-    } catch (err) {
-      setInviteError('An error occurred. Please try again.');
+    } catch (err: any) {
+      console.error('Invitation error:', err);
+      setInviteError(err.message || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
