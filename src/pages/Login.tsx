@@ -29,6 +29,28 @@ const Login = () => {
     setIsLoading(true);
 
     try {
+      // Extract domain from email for domain blocking check
+      const domain = email.split('@')[1]?.toLowerCase();
+      if (!domain) {
+        throw new Error('Invalid email address format.');
+      }
+
+      // Check if domain is blocked before proceeding with authentication
+      const { data: blockedDomains, error: blockedDomainError } = await supabase
+        .from('blocked_domains')
+        .select('domain, reason')
+        .eq('domain', domain)
+        .eq('status', 'active');
+
+      if (blockedDomainError) {
+        console.error('Error checking blocked domains:', blockedDomainError);
+        // Continue with authentication if we can't check blocked domains (don't block due to system error)
+      } else if (blockedDomains && blockedDomains.length > 0) {
+        const blockedDomain = blockedDomains[0];
+        const reason = blockedDomain.reason || 'This domain is not allowed for access';
+        throw new Error(`Access denied: ${reason}. Please contact support if you believe this is an error.`);
+      }
+
       if (isSignup) {
         // Sign up with Supabase Auth
         const { data, error } = await supabase.auth.signUp({
