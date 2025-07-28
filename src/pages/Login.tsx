@@ -87,8 +87,8 @@ const Login = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md animate-fade-in">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-primary-800 mb-2">Provaluate</h1>
+        <div className="text-center mb-8">          
+          <h1 className="text-3xl font-bold text-primary-800 mb-2"><img src="/public/logo.png" alt="Provaluate" className="w-24 h-24 mx-auto mb-2" />Provaluate</h1>
           <p className="text-muted-foreground">Smart Resume Evaluation Platform</p>
         </div>
         
@@ -198,7 +198,7 @@ const Login = () => {
         </Card>
         
         <div className="mt-8 text-center text-sm text-muted-foreground">
-          <p>Powered by AI | Coming soon: Automated JD parsing and resume ranking engine</p>
+          <p>Powered by AI | Automated JD parsing and resume ranking engine based on customized selection criteria</p>
         </div>
       </div>
     </div>

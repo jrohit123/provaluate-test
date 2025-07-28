@@ -43,7 +43,8 @@ interface SavedCriteriaGrid {
 const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
 const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx'];
 //const JD_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook-test/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
-const JD_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
+//const JD_WEBHOOK_URL = "https://n8n-6421994137235212.kloudbeansite.com/webhook/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
+const JD_WEBHOOK_URL = "https://automations.aitamate.com/webhook-test/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
 export const JobUploadSection = () => {
   const { user, loading, error } = useAuth();
   const [jobTitle, setJobTitle] = useState('');
@@ -209,7 +210,26 @@ export const JobUploadSection = () => {
         .eq('company_id', user.profile.company_id)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      setJobDescriptions(data || []);
+      
+      const jobDescriptions = data || [];
+      setJobDescriptions(jobDescriptions);
+      
+      // Validate selectedJobDescriptionId against loaded job descriptions
+      // Clear it if it doesn't exist for this user (prevents stale sessionStorage data)
+      if (selectedJobDescriptionId && jobDescriptions.length > 0) {
+        const isValidSelection = jobDescriptions.some(jd => jd.jd_id === selectedJobDescriptionId);
+        if (!isValidSelection) {
+          console.log('Clearing invalid selectedJobDescriptionId from sessionStorage:', selectedJobDescriptionId);
+          setSelectedJobDescriptionId('');
+          sessionStorage.removeItem('selectedJDId');
+          // This will trigger the useEffect to clear resolvedJD
+        }
+      } else if (selectedJobDescriptionId && jobDescriptions.length === 0) {
+        // No job descriptions exist for this user, clear any stale selection
+        console.log('Clearing selectedJobDescriptionId - no job descriptions found for this user');
+        setSelectedJobDescriptionId('');
+        sessionStorage.removeItem('selectedJDId');
+      }
     } catch (error) {
       toast({
         title: 'Error Loading Job Descriptions',

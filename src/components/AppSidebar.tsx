@@ -61,11 +61,17 @@ const menuItems = [
 export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) {
   const { user } = useAuth();
   
-  // Filter menu items based on hidden flags
+  // Filter menu items based on hidden flags and user role
   const visibleMenuItems = menuItems.filter(item => {
     // Hide items marked as hidden
     if (item.hidden) {
       return false;
+    }
+    
+    // Show Settings only to admin or superadmin users
+    if (item.section === 'settings') {
+      const userRole = user?.profile?.role;
+      return userRole === 'admin' || userRole === 'superadmin';
     }
     
     return true;

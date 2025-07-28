@@ -24,13 +24,7 @@ const Dashboard = () => {
       case 'match-scorecard':
         return <MatchScorecardSection onCandidateSelect={setSelectedCandidate} />;
       case 'settings':
-        return (
-          <div className="p-6">
-            <AdminUserManagement />
-            <h2 className="text-2xl font-bold mb-4 text-primary-800">Settings</h2>
-            <p className="text-muted-foreground">Configure your preferences and scoring logic here.</p>
-          </div>
-        );
+        return <AdminUserManagement />;
       default:
         return <JobUploadSection />;
     }

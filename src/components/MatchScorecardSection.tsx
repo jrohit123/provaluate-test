@@ -23,6 +23,7 @@ interface Candidate {
   recommendation?: string;
   detailedAssessment?: string;
   resumeUrl?: string;
+  createdAt?: string;
 }
 
 interface MatchScorecardSectionProps {
@@ -96,7 +97,8 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
         status: recommendationStatus,
         recommendation: selectedCandidateData.recommendation,
         detailedAssessment: selectedCandidateData.detailed_assessment,
-        resumeUrl: selectedCandidateData.resume_url
+        resumeUrl: selectedCandidateData.resume_url,
+        createdAt: selectedCandidateData.created_at
       };
 
       setCandidates([candidate]);
@@ -219,6 +221,8 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
         console.log('Processing report:', report.id, report.candidate_name);
         console.log('Report scoring field:', report.scoring);
         console.log('Report scoring type:', typeof report.scoring);
+        console.log('Report final_match:', report.final_match);
+        console.log('Report recommendation:', report.recommendation);
         
         // Handle scoring field - it might be a string or jsonb
         let scoringText = '';
@@ -231,25 +235,28 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
         
         const { scores, overallScore } = parseScoringText(scoringText);
         console.log('Parsed scores:', scores);
-        console.log('Overall score:', overallScore);
         
-        // Determine status based on overall score
-        let status: string = 'Under Review'; // Default to Under Review
-        if (report.status === 'completed' || overallScore > 0) {
-          if (overallScore >= 85) status = 'Excellent Match';
-          else if (overallScore >= 70) status = 'Good Match';
-          else status = 'No Match';
-        }
+        // Use final_match if available, otherwise use parsed overall score
+        const finalScore = report.final_match 
+          ? Math.round(report.final_match * 10) 
+          : overallScore;
+        
+        console.log('Final score used:', finalScore);
+        
+        // Extract recommendation status from recommendation text
+        const recommendationStatus = extractRecommendationStatus(report.recommendation);
+        console.log('Extracted recommendation status:', recommendationStatus);
 
         return {
           id: report.id,
           name: report.candidate_name || 'Unknown Candidate',
-          overallScore,
+          overallScore: finalScore,
           scores,
-          status,
+          status: recommendationStatus,
           recommendation: report.recommendation,
           detailedAssessment: report.detailed_assessment,
-          resumeUrl: report.resume_url
+          resumeUrl: report.resume_url,
+          createdAt: report.created_at
         };
       });
 
@@ -396,6 +403,24 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     return text.replace(/\*/g, '');
   };
 
+  // Function to format date for export (dd-mmm-yy hh:mm) - preserves UTC time
+  const formatDateForExport = (dateString: string) => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = new Date(dateString);
+      const day = date.getUTCDate().toString().padStart(2, '0');
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const month = monthNames[date.getUTCMonth()];
+      const year = date.getUTCFullYear().toString().slice(-2);
+      const hours = date.getUTCHours().toString().padStart(2, '0');
+      const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+      return `${day}-${month}-${year} ${hours}:${minutes}`;
+    } catch (error) {
+      return 'N/A';
+    }
+  };
+
   const handleExportReport = () => {
     try {
       // Create a new workbook
@@ -405,10 +430,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
       const summaryData = candidates.map(candidate => ({
         'Candidate Name': candidate.name,
         'Overall Score (%)': candidate.overallScore,
-        'Match Status': candidate.status === 'Excellent Match' ? 'Excellent Match' : 
-                       candidate.status === 'Good Match' ? 'Good Match' : 
-                       candidate.status === 'No Match' ? 'No Match' : 'Under Review',
-        'Resume URL': candidate.resumeUrl || 'N/A',
+        'Assessed at': formatDateForExport(candidate.createdAt || ''),
         'Recommendation': cleanTextForExport(candidate.recommendation),
         'Summary': cleanTextForExport(candidate.detailedAssessment)
       }));
@@ -458,11 +480,13 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
   };
 
   const handleTopFiveOnly = () => {
-    const topFive = candidates.slice(0, 5);
+    // Sort candidates by overall score descending, then take the top 5
+    const sortedCandidates = [...candidates].sort((a, b) => b.overallScore - a.overallScore);
+    const topFive = sortedCandidates.slice(0, 5);
     setCandidates(topFive);
     toast({
       title: "Filtered Results",
-      description: `Showing top ${topFive.length} candidates only.`,
+      description: `Showing top ${topFive.length} candidates sorted by highest scores.`,
     });
   };
 
@@ -504,15 +528,29 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
           <h2 className="text-2xl font-bold text-primary-800 mb-2">Match Scorecard</h2>
           <p className="text-muted-foreground">Candidate evaluation results and rankings ({candidates.length} candidates)</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleExportReport}>
-            <Download className="w-4 h-4 mr-2" />
-            Export Report
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleTopFiveOnly}>
-            Top 5 Only
-          </Button>
-        </div>
+        {/* Only show action buttons when not in single candidate mode (popup) */}
+        {!selectedCandidateData && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleExportReport}>
+              <Download className="w-4 h-4 mr-2" />
+              Export Report
+            </Button>
+            {candidates.length > 5 && (
+              <Button variant="outline" size="sm" onClick={handleTopFiveOnly}>
+                Top 5 Only
+              </Button>
+            )}
+          </div>
+        )}
+        {/* Show only export button when in single candidate mode */}
+        {selectedCandidateData && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleExportReport}>
+              <Download className="w-4 h-4 mr-2" />
+              Export Report
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="grid gap-6">
