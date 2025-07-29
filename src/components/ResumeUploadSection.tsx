@@ -138,6 +138,7 @@ export const ResumeUploadSection = () => {
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<NodeJS.Timeout | null>(null);
   const [evaluationStartTime, setEvaluationStartTime] = useState<string | null>(null);
   const [expectedResumeCount, setExpectedResumeCount] = useState<number>(0);
+  const [lastProgressCount, setLastProgressCount] = useState<number>(0);
 
   // Helper function to calculate and format evaluation time
   const getEvaluationTime = (reportCreatedAt: string): { text: string; colorClass: string } => {
@@ -267,6 +268,7 @@ export const ResumeUploadSection = () => {
     }
     setIsWaitingForAssessments(false);
     setExpectedResumeCount(0);
+    setLastProgressCount(0);
   };
 
   // Monitor assessment reports changes to stop auto-refresh when ALL expected resumes are processed
@@ -281,23 +283,38 @@ export const ResumeUploadSection = () => {
       });
       
       console.log(`📊 Processing progress: ${newReports.length}/${expectedResumeCount} resumes completed`);
+      console.log('📊 Evaluation start time:', evaluationStartTime);
+      console.log('📊 Assessment reports:', assessmentReports.map(r => ({
+        name: r.candidate_name,
+        created_at: r.created_at,
+        id: r.id
+      })));
+      console.log('📊 New reports:', newReports.map(r => ({
+        name: r.candidate_name,
+        created_at: r.created_at,
+        id: r.id
+      })));
       
+      // Check if all resumes are processed
       if (newReports.length >= expectedResumeCount) {
         console.log('✅ All resumes processed! Stopping auto-refresh.');
         stopAutoRefreshAssessments();
+        setLastProgressCount(0); // Reset progress tracking
         toast({
           title: "All Resumes Processed!",
           description: `Successfully processed all ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'}.`,
         });
-      } else if (newReports.length > 0) {
-        // Show intermediate progress
+      } else if (newReports.length > 0 && newReports.length > lastProgressCount) {
+        // Show intermediate progress toast only when count increases
+        console.log(`📊 Intermediate progress: ${newReports.length}/${expectedResumeCount} (previous: ${lastProgressCount})`);
+        setLastProgressCount(newReports.length);
         toast({
           title: "Processing Update",
           description: `${newReports.length} of ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'} completed.`,
         });
       }
     }
-  }, [assessmentReports.length, isWaitingForAssessments, expectedResumeCount, evaluationStartTime]);
+  }, [assessmentReports, isWaitingForAssessments, expectedResumeCount, evaluationStartTime, lastProgressCount]);
 
   // Cleanup interval on unmount
   useEffect(() => {
@@ -447,6 +464,7 @@ export const ResumeUploadSection = () => {
       console.log('🔄 Clearing evaluation start time (component mount)');
       setEvaluationStartTime(null);
       setExpectedResumeCount(0);
+      setLastProgressCount(0);
     }
   }, [user?.profile?.company_id, loadResumes, loadJobDescriptions, loadCriteriaGrids]);
 
@@ -814,6 +832,7 @@ export const ResumeUploadSection = () => {
         console.log('📊 Setting expected resume count:', resumeUrls.length);
         setEvaluationStartTime(startTime);
         setExpectedResumeCount(resumeUrls.length);
+        setLastProgressCount(0); // Reset progress tracking
         
         await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'provaluate');
         
@@ -986,6 +1005,7 @@ export const ResumeUploadSection = () => {
     console.log('🔄 Clearing evaluation start time (job description change)');
     setEvaluationStartTime(null);
     setExpectedResumeCount(0);
+    setLastProgressCount(0);
     
     const selectedJD = jobDescriptions.find(jd => jd.jd_id === jdId);
     toast({
@@ -1004,6 +1024,7 @@ export const ResumeUploadSection = () => {
     console.log('🔄 Clearing evaluation start time (criteria grid change)');
     setEvaluationStartTime(null);
     setExpectedResumeCount(0);
+    setLastProgressCount(0);
     
     const selectedGrid = criteriaGrids.find(grid => grid.id === gridId);
     toast({
@@ -1206,6 +1227,7 @@ export const ResumeUploadSection = () => {
       console.log('📊 Setting expected resume count:', resumeUrls.length);
       setEvaluationStartTime(startTime);
       setExpectedResumeCount(resumeUrls.length);
+      setLastProgressCount(0); // Reset progress tracking
       
       await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'new_resumes');
 
@@ -1303,6 +1325,7 @@ export const ResumeUploadSection = () => {
       console.log('📊 Setting expected resume count:', resumeUrls.length);
       setEvaluationStartTime(startTime);
       setExpectedResumeCount(resumeUrls.length);
+      setLastProgressCount(0); // Reset progress tracking
       
       await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'all_resumes');
 
@@ -1668,6 +1691,7 @@ export const ResumeUploadSection = () => {
                         console.log('🔄 Clearing evaluation start time (clear all files)');
                         setEvaluationStartTime(null);
                         setExpectedResumeCount(0);
+                        setLastProgressCount(0);
                         stopAutoRefreshAssessments();
                       }}
                       className="text-sm"

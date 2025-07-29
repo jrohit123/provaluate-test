@@ -578,11 +578,11 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-primary-800 mb-2">Match Scorecard</h2>
+          <h2 className="text-2xl font-bold text-primary-800 mb-2">All Results</h2>
           <p className="text-muted-foreground">
-            Candidate evaluation results and rankings 
+            Evaluation results and rankings <br />
             ({displayCandidates.length} {recommendationFilter !== 'all' ? 'filtered' : ''} 
-            of {candidates.length} candidates)
+             of {candidates.length} candidates)
           </p>
         </div>
         {/* Only show action buttons when not in single candidate mode (popup) */}
