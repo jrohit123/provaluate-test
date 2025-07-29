@@ -140,14 +140,32 @@ export const ResumeUploadSection = () => {
 
   // Helper function to calculate and format evaluation time
   const getEvaluationTime = (reportCreatedAt: string): { text: string; colorClass: string } => {
-    if (!evaluationStartTime) return { text: 'Unknown', colorClass: 'bg-gray-100 text-gray-700' };
+    console.log('🕐 getEvaluationTime called:', { reportCreatedAt, evaluationStartTime });
+    
+    if (!evaluationStartTime) {
+      console.log('❌ No evaluationStartTime set');
+      return { text: 'Unknown', colorClass: 'bg-gray-100 text-gray-700' };
+    }
     
     try {
       const startTime = new Date(evaluationStartTime);
       const endTime = new Date(reportCreatedAt);
+      
+      console.log('📅 Time comparison:', { 
+        startTime: startTime.toISOString(), 
+        endTime: endTime.toISOString(),
+        startTimeValid: !isNaN(startTime.getTime()),
+        endTimeValid: !isNaN(endTime.getTime())
+      });
+      
       const timeDiffMs = endTime.getTime() - startTime.getTime();
       
-      if (timeDiffMs < 0) return { text: 'Unknown', colorClass: 'bg-gray-100 text-gray-700' }; // Invalid time difference
+      console.log('⏱️ Time difference:', { timeDiffMs, timeDiffMinutes: timeDiffMs / 60000 });
+      
+      if (timeDiffMs < 0) {
+        console.log('❌ Negative time difference - report created before evaluation started');
+        return { text: 'Unknown', colorClass: 'bg-gray-100 text-gray-700' }; // Invalid time difference
+      }
       
       const timeDiffSeconds = Math.floor(timeDiffMs / 1000);
       const timeDiffMinutes = Math.floor(timeDiffSeconds / 60);
@@ -177,9 +195,10 @@ export const ResumeUploadSection = () => {
         colorClass = 'bg-green-100 text-green-700'; // <1 minute - green
       }
       
+      console.log('✅ Calculated time:', { timeText, colorClass });
       return { text: timeText, colorClass };
     } catch (error) {
-      console.error('Error calculating evaluation time:', error);
+      console.error('❌ Error calculating evaluation time:', error);
       return { text: 'Unknown', colorClass: 'bg-gray-100 text-gray-700' };
     }
   };
@@ -404,6 +423,7 @@ export const ResumeUploadSection = () => {
       setSelectedFiles([]);
       setNewlyUploadedIds(new Set());
       // Clear evaluation timing on component mount
+      console.log('🔄 Clearing evaluation start time (component mount)');
       setEvaluationStartTime(null);
     }
   }, [user?.profile?.company_id, loadResumes, loadJobDescriptions, loadCriteriaGrids]);
@@ -768,6 +788,7 @@ export const ResumeUploadSection = () => {
         
         // Record the start time for evaluation timing
         const startTime = new Date().toISOString();
+        console.log('🚀 Setting evaluation start time (handleEvaluation):', startTime);
         setEvaluationStartTime(startTime);
         
         await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'provaluate');
@@ -938,6 +959,7 @@ export const ResumeUploadSection = () => {
     // Stop any existing auto-refresh when switching job descriptions
     stopAutoRefreshAssessments();
     // Clear evaluation start time for new evaluation
+    console.log('🔄 Clearing evaluation start time (job description change)');
     setEvaluationStartTime(null);
     
     const selectedJD = jobDescriptions.find(jd => jd.jd_id === jdId);
@@ -954,6 +976,7 @@ export const ResumeUploadSection = () => {
     // Stop any existing auto-refresh when switching criteria grids
     stopAutoRefreshAssessments();
     // Clear evaluation start time for new evaluation
+    console.log('🔄 Clearing evaluation start time (criteria grid change)');
     setEvaluationStartTime(null);
     
     const selectedGrid = criteriaGrids.find(grid => grid.id === gridId);
@@ -1153,6 +1176,7 @@ export const ResumeUploadSection = () => {
 
       // Record the start time for evaluation timing
       const startTime = new Date().toISOString();
+      console.log('🚀 Setting evaluation start time (handleProcessNewResumes):', startTime);
       setEvaluationStartTime(startTime);
       
       await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'new_resumes');
@@ -1247,6 +1271,7 @@ export const ResumeUploadSection = () => {
 
       // Record the start time for evaluation timing
       const startTime = new Date().toISOString();
+      console.log('🚀 Setting evaluation start time (handleProcessAllResumes):', startTime);
       setEvaluationStartTime(startTime);
       
       await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'all_resumes');
@@ -1610,6 +1635,7 @@ export const ResumeUploadSection = () => {
                         setNewlyUploadedIds(new Set());
                         setCurrentlyProcessing(-1);
                         // Clear evaluation timing when clearing files
+                        console.log('🔄 Clearing evaluation start time (clear all files)');
                         setEvaluationStartTime(null);
                         stopAutoRefreshAssessments();
                       }}
@@ -1771,13 +1797,22 @@ export const ResumeUploadSection = () => {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                           <h4 className="font-semibold text-primary-800">{report.candidate_name || 'Unknown'}</h4>
-                          {report.created_at && (() => {
-                            const evaluationTime = getEvaluationTime(report.created_at);
-                            return (
-                              <span className={`text-xs ${evaluationTime.colorClass} px-2 py-1 rounded-full`}>
-                                Evaluated in {evaluationTime.text}
-                              </span>
-                            );
+                          {report.created_at && evaluationStartTime && (() => {
+                            // Only show timing for reports created after the current evaluation started
+                            const reportTime = new Date(report.created_at);
+                            const evalStartTime = new Date(evaluationStartTime);
+                            
+                            if (reportTime >= evalStartTime) {
+                              const evaluationTime = getEvaluationTime(report.created_at);
+                              if (evaluationTime.text !== 'Unknown') {
+                                return (
+                                  <span className={`text-xs ${evaluationTime.colorClass} px-2 py-1 rounded-full`}>
+                                    Evaluated in {evaluationTime.text}
+                                  </span>
+                                );
+                              }
+                            }
+                            return null;
                           })()}
                       </div>
                       <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">

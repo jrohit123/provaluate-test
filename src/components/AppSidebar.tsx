@@ -31,7 +31,7 @@ const menuItems = [
     description: 'Upload and manage candidate resumes'
   },
   {
-    title: 'Match Scorecard',
+    title: 'View All Results',
     icon: BarChart3,
     section: 'match-scorecard' as ActiveSection,
     description: 'View candidate scoring and rankings'
