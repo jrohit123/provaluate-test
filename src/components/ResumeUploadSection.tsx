@@ -278,40 +278,53 @@ export const ResumeUploadSection = () => {
   // Monitor assessment reports changes to stop auto-refresh when ALL expected resumes are processed
   useEffect(() => {
     // Skip if not actively waiting for assessments
-    if (!isWaitingForAssessments || expectedResumeCount <= 0) {
+    if (!isWaitingForAssessments || expectedResumeCount <= 0 || !evaluationStartTime) {
       return;
     }
 
-    // Count reports that have a final_match score (indicates processing is complete)
-    const completedReports = assessmentReports.filter(report => 
-      report.final_match !== null && report.final_match !== undefined
-    );
+    try {
+      const evalStartTime = new Date(evaluationStartTime).getTime();
+      console.log(`🕒 Checking reports created after: ${evaluationStartTime}`);
 
-    const completedCount = completedReports.length;
-    console.log(`📊 Completed reports: ${completedCount}/${expectedResumeCount}`);
-
-    // Only update if we have a new completion count
-    if (completedCount > lastProgressCount) {
-      console.log(`📈 New completions found: ${completedCount} (previous: ${lastProgressCount})`);
-      setLastProgressCount(completedCount);
-
-      // Show progress toast
-      toast({
-        title: "Processing Update",
-        description: `${completedCount} of ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'} completed.`,
+      // Count reports that were created after evaluation started AND have a final_match score
+      const newCompletedReports = assessmentReports.filter(report => {
+        if (!report.created_at || report.final_match === null || report.final_match === undefined) {
+          return false;
+        }
+        const reportTime = new Date(report.created_at).getTime();
+        const isNewReport = reportTime >= evalStartTime;
+        console.log(`📄 Report ${report.id}: created ${report.created_at}, isNew: ${isNewReport}, hasScore: ${report.final_match !== null}`);
+        return isNewReport;
       });
 
-      // If all expected resumes are processed
-      if (completedCount >= expectedResumeCount) {
-        console.log('✅ All resumes processed! Stopping auto-refresh.');
-        stopAutoRefreshAssessments();
+      const completedCount = newCompletedReports.length;
+      console.log(`📊 New completed reports: ${completedCount}/${expectedResumeCount} (total reports: ${assessmentReports.length})`);
+
+      // Only update if we have a new completion count
+      if (completedCount > lastProgressCount) {
+        console.log(`📈 Progress update: ${completedCount} (previous: ${lastProgressCount})`);
+        setLastProgressCount(completedCount);
+
+        // Show progress toast
         toast({
-          title: "All Resumes Processed!",
-          description: `Successfully processed all ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'}.`,
+          title: "Processing Update",
+          description: `${completedCount} of ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'} completed.`,
         });
+
+        // If all expected resumes are processed
+        if (completedCount >= expectedResumeCount) {
+          console.log('✅ All expected resumes processed! Stopping auto-refresh.');
+          stopAutoRefreshAssessments();
+          toast({
+            title: "All Resumes Processed!",
+            description: `Successfully processed all ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'}.`,
+          });
+        }
       }
+    } catch (error) {
+      console.error('❌ Error in assessment monitoring:', error);
     }
-  }, [assessmentReports, isWaitingForAssessments, expectedResumeCount, lastProgressCount, stopAutoRefreshAssessments]);
+  }, [assessmentReports, isWaitingForAssessments, expectedResumeCount, evaluationStartTime, lastProgressCount, stopAutoRefreshAssessments]);
 
   // Cleanup interval on unmount
   useEffect(() => {
@@ -1827,14 +1840,23 @@ export const ResumeUploadSection = () => {
               <div className="flex items-center text-xs text-blue-600">
                 <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
                 {(() => {
-                  if (expectedResumeCount > 0) {
-                    // Count assessment reports that have been completed (have final_match score)
-                    const completedReports = assessmentReports.filter(report => 
-                      report.final_match !== null && report.final_match !== undefined
-                    );
-                    return `Processing... (${completedReports.length}/${expectedResumeCount})`;
+                  if (expectedResumeCount > 0 && evaluationStartTime) {
+                    try {
+                      const evalStartTime = new Date(evaluationStartTime).getTime();
+                      // Count reports created after evaluation started AND have final_match score
+                      const newCompletedReports = assessmentReports.filter(report => {
+                        if (!report.created_at || report.final_match === null || report.final_match === undefined) {
+                          return false;
+                        }
+                        const reportTime = new Date(report.created_at).getTime();
+                        return reportTime >= evalStartTime;
+                      });
+                      return `Processing CV... (${newCompletedReports.length}/${expectedResumeCount})`;
+                    } catch (error) {
+                      return `Processing CV... (0/${expectedResumeCount})`;
+                    }
                   }
-                  return 'Processing...';
+                  return 'Processing CV...';
                 })()}
               </div>
             )}

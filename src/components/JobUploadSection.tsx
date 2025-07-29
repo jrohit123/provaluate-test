@@ -1130,7 +1130,7 @@ export const JobUploadSection = () => {
                   {isWaitingForResolvedJD && (
                     <div className="flex items-center text-xs text-blue-600">
                       <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                      Processing...
+                      Resolving JD...
                     </div>
                   )}
                 </div>
