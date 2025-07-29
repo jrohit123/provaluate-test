@@ -1827,15 +1827,12 @@ export const ResumeUploadSection = () => {
               <div className="flex items-center text-xs text-blue-600">
                 <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
                 {(() => {
-                  if (expectedResumeCount > 0 && evaluationStartTime) {
-                    // Count assessment reports created after the evaluation started
-                    const newReports = assessmentReports.filter(report => {
-                      if (!report.created_at) return false;
-                      const reportTime = new Date(report.created_at);
-                      const evalStartTime = new Date(evaluationStartTime);
-                      return reportTime >= evalStartTime;
-                    });
-                    return `Processing... (${newReports.length}/${expectedResumeCount})`;
+                  if (expectedResumeCount > 0) {
+                    // Count assessment reports that have been completed (have final_match score)
+                    const completedReports = assessmentReports.filter(report => 
+                      report.final_match !== null && report.final_match !== undefined
+                    );
+                    return `Processing... (${completedReports.length}/${expectedResumeCount})`;
                   }
                   return 'Processing...';
                 })()}
