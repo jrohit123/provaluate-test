@@ -277,55 +277,41 @@ export const ResumeUploadSection = () => {
 
   // Monitor assessment reports changes to stop auto-refresh when ALL expected resumes are processed
   useEffect(() => {
-    if (!isWaitingForAssessments || expectedResumeCount <= 0 || !evaluationStartTime) {
+    // Skip if not actively waiting for assessments
+    if (!isWaitingForAssessments || expectedResumeCount <= 0) {
       return;
     }
 
-    try {
-      const evalStartTime = new Date(evaluationStartTime).getTime();
-      console.log('🕒 Evaluation start timestamp:', evalStartTime);
+    // Count reports that have a final_match score (indicates processing is complete)
+    const completedReports = assessmentReports.filter(report => 
+      report.final_match !== null && report.final_match !== undefined
+    );
 
-      // Get the IDs of reports that were created after evaluation started
-      const newReportIds = new Set(
-        assessmentReports
-          .filter(report => {
-            if (!report.created_at) return false;
-            const reportTime = new Date(report.created_at).getTime();
-            const isNew = reportTime >= evalStartTime;
-            console.log(`Report ${report.id} time: ${reportTime}, isNew: ${isNew}`);
-            return isNew;
-          })
-          .map(report => report.id)
-      );
+    const completedCount = completedReports.length;
+    console.log(`📊 Completed reports: ${completedCount}/${expectedResumeCount}`);
 
-      const newReportsCount = newReportIds.size;
-      console.log(`📊 Found ${newReportsCount} new reports out of ${expectedResumeCount} expected`);
+    // Only update if we have a new completion count
+    if (completedCount > lastProgressCount) {
+      console.log(`📈 New completions found: ${completedCount} (previous: ${lastProgressCount})`);
+      setLastProgressCount(completedCount);
 
-      // If we have new reports and it's different from last count
-      if (newReportsCount > 0 && newReportsCount !== lastProgressCount) {
-        console.log(`📈 Progress update: ${newReportsCount}/${expectedResumeCount}`);
-        setLastProgressCount(newReportsCount);
+      // Show progress toast
+      toast({
+        title: "Processing Update",
+        description: `${completedCount} of ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'} completed.`,
+      });
 
-        // Show progress toast
+      // If all expected resumes are processed
+      if (completedCount >= expectedResumeCount) {
+        console.log('✅ All resumes processed! Stopping auto-refresh.');
+        stopAutoRefreshAssessments();
         toast({
-          title: "Processing Update",
-          description: `${newReportsCount} of ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'} completed.`,
+          title: "All Resumes Processed!",
+          description: `Successfully processed all ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'}.`,
         });
-
-        // If all expected resumes are processed
-        if (newReportsCount >= expectedResumeCount) {
-          console.log('✅ All resumes processed! Stopping auto-refresh.');
-          stopAutoRefreshAssessments();
-          toast({
-            title: "All Resumes Processed!",
-            description: `Successfully processed all ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'}.`,
-          });
-        }
       }
-    } catch (error) {
-      console.error('Error in assessment monitoring:', error);
     }
-  }, [assessmentReports, isWaitingForAssessments, expectedResumeCount, evaluationStartTime, lastProgressCount, stopAutoRefreshAssessments]);
+  }, [assessmentReports, isWaitingForAssessments, expectedResumeCount, lastProgressCount, stopAutoRefreshAssessments]);
 
   // Cleanup interval on unmount
   useEffect(() => {
