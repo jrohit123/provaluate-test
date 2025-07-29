@@ -587,7 +587,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                   <div className="flex justify-between items-center">
                     <span className="font-medium text-gray-900">{score.parameter}</span>
                     <div className="text-right">
-                      <span className="text-lg font-bold text-gray-900">{(score.score * 10)}%</span>
+                      <span className="text-lg font-bold text-gray-900">{(score.score)} on 10</span>
                       <span className="text-sm text-gray-500 ml-4">Weight: {score.weightage}%</span>
                     </div>
                   </div>
