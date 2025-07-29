@@ -139,6 +139,7 @@ export const ResumeUploadSection = () => {
   const [evaluationStartTime, setEvaluationStartTime] = useState<string | null>(null);
   const [expectedResumeCount, setExpectedResumeCount] = useState<number>(0);
   const [lastProgressCount, setLastProgressCount] = useState<number>(0);
+  const [initialReportCount, setInitialReportCount] = useState<number>(0);
 
   // Helper function to calculate and format evaluation time
   const getEvaluationTime = (reportCreatedAt: string): { text: string; colorClass: string } => {
@@ -209,6 +210,7 @@ export const ResumeUploadSection = () => {
   const startAutoRefreshAssessments = () => {
     setIsWaitingForAssessments(true);
     setLastProgressCount(0); // Reset progress counter when starting new refresh
+    // Note: initialReportCount should already be set by the calling function
     
     // Clear any existing interval
     if (autoRefreshInterval) {
@@ -273,46 +275,42 @@ export const ResumeUploadSection = () => {
     setIsWaitingForAssessments(false);
     setExpectedResumeCount(0);
     setLastProgressCount(0);
+    setInitialReportCount(0);
   };
 
   // Monitor assessment reports changes to stop auto-refresh when ALL expected resumes are processed
   useEffect(() => {
     // Skip if not actively waiting for assessments
-    if (!isWaitingForAssessments || expectedResumeCount <= 0 || !evaluationStartTime) {
+    if (!isWaitingForAssessments || expectedResumeCount <= 0 || !user?.id) {
       return;
     }
 
     try {
-      const evalStartTime = new Date(evaluationStartTime).getTime();
-      console.log(`🕒 Checking reports created after: ${evaluationStartTime}`);
+      // Count current reports that match our criteria (created by current user for current JD/criteria)
+      const currentSessionReports = assessmentReports.filter(report => 
+        report.created_by === user.id && 
+        report.final_match !== null && 
+        report.final_match !== undefined
+      );
 
-      // Count reports that were created after evaluation started AND have a final_match score
-      const newCompletedReports = assessmentReports.filter(report => {
-        if (!report.created_at || report.final_match === null || report.final_match === undefined) {
-          return false;
-        }
-        const reportTime = new Date(report.created_at).getTime();
-        const isNewReport = reportTime >= evalStartTime;
-        console.log(`📄 Report ${report.id}: created ${report.created_at}, isNew: ${isNewReport}, hasScore: ${report.final_match !== null}`);
-        return isNewReport;
-      });
-
-      const completedCount = newCompletedReports.length;
-      console.log(`📊 New completed reports: ${completedCount}/${expectedResumeCount} (total reports: ${assessmentReports.length})`);
+      // Calculate new reports by subtracting initial count
+      const newCompletedCount = Math.max(0, currentSessionReports.length - initialReportCount);
+      
+      console.log(`📊 Session reports: ${currentSessionReports.length}, Initial: ${initialReportCount}, New: ${newCompletedCount}/${expectedResumeCount}`);
 
       // Only update if we have a new completion count
-      if (completedCount > lastProgressCount) {
-        console.log(`📈 Progress update: ${completedCount} (previous: ${lastProgressCount})`);
-        setLastProgressCount(completedCount);
+      if (newCompletedCount > lastProgressCount) {
+        console.log(`📈 Progress update: ${newCompletedCount} (previous: ${lastProgressCount})`);
+        setLastProgressCount(newCompletedCount);
 
         // Show progress toast
         toast({
           title: "Processing Update",
-          description: `${completedCount} of ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'} completed.`,
+          description: `${newCompletedCount} of ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'} completed.`,
         });
 
         // If all expected resumes are processed
-        if (completedCount >= expectedResumeCount) {
+        if (newCompletedCount >= expectedResumeCount) {
           console.log('✅ All expected resumes processed! Stopping auto-refresh.');
           stopAutoRefreshAssessments();
           toast({
@@ -324,7 +322,7 @@ export const ResumeUploadSection = () => {
     } catch (error) {
       console.error('❌ Error in assessment monitoring:', error);
     }
-  }, [assessmentReports, isWaitingForAssessments, expectedResumeCount, evaluationStartTime, lastProgressCount, stopAutoRefreshAssessments]);
+  }, [assessmentReports, isWaitingForAssessments, expectedResumeCount, user?.id, initialReportCount, lastProgressCount, stopAutoRefreshAssessments]);
 
   // Cleanup interval on unmount
   useEffect(() => {
@@ -475,6 +473,7 @@ export const ResumeUploadSection = () => {
       setEvaluationStartTime(null);
       setExpectedResumeCount(0);
       setLastProgressCount(0);
+      setInitialReportCount(0);
     }
   }, [user?.profile?.company_id, loadResumes, loadJobDescriptions, loadCriteriaGrids]);
 
@@ -847,12 +846,22 @@ export const ResumeUploadSection = () => {
           message: 'Sending resumes to Pro-Valuation service...'
         });
         
-        // Record the start time for evaluation timing
+        // Record the start time for evaluation timing and initial report count
         const startTime = new Date().toISOString();
         console.log('🚀 Setting evaluation start time (handleEvaluation):', startTime);
         console.log('📊 Setting expected resume count:', resumeUrls.length);
+        
+        // Capture initial report count for current user/JD/criteria combination
+        const currentReports = assessmentReports.filter(report => 
+          report.created_by === user.id && 
+          report.final_match !== null && 
+          report.final_match !== undefined
+        );
+        console.log('📊 Initial report count:', currentReports.length);
+        
         setEvaluationStartTime(startTime);
         setExpectedResumeCount(resumeUrls.length);
+        setInitialReportCount(currentReports.length);
         setLastProgressCount(0); // Reset progress tracking
         
         await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'provaluate');
@@ -1027,6 +1036,7 @@ export const ResumeUploadSection = () => {
     setEvaluationStartTime(null);
     setExpectedResumeCount(0);
     setLastProgressCount(0);
+    setInitialReportCount(0);
     
     const selectedJD = jobDescriptions.find(jd => jd.jd_id === jdId);
     toast({
@@ -1046,6 +1056,7 @@ export const ResumeUploadSection = () => {
     setEvaluationStartTime(null);
     setExpectedResumeCount(0);
     setLastProgressCount(0);
+    setInitialReportCount(0);
     
     const selectedGrid = criteriaGrids.find(grid => grid.id === gridId);
     toast({
@@ -1242,12 +1253,22 @@ export const ResumeUploadSection = () => {
         created_at: new Date().toISOString()
       }));
 
-      // Record the start time for evaluation timing
+      // Record the start time for evaluation timing and initial report count
       const startTime = new Date().toISOString();
       console.log('🚀 Setting evaluation start time (handleProcessNewResumes):', startTime);
       console.log('📊 Setting expected resume count:', resumeUrls.length);
+      
+      // Capture initial report count for current user/JD/criteria combination
+      const currentReports = assessmentReports.filter(report => 
+        report.created_by === user.id && 
+        report.final_match !== null && 
+        report.final_match !== undefined
+      );
+      console.log('📊 Initial report count:', currentReports.length);
+      
       setEvaluationStartTime(startTime);
       setExpectedResumeCount(resumeUrls.length);
+      setInitialReportCount(currentReports.length);
       setLastProgressCount(0); // Reset progress tracking
       
       await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'new_resumes');
@@ -1340,12 +1361,22 @@ export const ResumeUploadSection = () => {
         return;
       }
 
-      // Record the start time for evaluation timing
+      // Record the start time for evaluation timing and initial report count
       const startTime = new Date().toISOString();
       console.log('🚀 Setting evaluation start time (handleProcessAllResumes):', startTime);
       console.log('📊 Setting expected resume count:', resumeUrls.length);
+      
+      // Capture initial report count for current user/JD/criteria combination
+      const currentReports = assessmentReports.filter(report => 
+        report.created_by === user.id && 
+        report.final_match !== null && 
+        report.final_match !== undefined
+      );
+      console.log('📊 Initial report count:', currentReports.length);
+      
       setEvaluationStartTime(startTime);
       setExpectedResumeCount(resumeUrls.length);
+      setInitialReportCount(currentReports.length);
       setLastProgressCount(0); // Reset progress tracking
       
       await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'all_resumes');
@@ -1713,6 +1744,7 @@ export const ResumeUploadSection = () => {
                         setEvaluationStartTime(null);
                         setExpectedResumeCount(0);
                         setLastProgressCount(0);
+                        setInitialReportCount(0);
                         stopAutoRefreshAssessments();
                       }}
                       className="text-sm"
@@ -1840,18 +1872,19 @@ export const ResumeUploadSection = () => {
               <div className="flex items-center text-xs text-blue-600">
                 <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
                 {(() => {
-                  if (expectedResumeCount > 0 && evaluationStartTime) {
+                  if (expectedResumeCount > 0 && user?.id) {
                     try {
-                      const evalStartTime = new Date(evaluationStartTime).getTime();
-                      // Count reports created after evaluation started AND have final_match score
-                      const newCompletedReports = assessmentReports.filter(report => {
-                        if (!report.created_at || report.final_match === null || report.final_match === undefined) {
-                          return false;
-                        }
-                        const reportTime = new Date(report.created_at).getTime();
-                        return reportTime >= evalStartTime;
-                      });
-                      return `Processing CV... (${newCompletedReports.length}/${expectedResumeCount})`;
+                      // Count current session reports (created by current user with final_match score)
+                      const currentSessionReports = assessmentReports.filter(report => 
+                        report.created_by === user.id && 
+                        report.final_match !== null && 
+                        report.final_match !== undefined
+                      );
+                      
+                      // Calculate new reports by subtracting initial count
+                      const newCompletedCount = Math.max(0, currentSessionReports.length - initialReportCount);
+                      
+                      return `Processing CV... (${newCompletedCount}/${expectedResumeCount})`;
                     } catch (error) {
                       return `Processing CV... (0/${expectedResumeCount})`;
                     }
