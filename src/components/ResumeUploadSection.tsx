@@ -281,14 +281,13 @@ export const ResumeUploadSection = () => {
   // Monitor assessment reports changes to stop auto-refresh when ALL expected resumes are processed
   useEffect(() => {
     // Skip if not actively waiting for assessments
-    if (!isWaitingForAssessments || expectedResumeCount <= 0 || !user?.id) {
+    if (!isWaitingForAssessments || expectedResumeCount <= 0) {
       return;
     }
 
     try {
-      // Count current reports that match our criteria (created by current user for current JD/criteria)
+      // Count current reports that match our criteria (all completed reports for current JD/criteria)
       const currentSessionReports = assessmentReports.filter(report => 
-        report.created_by === user.id && 
         report.final_match !== null && 
         report.final_match !== undefined
       );
@@ -322,7 +321,7 @@ export const ResumeUploadSection = () => {
     } catch (error) {
       console.error('❌ Error in assessment monitoring:', error);
     }
-  }, [assessmentReports, isWaitingForAssessments, expectedResumeCount, user?.id, initialReportCount, lastProgressCount, stopAutoRefreshAssessments]);
+  }, [assessmentReports, isWaitingForAssessments, expectedResumeCount, initialReportCount, lastProgressCount, stopAutoRefreshAssessments]);
 
   // Cleanup interval on unmount
   useEffect(() => {
@@ -851,9 +850,8 @@ export const ResumeUploadSection = () => {
         console.log('🚀 Setting evaluation start time (handleEvaluation):', startTime);
         console.log('📊 Setting expected resume count:', resumeUrls.length);
         
-        // Capture initial report count for current user/JD/criteria combination
+        // Capture initial report count for current JD/criteria combination (all completed reports)
         const currentReports = assessmentReports.filter(report => 
-          report.created_by === user.id && 
           report.final_match !== null && 
           report.final_match !== undefined
         );
@@ -1258,9 +1256,8 @@ export const ResumeUploadSection = () => {
       console.log('🚀 Setting evaluation start time (handleProcessNewResumes):', startTime);
       console.log('📊 Setting expected resume count:', resumeUrls.length);
       
-      // Capture initial report count for current user/JD/criteria combination
+      // Capture initial report count for current JD/criteria combination (all completed reports)
       const currentReports = assessmentReports.filter(report => 
-        report.created_by === user.id && 
         report.final_match !== null && 
         report.final_match !== undefined
       );
@@ -1366,9 +1363,8 @@ export const ResumeUploadSection = () => {
       console.log('🚀 Setting evaluation start time (handleProcessAllResumes):', startTime);
       console.log('📊 Setting expected resume count:', resumeUrls.length);
       
-      // Capture initial report count for current user/JD/criteria combination
+      // Capture initial report count for current JD/criteria combination (all completed reports)
       const currentReports = assessmentReports.filter(report => 
-        report.created_by === user.id && 
         report.final_match !== null && 
         report.final_match !== undefined
       );
@@ -1872,11 +1868,10 @@ export const ResumeUploadSection = () => {
               <div className="flex items-center text-xs text-blue-600">
                 <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
                 {(() => {
-                  if (expectedResumeCount > 0 && user?.id) {
+                  if (expectedResumeCount > 0) {
                     try {
-                      // Count current session reports (created by current user with final_match score)
+                      // Count current session reports (all completed reports with final_match score)
                       const currentSessionReports = assessmentReports.filter(report => 
-                        report.created_by === user.id && 
                         report.final_match !== null && 
                         report.final_match !== undefined
                       );
