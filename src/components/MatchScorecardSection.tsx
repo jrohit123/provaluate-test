@@ -2,7 +2,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { BarChart3, User, Eye, Download, Loader2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { BarChart3, User, Eye, Download, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Filter } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -35,7 +36,10 @@ interface MatchScorecardSectionProps {
 
 export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, selectedCandidateData, onClose }: MatchScorecardSectionProps) => {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [filteredCandidates, setFilteredCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc'); // Default to descending (highest first)
+  const [recommendationFilter, setRecommendationFilter] = useState<string>('all');
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -285,6 +289,27 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     }
   }, [user?.profile?.company_id, fetchAssessmentReports, selectedCandidateData]);
 
+  // Apply sorting and filtering whenever candidates, sortOrder, or recommendationFilter changes
+  useEffect(() => {
+    let filtered = [...candidates];
+    
+    // Apply recommendation filter
+    if (recommendationFilter !== 'all') {
+      filtered = filtered.filter(candidate => candidate.status === recommendationFilter);
+    }
+    
+    // Apply sorting
+    filtered.sort((a, b) => {
+      if (sortOrder === 'desc') {
+        return b.overallScore - a.overallScore; // Highest first
+      } else {
+        return a.overallScore - b.overallScore; // Lowest first
+      }
+    });
+    
+    setFilteredCandidates(filtered);
+  }, [candidates, sortOrder, recommendationFilter]);
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'excellent':
@@ -426,8 +451,11 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
       // Create a new workbook
       const wb = XLSX.utils.book_new();
       
+      // Use displayCandidates (filtered/sorted) for export
+      const candidatesToExport = selectedCandidateData ? candidates : displayCandidates;
+      
       // Prepare data for the main summary sheet
-      const summaryData = candidates.map(candidate => ({
+      const summaryData = candidatesToExport.map(candidate => ({
         'Candidate Name': candidate.name,
         'Overall Score (%)': candidate.overallScore,
         'Assessed at': formatDateForExport(candidate.createdAt || ''),
@@ -441,7 +469,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
 
       // Prepare detailed scoring data
       const detailedData: any[] = [];
-      candidates.forEach(candidate => {
+      candidatesToExport.forEach(candidate => {
         candidate.scores.forEach(score => {
           detailedData.push({
             'Candidate Name': candidate.name,
@@ -458,9 +486,18 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
       const detailedWS = XLSX.utils.json_to_sheet(detailedData);
       XLSX.utils.book_append_sheet(wb, detailedWS, 'Detailed Scoring');
 
-      // Generate filename with current date
+      // Generate filename with current date and filter info
       const currentDate = new Date().toISOString().split('T')[0];
-      const filename = `Match_Scorecard_Report_${currentDate}.xlsx`;
+      let filename = `Match_Scorecard_Report_${currentDate}`;
+      
+      // Add filter/sort info only when not in single candidate mode
+      if (!selectedCandidateData) {
+        const filterSuffix = recommendationFilter !== 'all' ? `_${recommendationFilter.replace(/\s+/g, '_')}` : '';
+        const sortSuffix = `_sorted_${sortOrder}`;
+        filename += `${filterSuffix}${sortSuffix}`;
+      }
+      
+      filename += '.xlsx';
 
       // Download the file
       XLSX.writeFile(wb, filename);
@@ -479,15 +516,28 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     }
   };
 
-  const handleTopFiveOnly = () => {
-    // Sort candidates by overall score descending, then take the top 5
-    const sortedCandidates = [...candidates].sort((a, b) => b.overallScore - a.overallScore);
-    const topFive = sortedCandidates.slice(0, 5);
-    setCandidates(topFive);
+  const handleSortToggle = () => {
+    const newSortOrder = sortOrder === 'desc' ? 'asc' : 'desc';
+    setSortOrder(newSortOrder);
     toast({
-      title: "Filtered Results",
-      description: `Showing top ${topFive.length} candidates sorted by highest scores.`,
+      title: "Sort Order Changed",
+      description: `Candidates sorted by ${newSortOrder === 'desc' ? 'highest' : 'lowest'} scores first.`,
     });
+  };
+
+  const handleRecommendationFilter = (value: string) => {
+    setRecommendationFilter(value);
+    const filterText = value === 'all' ? 'All candidates' : `${value} candidates only`;
+    toast({
+      title: "Filter Applied",
+      description: filterText,
+    });
+  };
+
+  // Get available recommendation statuses from current candidates
+  const getAvailableRecommendations = () => {
+    const statuses = [...new Set(candidates.map(candidate => candidate.status))];
+    return statuses.filter(status => status && status !== 'Under Review');
   };
 
   if (loading) {
@@ -521,25 +571,56 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     );
   }
 
+  // Use filteredCandidates for display
+  const displayCandidates = filteredCandidates;
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-primary-800 mb-2">Match Scorecard</h2>
-          <p className="text-muted-foreground">Candidate evaluation results and rankings ({candidates.length} candidates)</p>
+          <p className="text-muted-foreground">
+            Candidate evaluation results and rankings 
+            ({displayCandidates.length} {recommendationFilter !== 'all' ? 'filtered' : ''} 
+            of {candidates.length} candidates)
+          </p>
         </div>
         {/* Only show action buttons when not in single candidate mode (popup) */}
         {!selectedCandidateData && (
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {/* Recommendation Filter */}
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-muted-foreground" />
+              <Select value={recommendationFilter} onValueChange={handleRecommendationFilter}>
+                <SelectTrigger className="w-44">
+                  <SelectValue placeholder="Filter by recommendation" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Recommendations</SelectItem>
+                  {getAvailableRecommendations().map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Sort Button */}
+            <Button variant="outline" size="sm" onClick={handleSortToggle}>
+              {sortOrder === 'desc' ? (
+                <ArrowDown className="w-4 h-4 mr-2" />
+              ) : (
+                <ArrowUp className="w-4 h-4 mr-2" />
+              )}
+              Sort {sortOrder === 'desc' ? 'High→Low' : 'Low→High'}
+            </Button>
+            
+            {/* Export Button */}
             <Button variant="outline" size="sm" onClick={handleExportReport}>
               <Download className="w-4 h-4 mr-2" />
               Export Report
             </Button>
-            {candidates.length > 5 && (
-              <Button variant="outline" size="sm" onClick={handleTopFiveOnly}>
-                Top 5 Only
-              </Button>
-            )}
           </div>
         )}
         {/* Show only export button when in single candidate mode */}
@@ -554,7 +635,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
       </div>
 
       <div className="grid gap-6">
-        {candidates.map((candidate) => (
+        {displayCandidates.map((candidate) => (
           <Card key={candidate.id} className="p-6 mb-6 shadow-md rounded-xl bg-white">
             {/* Header Section */}
             <div className="flex justify-between items-start mb-6">
