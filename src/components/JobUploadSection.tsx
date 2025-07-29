@@ -89,9 +89,9 @@ export const JobUploadSection = () => {
       clearInterval(autoRefreshInterval);
     }
     
-    // Set up auto-refresh every 30 seconds for up to 5 minutes
+    // Set up auto-refresh every 15 seconds for up to 5 minutes
     let attempts = 0;
-    const maxAttempts = 10; // 10 attempts × 30 seconds = 5 minutes
+    const maxAttempts = 20; // 20 attempts × 15 seconds = 5 minutes
     
     const interval = setInterval(async () => {
       attempts++;
@@ -125,6 +125,10 @@ export const JobUploadSection = () => {
           setResolvedJD(data.parameter);
           setResolvedJDId(data.resolved_jd_id);
           stopAutoRefresh();
+          
+          // Refresh the job descriptions dropdown in case the title was updated during processing
+          loadJobDescriptions();
+          
           toast({
             title: "Resolved JD Data Updated",
             description: "Job description has been processed and analyzed.",
@@ -144,7 +148,7 @@ export const JobUploadSection = () => {
           stopAutoRefresh();
         }
       }
-    }, 30000); // 30 seconds
+    }, 15000); // 15 seconds
     
     setAutoRefreshInterval(interval);
   };
@@ -168,6 +172,7 @@ export const JobUploadSection = () => {
     }
     
     await loadResolvedJD(selectedJobDescriptionId);
+    // loadResolvedJD already calls loadJobDescriptions() when data is found
     toast({
       title: "Refreshed",
       description: "Checked for updated resolved JD data.",
@@ -378,6 +383,9 @@ export const JobUploadSection = () => {
         console.log('Loaded resolved JD:', data);
         // Stop auto-refresh if it's running since we found the data
         stopAutoRefresh();
+        
+        // Refresh the job descriptions dropdown to ensure it's up to date
+        loadJobDescriptions();
       } else {
         console.log('No resolved JD found for file URL:', jdData.jd_file);
         setResolvedJD(null);
@@ -782,7 +790,7 @@ export const JobUploadSection = () => {
                 loadResolvedJD(jdData.jd_id);
               }, 2000); // Wait 2 seconds for n8n to process and save to database
               
-              // Start auto-refresh to check for resolved JD data every 30 seconds
+              // Start auto-refresh to check for resolved JD data every 15 seconds
               startAutoRefresh(jdData.jd_id);
             }
           } catch (webhookError) {
@@ -806,6 +814,9 @@ export const JobUploadSection = () => {
           ? "Job description and file saved successfully."
           : "Job description saved successfully.",
       });
+
+      // Refresh the job descriptions dropdown to show the newly added JD
+      await loadJobDescriptions();
 
       // Reset form
       setJobTitle('');
@@ -1003,7 +1014,7 @@ export const JobUploadSection = () => {
               Job Description
             </CardTitle>
             <CardDescription>
-              Upload your job description file or select an existing one
+              Upload your job description file OR select an existing one from the dropdown
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1119,7 +1130,7 @@ export const JobUploadSection = () => {
                   {isWaitingForResolvedJD && (
                     <div className="flex items-center text-xs text-blue-600">
                       <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                      Auto-checking...
+                      Processing...
                     </div>
                   )}
                 </div>

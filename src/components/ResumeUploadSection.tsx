@@ -137,6 +137,7 @@ export const ResumeUploadSection = () => {
   const [isWaitingForAssessments, setIsWaitingForAssessments] = useState(false);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<NodeJS.Timeout | null>(null);
   const [evaluationStartTime, setEvaluationStartTime] = useState<string | null>(null);
+  const [expectedResumeCount, setExpectedResumeCount] = useState<number>(0);
 
   // Helper function to calculate and format evaluation time
   const getEvaluationTime = (reportCreatedAt: string): { text: string; colorClass: string } => {
@@ -212,9 +213,9 @@ export const ResumeUploadSection = () => {
       clearInterval(autoRefreshInterval);
     }
     
-    // Set up auto-refresh every 30 seconds for up to 5 minutes
+    // Set up auto-refresh every 15 seconds for up to 5 minutes
     let attempts = 0;
-    const maxAttempts = 10; // 10 attempts × 30 seconds = 5 minutes
+    const maxAttempts = 20; // 20 attempts × 15 seconds = 5 minutes
     
     const interval = setInterval(async () => {
       attempts++;
@@ -254,7 +255,7 @@ export const ResumeUploadSection = () => {
           stopAutoRefreshAssessments();
         }
       }
-    }, 30000); // 30 seconds
+    }, 15000); // 15 seconds
     
     setAutoRefreshInterval(interval);
   };
@@ -265,18 +266,38 @@ export const ResumeUploadSection = () => {
       setAutoRefreshInterval(null);
     }
     setIsWaitingForAssessments(false);
+    setExpectedResumeCount(0);
   };
 
-  // Monitor assessment reports changes to stop auto-refresh when data is found
+  // Monitor assessment reports changes to stop auto-refresh when ALL expected resumes are processed
   useEffect(() => {
-    if (isWaitingForAssessments && assessmentReports.length > 0) {
-      stopAutoRefreshAssessments();
-      toast({
-        title: "Assessment Reports Updated",
-        description: `Found ${assessmentReports.length} candidate assessment${assessmentReports.length === 1 ? '' : 's'}.`,
+    if (isWaitingForAssessments && expectedResumeCount > 0) {
+      // Count assessment reports created after the evaluation started
+      const newReports = assessmentReports.filter(report => {
+        if (!evaluationStartTime || !report.created_at) return false;
+        const reportTime = new Date(report.created_at);
+        const evalStartTime = new Date(evaluationStartTime);
+        return reportTime >= evalStartTime;
       });
+      
+      console.log(`📊 Processing progress: ${newReports.length}/${expectedResumeCount} resumes completed`);
+      
+      if (newReports.length >= expectedResumeCount) {
+        console.log('✅ All resumes processed! Stopping auto-refresh.');
+        stopAutoRefreshAssessments();
+        toast({
+          title: "All Resumes Processed!",
+          description: `Successfully processed all ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'}.`,
+        });
+      } else if (newReports.length > 0) {
+        // Show intermediate progress
+        toast({
+          title: "Processing Update",
+          description: `${newReports.length} of ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'} completed.`,
+        });
+      }
     }
-  }, [assessmentReports.length, isWaitingForAssessments]);
+  }, [assessmentReports.length, isWaitingForAssessments, expectedResumeCount, evaluationStartTime]);
 
   // Cleanup interval on unmount
   useEffect(() => {
@@ -425,6 +446,7 @@ export const ResumeUploadSection = () => {
       // Clear evaluation timing on component mount
       console.log('🔄 Clearing evaluation start time (component mount)');
       setEvaluationStartTime(null);
+      setExpectedResumeCount(0);
     }
   }, [user?.profile?.company_id, loadResumes, loadJobDescriptions, loadCriteriaGrids]);
 
@@ -789,7 +811,9 @@ export const ResumeUploadSection = () => {
         // Record the start time for evaluation timing
         const startTime = new Date().toISOString();
         console.log('🚀 Setting evaluation start time (handleEvaluation):', startTime);
+        console.log('📊 Setting expected resume count:', resumeUrls.length);
         setEvaluationStartTime(startTime);
+        setExpectedResumeCount(resumeUrls.length);
         
         await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'provaluate');
         
@@ -803,7 +827,7 @@ export const ResumeUploadSection = () => {
           description: `Successfully sent ${resumeUrls.length} new resume${resumeUrls.length > 1 ? 's' : ''} for Pro-Valuation. Wait for the results, it might take a while.`,
         });
 
-        // Start auto-refresh to check for assessment reports every 30 seconds
+        // Start auto-refresh to check for assessment reports every 15 seconds
         startAutoRefreshAssessments();
 
         // Clear session storage after successful processing
@@ -848,7 +872,7 @@ export const ResumeUploadSection = () => {
             message: ''
           });
         }
-      }, 3000);
+      }, 1500);
     }
   };
 
@@ -921,7 +945,7 @@ export const ResumeUploadSection = () => {
         await uploadSingleFile(fileData.file, index);
         
         // Small delay between files
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 150));
       }
       
       setCurrentlyProcessing(-1);
@@ -961,6 +985,7 @@ export const ResumeUploadSection = () => {
     // Clear evaluation start time for new evaluation
     console.log('🔄 Clearing evaluation start time (job description change)');
     setEvaluationStartTime(null);
+    setExpectedResumeCount(0);
     
     const selectedJD = jobDescriptions.find(jd => jd.jd_id === jdId);
     toast({
@@ -978,6 +1003,7 @@ export const ResumeUploadSection = () => {
     // Clear evaluation start time for new evaluation
     console.log('🔄 Clearing evaluation start time (criteria grid change)');
     setEvaluationStartTime(null);
+    setExpectedResumeCount(0);
     
     const selectedGrid = criteriaGrids.find(grid => grid.id === gridId);
     toast({
@@ -1177,7 +1203,9 @@ export const ResumeUploadSection = () => {
       // Record the start time for evaluation timing
       const startTime = new Date().toISOString();
       console.log('🚀 Setting evaluation start time (handleProcessNewResumes):', startTime);
+      console.log('📊 Setting expected resume count:', resumeUrls.length);
       setEvaluationStartTime(startTime);
+      setExpectedResumeCount(resumeUrls.length);
       
       await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'new_resumes');
 
@@ -1272,7 +1300,9 @@ export const ResumeUploadSection = () => {
       // Record the start time for evaluation timing
       const startTime = new Date().toISOString();
       console.log('🚀 Setting evaluation start time (handleProcessAllResumes):', startTime);
+      console.log('📊 Setting expected resume count:', resumeUrls.length);
       setEvaluationStartTime(startTime);
+      setExpectedResumeCount(resumeUrls.length);
       
       await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'all_resumes');
 
@@ -1637,6 +1667,7 @@ export const ResumeUploadSection = () => {
                         // Clear evaluation timing when clearing files
                         console.log('🔄 Clearing evaluation start time (clear all files)');
                         setEvaluationStartTime(null);
+                        setExpectedResumeCount(0);
                         stopAutoRefreshAssessments();
                       }}
                       className="text-sm"
@@ -1763,7 +1794,19 @@ export const ResumeUploadSection = () => {
             {isWaitingForAssessments && (
               <div className="flex items-center text-xs text-blue-600">
                 <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                Auto-checking...
+                {(() => {
+                  if (expectedResumeCount > 0 && evaluationStartTime) {
+                    // Count assessment reports created after the evaluation started
+                    const newReports = assessmentReports.filter(report => {
+                      if (!report.created_at) return false;
+                      const reportTime = new Date(report.created_at);
+                      const evalStartTime = new Date(evaluationStartTime);
+                      return reportTime >= evalStartTime;
+                    });
+                    return `Processing... (${newReports.length}/${expectedResumeCount})`;
+                  }
+                  return 'Processing...';
+                })()}
               </div>
             )}
           </div>
