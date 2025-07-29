@@ -208,6 +208,7 @@ export const ResumeUploadSection = () => {
   // Auto-refresh functions for assessment reports
   const startAutoRefreshAssessments = () => {
     setIsWaitingForAssessments(true);
+    setLastProgressCount(0); // Reset progress counter when starting new refresh
     
     // Clear any existing interval
     if (autoRefreshInterval) {
@@ -225,24 +226,27 @@ export const ResumeUploadSection = () => {
       try {
         // Check if we have the required selections
         if (!selectedJobDescriptionId || !selectedCriteriaGridId) {
-          if (attempts >= maxAttempts) {
-            stopAutoRefreshAssessments();
-          }
+          console.log('❌ Missing required selections, stopping refresh');
+          stopAutoRefreshAssessments();
+          return;
+        }
+
+        // Check if we're still waiting for assessments
+        if (!isWaitingForAssessments) {
+          console.log('❌ No longer waiting for assessments, stopping refresh');
+          clearInterval(interval);
           return;
         }
 
         // Get current assessment reports count before refresh
         const currentCount = assessmentReports.length;
+        console.log(`📊 Current assessment reports count: ${currentCount}`);
         
         // Fetch updated assessment reports
         await fetchAssessmentReports();
         
-        // Note: We can't directly check the new count here since fetchAssessmentReports 
-        // updates state asynchronously. The effect will be handled by the useEffect
-        // that monitors assessmentReports changes.
-        
         if (attempts >= maxAttempts) {
-          // Max attempts reached, stop trying
+          console.log('❌ Max attempts reached, stopping refresh');
           stopAutoRefreshAssessments();
           toast({
             title: "Processing Taking Longer",
@@ -273,48 +277,55 @@ export const ResumeUploadSection = () => {
 
   // Monitor assessment reports changes to stop auto-refresh when ALL expected resumes are processed
   useEffect(() => {
-    if (isWaitingForAssessments && expectedResumeCount > 0) {
-      // Count assessment reports created after the evaluation started
-      const newReports = assessmentReports.filter(report => {
-        if (!evaluationStartTime || !report.created_at) return false;
-        const reportTime = new Date(report.created_at);
-        const evalStartTime = new Date(evaluationStartTime);
-        return reportTime >= evalStartTime;
-      });
-      
-      console.log(`📊 Processing progress: ${newReports.length}/${expectedResumeCount} resumes completed`);
-      console.log('📊 Evaluation start time:', evaluationStartTime);
-      console.log('📊 Assessment reports:', assessmentReports.map(r => ({
-        name: r.candidate_name,
-        created_at: r.created_at,
-        id: r.id
-      })));
-      console.log('📊 New reports:', newReports.map(r => ({
-        name: r.candidate_name,
-        created_at: r.created_at,
-        id: r.id
-      })));
-      
-      // Check if all resumes are processed
-      if (newReports.length >= expectedResumeCount) {
-        console.log('✅ All resumes processed! Stopping auto-refresh.');
-        stopAutoRefreshAssessments();
-        setLastProgressCount(0); // Reset progress tracking
-        toast({
-          title: "All Resumes Processed!",
-          description: `Successfully processed all ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'}.`,
-        });
-      } else if (newReports.length > 0 && newReports.length > lastProgressCount) {
-        // Show intermediate progress toast only when count increases
-        console.log(`📊 Intermediate progress: ${newReports.length}/${expectedResumeCount} (previous: ${lastProgressCount})`);
-        setLastProgressCount(newReports.length);
+    if (!isWaitingForAssessments || expectedResumeCount <= 0 || !evaluationStartTime) {
+      return;
+    }
+
+    try {
+      const evalStartTime = new Date(evaluationStartTime).getTime();
+      console.log('🕒 Evaluation start timestamp:', evalStartTime);
+
+      // Get the IDs of reports that were created after evaluation started
+      const newReportIds = new Set(
+        assessmentReports
+          .filter(report => {
+            if (!report.created_at) return false;
+            const reportTime = new Date(report.created_at).getTime();
+            const isNew = reportTime >= evalStartTime;
+            console.log(`Report ${report.id} time: ${reportTime}, isNew: ${isNew}`);
+            return isNew;
+          })
+          .map(report => report.id)
+      );
+
+      const newReportsCount = newReportIds.size;
+      console.log(`📊 Found ${newReportsCount} new reports out of ${expectedResumeCount} expected`);
+
+      // If we have new reports and it's different from last count
+      if (newReportsCount > 0 && newReportsCount !== lastProgressCount) {
+        console.log(`📈 Progress update: ${newReportsCount}/${expectedResumeCount}`);
+        setLastProgressCount(newReportsCount);
+
+        // Show progress toast
         toast({
           title: "Processing Update",
-          description: `${newReports.length} of ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'} completed.`,
+          description: `${newReportsCount} of ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'} completed.`,
         });
+
+        // If all expected resumes are processed
+        if (newReportsCount >= expectedResumeCount) {
+          console.log('✅ All resumes processed! Stopping auto-refresh.');
+          stopAutoRefreshAssessments();
+          toast({
+            title: "All Resumes Processed!",
+            description: `Successfully processed all ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'}.`,
+          });
+        }
       }
+    } catch (error) {
+      console.error('Error in assessment monitoring:', error);
     }
-  }, [assessmentReports, isWaitingForAssessments, expectedResumeCount, evaluationStartTime, lastProgressCount]);
+  }, [assessmentReports, isWaitingForAssessments, expectedResumeCount, evaluationStartTime, lastProgressCount, stopAutoRefreshAssessments]);
 
   // Cleanup interval on unmount
   useEffect(() => {
@@ -490,13 +501,14 @@ export const ResumeUploadSection = () => {
   // Fetch assessment reports filtered by selected JD and criteria
   const fetchAssessmentReports = useCallback(async () => {
     if (!user?.profile?.company_id || !selectedJobDescriptionId || !selectedCriteriaGridId) {
+      console.log('❌ Missing required data for fetching reports');
       setAssessmentReports([]);
       return;
     }
     setLoadingReports(true);
     try {
       // First, get the resolved_jd_id for the selected job description
-      console.log('Looking for JD with ID:', selectedJobDescriptionId);
+      console.log('🔍 Looking for JD with ID:', selectedJobDescriptionId);
       const { data: jdData, error: jdError } = await supabase
         .from('job_descriptions')
         .select('jd_file')
@@ -504,13 +516,13 @@ export const ResumeUploadSection = () => {
         .single();
 
       if (jdError || !jdData?.jd_file) {
-        console.log('No JD file found for ID:', selectedJobDescriptionId);
+        console.log('❌ No JD file found for ID:', selectedJobDescriptionId);
         setAssessmentReports([]);
         setLoadingReports(false);
         return;
       }
 
-      console.log('Found JD file URL:', jdData.jd_file);
+      console.log('✅ Found JD file URL:', jdData.jd_file);
 
       // Then get the resolved_jd_id using the file URL
       const { data: resolvedJdData, error: resolvedJdError } = await supabase
@@ -520,14 +532,14 @@ export const ResumeUploadSection = () => {
         .single();
 
       if (resolvedJdError || !resolvedJdData?.resolved_jd_id) {
-        console.log('No resolved JD found for file URL:', jdData.jd_file);
+        console.log('❌ No resolved JD found for file URL:', jdData.jd_file);
         setAssessmentReports([]);
         setLoadingReports(false);
         return;
       }
 
-      console.log('Found resolved_jd_id:', resolvedJdData.resolved_jd_id);
-      console.log('Using criteria_id:', selectedCriteriaGridId);
+      console.log('✅ Found resolved_jd_id:', resolvedJdData.resolved_jd_id);
+      console.log('🔍 Using criteria_id:', selectedCriteriaGridId);
 
       // Finally, fetch assessment reports using resolved_jd_id and criteria_id
       const { data, error } = await supabase
@@ -539,16 +551,26 @@ export const ResumeUploadSection = () => {
       
       if (error) throw error;
       
-      console.log('Found assessment reports:', data?.length || 0);
+      const previousCount = assessmentReports.length;
+      const newCount = data?.length || 0;
+      console.log(`📊 Assessment reports: ${previousCount} → ${newCount}`);
+      
+      if (data) {
+        // Log the timestamps of all reports
+        data.forEach(report => {
+          console.log(`📄 Report ${report.id}: created_at = ${report.created_at}`);
+        });
+      }
+      
       setAssessmentReports(data || []);
     } catch (err) {
-      console.log('No assessment reports found for the selected criteria:', err);
+      console.error('❌ Error fetching assessment reports:', err);
       setAssessmentReports([]);
       // No error toast - this is normal when no reports exist yet
     } finally {
       setLoadingReports(false);
     }
-  }, [user?.profile?.company_id, selectedJobDescriptionId, selectedCriteriaGridId]);
+  }, [user?.profile?.company_id, selectedJobDescriptionId, selectedCriteriaGridId, assessmentReports.length]);
 
   useEffect(() => {
     fetchAssessmentReports();
