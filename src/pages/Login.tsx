@@ -46,8 +46,7 @@ const Login = () => {
         // Continue with authentication if we can't check blocked domains (don't block due to system error)
       } else if (blockedDomains && blockedDomains.length > 0) {
         const blockedDomain = blockedDomains[0];
-        const reason = blockedDomain.reason || 'This domain is not allowed for access';
-        throw new Error(`Access denied: ${reason}. Please contact ProValuate support if you believe this is an error.`);
+        throw new Error(`Access denied. Please use your official email ID to sign up.`);
       }
 
       if (isSignup) {
@@ -96,7 +95,13 @@ const Login = () => {
     setResetMessage('');
     setResetError('');
     setResetLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail);
+    
+    // Get the current origin for the redirect URL
+    const redirectTo = `${window.location.origin}/reset-password`;
+    
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: redirectTo,
+    });
     if (error) {
       setResetError(error.message);
     } else {

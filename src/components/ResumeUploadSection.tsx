@@ -134,6 +134,139 @@ export const ResumeUploadSection = () => {
     status: 'idle',
     message: ''
   });
+  const [isWaitingForAssessments, setIsWaitingForAssessments] = useState(false);
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<NodeJS.Timeout | null>(null);
+  const [evaluationStartTime, setEvaluationStartTime] = useState<string | null>(null);
+
+  // Helper function to calculate and format evaluation time
+  const getEvaluationTime = (reportCreatedAt: string): { text: string; colorClass: string } => {
+    if (!evaluationStartTime) return { text: 'Unknown', colorClass: 'bg-gray-100 text-gray-700' };
+    
+    try {
+      const startTime = new Date(evaluationStartTime);
+      const endTime = new Date(reportCreatedAt);
+      const timeDiffMs = endTime.getTime() - startTime.getTime();
+      
+      if (timeDiffMs < 0) return { text: 'Unknown', colorClass: 'bg-gray-100 text-gray-700' }; // Invalid time difference
+      
+      const timeDiffSeconds = Math.floor(timeDiffMs / 1000);
+      const timeDiffMinutes = Math.floor(timeDiffSeconds / 60);
+      const timeDiffHours = Math.floor(timeDiffMinutes / 60);
+      
+      let timeText = '';
+      let colorClass = '';
+      
+      if (timeDiffHours > 0) {
+        const remainingMinutes = timeDiffMinutes % 60;
+        timeText = `${timeDiffHours}h ${remainingMinutes}m`;
+        colorClass = 'bg-orange-100 text-orange-700'; // Long time - orange
+      } else if (timeDiffMinutes > 5) {
+        const remainingSeconds = timeDiffSeconds % 60;
+        timeText = `${timeDiffMinutes}m ${remainingSeconds}s`;
+        colorClass = 'bg-orange-100 text-orange-700'; // >5 minutes - orange
+      } else if (timeDiffMinutes > 2) {
+        const remainingSeconds = timeDiffSeconds % 60;
+        timeText = `${timeDiffMinutes}m ${remainingSeconds}s`;
+        colorClass = 'bg-yellow-100 text-yellow-700'; // 2-5 minutes - yellow
+      } else if (timeDiffMinutes > 0) {
+        const remainingSeconds = timeDiffSeconds % 60;
+        timeText = `${timeDiffMinutes}m ${remainingSeconds}s`;
+        colorClass = 'bg-green-100 text-green-700'; // 0-2 minutes - green
+      } else {
+        timeText = `${timeDiffSeconds}s`;
+        colorClass = 'bg-green-100 text-green-700'; // <1 minute - green
+      }
+      
+      return { text: timeText, colorClass };
+    } catch (error) {
+      console.error('Error calculating evaluation time:', error);
+      return { text: 'Unknown', colorClass: 'bg-gray-100 text-gray-700' };
+    }
+  };
+
+  // Auto-refresh functions for assessment reports
+  const startAutoRefreshAssessments = () => {
+    setIsWaitingForAssessments(true);
+    
+    // Clear any existing interval
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+    }
+    
+    // Set up auto-refresh every 30 seconds for up to 5 minutes
+    let attempts = 0;
+    const maxAttempts = 10; // 10 attempts × 30 seconds = 5 minutes
+    
+    const interval = setInterval(async () => {
+      attempts++;
+      console.log(`Auto-refresh assessment reports attempt ${attempts}/${maxAttempts}`);
+      
+      try {
+        // Check if we have the required selections
+        if (!selectedJobDescriptionId || !selectedCriteriaGridId) {
+          if (attempts >= maxAttempts) {
+            stopAutoRefreshAssessments();
+          }
+          return;
+        }
+
+        // Get current assessment reports count before refresh
+        const currentCount = assessmentReports.length;
+        
+        // Fetch updated assessment reports
+        await fetchAssessmentReports();
+        
+        // Note: We can't directly check the new count here since fetchAssessmentReports 
+        // updates state asynchronously. The effect will be handled by the useEffect
+        // that monitors assessmentReports changes.
+        
+        if (attempts >= maxAttempts) {
+          // Max attempts reached, stop trying
+          stopAutoRefreshAssessments();
+          toast({
+            title: "Processing Taking Longer",
+            description: "Assessment processing is taking longer than expected. You can manually refresh or try again later.",
+            variant: "default",
+          });
+        }
+      } catch (error) {
+        console.error('Auto-refresh error:', error);
+        if (attempts >= maxAttempts) {
+          stopAutoRefreshAssessments();
+        }
+      }
+    }, 30000); // 30 seconds
+    
+    setAutoRefreshInterval(interval);
+  };
+
+  const stopAutoRefreshAssessments = () => {
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      setAutoRefreshInterval(null);
+    }
+    setIsWaitingForAssessments(false);
+  };
+
+  // Monitor assessment reports changes to stop auto-refresh when data is found
+  useEffect(() => {
+    if (isWaitingForAssessments && assessmentReports.length > 0) {
+      stopAutoRefreshAssessments();
+      toast({
+        title: "Assessment Reports Updated",
+        description: `Found ${assessmentReports.length} candidate assessment${assessmentReports.length === 1 ? '' : 's'}.`,
+      });
+    }
+  }, [assessmentReports.length, isWaitingForAssessments]);
+
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+      }
+    };
+  }, [autoRefreshInterval]);
 
   // Load existing resumes from database
   const loadResumes = useCallback(async () => {
@@ -270,6 +403,8 @@ export const ResumeUploadSection = () => {
       clearSessionUploadedFiles();
       setSelectedFiles([]);
       setNewlyUploadedIds(new Set());
+      // Clear evaluation timing on component mount
+      setEvaluationStartTime(null);
     }
   }, [user?.profile?.company_id, loadResumes, loadJobDescriptions, loadCriteriaGrids]);
 
@@ -631,6 +766,10 @@ export const ResumeUploadSection = () => {
           message: 'Sending resumes to Pro-Valuation service...'
         });
         
+        // Record the start time for evaluation timing
+        const startTime = new Date().toISOString();
+        setEvaluationStartTime(startTime);
+        
         await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'provaluate');
         
         setProcessingState({
@@ -642,6 +781,9 @@ export const ResumeUploadSection = () => {
           title: "Pro-Valuation Started",
           description: `Successfully sent ${resumeUrls.length} new resume${resumeUrls.length > 1 ? 's' : ''} for Pro-Valuation. Wait for the results, it might take a while.`,
         });
+
+        // Start auto-refresh to check for assessment reports every 30 seconds
+        startAutoRefreshAssessments();
 
         // Clear session storage after successful processing
         clearSessionUploadedFiles();
@@ -656,6 +798,10 @@ export const ResumeUploadSection = () => {
           message: 'Failed to start Pro-Valuation process',
           error: webhookError.message || 'Network error occurred while contacting the service'
         });
+        
+        // Even if webhook fails, start auto-refresh in case N8N processes it later
+        startAutoRefreshAssessments();
+        
         throw webhookError;
       }
 
@@ -789,6 +935,10 @@ export const ResumeUploadSection = () => {
   const handleJobDescriptionSelect = (jdId: string) => {
     setSelectedJobDescriptionId(jdId);
     sessionStorage.setItem('selectedJDId', jdId);
+    // Stop any existing auto-refresh when switching job descriptions
+    stopAutoRefreshAssessments();
+    // Clear evaluation start time for new evaluation
+    setEvaluationStartTime(null);
     
     const selectedJD = jobDescriptions.find(jd => jd.jd_id === jdId);
     toast({
@@ -801,6 +951,10 @@ export const ResumeUploadSection = () => {
   const handleCriteriaGridSelect = (gridId: string) => {
     setSelectedCriteriaGridId(gridId);
     sessionStorage.setItem('selectedCriteriaGridId', gridId);
+    // Stop any existing auto-refresh when switching criteria grids
+    stopAutoRefreshAssessments();
+    // Clear evaluation start time for new evaluation
+    setEvaluationStartTime(null);
     
     const selectedGrid = criteriaGrids.find(grid => grid.id === gridId);
     toast({
@@ -997,7 +1151,14 @@ export const ResumeUploadSection = () => {
         created_at: new Date().toISOString()
       }));
 
+      // Record the start time for evaluation timing
+      const startTime = new Date().toISOString();
+      setEvaluationStartTime(startTime);
+      
       await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'new_resumes');
+
+      // Start auto-refresh to check for assessment reports
+      startAutoRefreshAssessments();
 
       toast({
         title: "Processing Started",
@@ -1006,6 +1167,10 @@ export const ResumeUploadSection = () => {
 
     } catch (error: any) {
       console.error('Error processing new resumes:', error);
+      
+      // Even if processing fails, start auto-refresh in case N8N processes it later
+      startAutoRefreshAssessments();
+      
       toast({
         title: "Processing Failed",
         description: error.message || "Failed to send new resumes to n8n webhook.",
@@ -1080,7 +1245,14 @@ export const ResumeUploadSection = () => {
         return;
       }
 
+      // Record the start time for evaluation timing
+      const startTime = new Date().toISOString();
+      setEvaluationStartTime(startTime);
+      
       await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'all_resumes');
+
+      // Start auto-refresh to check for assessment reports
+      startAutoRefreshAssessments();
 
       toast({
         title: "Processing Started",
@@ -1089,6 +1261,10 @@ export const ResumeUploadSection = () => {
 
     } catch (error: any) {
       console.error('Error processing all resumes:', error);
+      
+      // Even if processing fails, start auto-refresh in case N8N processes it later
+      startAutoRefreshAssessments();
+      
       toast({
         title: "Processing Failed",
         description: error.message || "Failed to send resumes to n8n webhook.",
@@ -1305,76 +1481,7 @@ export const ResumeUploadSection = () => {
               )}
             </div>
 
-            {/* Provaluate Button */}
-            <div className="flex flex-col justify-end h-full">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 mb-2">
-                  {/*<Play className="w-4 h-4 text-accent-600" /> */}
-                  {/*<h3 className="font-medium text-gray-900">Action</h3>*/}
-                </div>
-                
-                <Button
-                  onClick={handleEvaluation}
-                  disabled={isEvaluating || !selectedJobDescriptionId || !selectedCriteriaGridId || !hasNewlyUploadedResumes}
-                  className={`relative w-full ${
-                    processingState.status === 'processing' 
-                      ? 'bg-blue-600 hover:bg-blue-700' 
-                      : processingState.status === 'error'
-                      ? 'bg-red-600 hover:bg-red-700'
-                      : processingState.status === 'success'
-                      ? 'bg-green-600 hover:bg-green-700'
-                      : 'bg-accent-600 hover:bg-accent-700'
-                  } text-white disabled:opacity-50`}
-                >
-                  {processingState.status === 'processing' ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>{processingState.message}</span>
-                    </div>
-                  ) : processingState.status === 'error' ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <X className="w-4 h-4" />
-                      <span>{processingState.message}</span>
-                    </div>
-                  ) : processingState.status === 'success' ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <CheckCircle className="w-4 h-4" />
-                      <span>{processingState.message}</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center gap-2">
-                      <Play className="w-4 h-4" />
-                      <span>Pro-Valuate</span>
-                    </div>
-                  )}
-                </Button>
-                
-                {/* Show error message if any */}
-                {processingState.status === 'error' && processingState.error && (
-                  <div className="p-2 mt-2 text-sm text-red-800 bg-red-100 rounded-md">
-                    {processingState.error}
-                  </div>
-                )}
-                
-                {/* Show helper text below button */}
-                {processingState.status === 'idle' && (
-                  <div className="text-center mt-2">
-                    <p className="text-xs text-muted-foreground">
-                      {!selectedJobDescriptionId || !selectedCriteriaGridId 
-                        ? "Select job description and criteria above"
-                        : !hasNewlyUploadedResumes
-                        ? "Upload resumes to get started"
-                        : "Ready to evaluate resumes"}
-                    </p>
-                    {(selectedJobDescriptionId && selectedCriteriaGridId && !hasNewlyUploadedResumes) && (
-                      <p className="text-xs text-gray-500 italic mt-1">
-                        Disclaimer: AI can make mistakes. Please use the tool judiciously.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
+            
           </div>
         </CardContent>
       </Card>
@@ -1502,6 +1609,9 @@ export const ResumeUploadSection = () => {
                         clearSessionUploadedFiles();
                         setNewlyUploadedIds(new Set());
                         setCurrentlyProcessing(-1);
+                        // Clear evaluation timing when clearing files
+                        setEvaluationStartTime(null);
+                        stopAutoRefreshAssessments();
                       }}
                       className="text-sm"
                     >
@@ -1530,6 +1640,76 @@ export const ResumeUploadSection = () => {
               </>
             )}
           </div>
+          {/* Provaluate Button */}
+          <div className="flex flex-col justify-end h-full">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 mb-2">
+                  {/*<Play className="w-4 h-4 text-accent-600" /> */}
+                  {/*<h3 className="font-medium text-gray-900">Action</h3>*/}
+                </div>
+                
+                <Button
+                  onClick={handleEvaluation}
+                  disabled={isEvaluating || !selectedJobDescriptionId || !selectedCriteriaGridId || !hasNewlyUploadedResumes}
+                  className={`relative w-full ${
+                    processingState.status === 'processing' 
+                      ? 'bg-blue-600 hover:bg-blue-700' 
+                      : processingState.status === 'error'
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : processingState.status === 'success'
+                      ? 'bg-green-600 hover:bg-green-700'
+                      : 'bg-accent-600 hover:bg-accent-700'
+                  } text-white disabled:opacity-50`}
+                >
+                  {processingState.status === 'processing' ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>{processingState.message}</span>
+                    </div>
+                  ) : processingState.status === 'error' ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <X className="w-4 h-4" />
+                      <span>{processingState.message}</span>
+                    </div>
+                  ) : processingState.status === 'success' ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <CheckCircle className="w-4 h-4" />
+                      <span>{processingState.message}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center gap-2">
+                      <Play className="w-4 h-4" />
+                      <span>Pro-Valuate</span>
+                    </div>
+                  )}
+                </Button>
+                
+                {/* Show error message if any */}
+                {processingState.status === 'error' && processingState.error && (
+                  <div className="p-2 mt-2 text-sm text-red-800 bg-red-100 rounded-md">
+                    {processingState.error}
+                  </div>
+                )}
+                
+                {/* Show helper text below button */}
+                {processingState.status === 'idle' && (
+                  <div className="text-center mt-2">
+                    <p className="text-xs text-muted-foreground">
+                      {!selectedJobDescriptionId || !selectedCriteriaGridId 
+                        ? "Select job description and criteria above"
+                        : !hasNewlyUploadedResumes
+                        ? "Upload resumes to get started"
+                        : "Ready to evaluate resumes"}
+                    </p>
+                    {(selectedJobDescriptionId && selectedCriteriaGridId && !hasNewlyUploadedResumes) && (
+                      <p className="text-xs text-gray-500 italic mt-1">
+                        Disclaimer: AI can make mistakes. Please use the tool judiciously.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
                 </CardContent>
       </Card>
 
@@ -1542,16 +1722,25 @@ export const ResumeUploadSection = () => {
           <h3 className="text-lg font-semibold text-primary-800">
             Candidate Pool ({assessmentReports.length})
           </h3>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefreshReports}
-            disabled={loadingReports}
-            className="flex items-center gap-2"
-          >
-            <RefreshCw className={`w-4 h-4 ${loadingReports ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefreshReports}
+              disabled={loadingReports}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className={`w-4 h-4 ${loadingReports ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            
+            {isWaitingForAssessments && (
+              <div className="flex items-center text-xs text-blue-600">
+                <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                Auto-checking...
+              </div>
+            )}
+          </div>
         </div>
         {loadingReports ? (
           <div className="flex items-center justify-center py-8">
@@ -1582,6 +1771,14 @@ export const ResumeUploadSection = () => {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                           <h4 className="font-semibold text-primary-800">{report.candidate_name || 'Unknown'}</h4>
+                          {report.created_at && (() => {
+                            const evaluationTime = getEvaluationTime(report.created_at);
+                            return (
+                              <span className={`text-xs ${evaluationTime.colorClass} px-2 py-1 rounded-full`}>
+                                Evaluated in {evaluationTime.text}
+                              </span>
+                            );
+                          })()}
                       </div>
                       <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
                         <FileText className="w-4 h-4" />

@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, FileText, Grid, Save, Plus, Trash2, Download, Edit } from 'lucide-react';
+import { Upload, FileText, Grid, Save, Plus, Trash2, Download, Edit, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { DatabaseService } from '@/integrations/supabase/db';
@@ -74,11 +74,114 @@ export const JobUploadSection = () => {
   const [processingStatus, setProcessingStatus] = useState<'idle' | 'processing' | 'completed' | 'failed'>('idle');
   const [numPages, setNumPages] = useState<number>(1);
   const [pageNumber, setPageNumber] = useState<number>(1);
+  const [isWaitingForResolvedJD, setIsWaitingForResolvedJD] = useState(false);
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<NodeJS.Timeout | null>(null);
 
   const totalPercentage = criteriaData.reduce((sum, item) => sum + item.weightage, 0);
   const isValidTotal = totalPercentage === 0 || totalPercentage === 100;
 
+  // Auto-refresh functions
+  const startAutoRefresh = (jdId: string) => {
+    setIsWaitingForResolvedJD(true);
+    
+    // Clear any existing interval
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+    }
+    
+    // Set up auto-refresh every 30 seconds for up to 5 minutes
+    let attempts = 0;
+    const maxAttempts = 10; // 10 attempts × 30 seconds = 5 minutes
+    
+    const interval = setInterval(async () => {
+      attempts++;
+      console.log(`Auto-refresh attempt ${attempts}/${maxAttempts} for JD: ${jdId}`);
+      
+      try {
+        // Check if resolved JD exists
+        const { data: jdData, error: jdError } = await supabase
+          .from('job_descriptions')
+          .select('jd_file')
+          .eq('jd_id', jdId)
+          .single();
 
+        if (jdError || !jdData?.jd_file) {
+          if (attempts >= maxAttempts) {
+            stopAutoRefresh();
+          }
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('resolved_jd')
+          .select('*')
+          .eq('referenced_jd', jdData.jd_file)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        
+        if (data) {
+          // Found resolved JD data
+          setResolvedJD(data.parameter);
+          setResolvedJDId(data.resolved_jd_id);
+          stopAutoRefresh();
+          toast({
+            title: "Resolved JD Data Updated",
+            description: "Job description has been processed and analyzed.",
+          });
+        } else if (attempts >= maxAttempts) {
+          // Max attempts reached, stop trying
+          stopAutoRefresh();
+          toast({
+            title: "Processing Taking Longer",
+            description: "JD processing is taking longer than expected. You can manually refresh or try again later.",
+            variant: "default",
+          });
+        }
+      } catch (error) {
+        console.error('Auto-refresh error:', error);
+        if (attempts >= maxAttempts) {
+          stopAutoRefresh();
+        }
+      }
+    }, 30000); // 30 seconds
+    
+    setAutoRefreshInterval(interval);
+  };
+
+  const stopAutoRefresh = () => {
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      setAutoRefreshInterval(null);
+    }
+    setIsWaitingForResolvedJD(false);
+  };
+
+  const handleManualRefresh = async () => {
+    if (!selectedJobDescriptionId) {
+      toast({
+        title: "No Job Description Selected",
+        description: "Please select a job description first.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    await loadResolvedJD(selectedJobDescriptionId);
+    toast({
+      title: "Refreshed",
+      description: "Checked for updated resolved JD data.",
+    });
+  };
+
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+      }
+    };
+  }, [autoRefreshInterval]);
 
   useEffect(() => {
     console.log('JobUploadSection - User state:', { user, loading, error });
@@ -273,6 +376,8 @@ export const JobUploadSection = () => {
         setResolvedJD(data.parameter); // parameter field contains the JSON data
         setResolvedJDId(data.resolved_jd_id);
         console.log('Loaded resolved JD:', data);
+        // Stop auto-refresh if it's running since we found the data
+        stopAutoRefresh();
       } else {
         console.log('No resolved JD found for file URL:', jdData.jd_file);
         setResolvedJD(null);
@@ -676,6 +781,9 @@ export const JobUploadSection = () => {
               setTimeout(() => {
                 loadResolvedJD(jdData.jd_id);
               }, 2000); // Wait 2 seconds for n8n to process and save to database
+              
+              // Start auto-refresh to check for resolved JD data every 30 seconds
+              startAutoRefresh(jdData.jd_id);
             }
           } catch (webhookError) {
             console.error('Webhook error:', webhookError);
@@ -684,6 +792,9 @@ export const JobUploadSection = () => {
               description: "Job description saved but processing failed. The file will be processed later.",
               variant: "default",
             });
+            
+            // Even if webhook fails, start auto-refresh in case N8N processes it later
+            startAutoRefresh(jdData.jd_id);
           }
         }
       }
@@ -867,6 +978,8 @@ export const JobUploadSection = () => {
   const handleJDSelect = (jdId: string) => {
     setSelectedJobDescriptionId(jdId);
     sessionStorage.setItem('selectedJDId', jdId);
+    // Stop any existing auto-refresh when switching to a different JD
+    stopAutoRefresh();
   };
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
@@ -989,6 +1102,28 @@ export const JobUploadSection = () => {
               <Button onClick={handleProcessJobDescription} className="w-full">
                 Process Job Description
               </Button>
+              
+              {/* Show refresh button and auto-refresh status */}
+              {selectedJobDescriptionId && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleManualRefresh}
+                    className="flex-1"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Show Resolved JD Data
+                  </Button>
+                  
+                  {isWaitingForResolvedJD && (
+                    <div className="flex items-center text-xs text-blue-600">
+                      <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                      Auto-checking...
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {resolvedJD && !isEditingResolvedJD && (
