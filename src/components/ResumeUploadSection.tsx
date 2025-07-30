@@ -236,6 +236,8 @@ export const ResumeUploadSection = () => {
         // Check if we're still waiting for assessments
         if (!isWaitingForAssessments) {
           console.log('❌ No longer waiting for assessments, stopping refresh');
+          console.log('❌ Debug - isWaitingForAssessments:', isWaitingForAssessments);
+          console.log('❌ Debug - expectedResumeCount:', expectedResumeCount);
           clearInterval(interval);
           return;
         }
@@ -296,6 +298,7 @@ export const ResumeUploadSection = () => {
       const newCompletedCount = Math.max(0, currentSessionReports.length - initialReportCount);
       
       console.log(`📊 Session reports: ${currentSessionReports.length}, Initial: ${initialReportCount}, New: ${newCompletedCount}/${expectedResumeCount}`);
+      console.log(`📊 Debug - isWaitingForAssessments: ${isWaitingForAssessments}, lastProgressCount: ${lastProgressCount}`);
 
       // Only update if we have a new completion count
       if (newCompletedCount > lastProgressCount) {
@@ -321,7 +324,7 @@ export const ResumeUploadSection = () => {
     } catch (error) {
       console.error('❌ Error in assessment monitoring:', error);
     }
-  }, [assessmentReports, isWaitingForAssessments, expectedResumeCount, initialReportCount, lastProgressCount, stopAutoRefreshAssessments]);
+  }, [assessmentReports, isWaitingForAssessments, expectedResumeCount, initialReportCount, lastProgressCount]);
 
   // Cleanup interval on unmount
   useEffect(() => {
@@ -874,8 +877,12 @@ export const ResumeUploadSection = () => {
           description: `Successfully sent ${resumeUrls.length} new resume${resumeUrls.length > 1 ? 's' : ''} for Pro-Valuation. Wait for the results, it might take a while.`,
         });
 
-        // Start auto-refresh to check for assessment reports every 15 seconds
-        startAutoRefreshAssessments();
+        // Start auto-refresh to check for assessment reports every 15 seconds (with 30s delay)
+        setTimeout(() => {
+          if (isWaitingForAssessments) {
+            startAutoRefreshAssessments();
+          }
+        }, 30000); // Wait 30 seconds before starting auto-refresh
 
         // Clear session storage after successful processing
         clearSessionUploadedFiles();
@@ -1270,8 +1277,12 @@ export const ResumeUploadSection = () => {
       
       await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'new_resumes');
 
-      // Start auto-refresh to check for assessment reports
-      startAutoRefreshAssessments();
+      // Start auto-refresh to check for assessment reports (with 30s delay)
+      setTimeout(() => {
+        if (isWaitingForAssessments) {
+          startAutoRefreshAssessments();
+        }
+      }, 30000); // Wait 30 seconds before starting auto-refresh
 
       toast({
         title: "Processing Started",
@@ -1377,8 +1388,12 @@ export const ResumeUploadSection = () => {
       
       await sendResumesToWebhook(resumeUrls, selectedJDId, selectedCriteriaGridId, 'all_resumes');
 
-      // Start auto-refresh to check for assessment reports
-      startAutoRefreshAssessments();
+      // Start auto-refresh to check for assessment reports (with 30s delay)
+      setTimeout(() => {
+        if (isWaitingForAssessments) {
+          startAutoRefreshAssessments();
+        }
+      }, 30000); // Wait 30 seconds before starting auto-refresh
 
       toast({
         title: "Processing Started",

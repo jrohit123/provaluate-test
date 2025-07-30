@@ -96,17 +96,30 @@ const Login = () => {
     setResetError('');
     setResetLoading(true);
     
-    // Get the current origin for the redirect URL
-    const redirectTo = `${window.location.origin}/reset-password`;
-    
-    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: redirectTo,
-    });
-    if (error) {
-      setResetError(error.message);
-    } else {
-      setResetMessage('Password reset email sent! Please check your inbox.');
+    try {
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(resetEmail)) {
+        throw new Error('Please enter a valid email address.');
+      }
+
+      // Get the current origin for the redirect URL
+      const redirectTo = `${window.location.origin}/reset-password`;
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: redirectTo,
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      setResetMessage('Password reset email sent! Please check your inbox and spam folder.');
+      setResetEmail(''); // Clear the email field
+    } catch (error: any) {
+      setResetError(error.message || 'Failed to send password reset email.');
     }
+    
     setResetLoading(false);
   };
 
@@ -121,7 +134,7 @@ const Login = () => {
         <Card className="shadow-lg border-0">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl text-center">
-              {isSignup ? 'Create Account' : 'Welcome Back'}
+              {isSignup ? 'Create a new Account' : 'Welcome Back'}
             </CardTitle>
             <CardDescription className="text-center">
               {isSignup 
