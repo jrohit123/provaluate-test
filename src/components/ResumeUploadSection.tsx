@@ -917,6 +917,9 @@ export const ResumeUploadSection = () => {
         
         // Clear newly uploaded IDs after successful processing
         setNewlyUploadedIds(new Set());
+        
+        // Clear the uploaded files list from the Upload Area
+        setSelectedFiles([]);
 
       } catch (webhookError: any) {
         console.error('Error calling Pro-Valuation service:', webhookError);
