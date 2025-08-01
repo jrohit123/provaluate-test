@@ -142,8 +142,13 @@ export const ResumeUploadSection = () => {
   const [initialReportCount, setInitialReportCount] = useState<number>(0);
 
   // Helper function to calculate and format evaluation time
-  const getEvaluationTime = (reportCreatedAt: string): { text: string; colorClass: string } => {
-    console.log('🕐 getEvaluationTime called:', { reportCreatedAt, evaluationStartTime });
+  const getEvaluationTime = (report: any): { text: string; colorClass: string } => {
+    console.log('🕐 getEvaluationTime called:', { 
+      reportId: report.id,
+      created_at: report.created_at,
+      updated_at: report.updated_at,
+      evaluationStartTime 
+    });
     
     if (!evaluationStartTime) {
       console.log('❌ No evaluationStartTime set');
@@ -151,22 +156,43 @@ export const ResumeUploadSection = () => {
     }
     
     try {
+      // Normalize both timestamps to UTC to avoid timezone issues
       const startTime = new Date(evaluationStartTime);
-      const endTime = new Date(reportCreatedAt);
       
-      console.log('📅 Time comparison:', { 
-        startTime: startTime.toISOString(), 
-        endTime: endTime.toISOString(),
-        startTimeValid: !isNaN(startTime.getTime()),
-        endTimeValid: !isNaN(endTime.getTime())
+      // Use updated_at if available (when evaluation completed), otherwise fall back to created_at
+      const completionTimestamp = report.updated_at || report.created_at;
+      
+      // Parse the completion timestamp - handle both UTC and local timezone formats
+      let endTime;
+      if (completionTimestamp.includes('Z') || completionTimestamp.includes('+')) {
+        // Already has timezone info
+        endTime = new Date(completionTimestamp);
+      } else {
+        // Assume it's in local timezone and convert to UTC
+        endTime = new Date(completionTimestamp + 'Z');
+      }
+      
+      // Ensure both times are properly parsed and normalized to UTC
+      const startTimeUTC = new Date(startTime.toISOString());
+      const endTimeUTC = new Date(endTime.toISOString());
+      
+      console.log('📅 Time comparison (UTC normalized):', { 
+        startTimeUTC: startTimeUTC.toISOString(), 
+        endTimeUTC: endTimeUTC.toISOString(),
+        originalStartTime: evaluationStartTime,
+        originalEndTime: completionTimestamp,
+        usingField: report.updated_at ? 'updated_at' : 'created_at',
+        startTimeValid: !isNaN(startTimeUTC.getTime()),
+        endTimeValid: !isNaN(endTimeUTC.getTime()),
+        userTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone
       });
       
-      const timeDiffMs = endTime.getTime() - startTime.getTime();
+      const timeDiffMs = endTimeUTC.getTime() - startTimeUTC.getTime();
       
       console.log('⏱️ Time difference:', { timeDiffMs, timeDiffMinutes: timeDiffMs / 60000 });
       
       if (timeDiffMs < 0) {
-        console.log('❌ Negative time difference - report created before evaluation started');
+        console.log('❌ Negative time difference - report completed before evaluation started');
         return { text: 'Unknown', colorClass: 'bg-gray-100 text-gray-700' }; // Invalid time difference
       }
       
@@ -558,7 +584,7 @@ export const ResumeUploadSection = () => {
       if (data) {
         // Log the timestamps of all reports
         data.forEach(report => {
-          console.log(`📄 Report ${report.id}: created_at = ${report.created_at}`);
+          console.log(`📄 Report ${report.id}: created_at = ${report.created_at}, updated_at = ${report.updated_at}`);
         });
       }
       
@@ -849,8 +875,10 @@ export const ResumeUploadSection = () => {
         });
         
         // Record the start time for evaluation timing and initial report count
+        // Use the same timestamp format as Supabase to avoid timezone issues
         const startTime = new Date().toISOString();
         console.log('🚀 Setting evaluation start time (handleEvaluation):', startTime);
+        console.log('🌍 User timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
         console.log('📊 Setting expected resume count:', resumeUrls.length);
         
         // Capture initial report count for current JD/criteria combination (all completed reports)
@@ -1259,8 +1287,10 @@ export const ResumeUploadSection = () => {
       }));
 
       // Record the start time for evaluation timing and initial report count
+      // Use the same timestamp format as Supabase to avoid timezone issues
       const startTime = new Date().toISOString();
       console.log('🚀 Setting evaluation start time (handleProcessNewResumes):', startTime);
+      console.log('🌍 User timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
       console.log('📊 Setting expected resume count:', resumeUrls.length);
       
       // Capture initial report count for current JD/criteria combination (all completed reports)
@@ -1370,8 +1400,10 @@ export const ResumeUploadSection = () => {
       }
 
       // Record the start time for evaluation timing and initial report count
+      // Use the same timestamp format as Supabase to avoid timezone issues
       const startTime = new Date().toISOString();
       console.log('🚀 Setting evaluation start time (handleProcessAllResumes):', startTime);
+      console.log('🌍 User timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
       console.log('📊 Setting expected resume count:', resumeUrls.length);
       
       // Capture initial report count for current JD/criteria combination (all completed reports)
@@ -1940,7 +1972,7 @@ export const ResumeUploadSection = () => {
                             const evalStartTime = new Date(evaluationStartTime);
                             
                             if (reportTime >= evalStartTime) {
-                              const evaluationTime = getEvaluationTime(report.created_at);
+                              const evaluationTime = getEvaluationTime(report);
                               if (evaluationTime.text !== 'Unknown') {
                                 return (
                                   <span className={`text-xs ${evaluationTime.colorClass} px-2 py-1 rounded-full`}>
