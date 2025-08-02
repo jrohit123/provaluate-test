@@ -136,101 +136,11 @@ export const ResumeUploadSection = () => {
   });
   const [isWaitingForAssessments, setIsWaitingForAssessments] = useState(false);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<NodeJS.Timeout | null>(null);
-  const [evaluationStartTime, setEvaluationStartTime] = useState<string | null>(null);
   const [expectedResumeCount, setExpectedResumeCount] = useState<number>(0);
   const [lastProgressCount, setLastProgressCount] = useState<number>(0);
   const [initialReportCount, setInitialReportCount] = useState<number>(0);
 
-  // Helper function to calculate and format evaluation time
-  const getEvaluationTime = (report: any): { text: string; colorClass: string } => {
-    console.log('🕐 getEvaluationTime called:', { 
-      reportId: report.id,
-      created_at: report.created_at,
-      updated_at: report.updated_at,
-      evaluationStartTime 
-    });
-    
-    if (!evaluationStartTime) {
-      console.log('❌ No evaluationStartTime set');
-      return { text: 'Unknown', colorClass: 'bg-gray-100 text-gray-700' };
-    }
-    
-    try {
-      // Normalize both timestamps to UTC to avoid timezone issues
-      const startTime = new Date(evaluationStartTime);
-      
-      // Use updated_at if available (when evaluation completed), otherwise fall back to created_at
-      const completionTimestamp = report.updated_at || report.created_at;
-      
-      // Parse the completion timestamp - handle both UTC and local timezone formats
-      let endTime;
-      if (completionTimestamp.includes('Z') || completionTimestamp.includes('+')) {
-        // Already has timezone info
-        endTime = new Date(completionTimestamp);
-      } else {
-        // Assume it's in local timezone and convert to UTC
-        endTime = new Date(completionTimestamp + 'Z');
-      }
-      
-      // Ensure both times are properly parsed and normalized to UTC
-      const startTimeUTC = new Date(startTime.toISOString());
-      const endTimeUTC = new Date(endTime.toISOString());
-      
-      console.log('📅 Time comparison (UTC normalized):', { 
-        startTimeUTC: startTimeUTC.toISOString(), 
-        endTimeUTC: endTimeUTC.toISOString(),
-        originalStartTime: evaluationStartTime,
-        originalEndTime: completionTimestamp,
-        usingField: report.updated_at ? 'updated_at' : 'created_at',
-        startTimeValid: !isNaN(startTimeUTC.getTime()),
-        endTimeValid: !isNaN(endTimeUTC.getTime()),
-        userTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-      });
-      
-      const timeDiffMs = endTimeUTC.getTime() - startTimeUTC.getTime();
-      
-      console.log('⏱️ Time difference:', { timeDiffMs, timeDiffMinutes: timeDiffMs / 60000 });
-      
-      if (timeDiffMs < 0) {
-        console.log('❌ Negative time difference - report completed before evaluation started');
-        return { text: 'Unknown', colorClass: 'bg-gray-100 text-gray-700' }; // Invalid time difference
-      }
-      
-      const timeDiffSeconds = Math.floor(timeDiffMs / 1000);
-      const timeDiffMinutes = Math.floor(timeDiffSeconds / 60);
-      const timeDiffHours = Math.floor(timeDiffMinutes / 60);
-      
-      let timeText = '';
-      let colorClass = '';
-      
-      if (timeDiffHours > 0) {
-        const remainingMinutes = timeDiffMinutes % 60;
-        timeText = `${timeDiffHours}h ${remainingMinutes}m`;
-        colorClass = 'bg-orange-100 text-orange-700'; // Long time - orange
-      } else if (timeDiffMinutes > 5) {
-        const remainingSeconds = timeDiffSeconds % 60;
-        timeText = `${timeDiffMinutes}m ${remainingSeconds}s`;
-        colorClass = 'bg-orange-100 text-orange-700'; // >5 minutes - orange
-      } else if (timeDiffMinutes > 2) {
-        const remainingSeconds = timeDiffSeconds % 60;
-        timeText = `${timeDiffMinutes}m ${remainingSeconds}s`;
-        colorClass = 'bg-yellow-100 text-yellow-700'; // 2-5 minutes - yellow
-      } else if (timeDiffMinutes > 0) {
-        const remainingSeconds = timeDiffSeconds % 60;
-        timeText = `${timeDiffMinutes}m ${remainingSeconds}s`;
-        colorClass = 'bg-green-100 text-green-700'; // 0-2 minutes - green
-      } else {
-        timeText = `${timeDiffSeconds}s`;
-        colorClass = 'bg-green-100 text-green-700'; // <1 minute - green
-      }
-      
-      console.log('✅ Calculated time:', { timeText, colorClass });
-      return { text: timeText, colorClass };
-    } catch (error) {
-      console.error('❌ Error calculating evaluation time:', error);
-      return { text: 'Unknown', colorClass: 'bg-gray-100 text-gray-700' };
-    }
-  };
+
 
   // Auto-refresh functions for assessment reports
   const startAutoRefreshAssessments = () => {
@@ -497,8 +407,6 @@ export const ResumeUploadSection = () => {
       setSelectedFiles([]);
       setNewlyUploadedIds(new Set());
       // Clear evaluation timing on component mount
-      console.log('🔄 Clearing evaluation start time (component mount)');
-      setEvaluationStartTime(null);
       setExpectedResumeCount(0);
       setLastProgressCount(0);
       setInitialReportCount(0);
@@ -874,11 +782,6 @@ export const ResumeUploadSection = () => {
           message: 'Sending resumes to Pro-Valuation service...'
         });
         
-        // Record the start time for evaluation timing and initial report count
-        // Use the same timestamp format as Supabase to avoid timezone issues
-        const startTime = new Date().toISOString();
-        console.log('🚀 Setting evaluation start time (handleEvaluation):', startTime);
-        console.log('🌍 User timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
         console.log('📊 Setting expected resume count:', resumeUrls.length);
         
         // Capture initial report count for current JD/criteria combination (all completed reports)
@@ -888,7 +791,6 @@ export const ResumeUploadSection = () => {
         );
         console.log('📊 Initial report count:', currentReports.length);
         
-        setEvaluationStartTime(startTime);
         setExpectedResumeCount(resumeUrls.length);
         setInitialReportCount(currentReports.length);
         setLastProgressCount(0); // Reset progress tracking
@@ -1068,8 +970,6 @@ export const ResumeUploadSection = () => {
     // Stop any existing auto-refresh when switching job descriptions
     stopAutoRefreshAssessments();
     // Clear evaluation start time for new evaluation
-    console.log('🔄 Clearing evaluation start time (job description change)');
-    setEvaluationStartTime(null);
     setExpectedResumeCount(0);
     setLastProgressCount(0);
     setInitialReportCount(0);
@@ -1088,8 +988,6 @@ export const ResumeUploadSection = () => {
     // Stop any existing auto-refresh when switching criteria grids
     stopAutoRefreshAssessments();
     // Clear evaluation start time for new evaluation
-    console.log('🔄 Clearing evaluation start time (criteria grid change)');
-    setEvaluationStartTime(null);
     setExpectedResumeCount(0);
     setLastProgressCount(0);
     setInitialReportCount(0);
@@ -1289,11 +1187,6 @@ export const ResumeUploadSection = () => {
         created_at: new Date().toISOString()
       }));
 
-      // Record the start time for evaluation timing and initial report count
-      // Use the same timestamp format as Supabase to avoid timezone issues
-      const startTime = new Date().toISOString();
-      console.log('🚀 Setting evaluation start time (handleProcessNewResumes):', startTime);
-      console.log('🌍 User timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
       console.log('📊 Setting expected resume count:', resumeUrls.length);
       
       // Capture initial report count for current JD/criteria combination (all completed reports)
@@ -1303,7 +1196,6 @@ export const ResumeUploadSection = () => {
       );
       console.log('📊 Initial report count:', currentReports.length);
       
-      setEvaluationStartTime(startTime);
       setExpectedResumeCount(resumeUrls.length);
       setInitialReportCount(currentReports.length);
       setLastProgressCount(0); // Reset progress tracking
@@ -1402,11 +1294,6 @@ export const ResumeUploadSection = () => {
         return;
       }
 
-      // Record the start time for evaluation timing and initial report count
-      // Use the same timestamp format as Supabase to avoid timezone issues
-      const startTime = new Date().toISOString();
-      console.log('🚀 Setting evaluation start time (handleProcessAllResumes):', startTime);
-      console.log('🌍 User timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
       console.log('📊 Setting expected resume count:', resumeUrls.length);
       
       // Capture initial report count for current JD/criteria combination (all completed reports)
@@ -1416,7 +1303,6 @@ export const ResumeUploadSection = () => {
       );
       console.log('📊 Initial report count:', currentReports.length);
       
-      setEvaluationStartTime(startTime);
       setExpectedResumeCount(resumeUrls.length);
       setInitialReportCount(currentReports.length);
       setLastProgressCount(0); // Reset progress tracking
@@ -1786,8 +1672,6 @@ export const ResumeUploadSection = () => {
                         setNewlyUploadedIds(new Set());
                         setCurrentlyProcessing(-1);
                         // Clear evaluation timing when clearing files
-                        console.log('🔄 Clearing evaluation start time (clear all files)');
-                        setEvaluationStartTime(null);
                         setExpectedResumeCount(0);
                         setLastProgressCount(0);
                         setInitialReportCount(0);
@@ -1969,23 +1853,7 @@ export const ResumeUploadSection = () => {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                           <h4 className="font-semibold text-primary-800">{report.candidate_name || 'Unknown'}</h4>
-                          {report.created_at && evaluationStartTime && (() => {
-                            // Only show timing for reports created after the current evaluation started
-                            const reportTime = new Date(report.created_at);
-                            const evalStartTime = new Date(evaluationStartTime);
-                            
-                            if (reportTime >= evalStartTime) {
-                              const evaluationTime = getEvaluationTime(report);
-                              if (evaluationTime.text !== 'Unknown') {
-                                return (
-                                  <span className={`text-xs ${evaluationTime.colorClass} px-2 py-1 rounded-full`}>
-                                    Evaluated in {evaluationTime.text}
-                                  </span>
-                                );
-                              }
-                            }
-                            return null;
-                          })()}
+
                       </div>
                       <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
                         <FileText className="w-4 h-4" />

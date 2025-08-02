@@ -1096,7 +1096,7 @@ export const JobUploadSection = () => {
             >
               <Upload className="w-8 h-8 text-primary-400 mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">
-                Drop PDF/DOC files here or click to browse
+                Drop PDF files here or click to browse
               </p>
               {uploadedFile && (
                 <div className="mt-2 text-xs text-primary-700">Selected file: {uploadedFile.name}</div>
