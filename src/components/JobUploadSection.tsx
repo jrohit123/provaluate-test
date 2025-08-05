@@ -189,6 +189,13 @@ export const JobUploadSection = () => {
     };
   }, [autoRefreshInterval]);
 
+  // Additional cleanup on unmount to ensure auto-refresh is stopped
+  useEffect(() => {
+    return () => {
+      stopAutoRefresh();
+    };
+  }, []); // Empty dependency array to ensure cleanup only runs on unmount
+
   useEffect(() => {
     console.log('JobUploadSection - User state:', { user, loading, error });
     console.log('User object details:', user);
@@ -391,6 +398,9 @@ export const JobUploadSection = () => {
         console.log('No resolved JD found for file URL:', jdData.jd_file);
         setResolvedJD(null);
         setResolvedJDId(null);
+        
+        // Start auto-refresh to wait for resolved JD data
+        startAutoRefresh(jdId);
       }
     } catch (error) {
       console.error('Error loading resolved JD:', error);
