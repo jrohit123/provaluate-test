@@ -1,0 +1,1327 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { 
+  ArrowLeft, 
+  Download, 
+  Share2, 
+  BarChart3, 
+  Award,
+  XCircle,
+  FileText,
+  FileSpreadsheet
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+import ExcelJS from 'exceljs';
+
+const FinalResults = () => {
+  const { interviewId } = useParams();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [reportData, setReportData] = useState(null);
+  const [selectedParameter, setSelectedParameter] = useState(null);
+
+  // Audio and video playback functions
+  const playAudio = (audioUrl) => {
+    if (audioUrl) {
+      const audio = new Audio(audioUrl);
+      audio.play().catch(error => {
+        console.error('Error playing audio:', error);
+        toast.error('Failed to play audio');
+      });
+    }
+  };
+
+  const [playingVideo, setPlayingVideo] = useState(null);
+
+  const playVideo = (videoUrl) => {
+    if (videoUrl) {
+      setPlayingVideo(videoUrl);
+    }
+  };
+
+  const closeVideo = () => {
+    setPlayingVideo(null);
+  };
+
+
+
+  const loadFinalResults = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`http://localhost:5000/api/get-final-results/${interviewId}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📊 Final results data loaded:', data);
+        console.log('📊 Interview data:', data.interview);
+        console.log('📊 Interview type from API:', data.interview?.interview_type);
+        console.log('📊 Parameters:', data.parameters?.length);
+        console.log('📊 Raw answers from API:', data.answers?.length);
+        
+        // Try to get parameter scores data directly to extract real feedback
+        let realFeedbackData = null;
+        try {
+          console.log('🔍 Attempting to fetch parameter scores data...');
+          console.log('🔍 Data structure keys:', Object.keys(data));
+          console.log('🔍 Custom parameters:', data.custom_parameters);
+          console.log('🔍 Standard parameters:', data.standard_parameters);
+          console.log('🔍 Parameters array:', data.parameters);
+          
+          // Check if parameters array contains the detailed data
+          if (data.parameters && data.parameters.length > 0) {
+            console.log('🔍 First parameter structure:', data.parameters[0]);
+            if (data.parameters[0].questions && data.parameters[0].questions.length > 0) {
+              console.log('🔍 First question structure:', data.parameters[0].questions[0]);
+            }
+          }
+          
+                  // Use the real data from the API response
+        console.log('📊 Using real data from API response');
+        console.log('📊 Answers with video URLs:', data.answers?.map(a => ({ 
+          question_order: a.question_order, 
+          video_url: a.question_video_url 
+        })));
+        
+        // Log video URLs for debugging
+        if (data.answers) {
+          data.answers.forEach((answer, index) => {
+            if (answer.question_video_url) {
+              console.log(`🎥 Answer ${index + 1} (Q${answer.question_order + 1}) has video: ${answer.question_video_url}`);
+            }
+          });
+        }
+          
+        } catch (paramError) {
+          console.log('⚠️ Could not load parameter scores data:', paramError);
+        }
+        
+        // Extract questions and answers from parameters with proper ordering
+        const extractedQuestions = [];
+        const extractedAnswers = [];
+        let globalQuestionIndex = 0;
+        
+        // First, check if we have questions and answers arrays from the API
+        if (data.questions && data.questions.length > 0 && data.answers && data.answers.length > 0) {
+          console.log('✅ Using questions and answers arrays from API');
+          console.log('📊 Number of questions from API:', data.questions.length);
+          console.log('📊 Number of answers from API:', data.answers.length);
+          
+          // Use the questions array for question text and answers array for feedback
+          data.questions.forEach((question, index) => {
+            console.log(`🔍 Question ${index} data:`, question);
+            console.log(`🔍 Question ${index} text:`, question.question_text);
+            
+            extractedQuestions.push({
+              question_order: question.question_order,
+              question_text: question.question_text,
+              parameter_key: question.parameter_key,
+              parameter_name: question.parameter_name
+            });
+          });
+          
+          data.answers.forEach((answer, index) => {
+            console.log(`🔍 Answer ${index} data:`, answer);
+            console.log(`🎥 Answer ${index} video URL:`, answer.question_video_url);
+            
+            extractedAnswers.push({
+              question_order: answer.question_order,
+              transcript: answer.transcript,
+              audio_url: answer.audio_url,
+              question_video_url: answer.question_video_url, // Preserve video URL
+              score: answer.score,
+              feedback: answer.feedback, // This is the REAL AI feedback
+              parameter_key: answer.parameter_key,
+              parameter_name: answer.parameter_name
+            });
+          });
+          
+          console.log('🎯 Using real feedback from answers array');
+          console.log('📊 Sample real feedback:', extractedAnswers[0]?.feedback?.substring(0, 100) + '...');
+          console.log('🎥 Videos in extracted answers:', extractedAnswers.filter(a => a.question_video_url).length);
+        } else if (data.answers && data.answers.length > 0) {
+          // Fallback: if we only have answers array, try to extract question text from it
+          console.log('⚠️ No questions array from API, trying to extract from answers data...');
+          
+          data.answers.forEach((answer, index) => {
+            console.log(`🔍 Answer ${index} data:`, answer);
+            console.log(`🎥 Answer ${index} video URL:`, answer.question_video_url);
+            
+            // Try to get question text from answer data if available
+            const questionText = answer.question_text || `Question ${answer.question_order + 1}`;
+            
+            extractedQuestions.push({
+              question_order: answer.question_order,
+              question_text: questionText,
+              parameter_key: answer.parameter_key,
+              parameter_name: answer.parameter_name
+            });
+            
+            extractedAnswers.push({
+              question_order: answer.question_order,
+              transcript: answer.transcript,
+              audio_url: answer.audio_url,
+              question_video_url: answer.question_video_url, // Preserve video URL
+              score: answer.score,
+              feedback: answer.feedback,
+              parameter_key: answer.parameter_key,
+              parameter_name: answer.parameter_name
+            });
+          });
+        } else {
+          console.log('⚠️ No questions or answers arrays from API, extracting from parameters data...');
+          
+          if (data.parameters && data.parameters.length > 0) {
+            console.log('🔍 Extracting from parameters data...');
+            
+            data.parameters.forEach((param, paramIndex) => {
+              if (param.questions && Array.isArray(param.questions)) {
+                param.questions.forEach((questionData, qIndex) => {
+                  // Create question object with proper global ordering
+                  extractedQuestions.push({
+                    question_order: globalQuestionIndex,
+                    question_text: questionData.text,
+                    parameter_key: param.key,
+                    parameter_name: param.name
+                  });
+                  
+                  // Try to get real feedback from parameter scores data
+                  let realFeedback = `Assessment for ${param.name}: ${param.reason}`;
+                  if (realFeedbackData && realFeedbackData[param.key]) {
+                    const individualScores = realFeedbackData[param.key].individual_question_scores;
+                    if (individualScores && individualScores[qIndex]) {
+                      realFeedback = individualScores[qIndex].feedback;
+                      console.log(`🎯 Found real feedback for ${param.key} question ${qIndex}:`, realFeedback.substring(0, 100) + '...');
+                    }
+                  }
+                  
+                  // Create answer object with real data
+                  extractedAnswers.push({
+                    question_order: globalQuestionIndex,
+                    transcript: questionData.answer,
+                    audio_url: questionData.audio_url,
+                    score: param.score,
+                    feedback: realFeedback,
+                    parameter_key: param.key,
+                    parameter_name: param.name
+                  });
+                  
+                  globalQuestionIndex++;
+                });
+              }
+            });
+          }
+        }
+        
+        // Sort by question_order to ensure proper ordering
+        extractedQuestions.sort((a, b) => a.question_order - b.question_order);
+        extractedAnswers.sort((a, b) => a.question_order - b.question_order);
+        
+        // Add extracted data to the response
+                 const processedData = {
+           ...data,
+           questions: extractedQuestions,
+           answers: extractedAnswers
+         };
+         
+         console.log('📊 Extracted questions:', extractedQuestions.length);
+         console.log('📊 Extracted answers:', extractedAnswers.length);
+         console.log('📊 Sample answer feedback:', extractedAnswers[0]?.feedback?.substring(0, 100) + '...');
+         
+         // Debug duration data
+         console.log('🔍 Interview data:', data.interview);
+         console.log('🔍 Duration minutes from API:', data.interview?.duration_minutes);
+         console.log('🔍 Session duration from API:', data.interview?.session_duration);
+         
+         setReportData(processedData);
+      } else {
+        throw new Error('Failed to load final results');
+      }
+    } catch (error) {
+      console.error('Error loading final results:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to load final results');
+    } finally {
+      setLoading(false);
+    }
+  }, [interviewId]);
+
+  useEffect(() => {
+    if (interviewId) {
+      loadFinalResults();
+    }
+  }, [loadFinalResults, interviewId]);
+
+  // Auto-select first parameter when questions are loaded
+  useEffect(() => {
+    if (reportData && reportData.questions && reportData.questions.length > 0 && !selectedParameter) {
+      const firstParamKey = reportData.questions[0].parameter_key || reportData.questions[0].parameter_name;
+      setSelectedParameter(firstParamKey);
+    }
+  }, [reportData, selectedParameter]);
+
+
+
+  const downloadReport = () => {
+    if (!reportData) return;
+
+    try {
+      // Create comprehensive report content
+      let reportContent = `INTERVIEW ASSESSMENT REPORT\n`;
+      reportContent += `================================\n\n`;
+      
+      // Interview details
+      reportContent += `CANDIDATE: ${reportData.interview?.candidate_name || 'N/A'}\n`;
+      reportContent += `POSITION: ${reportData.interview?.position || 'N/A'}\n`;
+      reportContent += `INTERVIEW TYPE: ${reportData.interview?.interview_type || 'N/A'}\n`;
+      reportContent += `OVERALL SCORE: ${reportData.interview?.overall_score || 'N/A'}/10\n`;
+      reportContent += `TOTAL QUESTIONS: ${reportData.questions?.length || 0}\n`;
+      reportContent += `ASSESSMENT DATE: ${new Date().toLocaleDateString()}\n`;
+      reportContent += `REPORT GENERATED: ${new Date().toLocaleString()}\n\n`;
+      
+      // Parameter scores summary
+      if (reportData.parameters && reportData.parameters.length > 0) {
+        reportContent += `PARAMETER SCORES SUMMARY:\n`;
+        reportContent += `========================\n`;
+        reportData.parameters.forEach((param, index) => {
+          reportContent += `${index + 1}. ${param.name || param.parameter_name || 'Unknown Parameter'}\n`;
+          reportContent += `   Score: ${param.score || param.averageScore || 'N/A'}/10\n`;
+          if (param.weight) reportContent += `   Weight: ${param.weight}%\n`;
+          reportContent += `\n`;
+        });
+        reportContent += `\n`;
+      }
+      
+      // Detailed assessment with all URLs
+      reportContent += `DETAILED ASSESSMENT:\n`;
+      reportContent += `===================\n\n`;
+      
+      if (reportData.questions && reportData.answers) {
+        reportData.questions.forEach((question, index) => {
+          const answer = reportData.answers.find(a => a.question_order === index);
+          if (answer) {
+            reportContent += `QUESTION ${index + 1}:\n`;
+            reportContent += `==================\n`;
+            reportContent += `Question Text: ${question.question_text}\n`;
+            reportContent += `Parameter: ${question.parameter_name || question.parameter_key || 'N/A'}\n`;
+            reportContent += `Question Order: ${question.question_order + 1}\n\n`;
+            
+            reportContent += `CANDIDATE'S ANSWER:\n`;
+            reportContent += `Transcript: ${answer.transcript || 'No transcript available'}\n`;
+            reportContent += `Score: ${answer.score}/10\n`;
+            reportContent += `Parameter Score: ${answer.parameter_score || 'N/A'}/10\n\n`;
+            
+            reportContent += `AI FEEDBACK:\n`;
+            reportContent += `${answer.feedback || 'No feedback available'}\n\n`;
+            
+            // Media URLs
+            reportContent += `MEDIA FILES:\n`;
+            if (answer.audio_url) {
+              reportContent += `Audio Recording: ${answer.audio_url}\n`;
+            } else {
+              reportContent += `Audio Recording: Not available\n`;
+            }
+            
+            if (answer.question_video_url) {
+              reportContent += `Video Recording: ${answer.question_video_url}\n`;
+            } else {
+              reportContent += `Video Recording: Not available\n`;
+            }
+            
+            reportContent += `\n`;
+            reportContent += `----------------------------------------\n\n`;
+          }
+        });
+      }
+      
+      // Footer
+      reportContent += `\nREPORT FOOTER:\n`;
+      reportContent += `==============\n`;
+      reportContent += `This report contains the complete assessment details including:\n`;
+      reportContent += `- All questions asked during the interview\n`;
+      reportContent += `- Candidate's verbal responses (transcripts)\n`;
+      reportContent += `- Individual question scores and parameter scores\n`;
+      reportContent += `- AI-generated feedback for each answer\n`;
+      reportContent += `- Direct links to audio and video recordings\n`;
+      reportContent += `- Parameter-wise performance breakdown\n\n`;
+      reportContent += `Generated by AI Interview System\n`;
+      reportContent += `Report ID: ${interviewId}\n`;
+      
+      // Create and download file
+      const blob = new Blob([reportContent], { type: 'text/plain' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Interview_Report_${reportData.interview?.candidate_name || 'Candidate'}_${new Date().toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Comprehensive report downloaded successfully!');
+    } catch (error) {
+      console.error('Error downloading report:', error);
+      toast.error('Failed to download report');
+    }
+  };
+
+  // Download as PDF function
+  const downloadPDF = async () => {
+    if (!reportData) return;
+
+    try {
+      // Dynamically import jsPDF to avoid bundle size issues
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF();
+      
+      // Set document properties
+      doc.setProperties({
+        title: `Interview Report - ${reportData.interview?.candidate_name || 'Candidate'}`,
+        subject: 'Interview Assessment Report',
+        author: 'AI Interview System',
+        creator: 'AI Interview System'
+      });
+
+      // Professional header with background
+      doc.setFillColor(41, 128, 185); // Blue background
+      doc.rect(0, 0, 210, 30, 'F');
+      
+      // Title in white
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(24);
+      doc.setFont('helvetica', 'bold');
+      doc.text('INTERVIEW ASSESSMENT REPORT', 105, 18, { align: 'center' });
+      
+      // Subtitle
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Professional Evaluation & Analysis', 105, 28, { align: 'center' });
+      
+      // Reset text color
+      doc.setTextColor(0, 0, 0);
+      
+      let yPosition = 45;
+      
+      // Interview details section with box
+      doc.setFillColor(236, 240, 241); // Light gray background
+      doc.rect(10, yPosition - 5, 190, 35, 'F');
+      doc.setDrawColor(189, 195, 199);
+      doc.setLineWidth(0.5);
+      doc.rect(10, yPosition - 5, 190, 35);
+      
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('INTERVIEW DETAILS', 15, yPosition);
+      yPosition += 12;
+      
+      // Two-column layout for details
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      
+      // Left column
+      doc.text(`Candidate: ${reportData.interview?.candidate_name || 'N/A'}`, 15, yPosition);
+      doc.text(`Position: ${reportData.interview?.position || 'N/A'}`, 15, yPosition + 8);
+      doc.text(`Interview Type: ${reportData.interview?.interview_type || 'N/A'}`, 15, yPosition + 16);
+      
+      // Right column
+      doc.text(`Overall Score: ${reportData.interview?.overall_score || 'N/A'}/10`, 110, yPosition);
+      doc.text(`Total Questions: ${reportData.questions?.length || 0}`, 110, yPosition + 8);
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, 110, yPosition + 16);
+      
+      yPosition += 45;
+      
+      // Parameter scores section with professional table
+      if (reportData.parameters && reportData.parameters.length > 0) {
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text('PARAMETER PERFORMANCE', 15, yPosition);
+        yPosition += 15;
+        
+        // Create professional table
+        const tableData = [['Parameter', 'Score', 'Weight', 'Performance']];
+        reportData.parameters.forEach((param, index) => {
+          const paramName = param.name || param.parameter_name || `Parameter ${index + 1}`;
+          const score = param.score || param.averageScore || 'N/A';
+          const weight = param.weight ? `${param.weight}%` : 'N/A';
+          
+          // Performance indicator
+          let performance = 'Needs Improvement';
+          if (score >= 8) performance = 'Excellent';
+          else if (score >= 6) performance = 'Good';
+          else if (score >= 4) performance = 'Fair';
+          
+          tableData.push([paramName, score.toString(), weight, performance]);
+        });
+        
+        // Professional table with borders and styling
+        let tableY = yPosition;
+        const colWidths = [70, 25, 25, 50];
+        const startX = 15;
+        
+        tableData.forEach((row, rowIndex) => {
+          if (tableY > 250) {
+            doc.addPage();
+            tableY = 20;
+          }
+          
+          let currentX = startX;
+          
+          // Draw cell borders
+          doc.setDrawColor(189, 195, 199);
+          doc.setLineWidth(0.2);
+          
+          row.forEach((cell, colIndex) => {
+            // Cell background for header
+            if (rowIndex === 0) {
+              doc.setFillColor(52, 73, 94); // Dark blue
+              doc.rect(currentX, tableY - 5, colWidths[colIndex], 8, 'F');
+              doc.setTextColor(255, 255, 255);
+            } else {
+              doc.setFillColor(236, 240, 241); // Light gray
+              doc.rect(currentX, tableY - 5, colWidths[colIndex], 8, 'F');
+              doc.setTextColor(0, 0, 0);
+            }
+            
+            // Cell border
+            doc.rect(currentX, tableY - 5, colWidths[colIndex], 8);
+            
+            // Text
+            doc.setFont('helvetica', rowIndex === 0 ? 'bold' : 'normal');
+            doc.setFontSize(10);
+            
+            // Center align score and weight
+            if (colIndex === 1 || colIndex === 2) {
+              doc.text(cell, currentX + colWidths[colIndex]/2, tableY, { align: 'center' });
+            } else {
+              doc.text(cell, currentX + 3, tableY);
+            }
+            
+            currentX += colWidths[colIndex];
+          });
+          
+          tableY += 8;
+        });
+        
+        yPosition = tableY + 15;
+      }
+      
+      // Detailed assessment section
+      if (reportData.questions && reportData.answers) {
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text('DETAILED ASSESSMENT', 15, yPosition);
+        yPosition += 15;
+        
+        reportData.questions.forEach((question, index) => {
+          const answer = reportData.answers.find(a => a.question_order === index);
+          if (answer) {
+            // Check if we need a new page
+            if (yPosition > 250) {
+              doc.addPage();
+              yPosition = 20;
+            }
+            
+            // Question box
+            doc.setFillColor(248, 249, 250);
+            doc.rect(10, yPosition - 5, 190, 80, 'F');
+            doc.setDrawColor(189, 195, 199);
+            doc.rect(10, yPosition - 5, 190, 80);
+            
+            // Question header with icon
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`Question ${index + 1}`, 15, yPosition);
+            yPosition += 10;
+            
+            // Question text
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'normal');
+            const questionText = doc.splitTextToSize(question.question_text, 180);
+            questionText.forEach(line => {
+              if (yPosition > 250) {
+                doc.addPage();
+                yPosition = 20;
+              }
+              doc.text(line, 15, yPosition);
+              yPosition += 5;
+            });
+            yPosition += 8;
+            
+            // Answer section
+            doc.setFont('helvetica', 'bold');
+            doc.text('Answer:', 15, yPosition);
+            yPosition += 6;
+            doc.setFont('helvetica', 'normal');
+            
+            const transcript = answer.transcript || 'No transcript available';
+            const transcriptLines = doc.splitTextToSize(transcript, 180);
+            transcriptLines.forEach(line => {
+              if (yPosition > 250) {
+                doc.addPage();
+                yPosition = 20;
+              }
+              doc.text(line, 15, yPosition);
+              yPosition += 5;
+            });
+            yPosition += 8;
+            
+            // Score with color coding
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            
+            // Score background based on performance
+            let scoreColor;
+            if (answer.score >= 8) scoreColor = [46, 204, 113]; // Green
+            else if (answer.score >= 6) scoreColor = [241, 196, 15]; // Yellow
+            else scoreColor = [231, 76, 60]; // Red
+            
+            doc.setFillColor(scoreColor[0], scoreColor[1], scoreColor[2]);
+            doc.rect(15, yPosition - 3, 40, 8, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.text(`Score: ${answer.score}/10`, 17, yPosition);
+            doc.setTextColor(0, 0, 0);
+            
+            yPosition += 12;
+            
+            // AI Feedback
+            if (answer.feedback) {
+              doc.setFont('helvetica', 'bold');
+              doc.text('AI Feedback:', 15, yPosition);
+              yPosition += 6;
+              doc.setFont('helvetica', 'normal');
+              doc.setFontSize(10);
+              
+              const feedbackLines = doc.splitTextToSize(answer.feedback, 180);
+              feedbackLines.forEach(line => {
+                if (yPosition > 250) {
+                  doc.addPage();
+                  yPosition = 20;
+                }
+                doc.text(line, 15, yPosition);
+                yPosition += 5;
+              });
+              yPosition += 8;
+            }
+            
+            // Media files section
+            doc.setFont('helvetica', 'bold');
+            doc.text('Media Files:', 15, yPosition);
+            yPosition += 6;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            
+            if (answer.audio_url) {
+              doc.text('Audio:', 15, yPosition);
+              doc.text(answer.audio_url, 25, yPosition);
+              yPosition += 5;
+            }
+            
+            if (answer.question_video_url) {
+              doc.text('Video:', 15, yPosition);
+              doc.text(answer.question_video_url, 25, yPosition);
+              yPosition += 5;
+            }
+            
+            yPosition += 15;
+          }
+        });
+      }
+      
+      // Professional footer
+      if (yPosition > 250) {
+        doc.addPage();
+        yPosition = 20;
+      }
+      
+      // Footer box
+      doc.setFillColor(52, 73, 94);
+      doc.rect(0, yPosition, 210, 30, 'F');
+      
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'italic');
+      doc.text('Generated by AI Interview System', 105, yPosition + 10, { align: 'center' });
+      doc.text(`Report ID: ${interviewId} | ${new Date().toLocaleString()}`, 105, yPosition + 20, { align: 'center' });
+      
+      // Save the PDF
+      const filename = `Interview_Report_${reportData.interview?.candidate_name || 'Candidate'}_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(filename);
+      
+      toast.success('Professional PDF report downloaded successfully!');
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      toast.error('Failed to download PDF. Please try again.');
+    }
+  };
+
+  // Download as Excel function using ExcelJS for full styling support
+  const downloadExcel = async () => {
+    if (!reportData) return;
+
+    try {
+      // Create workbook with ExcelJS
+      const workbook = new ExcelJS.Workbook();
+      
+      // 1. OVERVIEW SHEET
+      const overviewSheet = workbook.addWorksheet('Overview');
+      
+      
+      // Add headers with styling
+      const headerRow = overviewSheet.addRow(['FIELD', 'VALUES', 'STATUS']);
+      headerRow.font = { bold: true, size: 12 };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
+      
+      // Add data rows
+      overviewSheet.addRow(['Candidate Name', reportData.interview?.candidate_name || 'N/A', 'Available']);
+      overviewSheet.addRow(['Position Applied', reportData.interview?.position || 'N/A', 'Available']);
+      
+      // Use the same overall score that the UI displays
+      const overallScore = reportData.interview?.overall_score;
+      const displayScore = overallScore ? parseFloat(overallScore).toFixed(1) : 'N/A';
+      
+      overviewSheet.addRow(['Overall Score', displayScore, 'Available']);
+      overviewSheet.addRow(['Total Questions', reportData.questions?.length || 0, 'Available']);
+      overviewSheet.addRow(['Interview Type', reportData.interview?.interview_type || 'Not Specified', 'Available']);
+      overviewSheet.addRow(['Assessment Date', new Date().toLocaleDateString(), 'Available']);
+      overviewSheet.addRow(['Report Generated', new Date().toLocaleTimeString(), 'Available']);
+      overviewSheet.addRow(['Performance Level', getScoreLabel(reportData.interview?.overall_score || 0), 'Available']);
+      overviewSheet.addRow(['Audio Files', reportData.answers?.filter(a => a.audio_url).length || 0, 'Available']);
+      overviewSheet.addRow(['Video Files', reportData.answers?.filter(a => a.question_video_url).length || 0, 'Available']);
+      
+      // 2. PARAMETERS SHEET
+      if (reportData.parameters && reportData.parameters.length > 0) {
+        const parameterSheet = workbook.addWorksheet('Parameters');
+        
+        
+        // Add headers with styling
+        const paramHeaderRow = parameterSheet.addRow(['PARAMETER NAME', 'SCORE', 'QUESTIONS', 'WEIGHT', 'PERFORMANCE']);
+        paramHeaderRow.font = { bold: true, size: 12 };
+        paramHeaderRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' }
+        };
+        
+        // Calculate actual question counts for each parameter
+        const parameterQuestionCounts = {};
+        if (reportData.questions) {
+          reportData.questions.forEach(question => {
+            const paramKey = question.parameter_key || question.parameter_name;
+            if (paramKey) {
+              parameterQuestionCounts[paramKey] = (parameterQuestionCounts[paramKey] || 0) + 1;
+            }
+          });
+        }
+        
+        // Add data rows
+        reportData.parameters.forEach((param) => {
+          const paramName = param.name || param.parameter_name || 'Unknown Parameter';
+          const score = param.score || param.averageScore || 'N/A';
+          const paramKey = param.key || param.parameter_key || param.parameter_name;
+          const questionCount = parameterQuestionCounts[paramKey] || 0;
+          const weight = param.weight ? param.weight : 'N/A';
+          
+          let performance = 'Needs Improvement';
+          if (score >= 8) performance = 'Excellent';
+          else if (score >= 6) performance = 'Good';
+          else if (score >= 4) performance = 'Fair';
+          
+          parameterSheet.addRow([paramName, score, questionCount, weight, performance]);
+        });
+      }
+      
+      // 3. QUESTIONS & ANSWERS SHEET
+      if (reportData.questions && reportData.answers) {
+        const qaSheet = workbook.addWorksheet('Questions & Answers');
+        
+        // Add headers with styling
+        const qaHeaderRow = qaSheet.addRow(['Q', 'PARAMETER', 'QUESTION', 'ANSWER', 'SCORE', 'AI FEEDBACK']);
+        qaHeaderRow.font = { bold: true, size: 12 };
+        qaHeaderRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' }
+        };
+        
+        // Add data rows
+        reportData.questions.forEach((question, index) => {
+          const answer = reportData.answers.find(a => a.question_order === index);
+          if (answer) {
+            const questionText = question.question_text || 'N/A';
+            const transcript = answer.transcript || 'No transcript available';
+            const score = answer.score || 'N/A';
+            const feedback = answer.feedback || 'No feedback available';
+            const parameter = question.parameter_name || question.parameter_key || 'N/A';
+            
+            qaSheet.addRow([index + 1, parameter, questionText, transcript, score, feedback]);
+          }
+        });
+      }
+      
+      // 4. MEDIA FILES SHEET
+      const mediaSheet = workbook.addWorksheet('Media Files');
+      
+      // Add headers with styling
+      const mediaHeaderRow = mediaSheet.addRow(['MEDIA TYPE', 'QUESTION', 'PARAMETER', 'URL', 'STATUS', 'FILE TYPE']);
+      mediaHeaderRow.font = { bold: true, size: 12 };
+      mediaHeaderRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
+      
+      // Add data rows - Group all audio files first, then all video files
+      if (reportData.answers) {
+        // First, add all audio files
+        reportData.answers.forEach((answer, index) => {
+          const question = reportData.questions?.find(q => q.question_order === index);
+          const parameter = question?.parameter_name || question?.parameter_key || 'N/A';
+          
+          if (answer.audio_url) {
+            mediaSheet.addRow(['Audio Recording', index + 1, parameter, answer.audio_url, 'Available', 'Audio']);
+          }
+        });
+        
+        // Then, add all video files
+        reportData.answers.forEach((answer, index) => {
+          const question = reportData.questions?.find(q => q.question_order === index);
+          const parameter = question?.parameter_name || question?.parameter_key || 'N/A';
+          
+          if (answer.question_video_url) {
+            mediaSheet.addRow(['Question Video', index + 1, parameter, answer.question_video_url, 'Available', 'Video']);
+          }
+        });
+      }
+      
+      // 5. SCORE ANALYSIS SHEET
+      if (reportData.answers && reportData.answers.length > 0) {
+        const analysisSheet = workbook.addWorksheet('Score Analysis');
+        
+        // Add headers with styling
+        const analysisHeaderRow = analysisSheet.addRow(['Q', 'PARAMETER', 'SCORE', 'PERFORMANCE', 'NOTES']);
+        analysisHeaderRow.font = { bold: true, size: 12 };
+        analysisHeaderRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' }
+        };
+        
+        // Use the same overall score that's displayed in the Overview sheet
+        const overallScore = reportData.interview?.overall_score;
+        const averageScore = overallScore ? parseFloat(overallScore) : 0;
+        
+        // Add data rows
+        reportData.answers.forEach((answer, index) => {
+          const question = reportData.questions?.find(q => q.question_order === index);
+          const parameter = question?.parameter_name || question?.parameter_key || 'N/A';
+          const score = answer.score || 0;
+          
+          let performance = 'Needs Improvement';
+          if (score >= 8) performance = 'Excellent';
+          else if (score >= 6) performance = 'Good';
+          else if (score >= 4) performance = 'Fair';
+          
+          const notes = score >= 8 ? 'Strong performance' : 
+                       score >= 6 ? 'Good performance' : 
+                       score >= 4 ? 'Room for improvement' : 'Needs significant improvement';
+          
+          analysisSheet.addRow([index + 1, parameter, score, performance, notes]);
+        });
+        
+        // Add summary row with consistent formatting
+        const displayAverage = averageScore ? parseFloat(averageScore.toString()).toFixed(1) : 'N/A';
+        analysisSheet.addRow(['', 'AVERAGE', displayAverage, '', '']);
+      }
+      
+      // Auto-size columns for all sheets
+      workbook.worksheets.forEach(worksheet => {
+        worksheet.columns.forEach(column => {
+          let maxLength = 0;
+          column.eachCell({ includeEmpty: true }, (cell) => {
+            const columnLength = cell.value ? cell.value.toString().length : 10;
+            if (columnLength > maxLength) {
+              maxLength = columnLength;
+            }
+          });
+          column.width = Math.min(maxLength + 2, 50);
+        });
+      });
+      
+      // Save the Excel file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Interview_Report_${reportData.interview?.candidate_name || 'Candidate'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Comprehensive Excel report downloaded successfully!');
+    } catch (error) {
+      console.error('Error downloading Excel:', error);
+      toast.error('Failed to download Excel. Please try again.');
+    }
+  };
+
+  const shareReport = () => {
+    const url = window.location.href;
+    if (navigator.share) {
+      navigator.share({
+        title: `Final Results - ${reportData?.interview?.candidate_name || 'Interview'}`,
+        text: `View the final assessment results for ${reportData?.interview?.candidate_name || 'Interview'}`,
+        url: url
+      });
+    } else {
+      navigator.clipboard.writeText(url);
+      toast.success('Report URL copied to clipboard');
+    }
+  };
+
+  const getScoreColor = (score) => {
+    if (score >= 8) return 'text-green-400';
+    if (score >= 6) return 'text-yellow-400';
+    return 'text-red-400';
+  };
+
+  const getScoreLabel = (score) => {
+    if (score >= 8) return 'Excellent';
+    if (score >= 6) return 'Good';
+    if (score >= 4) return 'Fair';
+    return 'Needs Improvement';
+  };
+
+  const getScoreClass = (score) => {
+    if (score >= 8) return 'bg-green-500';
+    if (score >= 6) return 'bg-yellow-500';
+    if (score >= 4) return 'bg-orange-500';
+    return 'bg-red-500';
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="text-gray-300 mt-4">Loading final results...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!reportData) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <XCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-white mb-2">Results Not Found</h2>
+          <p className="text-gray-300 mb-4">The interview results could not be loaded.</p>
+          <button
+            onClick={() => navigate('/dashboard', { state: { activeSection: 'interview-dashboard' } })}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const { interview, parameters } = reportData;
+
+  return (
+    <div className="min-h-screen bg-gray-900 text-white w-full h-full">
+      {/* Header */}
+      <div className="bg-gray-800 w-full">
+        <div className="py-4 px-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => navigate('/dashboard', { state: { activeSection: 'interview-dashboard' } })}
+                className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
+              >
+                <ArrowLeft className="h-5 w-5" />
+                <span>Back to Dashboard</span>
+              </button>
+            </div>
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={downloadReport}
+                className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors"
+                title="Download comprehensive text report with all questions, answers, scores, feedback, audio URLs, and video URLs"
+              >
+                <FileText className="h-4 w-4" />
+                <span>Text Report</span>
+              </button>
+
+              <button
+                onClick={downloadExcel}
+                className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg transition-colors"
+                title="Download comprehensive Excel report with multiple sheets including overview, parameters, questions, answers, media files, and score analysis"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                <span>Excel Report</span>
+              </button>
+              <button
+                onClick={shareReport}
+                className="flex items-center space-x-2 bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition-colors"
+              >
+                <Share2 className="h-4 w-4" />
+                <span>Share</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="py-8 px-4 w-full">
+        {/* Interview Overview */}
+        <div className="bg-gray-800 rounded-lg p-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="text-center">
+              <div className="text-3xl font-bold text-blue-400">{interview.overall_score?.toFixed(1) || 'N/A'}/10</div>
+              <div className="text-sm text-gray-400">Overall Score</div>
+              <div className={`text-xs mt-1 px-2 py-1 rounded-full ${getScoreClass(interview.overall_score || 0)}`}>
+                {getScoreLabel(interview.overall_score || 0)} Performance
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-green-400">{parameters?.length || 0}</div>
+              <div className="text-sm text-gray-400">Parameters Assessed</div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-yellow-400">{interview.total_questions || 0}</div>
+              <div className="text-sm text-gray-400">Total Questions</div>
+            </div>
+             <div className="text-center">
+               <div className="text-3xl font-bold text-purple-400">
+                 {interview.duration_minutes || 30} min
+               </div>
+               <div className="text-sm text-gray-400">Duration</div>
+             </div>
+          </div>
+        </div>
+
+        {/* Unified Assessment Dashboard */}
+        {reportData?.questions && reportData.questions.length > 0 && (
+          <div className="bg-gray-800 rounded-lg p-6">
+            <h2 className="text-2xl font-bold mb-8 flex items-center">
+              <BarChart3 className="h-6 w-6 mr-3" />
+              Assessment Dashboard
+            </h2>
+            
+            {/* Parameter Navigation Tabs */}
+            {(() => {
+              // Safety check - ensure data exists
+              if (!reportData.questions || !reportData.answers) {
+                return (
+                  <div className="text-center py-12 text-gray-400">
+                    <Award className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                    <p className="text-lg">Loading assessment data...</p>
+                    </div>
+                );
+              }
+
+              // Get unique parameters and their questions
+              const parameters = {};
+              reportData.questions.forEach(question => {
+                const paramKey = question.parameter_key || question.parameter_name;
+                if (!parameters[paramKey]) {
+                  parameters[paramKey] = {
+                    name: question.parameter_name,
+                    key: paramKey,
+                    questions: [],
+                    totalScore: 0,
+                    questionCount: 0
+                  };
+                }
+                const answer = reportData.answers?.find(a => a.question_order === question.question_order);
+                if (answer) {
+                  parameters[paramKey].questions.push({ question, answer });
+                  parameters[paramKey].totalScore += answer.score || 0;
+                  parameters[paramKey].questionCount += 1;
+                }
+              });
+
+              // Calculate average scores for each parameter
+              Object.values(parameters).forEach((param: any) => {
+                param.averageScore = param.questionCount > 0 ? Math.round((param.totalScore / param.questionCount) * 10) / 10 : 0;
+              });
+
+              // Check if we have any parameters with questions
+              if (Object.keys(parameters).length === 0) {
+                return (
+                  <div className="text-center py-12 text-gray-400">
+                    <Award className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                    <p className="text-lg">No assessment data available</p>
+                    <p className="text-sm">Assessment questions and answers are still being processed</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-6">
+                  {/* Enhanced Parameter Tabs with Performance Metrics */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    {Object.entries(parameters).map(([paramKey, param]: [string, any]) => (
+                      <button
+                        key={paramKey}
+                        onClick={() => setSelectedParameter(paramKey)}
+                        className={`p-6 rounded-xl transition-all duration-200 text-left ${
+                          selectedParameter === paramKey
+                            ? 'bg-blue-600 text-white shadow-lg transform scale-105'
+                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white hover:scale-102'
+                        }`}
+                      >
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-bold text-lg leading-tight">{param.name}</h4>
+                            <div className={`text-3xl font-bold ${
+                              selectedParameter === paramKey ? 'text-white' : getScoreColor(param.averageScore)
+                            }`}>
+                              {param.averageScore}/10
+                    </div>
+                          </div>
+                          
+                          <div className="space-y-3">
+                            <div className="flex justify-between text-lg font-medium opacity-90">
+                              <span>Weight: {(() => {
+                                // Calculate weight based on question count relative to total
+                                const totalQuestions = Object.values(parameters).reduce((sum: number, p: any) => sum + (p.questionCount as number), 0) as number;
+                                const weight = totalQuestions > 0 ? Math.round(((param.questionCount as number) / totalQuestions) * 100) : 0;
+                                return weight;
+                              })()}%</span>
+                              <span>{param.questionCount} questions</span>
+                            </div>
+                            
+                            {/* Performance Bar */}
+                            <div className="w-full bg-gray-600 rounded-full h-3">
+                              <div 
+                                className={`h-3 rounded-full transition-all duration-300 ${
+                                  selectedParameter === paramKey ? 'bg-white' : getScoreClass(param.averageScore)
+                                }`}
+                                style={{ width: `${param.averageScore * 10}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+                      </button>
+              ))}
+            </div>
+
+                  {/* Questions for Selected Parameter */}
+                  {selectedParameter && parameters[selectedParameter] && (
+            <div className="space-y-6">
+                      <div className="bg-gray-700 rounded-xl p-6 mb-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-2xl font-bold text-white">
+                              {parameters[selectedParameter].name}
+                            </h3>
+                            <p className="text-lg text-gray-300 mt-3 leading-relaxed">
+                              Detailed questions and feedback for this assessment area
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <div className={`text-4xl font-bold ${getScoreColor(parameters[selectedParameter].averageScore)}`}>
+                              {parameters[selectedParameter].averageScore}/10
+                            </div>
+                            <div className="text-lg text-gray-300 font-medium">
+                              {parameters[selectedParameter].questionCount} questions
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {parameters[selectedParameter].questions.map(({ question, answer }, index) => (
+                        <div key={index} className="bg-gray-700 rounded-xl p-6">
+                          <div className="flex items-center justify-between mb-6">
+                            <h4 className="text-xl font-bold">Question {index + 1}</h4>
+                            <div className={`text-2xl font-bold ${getScoreColor(answer.score)}`}>
+                            {answer.score}/10
+                      </div>
+                    </div>
+                    
+                          <div className="mb-6">
+                            <p className="text-gray-200 text-lg leading-relaxed text-left">{question.question_text}</p>
+                    </div>
+
+                          <div className="mb-6">
+                            <h5 className="text-white font-bold mb-3 text-lg text-left">Answer:</h5>
+                            <p className="text-gray-200 text-lg leading-relaxed text-left">{answer.transcript || 'No transcript available'}</p>
+                        </div>
+
+                        {answer.audio_url && (
+                            <div className="mb-6">
+                              <h5 className="text-white font-bold mb-3 text-lg text-left">Audio Recording:</h5>
+                            <audio 
+                              controls 
+                              className="w-full"
+                              src={answer.audio_url}
+                            >
+                              Your browser does not support the audio element.
+                            </audio>
+                          </div>
+                        )}
+
+                        {answer.question_video_url && (
+                            <div className="mb-6">
+                              <h5 className="text-white font-bold mb-3 text-lg text-left">Video:</h5>
+                              <div className="bg-gray-600 rounded-xl p-3">
+                                {/* Video Thumbnail/Preview - Click to play */}
+                                <div 
+                                  className="relative bg-black rounded-lg overflow-hidden cursor-pointer group"
+                                onClick={() => playVideo(answer.question_video_url)}
+                                  title="Click to play video"
+                              >
+                                <video
+                                  src={answer.question_video_url}
+                                    className="w-full h-56 object-cover transition-transform duration-300 group-hover:scale-105"
+                                  autoPlay
+                                  muted
+                                  loop
+                                  playsInline
+                                />
+                                  {/* Play button overlay */}
+                                  <div className="absolute inset-0 bg-black bg-opacity-30 group-hover:bg-opacity-10 transition-all duration-300 flex items-center justify-center">
+                                    <div className="bg-white bg-opacity-90 rounded-full p-3 group-hover:scale-110 transition-transform duration-300">
+                                      <svg className="w-8 h-8 text-gray-800 ml-1" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M8 5v14l11-7z"/>
+                                    </svg>
+                                  </div>
+                                </div>
+                                  
+                                  {/* Download link - subtle and positioned at bottom right */}
+                                  <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                    <a
+                                      href={answer.question_video_url}
+                                      download
+                                      className="bg-black bg-opacity-70 hover:bg-opacity-90 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:scale-105"
+                                      onClick={(e) => e.stopPropagation()}
+                                      title="Download video"
+                                    >
+                                      Download
+                                    </a>
+                                  </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {answer.feedback && (
+                            <div className="mb-6">
+                              <h5 className="text-white font-bold mb-3 text-lg text-left">AI Feedback:</h5>
+                              <p className="text-gray-200 text-lg leading-relaxed text-left">{answer.feedback}</p>
+                          </div>
+                        )}
+
+                        {!answer.feedback && (
+                            <div className="mb-6">
+                              <h5 className="text-white font-bold mb-3 text-lg text-left">AI Feedback:</h5>
+                              <p className="text-gray-400 italic text-lg text-left">Feedback analysis pending - will be available soon</p>
+                          </div>
+                        )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* No Parameter Selected Message */}
+                  {!selectedParameter && (
+                    <div className="text-center py-16 text-gray-400">
+                      <BarChart3 className="w-20 h-20 mx-auto mb-6 opacity-50" />
+                      <p className="text-xl font-medium">Select a parameter above to view detailed questions and feedback</p>
+                      <p className="text-lg mt-3 leading-relaxed">Each parameter card shows performance metrics and clicking reveals detailed questions, answers, audio, videos, and AI feedback</p>
+                      </div>
+                    )}
+                  </div>
+                );
+            })()}
+          </div>
+        )}
+
+                 
+
+        {/* Complete Session Video */}
+        {reportData.interview?.session_video_url && (
+          <div className="bg-gray-800 rounded-lg p-6 mb-6">
+            <h3 className="text-xl font-semibold mb-4">Complete Session Video</h3>
+            <div className="bg-gray-700 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h4 className="font-medium text-white">🎥 Full Interview Session</h4>
+                  <p className="text-sm text-gray-300">
+                    Complete video recording from start to finish
+                  </p>
+                  <p className="text-sm text-gray-400">
+                    Size: {reportData.interview.session_video_size ? `${(reportData.interview.session_video_size / 1024 / 1024).toFixed(1)} MB` : 'Unknown'} | Format: WebM
+                  </p>
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => playVideo(reportData.interview.session_video_url)}
+                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition-colors"
+                  >
+                    Play Full Video
+                  </button>
+                  <a
+                    href={reportData.interview.session_video_url}
+                    download
+                    className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition-colors"
+                  >
+                    Download Video
+                  </a>
+                </div>
+              </div>
+              <div className="bg-gray-600 rounded p-3">
+                <h5 className="font-medium text-white mb-2">📹 This video contains the complete interview session including:</h5>
+                <ul className="text-sm text-gray-300 space-y-1">
+                  <li>• Candidate's facial expressions and body language</li>
+                  <li>• Complete audio from all questions</li>
+                  <li>• Full session duration: {reportData.interview.duration_minutes || 30} minutes</li>
+                  <li>• Professional assessment context</li>
+                  {reportData.answers && reportData.answers.some(answer => answer.question_video_url) && (
+                    <li>• Individual question videos are also available above for easier review</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Video Modal */}
+      {playingVideo && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-4">
+              <h3 className="text-lg font-semibold text-white">Question Video Player</h3>
+              <button
+                onClick={closeVideo}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <XCircle className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="p-4">
+              <video
+                controls
+                autoPlay
+                muted
+                className="w-full h-auto max-h-[70vh] rounded-lg"
+                src={playingVideo}
+              >
+                Your browser does not support the video element.
+              </video>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default FinalResults;
