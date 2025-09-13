@@ -77,6 +77,7 @@ const HRInterviewCreator = () => {
   const [isSavingParameters, setIsSavingParameters] = useState(false);
   const [parametersSaved, setParametersSaved] = useState(false);
   const [isExpandDialogOpen, setIsExpandDialogOpen] = useState(false);
+  const [loadedPositions, setLoadedPositions] = useState<Set<string>>(new Set());
 
   // Load job descriptions from both CV screening and AI interview tables
   const loadJobDescriptions = async () => {
@@ -142,10 +143,16 @@ const HRInterviewCreator = () => {
       if (selectedJD.extracted_text) {
         // Use the already extracted text from jd_for_interview table
         setFormData(prev => ({ ...prev, jobDescription: selectedJD.extracted_text }));
-        toast.success('Role and JD text loaded from database!');
+        // Only show toast if we haven't loaded this role before
+        const normalizedTitle = selectedJD.title.trim().toLowerCase();
+        if (!loadedPositions.has(normalizedTitle)) {
+          toast.success('Role and JD text loaded from database!');
+          setLoadedPositions(prev => new Set(prev).add(normalizedTitle));
+        }
         
         // Load existing parameters for this role (if any)
-        await loadParametersForPosition(selectedJD.extracted_text ? selectedJD.title : formData.position);
+        console.log('🔄 Role selection: Loading parameters for:', selectedJD.title);
+        await loadParametersForPosition(selectedJD.title);
         return;
       }
       
@@ -388,19 +395,44 @@ const HRInterviewCreator = () => {
         ...prev,
         [name]: value
       }));
+      
+      // Trigger parameter loading when newRole changes and we're in AI mode
+      // Only trigger if the value is substantial and user has stopped typing
+      if (name === 'newRole' && formData.interviewMode === 'ai' && value.trim().length > 3) {
+        // Clear any existing timeout
+        if (window.newRoleTimeout) {
+          clearTimeout(window.newRoleTimeout);
+        }
+        // Add a delay to prevent loading while user is still typing
+        window.newRoleTimeout = setTimeout(() => {
+          if (formData.newRole === value) { // Only load if the value hasn't changed
+            loadParametersForPosition(value.trim());
+          }
+        }, 1500);
+      }
     }
   };
 
 
 
   const loadParametersForPosition = async (position: string) => {
-    if (!position) {
-      console.log('🔄 No position provided, clearing parameters');
+    console.log('🔍 loadParametersForPosition called with:', { position, interviewMode: formData.interviewMode, isLoadingParameters });
+    
+    if (!position || formData.interviewMode !== 'ai') {
+      console.log('🔄 No position provided or not AI mode, clearing parameters');
       setCustomParameters({});
       setParametersSaved(false);
       return;
     }
     
+    // Only prevent if we're already loading the same position
+    // Temporarily disabled to debug
+    // if (isLoadingParameters) {
+    //   console.log('🔄 Already loading parameters, skipping duplicate call for:', position);
+    //   return;
+    // }
+    
+    console.log('🔄 Starting to load parameters for:', position);
     setIsLoadingParameters(true);
     try {
       console.log('🔄 Loading parameters for position:', position);
@@ -448,14 +480,27 @@ const HRInterviewCreator = () => {
           setCustomParameters(paramsWithDefaults);
           setParametersSaved(true);
           calculateDuration(paramsWithDefaults);
-          toast.success(`Automatically loaded existing AI parameters for ${position}`);
+          
+          // Only show toast if we haven't loaded this position before
+          const normalizedPosition = position.trim().toLowerCase();
+          console.log('🔍 Toast check:', { position, normalizedPosition, loadedPositions: Array.from(loadedPositions), hasPosition: loadedPositions.has(normalizedPosition) });
+          if (!loadedPositions.has(normalizedPosition)) {
+            toast.success(`Automatically loaded existing AI parameters for ${position}`);
+            setLoadedPositions(prev => new Set(prev).add(normalizedPosition));
+          }
           console.log('✅ Loaded existing AI parameters for', position);
         } else if (structuredQuestions && structuredQuestions.length > 0) {
           // Load structured interview questions
           console.log('🔄 Found structured interview questions:', structuredQuestions.length);
           setStructuredQuestions(structuredQuestions);
           setParametersSaved(true);
-          toast.success(`Found existing structured interview for ${position} (${structuredQuestions.length} questions)`);
+          
+          // Only show toast if we haven't loaded this position before
+          const normalizedPosition = position.trim().toLowerCase();
+          if (!loadedPositions.has(normalizedPosition)) {
+            toast.success(`Found existing structured interview for ${position} (${structuredQuestions.length} questions)`);
+            setLoadedPositions(prev => new Set(prev).add(normalizedPosition));
+          }
           console.log('✅ Loaded existing structured interview for', position);
         } else {
           console.log('🔄 Existing record found but no valid data, clearing state');
@@ -817,6 +862,10 @@ const HRInterviewCreator = () => {
 
   // Clear data when switching interview modes
   useEffect(() => {
+    console.log('🔍 Mode useEffect triggered:', { 
+      interviewMode: formData.interviewMode
+    });
+    
     if (formData.interviewMode === 'ai') {
       // Clear structured questions when switching to AI mode
       setStructuredQuestions([]);
@@ -824,8 +873,23 @@ const HRInterviewCreator = () => {
       // Clear custom parameters when switching to structured mode
       setCustomParameters({});
     }
+    
+    // Clear loaded positions to allow fresh toasts for new mode
+    setLoadedPositions(new Set());
   }, [formData.interviewMode]);
 
+  // Load parameters when position changes (only for AI mode)
+  useEffect(() => {
+    console.log('🔍 Position useEffect triggered:', { 
+      position: formData.position, 
+      interviewMode: formData.interviewMode 
+    });
+    
+    if (formData.position && formData.interviewMode === 'ai') {
+      console.log('🔄 Position useEffect: Loading parameters for position:', formData.position);
+      loadParametersForPosition(formData.position);
+    }
+  }, [formData.position, formData.interviewMode]);
 
   const saveParameters = async () => {
     const roleName = formData.newRole || formData.position;
@@ -859,7 +923,7 @@ const HRInterviewCreator = () => {
           .update({
             custom_parameters: customParameters,
             interview_type: formData.interviewType,
-            structured_questions: null, // Clear structured questions for AI interviews
+            structured_questions: {}, // Clear structured questions for AI interviews
             updated_at: new Date().toISOString()
           })
           .eq('id', existingData.id)
@@ -876,7 +940,7 @@ const HRInterviewCreator = () => {
             role_name: roleName,
             custom_parameters: customParameters,
             interview_type: formData.interviewType,
-            structured_questions: null, // No structured questions for AI interviews
+            structured_questions: {}, // No structured questions for AI interviews
             user_id: user?.id,
             is_active: true
           })
@@ -1125,9 +1189,13 @@ const HRInterviewCreator = () => {
                   <Label htmlFor="interviewType">Interview Type *</Label>
                   <Select 
                     value={formData.interviewType} 
-                    onValueChange={(value: 'technical' | 'behavioral' | 'mixed') => 
-                      setFormData(prev => ({ ...prev, interviewType: value }))
-                    }
+                    onValueChange={async (value: 'technical' | 'behavioral' | 'mixed') => {
+                      setFormData(prev => ({ ...prev, interviewType: value }));
+                      // Trigger parameter loading when interview type changes
+                      if (formData.position) {
+                        await loadParametersForPosition(formData.position);
+                      }
+                    }}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select interview type..." />
@@ -1288,7 +1356,8 @@ const HRInterviewCreator = () => {
               </div>
             </div>
             
-            {/* Editable Duration and Questions Fields */}
+            {/* Editable Duration and Questions Fields - Only for AI Interviews */}
+            {formData.interviewMode === 'ai' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="duration">Duration (minutes)</Label>
@@ -1338,6 +1407,8 @@ const HRInterviewCreator = () => {
                 </p>
               </div>
             </div>
+            )}
+
           </CardContent>
         </Card>
       )}
@@ -1758,7 +1829,7 @@ const HRInterviewCreator = () => {
                 return;
               }
 
-              const response = await fetch('API_CONFIG.ENDPOINTS.STRUCTURED_INTERVIEW', {
+              const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.STRUCTURED_INTERVIEW}`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',

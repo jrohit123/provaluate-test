@@ -401,7 +401,7 @@ const ConversationalInterview = () => {
           interview_id: interviewData.interviewId,
           current_question_index: currentQuestionIndex + 1
         })
-      });
+      }, API_CONFIG.TIMEOUTS.GENERATE_QUESTION);
 
       if (response.ok) {
         const data = await response.json();
@@ -447,6 +447,7 @@ const ConversationalInterview = () => {
         console.log('🔄 Reset all states for new question');
         
         // Store timer values but don't start timer yet - wait for recording to start
+        console.log('🔍 API response data:', data);
         if (data.max_time) {
           const questionTimeInSeconds = data.max_time * 60;
           setCurrentQuestionMaxTime(questionTimeInSeconds);
@@ -458,6 +459,7 @@ const ConversationalInterview = () => {
           console.log('⏰ Timer will start when recording begins');
         } else {
           console.log('⏰ No max_time in API response, timer will be initialized when question is spoken');
+          console.log('🔍 Available data keys:', Object.keys(data));
         }
         // Keep screen permissions state - don't reset this
         
@@ -485,8 +487,8 @@ const ConversationalInterview = () => {
         console.log('🎤 Question ID:', questionId, 'Already spoken:', spokenQuestions.has(questionId));
         console.log('🎤 Clean question text:', cleanQuestionText);
         
-        // Set the question message immediately for display (smooth transition)
-        setAiMessage(questionMessage);
+        // Set transition message first
+        setAiMessage("Let's move to the next question...");
         
         // Only speak if this question hasn't been spoken before and we have valid text
         if (!spokenQuestions.has(questionId) && cleanQuestionText && cleanQuestionText !== 'Question data unavailable') {
@@ -496,16 +498,23 @@ const ConversationalInterview = () => {
           // Set question finished speaking to false initially
           setQuestionFinishedSpeaking(false);
           
-          // Small delay to ensure smooth transition, then speak question
+          // First speak transition message, then show question and speak it
           setTimeout(() => {
-            console.log('🎤 Speaking new question:', questionMessage);
-            speakWithAI(questionMessage);
-            setSpokenQuestions(prev => {
-              const newSet = new Set([...prev, questionId]);
-              console.log('📝 Updated spoken questions:', Array.from(newSet));
-              return newSet;
-            });
-          }, 500); // 500ms delay for smooth transition
+            console.log('🎤 Speaking transition message...');
+            speakWithAI("Let's move to the next question...");
+            
+            // After transition message, show question and speak it
+            setTimeout(() => {
+              console.log('🎤 Showing question and speaking:', questionMessage);
+              setAiMessage(questionMessage);
+              speakWithAI(questionMessage);
+              setSpokenQuestions(prev => {
+                const newSet = new Set([...prev, questionId]);
+                console.log('📝 Updated spoken questions:', Array.from(newSet));
+                return newSet;
+              });
+            }, 2000); // 2 seconds after transition message
+          }, 500); // 500ms delay to ensure smooth transition
         } else {
           console.log('⚠️ Question already spoken or invalid, skipping speech');
           // If question already spoken, set finished speaking to true
@@ -600,7 +609,7 @@ const ConversationalInterview = () => {
        }
 
        dispatch(interviewActions.setSubmitting(true));
-      setSubmissionStatus('uploading');
+       setSubmissionStatus('uploading');
        
        try {
          // Convert audio to base64
@@ -617,7 +626,7 @@ const ConversationalInterview = () => {
            if (questionVideoBlob) {
              try {
                console.log('📤 Uploading question video...');
-               setSubmissionStatus('uploading');
+               // Keep uploading status for video upload
                
                // Use FormData for efficient file upload instead of base64
                const formData = new FormData();
@@ -662,6 +671,7 @@ const ConversationalInterview = () => {
            }
            
            // Submit answer with cleaned transcript (increased for 3-minute recordings)
+           console.log('🔄 Starting answer submission...');
            setSubmissionStatus('processing');
            const answerController = new AbortController();
            const answerTimeout = setTimeout(() => answerController.abort(), API_CONFIG.TIMEOUTS.ANSWER_SUBMISSION);
@@ -726,12 +736,19 @@ const ConversationalInterview = () => {
                console.log('🔄 Generating next question immediately...');
                await generateNextQuestion();
                
-               // Reset submission states after next question is generated
-               setAnswerSubmitted(false);
-               setSubmissionStatus('idle');
+               // Reset submission states after next question is generated with a small delay
+               setTimeout(() => {
+                 setAnswerSubmitted(false);
+                 setSubmissionStatus('idle');
+                 dispatch(interviewActions.setSubmitting(false));
+               }, 1000); // 1 second delay to show the submitted state
                
              } else {
+               console.error('❌ Answer submission failed with status:', response.status);
                toast.error('Failed to submit answer');
+               // Reset states on failure
+               dispatch(interviewActions.setSubmitting(false));
+               setSubmissionStatus('idle');
              }
            } catch (fetchError) {
              clearTimeout(answerTimeout);
@@ -742,6 +759,9 @@ const ConversationalInterview = () => {
                console.error('❌ Error during answer submission:', fetchError);
                toast.error('Failed to submit answer. Please try again.');
              }
+             // Reset states on error
+             dispatch(interviewActions.setSubmitting(false));
+             setSubmissionStatus('idle');
            }
          };
          
@@ -750,9 +770,9 @@ const ConversationalInterview = () => {
        } catch (error) {
          console.error('Error submitting answer:', error);
          toast.error('Failed to submit answer');
-       } finally {
+         // Reset states on error
          dispatch(interviewActions.setSubmitting(false));
-         // Don't reset submission status here - it's handled in the success flow
+         setSubmissionStatus('idle');
        }
      }, [transcript, audioBlob, isVideoOn, currentQuestion, currentQuestionIndex, interviewData.interviewId, spokenFeedback, generateNextQuestion, interviewData.candidateName, isSubmitting, questionVideoBlob]);
 
@@ -794,9 +814,10 @@ const ConversationalInterview = () => {
     navigate('/dashboard');
   }, [navigate, interviewData?.interviewId]);
 
-  // Timer effect
+  // Timer effect - only start after AI completes intro
   useEffect(() => {
-    if (timeRemaining > 0) {
+    // Don't start timer until AI has finished speaking the welcome message
+    if (timeRemaining > 0 && hasSpokenWelcomeRef.current && !aiSpeaking) {
       intervalRef.current = setInterval(() => {
         setTimeRemaining(prev => {
           const newTime = prev - 1;
@@ -832,47 +853,55 @@ const ConversationalInterview = () => {
         });
       }, 1000);
     } else {
-      // Time's up - automatically finish the interview
-      console.log('⏰ Interview duration completed, automatically finishing interview...');
-      
-      // Stop any ongoing recording
-      if (isRecording) {
-        console.log('⏰ Time expired, stopping recording');
-        stopQuestionRecording();
-      }
-      
-      // Stop video recording if active
-      if (isVideoRecording) {
-        console.log('⏰ Time expired, stopping video recording');
-        // stopQuestionRecording handles both audio and video recording
-        stopQuestionRecording();
-      }
-      
-      // Clear the timer
+      // Clear timer if AI is still speaking or welcome not spoken
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
       
-      // Show completion message
-      toast.success('⏰ Interview time completed! Finishing interview automatically...');
-      
-      // Automatically finish the interview
-      setTimeout(async () => {
-        try {
-          if (finishInterviewRef.current) {
-            await finishInterviewRef.current();
-          } else {
-            console.log('⚠️ finishInterviewRef not ready, using direct call');
-            await finishInterview();
-          }
-        } catch (error) {
-          console.error('❌ Error auto-finishing interview:', error);
-          toast.error('Failed to auto-finish interview');
-          // Navigate to dashboard as fallback
-          navigate('/dashboard');
+      // Time's up - automatically finish the interview
+      if (timeRemaining <= 0) {
+        console.log('⏰ Interview duration completed, automatically finishing interview...');
+        
+        // Stop any ongoing recording
+        if (isRecording) {
+          console.log('⏰ Time expired, stopping recording');
+          stopQuestionRecording();
         }
-      }, INTERVIEW_CONSTANTS.TIMEOUTS.AUTO_FINISH_DELAY);
+        
+        // Stop video recording if active
+        if (isVideoRecording) {
+          console.log('⏰ Time expired, stopping video recording');
+          // stopQuestionRecording handles both audio and video recording
+          stopQuestionRecording();
+        }
+        
+        // Clear the timer
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        
+        // Show completion message
+        toast.success('⏰ Interview time completed! Finishing interview automatically...');
+        
+        // Automatically finish the interview
+        setTimeout(async () => {
+          try {
+            if (finishInterviewRef.current) {
+              await finishInterviewRef.current();
+            } else {
+              console.log('⚠️ finishInterviewRef not ready, using direct call');
+              await finishInterview();
+            }
+          } catch (error) {
+            console.error('❌ Error auto-finishing interview:', error);
+            toast.error('Failed to auto-finish interview');
+            // Navigate to dashboard as fallback
+            navigate('/dashboard');
+          }
+        }, INTERVIEW_CONSTANTS.TIMEOUTS.AUTO_FINISH_DELAY);
+      }
     }
     
     return () => {
@@ -881,7 +910,7 @@ const ConversationalInterview = () => {
         intervalRef.current = null;
       }
     };
-  }, [timeRemaining, isRecording, isVideoRecording, finishInterview, navigate]);
+  }, [timeRemaining, isRecording, isVideoRecording, finishInterview, navigate, aiSpeaking]);
 
   // Question timer effect - per-question countdown with auto-advance
   useEffect(() => {
@@ -987,7 +1016,12 @@ const ConversationalInterview = () => {
         console.log('⏰ Starting timer immediately for subsequent question - permissions already granted');
         // Only initialize timer if we don't already have correct values from API response
         if (currentQuestionMaxTime === 0) {
-          initializeTimerForExistingQuestion(interviewData.position, currentQuestionIndex);
+          // For structured interviews, don't initialize timer here - it should come from API response
+          if (interviewData?.interview_mode === 'structured') {
+            console.log('⏰ Structured interview - timer should come from API response, not parameter initialization');
+          } else {
+            initializeTimerForExistingQuestion(interviewData.position, currentQuestionIndex);
+          }
         } else {
           console.log('⏰ Timer already set from API response, skipping initialization');
         }
@@ -1170,7 +1204,12 @@ const ConversationalInterview = () => {
         console.log('⏰ Starting timer for first question - recording is about to begin');
         // Only initialize timer if we don't already have correct values from API response
         if (currentQuestionMaxTime === 0) {
-          initializeTimerForExistingQuestion(interviewData.position, currentQuestionIndex);
+          // For structured interviews, don't initialize timer here - it should come from API response
+          if (interviewData?.interview_mode === 'structured') {
+            console.log('⏰ Structured interview - timer should come from API response, not parameter initialization');
+          } else {
+            initializeTimerForExistingQuestion(interviewData.position, currentQuestionIndex);
+          }
         } else {
           console.log('⏰ Timer already set from API response, skipping initialization');
         }
@@ -1269,8 +1308,18 @@ const ConversationalInterview = () => {
         console.log('🎯 Data questions:', data.questions);
         setCurrentQuestion(firstQuestion);
         
-        // Don't initialize timer here - it will be initialized when the first question is spoken
-        console.log('⏰ Timer will be initialized when first question is spoken');
+        // Initialize timer for first question if we have the data
+        if (firstQuestion && firstQuestion.max_time) {
+          const questionTimeInSeconds = firstQuestion.max_time * 60;
+          setCurrentQuestionMaxTime(questionTimeInSeconds);
+          setQuestionTimeRemaining(questionTimeInSeconds);
+          setIsQuestionTimerActive(false); // Don't start timer yet!
+          
+          console.log('⏰ Timer initialized for first question:', questionTimeInSeconds, 'seconds for', firstQuestion.max_time, 'min answer time');
+          console.log('🔍 Using first question data - max_time:', firstQuestion.max_time, 'level:', firstQuestion.level);
+        } else {
+          console.log('⏰ No max_time in first question data, timer will be initialized when question is spoken');
+        }
         
         // Clean up question text (remove "Question:" prefix if present)
         let cleanQuestionText = '';
@@ -2342,7 +2391,7 @@ const ConversationalInterview = () => {
               onClick={handleSubmitAnswer}
               disabled={!audioBlob || isSubmitting || !isVideoOn || answerSubmitted}
               className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                answerSubmitted 
+                answerSubmitted || submissionStatus === 'submitted'
                   ? 'bg-green-600 text-white cursor-default animate-pulse' 
                   : isSubmitting 
                     ? submissionStatus === 'uploading' 
@@ -2358,14 +2407,16 @@ const ConversationalInterview = () => {
               ) : (
                 <Send className="w-5 h-5" />
               )}
-              {isSubmitting 
-                ? submissionStatus === 'uploading' 
-                  ? 'Uploading...' 
-                  : submissionStatus === 'processing'
-                    ? 'Processing...'
-                    : 'Submitting...'
-                : answerSubmitted 
-                  ? 'Submitted' 
+              {answerSubmitted 
+                ? 'Submitted' 
+                : isSubmitting 
+                  ? submissionStatus === 'uploading' 
+                    ? 'Uploading...' 
+                    : submissionStatus === 'processing'
+                      ? 'Processing...'
+                      : submissionStatus === 'submitted'
+                        ? 'Submitted'
+                        : 'Submitting...'
                   : 'Submit Answer'
               }
               {(!audioBlob || isSubmitting || !isVideoOn) && !answerSubmitted && (

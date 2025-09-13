@@ -35,6 +35,7 @@ interface FormData {
   totalQuestions: number;
   customInstructions: string;
   interviewType: string;
+  interviewMode: 'ai' | 'structured';
 }
 
 interface CustomParameter {
@@ -69,7 +70,8 @@ const HRInterviewCreator = () => {
     duration: 30,
     totalQuestions: 1,
     customInstructions: '',
-    interviewType: 'mixed'
+    interviewType: 'mixed',
+    interviewMode: 'ai'
   });
 
   const [isCreating, setIsCreating] = useState(false);
@@ -236,12 +238,12 @@ const HRInterviewCreator = () => {
     
     setIsLoadingParameters(true);
     try {
-      console.log('🔄 Loading parameters for position:', formData.position);
+      console.log('🔄 Loading parameters for position:', formData.position, 'mode:', formData.interviewMode);
       
-      // Try to load from custom_role_parameters table first
+      // Try to load from custom_role_parameters table
       const { data, error } = await supabase
         .from('custom_role_parameters')
-        .select('custom_parameters')
+        .select('custom_parameters, structured_questions')
         .eq('role_name', formData.position)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
@@ -250,21 +252,63 @@ const HRInterviewCreator = () => {
       if (error) throw error;
       
       if (data && data.length > 0) {
-        const customParams = data[0].custom_parameters;
-        if (customParams && Object.keys(customParams).length > 0) {
-          setCustomParameters(customParams);
-          setParametersSaved(true);
-          calculateDuration(customParams);
-          toast({
-            title: "Parameters Loaded",
-            description: `Automatically loaded existing parameters for ${formData.position}`,
-          });
-        } else {
-          setCustomParameters({});
-          setParametersSaved(false);
+        const record = data[0];
+        const customParams = record.custom_parameters;
+        const structuredQuestions = record.structured_questions;
+        
+        if (formData.interviewMode === 'ai') {
+          // Load AI interview parameters
+          if (customParams && Object.keys(customParams).length > 0) {
+            setCustomParameters(customParams);
+            setParametersSaved(true);
+            calculateDuration(customParams);
+            toast({
+              title: "Parameters Loaded",
+              description: `Automatically loaded existing AI parameters for ${formData.position}`,
+            });
+          } else if (structuredQuestions && Array.isArray(structuredQuestions) && structuredQuestions.length > 0) {
+            // No AI parameters but structured questions exist - suggest switching mode
+            setCustomParameters({});
+            setParametersSaved(false);
+            toast({
+              title: "Structured Interview Available",
+              description: `Found structured interview for ${formData.position} (${structuredQuestions.length} questions). Switch to "Structured Interview" mode to use them.`,
+              variant: "default",
+            });
+          } else {
+            setCustomParameters({});
+            setParametersSaved(false);
+          }
+        } else if (formData.interviewMode === 'structured') {
+          // Load structured interview questions
+          if (structuredQuestions && Array.isArray(structuredQuestions) && structuredQuestions.length > 0) {
+            // For structured interviews, we don't need custom parameters
+            setCustomParameters({});
+            setParametersSaved(true);
+            
+            // Calculate duration from structured questions
+            calculateDurationFromStructuredQuestions(structuredQuestions);
+            
+            toast({
+              title: "Structured Interview Loaded",
+              description: `Found existing structured interview for ${formData.position} (${structuredQuestions.length} questions)`,
+            });
+          } else if (customParams && Object.keys(customParams).length > 0) {
+            // No structured questions but AI parameters exist - suggest switching mode
+            setCustomParameters({});
+            setParametersSaved(false);
+            toast({
+              title: "AI Parameters Available",
+              description: `Found AI parameters for ${formData.position}. Switch to "AI Interview" mode to use them.`,
+              variant: "default",
+            });
+          } else {
+            setCustomParameters({});
+            setParametersSaved(false);
+          }
         }
       } else {
-        // No existing parameters found, start with empty parameters
+        // No existing data found
         setCustomParameters({});
         setParametersSaved(false);
       }
@@ -275,7 +319,7 @@ const HRInterviewCreator = () => {
     } finally {
       setIsLoadingParameters(false);
     }
-  }, [formData.position]);
+  }, [formData.position, formData.interviewMode]);
 
   const calculateDuration = (parameters: CustomParameters) => {
     if (!parameters || Object.keys(parameters).length === 0) {
@@ -286,7 +330,7 @@ const HRInterviewCreator = () => {
     let totalQuestions = 0; // Will be calculated and rounded to whole number
 
     // Calculate questions per parameter: (min + max) ÷ 2, then round to nearest whole number
-    Object.values(parameters).forEach(param => {
+    Object.values(parameters).forEach((param, index) => {
       let minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
       let maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
       
@@ -297,6 +341,8 @@ const HRInterviewCreator = () => {
 
       const questionsPerParam = (minQuestions + maxQuestions) / 2;
       totalQuestions += questionsPerParam;
+      
+      console.log(`🔍 Parameter ${index + 1}: min=${minQuestions}, max=${maxQuestions}, calculated=${questionsPerParam}, running total=${totalQuestions}`);
     });
 
     // Round to nearest whole number for interview questions (no decimals)
@@ -304,6 +350,8 @@ const HRInterviewCreator = () => {
     
     // Ensure minimum of 1 question
     totalQuestions = Math.max(1, totalQuestions);
+    
+    console.log(`🎯 Final totalQuestions calculation: ${totalQuestions} questions`);
     
     // Calculate duration based on answer time + reading time for each parameter
     let calculatedDuration = 0;
@@ -353,6 +401,38 @@ const HRInterviewCreator = () => {
     setFormData(prev => ({ ...prev, duration: finalDuration }));
   };
 
+  const calculateDurationFromStructuredQuestions = (structuredQuestions: any[]) => {
+    // Calculate duration from structured questions' timeLimit values
+    let totalDuration = 0;
+    
+    structuredQuestions.forEach(question => {
+      const timeLimit = question.timeLimit || 3; // Default to 3 minutes if not set
+      totalDuration += timeLimit;
+    });
+    
+    // Add reading time (30 seconds per question)
+    const readingTime = structuredQuestions.length * 0.5;
+    
+    // Add 2 minutes buffer
+    const buffer = 2;
+    
+    // Total duration = question time + reading time + buffer
+    const finalDuration = totalDuration + readingTime + buffer;
+    
+    console.log(`📊 Structured interview duration calculation:`, {
+      questionTime: totalDuration,
+      readingTime: readingTime,
+      buffer: buffer,
+      total: finalDuration
+    });
+    
+    setFormData(prev => ({ 
+      ...prev, 
+      duration: Math.round(finalDuration * 10) / 10, // Round to 1 decimal place
+      totalQuestions: structuredQuestions.length
+    }));
+  };
+
   const calculateQuestionsFromDuration = (duration: number) => {
     // Calculate questions when user manually edits duration
     const calculatedQuestions = (duration - 2) / 4;
@@ -373,7 +453,15 @@ const HRInterviewCreator = () => {
     if (formData.position) {
       loadParameters();
     }
-  }, [formData.position, loadParameters]);
+  }, [formData.position, formData.interviewMode, loadParameters]);
+
+  // Clear parameters when switching to structured mode
+  useEffect(() => {
+    if (formData.interviewMode === 'structured') {
+      setCustomParameters({});
+      setParametersSaved(false);
+    }
+  }, [formData.interviewMode]);
 
 
   const saveParameters = async () => {
@@ -429,7 +517,8 @@ const HRInterviewCreator = () => {
       duration: 30,
       totalQuestions: 1,
       customInstructions: '',
-      interviewType: 'mixed'
+      interviewType: 'mixed',
+      interviewMode: 'ai'
     });
     setCreatedInterviews([]);
   };
@@ -568,10 +657,20 @@ const HRInterviewCreator = () => {
       return;
     }
 
-    if (Object.keys(customParameters).length === 0) {
+    // For AI interviews, check if parameters are configured
+    // For structured interviews, check if parameters are saved (indicating structured questions exist)
+    if (formData.interviewMode === 'ai' && Object.keys(customParameters).length === 0) {
       toast({
         title: "Parameters Required",
         description: 'Please configure assessment parameters first. Use the "Assessment Parameters" section below to set up parameters for this role.',
+      });
+      return;
+    }
+    
+    if (formData.interviewMode === 'structured' && !parametersSaved) {
+      toast({
+        title: "Structured Interview Required",
+        description: 'Please create structured interview questions first. Use the "Structured Interview Setup" section to add questions for this role.',
       });
       return;
     }
@@ -583,6 +682,13 @@ const HRInterviewCreator = () => {
       
       // Create interviews for all candidates
       for (const candidate of formData.candidates) {
+        console.log(`📤 Current formData before API call:`, {
+          totalQuestions: formData.totalQuestions,
+          duration: formData.duration,
+          position: formData.position
+        });
+        console.log(`📤 Sending to server: total_questions=${formData.totalQuestions}, duration=${formData.duration}`);
+        
         const response = await fetch('http://localhost:5000/api/create-interview', {
           method: 'POST',
           headers: {
@@ -595,7 +701,8 @@ const HRInterviewCreator = () => {
             duration_minutes: formData.duration,
             total_questions: formData.totalQuestions,
             custom_instructions: formData.customInstructions,
-            interview_type: 'technical' // Default to technical interview
+            interview_type: formData.interviewType,
+            interview_mode: formData.interviewMode
           }),
         });
 
@@ -783,12 +890,34 @@ const HRInterviewCreator = () => {
                 rows={3}
               />
             </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="interviewMode">Interview Mode *</Label>
+              <Select
+                value={formData.interviewMode}
+                onValueChange={(value: 'ai' | 'structured') => 
+                  setFormData(prev => ({ ...prev, interviewMode: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select interview mode..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ai">🤖 AI Interview (Dynamic)</SelectItem>
+                  <SelectItem value="structured">📋 Structured Interview (Pre-defined)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500">
+                AI Interview: Questions generated dynamically based on candidate responses<br/>
+                Structured Interview: Pre-defined questions set by HR
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Interview Summary Section */}
-      {formData.position && Object.keys(customParameters).length > 0 && (
+      {/* Interview Summary Section - Only for AI Interviews */}
+      {formData.position && Object.keys(customParameters).length > 0 && formData.interviewMode === 'ai' && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -869,8 +998,8 @@ const HRInterviewCreator = () => {
         </Card>
       )}
 
-      {/* Weightage Summary Section */}
-      {formData.position && Object.keys(customParameters).length > 0 && (
+      {/* Weightage Summary Section - Only for AI Interviews */}
+      {formData.position && Object.keys(customParameters).length > 0 && formData.interviewMode === 'ai' && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -964,7 +1093,8 @@ const HRInterviewCreator = () => {
         </Card>
       )}
 
-      {/* Assessment Parameters Section */}
+      {/* Assessment Parameters Section - Only for AI Interviews */}
+      {formData.interviewMode === 'ai' && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -1096,6 +1226,7 @@ const HRInterviewCreator = () => {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Create Interview Button */}
       <Card>

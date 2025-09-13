@@ -35,6 +35,7 @@ export const API_CONFIG = {
     DEFAULT: 30000, // 30 seconds
     VIDEO_UPLOAD: 90000, // 1.5 minutes
     ANSWER_SUBMISSION: 300000, // 5 minutes
+    GENERATE_QUESTION: 120000, // 2 minutes for question generation
     FILE_READER: 10000, // 10 seconds
     HEARTBEAT: 30000, // 30 seconds
   },
