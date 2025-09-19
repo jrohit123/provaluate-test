@@ -25,6 +25,10 @@ const InterviewSession = () => {
   const navigate = useNavigate();
   const interviewData: InterviewData = location.state || {} as InterviewData;
   
+  // Debug: Log the received data
+  console.log('🔍 InterviewSession received data:', interviewData);
+  console.log('🔍 Interview ID:', interviewData.interviewId);
+  
   // Use centralized interview state
   const { state: interviewState, dispatch } = useInterview();
   const [isRecording, setIsRecording] = useState(false);
@@ -34,13 +38,19 @@ const InterviewSession = () => {
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Answer[]>([]);
-  const [currentQuestion, setCurrentQuestion] = useState<Question | string>(interviewData.currentQuestion || '');
+  const [currentQuestion, setCurrentQuestion] = useState<Question | string>(interviewData.currentQuestion || 'Loading question...');
   const [audioLevel, setAudioLevel] = useState(0);
   const [audioBlob, setAudioBlob] = useState(null);
   const [mediaRecorder, setMediaRecorder] = useState(null);
   const [isCreatingInterview] = useState(false);
   const [answerSubmitted, setAnswerSubmitted] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [welcomeMessage, setWelcomeMessage] = useState('');
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [hasPersonalizedQuestions, setHasPersonalizedQuestions] = useState(false);
+  const [personalizedQuestions, setPersonalizedQuestions] = useState([]);
+  const [currentPersonalizedQuestionIndex, setCurrentPersonalizedQuestionIndex] = useState(0);
+  const [isPersonalizedQuestionPhase, setIsPersonalizedQuestionPhase] = useState(false);
   
   // Per-question timer states
   const [questionTimeRemaining, setQuestionTimeRemaining] = useState(0);
@@ -162,6 +172,29 @@ const InterviewSession = () => {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load welcome message when interview ID is available
+  useEffect(() => {
+    const loadWelcomeMessage = async () => {
+      if (interviewData.interviewId) {
+        try {
+          const response = await fetch(`/api/get-welcome-message/${interviewData.interviewId}`);
+          const data = await response.json();
+          if (data.status === 'success') {
+            setWelcomeMessage(data.welcome_message);
+            setHasPersonalizedQuestions(data.has_personalized_questions);
+            if (data.personalized_questions) {
+              setPersonalizedQuestions(data.personalized_questions);
+            }
+          }
+        } catch (error) {
+          console.error('Error loading welcome message:', error);
+        }
+      }
+    };
+    
+    loadWelcomeMessage();
+  }, [interviewData.interviewId]);
+
   // Start transcription when interview ID is available
   useEffect(() => {
     if (interviewData?.interviewId && socketRef.current?.connected) {
@@ -256,22 +289,34 @@ const InterviewSession = () => {
 
   const loadInterviewData = async () => {
     try {
+      console.log('🔍 Loading interview data for ID:', interviewData.interviewId);
+      console.log('🔍 Full interviewData object:', interviewData);
+      
+      if (!interviewData.interviewId) {
+        console.error('❌ No interview ID found in interviewData');
+        setCurrentQuestion('Error: No interview ID found. Please try again.');
+        return;
+      }
+      
       const response = await apiCall(`${API_CONFIG.ENDPOINTS.GET_INTERVIEW}/${interviewData.interviewId}`);
       if (response.ok) {
         const data = await response.json();
-        setQuestions(data.questions);
-        setAnswers(data.answers);
+        console.log('📊 Interview data received:', data);
+        
+        setQuestions(data.questions || []);
+        setAnswers(data.answers || []);
         
         // Set current question based on answers count (next question to answer)
-        if (data.questions.length > 0) {
-          const nextQuestionIndex = data.answers.length; // Next question to answer
+        if (data.questions && data.questions.length > 0) {
+          const nextQuestionIndex = data.answers ? data.answers.length : 0; // Next question to answer
           
           if (nextQuestionIndex < data.questions.length) {
             // Show the next question to answer
             const currentQ = data.questions[nextQuestionIndex];
             setCurrentQuestion(currentQ.question_text);
             dispatch(interviewActions.setQuestionIndex(nextQuestionIndex));
-            console.log('📝 Loaded questions:', data.questions.length, 'Answers:', data.answers.length, 'Next question index:', nextQuestionIndex);
+            console.log('📝 Loaded questions:', data.questions.length, 'Answers:', data.answers ? data.answers.length : 0, 'Next question index:', nextQuestionIndex);
+            console.log('📝 Current question set to:', currentQ.question_text);
           } else {
             // All questions answered, show the last question
             const lastQ = data.questions[data.questions.length - 1];
@@ -279,10 +324,17 @@ const InterviewSession = () => {
             dispatch(interviewActions.setQuestionIndex(data.questions.length - 1));
             console.log('📝 All questions answered, showing last question');
           }
+        } else {
+          console.log('❌ No questions found in interview data');
+          setCurrentQuestion('No questions available. Please contact support.');
         }
+      } else {
+        console.error('❌ Failed to load interview data:', response.status, response.statusText);
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Error details:', errorData);
       }
     } catch (error) {
-      console.error('Error loading interview data:', error);
+      console.error('❌ Error loading interview data:', error);
     }
   };
 
@@ -822,6 +874,89 @@ const InterviewSession = () => {
     }
   };
 
+  const startPersonalizedQuestions = () => {
+    if (personalizedQuestions.length > 0) {
+      setIsPersonalizedQuestionPhase(true);
+      setShowWelcome(false);
+      setCurrentQuestion(personalizedQuestions[0].question);
+      setCurrentPersonalizedQuestionIndex(0);
+      
+      // Set timer for personalized question
+      const timeLimit = personalizedQuestions[0].timeLimit || 3;
+      const questionTimeInSeconds = timeLimit * 60;
+      setCurrentQuestionMaxTime(questionTimeInSeconds);
+      setQuestionTimeRemaining(questionTimeInSeconds);
+      setIsQuestionTimerActive(true);
+      
+      console.log('🎯 Starting personalized questions phase:', personalizedQuestions.length, 'questions');
+    }
+  };
+
+  const handlePersonalizedQuestionSubmit = async () => {
+    if (!transcript || !transcript.trim()) {
+      toast.error('Please record your answer before submitting');
+      return;
+    }
+
+    if (!audioBlob || audioBlob.size === 0) {
+      toast.error('No audio recording found. Please record your answer first.');
+      return;
+    }
+
+    dispatch(interviewActions.setSubmitting(true));
+    try {
+      // Submit personalized question answer (no scoring)
+      const response = await apiCall(API_CONFIG.ENDPOINTS.SUBMIT_ANSWER, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          interview_id: interviewData.interviewId,
+          question_id: `personalized_${currentPersonalizedQuestionIndex}`,
+          question_order: currentPersonalizedQuestionIndex,
+          transcript: transcript,
+          audio_data: audioBlob,
+          is_personalized: true
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit personalized answer');
+      }
+
+      toast.success('Personal question answered successfully!');
+      
+      // Clear audio blob after submission
+      setAudioBlob(null);
+      setTranscript('');
+      
+      // Move to next personalized question or start technical questions
+      if (currentPersonalizedQuestionIndex < personalizedQuestions.length - 1) {
+        const nextIndex = currentPersonalizedQuestionIndex + 1;
+        setCurrentPersonalizedQuestionIndex(nextIndex);
+        setCurrentQuestion(personalizedQuestions[nextIndex].question);
+        
+        // Set timer for next personalized question
+        const timeLimit = personalizedQuestions[nextIndex].timeLimit || 3;
+        const questionTimeInSeconds = timeLimit * 60;
+        setCurrentQuestionMaxTime(questionTimeInSeconds);
+        setQuestionTimeRemaining(questionTimeInSeconds);
+        setIsQuestionTimerActive(true);
+      } else {
+        // All personalized questions answered, start technical questions
+        setIsPersonalizedQuestionPhase(false);
+        await loadInterviewData(); // Load technical questions
+      }
+      
+    } catch (error) {
+      console.error('Error submitting personalized answer:', error);
+      toast.error('Failed to submit personalized answer');
+    } finally {
+      dispatch(interviewActions.setSubmitting(false));
+    }
+  };
+
 
 
   return (
@@ -961,16 +1096,75 @@ const InterviewSession = () => {
               </div>
             </div>
 
+            {/* Welcome Message */}
+            {showWelcome && welcomeMessage && (
+              <div className="bg-white rounded-3xl p-8 hover:shadow-2xl transition-all duration-300 border border-slate-200 shadow-lg mb-6">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <User className="w-8 h-8 text-blue-600" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-slate-800 mb-4">Welcome to Your Interview!</h2>
+                  <p className="text-slate-600 text-lg leading-relaxed mb-6">
+                    {welcomeMessage}
+                  </p>
+                  
+                  {hasPersonalizedQuestions && personalizedQuestions.length > 0 && (
+                    <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
+                      <p className="text-blue-800 text-sm mb-2">
+                        This interview includes {personalizedQuestions.length} personal question{personalizedQuestions.length > 1 ? 's' : ''} that will be asked before the technical assessment.
+                      </p>
+                      <p className="text-blue-600 text-xs">
+                        These questions are for review only and won't be scored.
+                      </p>
+                    </div>
+                  )}
+                  
+                  <div className="flex gap-4 justify-center">
+                    {hasPersonalizedQuestions && personalizedQuestions.length > 0 ? (
+                      <button
+                        onClick={startPersonalizedQuestions}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl transition-all duration-300 flex items-center gap-2 hover:scale-105 active:scale-95"
+                      >
+                        <CheckCircle className="w-5 h-5" />
+                        Start with Personal Questions
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShowWelcome(false)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl transition-all duration-300 flex items-center gap-2 hover:scale-105 active:scale-95"
+                      >
+                        <CheckCircle className="w-5 h-5" />
+                        Start Interview
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Question Panel */}
-            <div className="bg-white rounded-3xl p-8 hover:shadow-2xl transition-all duration-300 border border-slate-200 shadow-lg">
+            {!showWelcome && (
+              <div className="bg-white rounded-3xl p-8 hover:shadow-2xl transition-all duration-300 border border-slate-200 shadow-lg">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center animate-pulse">
-                                          <HelpCircle className="w-6 h-6 text-blue-600" />
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center animate-pulse ${
+                    isPersonalizedQuestionPhase ? 'bg-blue-100' : 'bg-blue-100'
+                  }`}>
+                    <HelpCircle className="w-6 h-6 text-blue-600" />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-bold text-slate-800">Question {currentQuestionIndex + 1} of {interviewData.totalQuestions || 1}</h3>
-                    <p className="text-slate-600 text-sm">AI-Generated Dynamic Question</p>
+                    <h3 className="text-2xl font-bold text-slate-800">
+                      {isPersonalizedQuestionPhase 
+                        ? `Personal Question ${currentPersonalizedQuestionIndex + 1} of ${personalizedQuestions.length}`
+                        : `Question ${currentQuestionIndex + 1} of ${interviewData.totalQuestions || 1}`
+                      }
+                    </h3>
+                    <p className="text-slate-600 text-sm">
+                      {isPersonalizedQuestionPhase 
+                        ? 'Personal Question (Review Only)'
+                        : 'AI-Generated Dynamic Question'
+                      }
+                    </p>
                   </div>
                 </div>
                 
@@ -993,9 +1187,15 @@ const InterviewSession = () => {
                         isProcessing: isProcessing,
                         audioBlob: audioBlob,
                         audioBlobSize: audioBlob?.size,
+                        isPersonalizedQuestionPhase: isPersonalizedQuestionPhase,
                         buttonDisabled: !transcript || !transcript.trim() || isSubmitting || isProcessing || !audioBlob
                       });
-                      handleSubmitAnswer();
+                      
+                      if (isPersonalizedQuestionPhase) {
+                        handlePersonalizedQuestionSubmit();
+                      } else {
+                        handleSubmitAnswer();
+                      }
                     }}
                     disabled={!transcript || !transcript.trim() || isSubmitting || isProcessing || !audioBlob || answerSubmitted}
                     className={`px-6 py-2 rounded-xl transition-all duration-300 flex items-center gap-2 hover:scale-105 active:scale-95 disabled:hover:scale-100 shadow-lg ${
@@ -1005,7 +1205,9 @@ const InterviewSession = () => {
                           ? 'bg-slate-300 text-slate-500 cursor-not-allowed' 
                           : isSubmitting || isProcessing
                             ? 'bg-blue-500 text-white cursor-wait'
-                            : 'bg-blue-600 hover:bg-blue-700 text-white'
+                            : isPersonalizedQuestionPhase
+                              ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                              : 'bg-blue-600 hover:bg-blue-700 text-white'
                     }`}
                   >
                     {answerSubmitted ? (
@@ -1026,7 +1228,10 @@ const InterviewSession = () => {
                     ) : (
                       <>
                         <Save className="w-4 h-4" />
-                        {currentQuestionIndex < (interviewData.totalQuestions - 1) ? 'Submit & Continue' : 'Finish Interview'}
+                        {isPersonalizedQuestionPhase 
+                          ? (currentPersonalizedQuestionIndex < personalizedQuestions.length - 1 ? 'Next Personal Question' : 'Start Technical Questions')
+                          : (currentQuestionIndex < (interviewData.totalQuestions - 1) ? 'Submit & Continue' : 'Finish Interview')
+                        }
                         {audioBlob && (
                           <span className="text-xs ml-1">
                             ({(audioBlob.size / 1024).toFixed(1)} KB)
@@ -1095,7 +1300,10 @@ const InterviewSession = () => {
                       </div>
                     ) : (
                       <p className="text-gray-800 text-lg leading-relaxed font-medium transition-all duration-300">
-                        {typeof currentQuestion === 'string' ? currentQuestion : currentQuestion.question_text}
+                        {typeof currentQuestion === 'string' 
+                          ? (currentQuestion || 'Loading question...') 
+                          : (currentQuestion?.question_text || 'Loading question...')
+                        }
                       </p>
                     )}
                     <div className="flex items-center gap-4 mt-4 text-sm">
@@ -1251,6 +1459,8 @@ const InterviewSession = () => {
                   </div>
                 )}
               </div>
+            )}
+            </div>
             )}
 
           </div>

@@ -210,7 +210,7 @@ const QuestionVideoRecorder = ({
       }, 200);
 
       // Upload to server
-      const response = await fetch('http://localhost:5000/api/upload-question-video', {
+      const response = await fetch('http://localhost:5003/api/upload-question-video', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

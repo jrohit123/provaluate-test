@@ -70,7 +70,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
   const fetchInterviews = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5000/api/get-all-interviews');
+      const response = await fetch('http://localhost:5003/api/get-all-interviews');
       if (response.ok) {
         const data = await response.json();
         const interviewsData = data.interviews || [];
@@ -198,7 +198,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
     setSaveStates(prev => ({...prev, [interviewId]: 'saving'}));
     
     try {
-      const response = await fetch('http://localhost:5000/api/update-interview-decision', {
+      const response = await fetch('http://localhost:5003/api/update-interview-decision', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

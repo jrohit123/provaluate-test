@@ -461,6 +461,13 @@ const ConversationalInterview = () => {
           console.log('⏰ No max_time in API response, timer will be initialized when question is spoken');
           console.log('🔍 Available data keys:', Object.keys(data));
         }
+        
+        // CRITICAL FIX: Clear any existing timer intervals to prevent timer conflicts
+        if (questionTimerRef.current) {
+          clearInterval(questionTimerRef.current);
+          questionTimerRef.current = null;
+          console.log('⏰ Cleared existing question timer interval');
+        }
         // Keep screen permissions state - don't reset this
         
         // Clean up question text and speak the question (only if not already spoken)
@@ -677,6 +684,20 @@ const ConversationalInterview = () => {
            const answerTimeout = setTimeout(() => answerController.abort(), API_CONFIG.TIMEOUTS.ANSWER_SUBMISSION);
            
            try {
+             // Ensure we have a valid transcript
+             const finalTranscript = cleanedTranscript && cleanedTranscript.trim() !== "" 
+               ? cleanedTranscript 
+               : "No transcript provided";
+             
+             // Use audio data as-is (server.py handled large files fine)
+             let processedAudioData = audioData;
+             
+             console.log('🔍 Final submission data:');
+             console.log('🔍 interview_id:', interviewData.interviewId);
+             console.log('🔍 transcript:', finalTranscript);
+             console.log('🔍 audio_data size:', processedAudioData ? (typeof processedAudioData === 'string' ? processedAudioData.length : processedAudioData.byteLength) : 'null');
+             console.log('🔍 question_video_url:', questionVideoUrl);
+             
              const response = await apiCall(API_CONFIG.ENDPOINTS.SUBMIT_ANSWER, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
@@ -684,8 +705,8 @@ const ConversationalInterview = () => {
                  interview_id: interviewData.interviewId,
                  question_id: currentQuestion?.id || currentQuestion?.question_id || `q${currentQuestionIndex}`,
                  question_order: currentQuestionIndex,
-                 transcript: cleanedTranscript, // Use cleaned transcript
-                 audio_data: audioData,
+                 transcript: finalTranscript, // Use final transcript
+                 audio_data: processedAudioData, // Use processed audio data
                  question_video_url: questionVideoUrl
                }),
                signal: answerController.signal
@@ -1299,13 +1320,19 @@ const ConversationalInterview = () => {
         const data = await response.json();
         console.log('📊 Interview data received:', data);
         
-
+        // The API returns nested structure: {interview: {...}, questions: [...], answers: [...]}
+        // We need to flatten it like we did in CandidateInterview
+        const flattenedData = {
+          ...data.interview,
+          questions: data.questions || [],
+          answers: data.answers || []
+        };
         
         // Set current question from interview data or first question
-        const firstQuestion = interviewData.currentQuestion || data.questions?.[0];
+        const firstQuestion = interviewData.currentQuestion || flattenedData.questions?.[0];
         console.log('🎯 Setting current question:', firstQuestion);
         console.log('🎯 Interview data currentQuestion:', interviewData.currentQuestion);
-        console.log('🎯 Data questions:', data.questions);
+        console.log('🎯 Data questions:', flattenedData.questions);
         setCurrentQuestion(firstQuestion);
         
         // Initialize timer for first question if we have the data
@@ -1528,9 +1555,17 @@ const ConversationalInterview = () => {
   useEffect(() => {
     if (isRecording && currentQuestionMaxTime > 0 && !isQuestionTimerActive) {
       console.log('⏰ Recording started, starting question timer');
+      console.log('⏰ Timer values - maxTime:', currentQuestionMaxTime, 'remaining:', questionTimeRemaining);
+      
+      // CRITICAL FIX: Ensure timer starts with fresh values
+      if (questionTimeRemaining !== currentQuestionMaxTime) {
+        console.log('⏰ Resetting timer to max time before starting');
+        setQuestionTimeRemaining(currentQuestionMaxTime);
+      }
+      
       setIsQuestionTimerActive(true);
     }
-  }, [isRecording, currentQuestionMaxTime, isQuestionTimerActive]);
+  }, [isRecording, currentQuestionMaxTime, isQuestionTimerActive, questionTimeRemaining]);
 
   const initializeCamera = useCallback(async () => {
     try {
@@ -1733,6 +1768,10 @@ const ConversationalInterview = () => {
       clearInterval(questionTimerRef.current);
       questionTimerRef.current = null;
     }
+    
+    // CRITICAL FIX: Reset timer values to prevent carryover to next question
+    console.log('⏰ Resetting timer values for next question');
+    setQuestionTimeRemaining(0); // Reset to 0 so next question starts fresh
     
     if (!mediaRecorder && !videoRecorder) {
       setIsRecording(false);

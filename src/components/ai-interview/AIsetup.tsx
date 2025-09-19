@@ -25,7 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import StructuredInterviewSetup from './StructuredInterviewSetup';
 
 interface FormData {
@@ -36,6 +36,8 @@ interface FormData {
   totalQuestions: number;
   interviewType: 'technical' | 'behavioral' | 'mixed';
   interviewMode: 'ai' | 'structured';
+  personalizedQuestionsEnabled: boolean;
+  personalizedQuestions: Array<{question: string, timeLimit: number}>;
 }
 
 
@@ -63,7 +65,9 @@ const HRInterviewCreator = () => {
     duration: 30,
     totalQuestions: 1,
     interviewType: 'mixed',
-    interviewMode: 'ai'
+    interviewMode: 'ai',
+    personalizedQuestionsEnabled: false,
+    personalizedQuestions: []
   });
 
   const [jobDescriptions, setJobDescriptions] = useState<JobDescription[]>([]);
@@ -441,7 +445,7 @@ const HRInterviewCreator = () => {
       // Try to load from custom_role_parameters table first
       const { data, error } = await supabase
         .from('custom_role_parameters')
-        .select('custom_parameters, interview_type, structured_questions')
+        .select('custom_parameters, interview_type, structured_questions, personalized_questions')
         .eq('role_name', position)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
@@ -456,13 +460,16 @@ const HRInterviewCreator = () => {
         const customParams = record.custom_parameters;
         const interviewType = record.interview_type || 'mixed';
         const structuredQuestions = record.structured_questions;
+        const personalizedQuestions = record.personalized_questions;
         
-        console.log('🔄 Found existing record:', { interviewType, hasCustomParams: !!customParams, hasStructuredQuestions: !!structuredQuestions });
+        console.log('🔄 Found existing record:', { interviewType, hasCustomParams: !!customParams, hasStructuredQuestions: !!structuredQuestions, hasPersonalizedQuestions: !!personalizedQuestions });
         
-        // Set the interview type first
+        // Set the interview type and personalized questions first
         setFormData(prev => ({ 
           ...prev, 
-          interviewType: interviewType
+          interviewType: interviewType,
+          personalizedQuestionsEnabled: !!personalizedQuestions,
+          personalizedQuestions: personalizedQuestions || []
         }));
         
         if (customParams && Object.keys(customParams).length > 0) {
@@ -480,6 +487,11 @@ const HRInterviewCreator = () => {
           setCustomParameters(paramsWithDefaults);
           setParametersSaved(true);
           calculateDuration(paramsWithDefaults);
+          
+          // Recalculate duration with personalized questions if they exist
+          if (personalizedQuestions && personalizedQuestions.length > 0) {
+            recalculateDurationWithPersonalizedQuestions(personalizedQuestions);
+          }
           
           // Only show toast if we haven't loaded this position before
           const normalizedPosition = position.trim().toLowerCase();
@@ -611,6 +623,12 @@ const HRInterviewCreator = () => {
       }))
     });
     
+    console.log('🔄 Setting form data:', {
+      previousDuration: formData.duration,
+      calculatedDuration: finalDuration,
+      totalQuestions: totalQuestions
+    });
+    
     setFormData(prev => ({ 
       ...prev, 
       duration: finalDuration,
@@ -635,7 +653,8 @@ const HRInterviewCreator = () => {
     calculatedDuration += 2;
     
     const finalDuration = Math.max(5, Math.min(120, calculatedDuration));
-    setFormData(prev => ({ ...prev, duration: finalDuration }));
+    // FIXED: Replace duration instead of adding to it
+    setFormData(prev => ({ ...prev, duration: finalDuration, totalQuestions: questions }));
   };
 
   const calculateQuestionsFromDuration = (duration: number) => {
@@ -644,7 +663,8 @@ const HRInterviewCreator = () => {
       // Fallback to old logic if no parameters
       const calculatedQuestions = (duration - 2) / 4;
       const finalQuestions = Math.max(1, Math.min(30, Math.round(calculatedQuestions)));
-      setFormData(prev => ({ ...prev, totalQuestions: finalQuestions }));
+      // FIXED: Replace both duration and totalQuestions instead of just totalQuestions
+      setFormData(prev => ({ ...prev, duration: duration, totalQuestions: finalQuestions }));
       return;
     }
     
@@ -670,7 +690,8 @@ const HRInterviewCreator = () => {
     const avgTimePerQuestion = totalTimeForAllQuestions / totalQuestions;
     const calculatedQuestions = (duration - 2) / avgTimePerQuestion;
     const finalQuestions = Math.max(1, Math.min(30, Math.round(calculatedQuestions)));
-    setFormData(prev => ({ ...prev, totalQuestions: finalQuestions }));
+    // FIXED: Replace both duration and totalQuestions instead of just totalQuestions
+    setFormData(prev => ({ ...prev, duration: duration, totalQuestions: finalQuestions }));
   };
 
   const generateDynamicParameters = async (forceFresh = false) => {
@@ -731,10 +752,10 @@ const HRInterviewCreator = () => {
           acc[key] = {
             ...aiParam,
             // Preserve manual settings if they exist, otherwise use reasonable defaults
-            max_time: existingParam?.max_time || (aiParam.max_time && aiParam.max_time <= 3 ? aiParam.max_time : 2),
+            max_time: existingParam?.max_time || (aiParam.max_time && aiParam.max_time >= 1 && aiParam.max_time <= 10 ? aiParam.max_time : 3),
             level: existingParam?.level || aiParam.level || 'Regular',
-            min_questions: existingParam?.min_questions || (aiParam.min_questions && aiParam.min_questions >= 1 && aiParam.min_questions <= 3 ? aiParam.min_questions : 1),
-            max_questions: existingParam?.max_questions || (aiParam.max_questions && aiParam.max_questions >= 1 && aiParam.max_questions <= 8 ? aiParam.max_questions : 3),
+            min_questions: existingParam?.min_questions || (aiParam.min_questions && aiParam.min_questions >= 1 && aiParam.min_questions <= 8 ? aiParam.min_questions : 2),
+            max_questions: existingParam?.max_questions || (aiParam.max_questions && aiParam.max_questions >= 1 && aiParam.max_questions <= 8 ? aiParam.max_questions : 5),
             weight: existingParam?.weight || (aiParam.weight && aiParam.weight >= 10 && aiParam.weight <= 40 ? aiParam.weight : 25)
           };
           
@@ -800,6 +821,18 @@ const HRInterviewCreator = () => {
       if (response.ok) {
         const data = await response.json();
         const generatedParameters = data.parameters || {};
+        
+        console.log('🔄 Received parameters from backend:', generatedParameters);
+        console.log('🔄 Parameter keys:', Object.keys(generatedParameters));
+        Object.entries(generatedParameters).forEach(([key, param]) => {
+          console.log(`  ${key}:`, {
+            name: param.name,
+            min_questions: param.min_questions,
+            max_questions: param.max_questions,
+            max_time: param.max_time,
+            weight: param.weight
+          });
+        });
         
         // Save parameters directly to custom_role_parameters table
         const { error: saveError } = await supabase
@@ -924,6 +957,7 @@ const HRInterviewCreator = () => {
             custom_parameters: customParameters,
             interview_type: formData.interviewType,
             structured_questions: {}, // Clear structured questions for AI interviews
+            personalized_questions: formData.personalizedQuestionsEnabled ? formData.personalizedQuestions : null,
             updated_at: new Date().toISOString()
           })
           .eq('id', existingData.id)
@@ -941,6 +975,7 @@ const HRInterviewCreator = () => {
             custom_parameters: customParameters,
             interview_type: formData.interviewType,
             structured_questions: {}, // No structured questions for AI interviews
+            personalized_questions: formData.personalizedQuestionsEnabled ? formData.personalizedQuestions : null,
             user_id: user?.id,
             is_active: true
           })
@@ -1006,41 +1041,8 @@ const HRInterviewCreator = () => {
         }
       };
       
-      // Recalculate duration when weights or max_time change
-      if (field === 'weight' || field === 'max_time') {
-        setTimeout(() => calculateDuration(updated), INTERVIEW_CONSTANTS.TIMEOUTS.RECORDING_VERIFICATION);
-      }
-      // Recalculate total questions when min/max questions change
-      else if (field === 'min_questions' || field === 'max_questions') {
-        setTimeout(() => {
-          // Calculate total questions from all parameters
-          let totalQuestions = 0;
-          Object.values(updated).forEach(param => {
-            const questionsPerParam = (param.min_questions + param.max_questions) / 2;
-            totalQuestions += questionsPerParam;
-          });
-          totalQuestions = Math.round(totalQuestions);
-          totalQuestions = Math.max(1, totalQuestions);
-          
-          // Calculate duration based on answer time + reading time from parameters
-          let calculatedDuration = 0;
-          Object.values(updated).forEach(param => {
-            const avgQuestions = (param.min_questions + param.max_questions) / 2;
-            const answerTime = param.max_time || 3; // Default to 3 minutes if not set
-            const readingTime = 0.5; // 30 seconds per question
-            const totalTimePerQuestion = answerTime + readingTime;
-            calculatedDuration += avgQuestions * totalTimePerQuestion;
-          });
-          calculatedDuration += 2; // Add buffer
-          const finalDuration = Math.max(5, Math.min(120, calculatedDuration));
-          
-          setFormData(prevForm => ({ 
-            ...prevForm, 
-            duration: finalDuration,
-            totalQuestions: totalQuestions
-          }));
-        }, 100);
-      }
+      // Recalculate duration and questions for any parameter change
+      setTimeout(() => calculateDuration(updated), INTERVIEW_CONSTANTS.TIMEOUTS.RECORDING_VERIFICATION);
       
       return updated;
     });
@@ -1067,8 +1069,96 @@ const HRInterviewCreator = () => {
       duration: 30,
       totalQuestions: 1,
       interviewType: 'mixed',
-      interviewMode: 'ai'
+      interviewMode: 'ai',
+      personalizedQuestionsEnabled: false,
+      personalizedQuestions: []
     });
+  };
+
+  const recalculateDurationWithPersonalizedQuestions = (personalizedQuestions: Array<{question: string, timeLimit: number}>) => {
+    // Calculate personalized questions duration
+    const personalizedDuration = personalizedQuestions.reduce((total, q) => total + q.timeLimit, 0);
+    
+    // Get base duration from parameters (without personalized questions)
+    let baseDuration = 30; // Default fallback
+    if (Object.keys(customParameters).length > 0) {
+      let calculatedDuration = 0;
+      Object.values(customParameters).forEach(param => {
+        const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
+        const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
+        const avgQuestions = (minQuestions + maxQuestions) / 2;
+        const answerTime = typeof param.max_time === 'string' ? parseFloat(param.max_time) : (param.max_time || 3);
+        const readingTime = 0.5; // 30 seconds per question
+        const totalTimePerQuestion = answerTime + readingTime;
+        calculatedDuration += avgQuestions * totalTimePerQuestion;
+      });
+      calculatedDuration += 2; // Add buffer
+      baseDuration = Math.max(5, Math.min(120, calculatedDuration));
+    }
+    
+    // Total duration = base duration + personalized questions duration
+    const totalDuration = baseDuration + personalizedDuration;
+    
+    setFormData(prev => ({
+      ...prev,
+      duration: totalDuration
+    }));
+  };
+
+  const saveInterviewConfiguration = async () => {
+    const roleName = formData.newRole || formData.position;
+    
+    if (!roleName) {
+      toast.error('Please select or enter a role name');
+      return;
+    }
+    
+    if (!formData.jobDescription) {
+      toast.error('Please provide a job description');
+      return;
+    }
+    
+    try {
+      const response = await fetch('http://localhost:5003/api/save-interview-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: `${roleName} Interview Configuration`,
+          description: `Interview configuration for ${roleName} position`,
+          duration: formData.duration,
+          difficulty: 'medium', // Default difficulty
+          position: roleName,
+          skills: [], // Could be extracted from job description
+          custom_questions: [], // No custom questions in this component
+          personalized_questions_enabled: formData.personalizedQuestionsEnabled,
+          personalized_questions: formData.personalizedQuestions,
+          total_duration: formData.duration + (formData.personalizedQuestionsEnabled ? 
+            formData.personalizedQuestions.reduce((total, q) => total + q.timeLimit, 0) : 0),
+          job_description: formData.jobDescription,
+          interview_type: formData.interviewType,
+          interview_mode: formData.interviewMode,
+          custom_parameters: customParameters
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Interview configuration saved:', result);
+        
+        // Show success message and stay on the same page
+        toast.success('Interview configuration saved successfully!');
+        console.log('Interview configuration saved with ID:', result.interview_id);
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to save interview configuration:', errorData);
+        toast.error('Failed to save interview configuration: ' + (errorData.message || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error saving interview configuration:', error);
+      toast.error('Error saving interview configuration: ' + (error as Error).message);
+    }
   };
 
 
@@ -1214,6 +1304,127 @@ const HRInterviewCreator = () => {
                 </div>
               )}
 
+              {/* Personalized Questions Section - Only for AI Interviews */}
+              {formData.interviewMode === 'ai' && (
+                <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="personalizedQuestionsEnabled"
+                      checked={formData.personalizedQuestionsEnabled}
+                      onChange={(e) => {
+                        const enabled = e.target.checked;
+                        setFormData(prev => {
+                          const newQuestions = enabled ? prev.personalizedQuestions : [];
+                          return { 
+                            ...prev, 
+                            personalizedQuestionsEnabled: enabled,
+                            personalizedQuestions: newQuestions
+                          };
+                        });
+                        
+                        // Recalculate duration when enabling/disabling personalized questions
+                        if (enabled) {
+                          recalculateDurationWithPersonalizedQuestions(formData.personalizedQuestions);
+                        } else {
+                          recalculateDurationWithPersonalizedQuestions([]);
+                        }
+                      }}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <Label htmlFor="personalizedQuestionsEnabled" className="text-sm font-medium text-blue-800">
+                      Enable Personalized Questions (Optional)
+                    </Label>
+                  </div>
+                  
+                  {formData.personalizedQuestionsEnabled && (
+                    <div className="space-y-3">
+                      <p className="text-xs text-blue-600">
+                        Add 1-2 personal questions that will be asked before technical questions. These are for review only and won't be scored.
+                      </p>
+                      
+                      {formData.personalizedQuestions.map((question, index) => (
+                        <div key={index} className="space-y-2 p-3 bg-white rounded border">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium text-gray-700">
+                              Question {index + 1}
+                            </Label>
+                            {formData.personalizedQuestions.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const newQuestions = formData.personalizedQuestions.filter((_, i) => i !== index);
+                                  setFormData(prev => ({ ...prev, personalizedQuestions: newQuestions }));
+                                  // Recalculate duration when removing a question
+                                  recalculateDurationWithPersonalizedQuestions(newQuestions);
+                                }}
+                                className="text-red-500 hover:text-red-700 h-6 w-6 p-0"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                          <Textarea
+                            value={question.question}
+                            onChange={(e) => {
+                              const newQuestions = [...formData.personalizedQuestions];
+                              newQuestions[index].question = e.target.value;
+                              setFormData(prev => ({ ...prev, personalizedQuestions: newQuestions }));
+                              // Recalculate duration when changing question text (though time doesn't change)
+                              recalculateDurationWithPersonalizedQuestions(newQuestions);
+                            }}
+                            placeholder="Enter your personal question here..."
+                            rows={2}
+                            className="resize-none"
+                          />
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs text-gray-600">Time Limit (minutes):</Label>
+                            <Input
+                              type="number"
+                              min="1"
+                              max="10"
+                              value={question.timeLimit}
+                              onChange={(e) => {
+                                const newQuestions = [...formData.personalizedQuestions];
+                                newQuestions[index].timeLimit = parseInt(e.target.value) || 3;
+                                setFormData(prev => ({ ...prev, personalizedQuestions: newQuestions }));
+                                // Recalculate duration when changing time limit
+                                recalculateDurationWithPersonalizedQuestions(newQuestions);
+                              }}
+                              className="w-20 h-8 text-sm"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {formData.personalizedQuestions.length < 2 && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const newQuestion = { question: '', timeLimit: 3 };
+                            const newQuestions = [...formData.personalizedQuestions, newQuestion];
+                            setFormData(prev => ({
+                              ...prev,
+                              personalizedQuestions: newQuestions
+                            }));
+                            // Recalculate duration when adding a question
+                            recalculateDurationWithPersonalizedQuestions(newQuestions);
+                          }}
+                          className="w-full border-dashed border-blue-300 text-blue-600 hover:bg-blue-50"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Personal Question
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
 
             {/* Right Column */}
@@ -1303,6 +1514,9 @@ const HRInterviewCreator = () => {
                       <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
                         <DialogHeader>
                           <DialogTitle>Job Description - Full Text</DialogTitle>
+                          <DialogDescription>
+                            View the complete job description text that was extracted from the uploaded PDF file.
+                          </DialogDescription>
                         </DialogHeader>
                         <div className="overflow-y-auto max-h-[60vh]">
                           <div className="whitespace-pre-wrap text-sm leading-relaxed p-4 bg-gray-50 rounded-lg border">
@@ -1425,67 +1639,72 @@ const HRInterviewCreator = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-          {/* Show buttons when creating new parameters or when no parameters exist */}
-          {(!parametersSaved || Object.keys(customParameters).length === 0) && (
+          {/* Always show Save Configuration button, show other buttons conditionally */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex gap-3">
-              <Button
-                onClick={() => generateDynamicParameters(true)} // Always force fresh generation
-                disabled={isLoadingParameters || !formData.position}
-                className="flex items-center gap-2"
-                title="Generate completely new parameters, ignoring any cached versions"
-              >
-                {isLoadingParameters ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Brain className="h-4 w-4" />
-                    Generate AI Parameters
-                  </>
-                )}
-              </Button>
+              {/* Show Generate button only when creating new parameters */}
+              {(!parametersSaved || Object.keys(customParameters).length === 0) && (
+                <Button
+                  onClick={() => generateDynamicParameters(true)} // Always force fresh generation
+                  disabled={isLoadingParameters || !formData.position}
+                  className="flex items-center gap-2"
+                  title="Generate completely new parameters, ignoring any cached versions"
+                >
+                  {isLoadingParameters ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Brain className="h-4 w-4" />
+                      Generate AI Parameters
+                    </>
+                  )}
+                </Button>
+              )}
               
-              <Button
-                onClick={saveParameters}
-                disabled={isSavingParameters || Object.keys(customParameters).length === 0}
-                variant="outline"
-                className="flex items-center gap-2"
-              >
-                {isSavingParameters ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4" />
-                    Save Parameters
-                  </>
-                )}
-              </Button>
+              {/* Always show Save Parameters button when parameters exist */}
+              {Object.keys(customParameters).length > 0 && (
+                <Button
+                  onClick={saveParameters}
+                  disabled={isSavingParameters}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {isSavingParameters ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Save Parameters
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
 
             <div className="flex gap-2">
-              <Button
-                onClick={() => {
-                  setCustomParameters({});
-                  setParametersSaved(false);
-                  toast.success('Parameters cleared successfully!');
-                }}
-                disabled={Object.keys(customParameters).length === 0}
-                variant="destructive"
-                className="flex items-center gap-2"
-                title="Clear all current parameters"
-              >
-                <Trash2 className="h-4 w-4" />
-                Clear
-              </Button>
+              {/* Show Clear button only when parameters exist */}
+              {Object.keys(customParameters).length > 0 && (
+                <Button
+                  onClick={() => {
+                    setCustomParameters({});
+                    setParametersSaved(false);
+                    toast.success('Parameters cleared successfully!');
+                  }}
+                  variant="destructive"
+                  className="flex items-center gap-2"
+                  title="Clear all current parameters"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Clear
+                </Button>
+              )}
             </div>
           </div>
-          )}
 
           {Object.keys(customParameters).length > 0 ? (
             <div className="space-y-4">

@@ -48,7 +48,7 @@ const FinalResults = () => {
   const loadFinalResults = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:5000/api/get-final-results/${interviewId}`);
+      const response = await fetch(`http://localhost:5003/api/get-final-results/${interviewId}`);
       
       if (response.ok) {
         const data = await response.json();
@@ -982,10 +982,10 @@ const FinalResults = () => {
         <div className="bg-gray-800 rounded-lg p-6 mb-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="text-center">
-              <div className="text-3xl font-bold text-blue-400">{interview.overall_score?.toFixed(1) || 'N/A'}/10</div>
+              <div className="text-3xl font-bold text-blue-400">{interview?.overall_score?.toFixed(1) || 'N/A'}/10</div>
               <div className="text-sm text-gray-400">Overall Score</div>
-              <div className={`text-xs mt-1 px-2 py-1 rounded-full ${getScoreClass(interview.overall_score || 0)}`}>
-                {getScoreLabel(interview.overall_score || 0)} Performance
+              <div className={`text-xs mt-1 px-2 py-1 rounded-full ${getScoreClass(interview?.overall_score || 0)}`}>
+                {getScoreLabel(interview?.overall_score || 0)} Performance
               </div>
             </div>
             <div className="text-center">
@@ -993,7 +993,7 @@ const FinalResults = () => {
               <div className="text-sm text-gray-400">Parameters Assessed</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-yellow-400">{interview.total_questions || 0}</div>
+              <div className="text-3xl font-bold text-yellow-400">{interview?.total_questions || 0}</div>
               <div className="text-sm text-gray-400">Total Questions</div>
             </div>
              <div className="text-center">
@@ -1004,6 +1004,67 @@ const FinalResults = () => {
              </div>
           </div>
         </div>
+
+        {/* Personalized Questions Section */}
+        {reportData?.personalized_answers && reportData.personalized_answers.length > 0 && (
+          <div className="bg-gray-800 rounded-lg p-6 mb-6">
+            <h2 className="text-2xl font-bold mb-6 flex items-center">
+              <FileText className="h-6 w-6 mr-3" />
+              Personal Questions
+            </h2>
+            <p className="text-gray-400 mb-6">These questions are for review only - no scoring applied</p>
+            
+            <div className="space-y-6">
+              {reportData.personalized_answers.map((answer, index) => (
+                <div key={index} className="bg-gray-700 rounded-lg p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-white">
+                      Question {index + 1}
+                    </h3>
+                    <div className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+                      Review Only
+                    </div>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <p className="text-gray-300 text-lg leading-relaxed">
+                      {answer.question_text}
+                    </p>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium text-gray-400 mb-2">Answer:</h4>
+                    <p className="text-gray-300 bg-gray-600 p-3 rounded-lg">
+                      {answer.transcript || 'No transcript available'}
+                    </p>
+                  </div>
+                  
+                  <div className="flex gap-4">
+                    {answer.audio_url && (
+                      <button
+                        onClick={() => playAudio(answer.audio_url)}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                      >
+                        <Download className="h-4 w-4" />
+                        Play Audio
+                      </button>
+                    )}
+                    
+                    {answer.question_video_url && (
+                      <button
+                        onClick={() => playVideo(answer.question_video_url)}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                      >
+                        <Download className="h-4 w-4" />
+                        Play Video
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Unified Assessment Dashboard */}
         {reportData?.questions && reportData.questions.length > 0 && (

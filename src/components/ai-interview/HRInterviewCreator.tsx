@@ -36,6 +36,8 @@ interface FormData {
   customInstructions: string;
   interviewType: string;
   interviewMode: 'ai' | 'structured';
+  personalizedQuestionsEnabled: boolean;
+  personalizedQuestions: Array<{question: string, timeLimit: number}>;
 }
 
 interface CustomParameter {
@@ -71,7 +73,9 @@ const HRInterviewCreator = () => {
     totalQuestions: 1,
     customInstructions: '',
     interviewType: 'mixed',
-    interviewMode: 'ai'
+    interviewMode: 'ai',
+    personalizedQuestionsEnabled: false,
+    personalizedQuestions: []
   });
 
   const [isCreating, setIsCreating] = useState(false);
@@ -243,7 +247,7 @@ const HRInterviewCreator = () => {
       // Try to load from custom_role_parameters table
       const { data, error } = await supabase
         .from('custom_role_parameters')
-        .select('custom_parameters, structured_questions')
+        .select('custom_parameters, structured_questions, personalized_questions')
         .eq('role_name', formData.position)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
@@ -255,6 +259,24 @@ const HRInterviewCreator = () => {
         const record = data[0];
         const customParams = record.custom_parameters;
         const structuredQuestions = record.structured_questions;
+        const personalizedQuestions = record.personalized_questions;
+        
+        // Load personalized questions from database
+        if (personalizedQuestions && personalizedQuestions.length > 0) {
+          setFormData(prev => ({
+            ...prev,
+            personalizedQuestionsEnabled: true,
+            personalizedQuestions: personalizedQuestions
+          }));
+          // Recalculate duration with personalized questions
+          setTimeout(() => recalculateDurationWithPersonalizedQuestions(personalizedQuestions), 100);
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            personalizedQuestionsEnabled: false,
+            personalizedQuestions: []
+          }));
+        }
         
         if (formData.interviewMode === 'ai') {
           // Load AI interview parameters
@@ -394,6 +416,36 @@ const HRInterviewCreator = () => {
     }));
   };
 
+  const recalculateDurationWithPersonalizedQuestions = (personalizedQuestions: Array<{question: string, timeLimit: number}>) => {
+    // Calculate personalized questions duration
+    const personalizedDuration = personalizedQuestions.reduce((total, q) => total + q.timeLimit, 0);
+    
+    // Get base duration from parameters (without personalized questions)
+    let baseDuration = 30; // Default fallback
+    if (Object.keys(customParameters).length > 0) {
+      let calculatedDuration = 0;
+      Object.values(customParameters).forEach(param => {
+        const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
+        const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
+        const avgQuestions = (minQuestions + maxQuestions) / 2;
+        const answerTime = typeof param.max_time === 'string' ? parseFloat(param.max_time) : (param.max_time || 3);
+        const readingTime = 0.5; // 30 seconds per question
+        const totalTimePerQuestion = answerTime + readingTime;
+        calculatedDuration += avgQuestions * totalTimePerQuestion;
+      });
+      calculatedDuration += 2; // Add buffer
+      baseDuration = Math.max(5, Math.min(120, calculatedDuration));
+    }
+    
+    // Total duration = base duration + personalized questions duration
+    const totalDuration = baseDuration + personalizedDuration;
+    
+    setFormData(prev => ({
+      ...prev,
+      duration: totalDuration
+    }));
+  };
+
   const calculateDurationFromQuestions = (questions: number) => {
     // Calculate duration when user manually edits question count
     const calculatedDuration = Math.round(questions * 4 + 2);
@@ -477,7 +529,7 @@ const HRInterviewCreator = () => {
     try {
       console.log('🔄 Saving parameters for role:', formData.position, customParameters);
       
-      const response = await fetch('http://localhost:5000/api/custom-parameters', {
+      const response = await fetch('http://localhost:5003/api/custom-parameters', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -518,7 +570,9 @@ const HRInterviewCreator = () => {
       totalQuestions: 1,
       customInstructions: '',
       interviewType: 'mixed',
-      interviewMode: 'ai'
+      interviewMode: 'ai',
+      personalizedQuestionsEnabled: false,
+      personalizedQuestions: []
     });
     setCreatedInterviews([]);
   };
@@ -689,7 +743,7 @@ const HRInterviewCreator = () => {
         });
         console.log(`📤 Sending to server: total_questions=${formData.totalQuestions}, duration=${formData.duration}`);
         
-        const response = await fetch('http://localhost:5000/api/create-interview', {
+        const response = await fetch('http://localhost:5003/api/create-interview', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -702,7 +756,9 @@ const HRInterviewCreator = () => {
             total_questions: formData.totalQuestions,
             custom_instructions: formData.customInstructions,
             interview_type: formData.interviewType,
-            interview_mode: formData.interviewMode
+            interview_mode: formData.interviewMode,
+            personalized_questions_enabled: formData.personalizedQuestionsEnabled,
+            personalized_questions: formData.personalizedQuestions
           }),
         });
 
@@ -912,6 +968,42 @@ const HRInterviewCreator = () => {
                 Structured Interview: Pre-defined questions set by HR
               </p>
             </div>
+
+            {/* Personalized Questions Display - Loaded from Database */}
+            {formData.interviewMode === 'ai' && formData.personalizedQuestionsEnabled && formData.personalizedQuestions.length > 0 && (
+              <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center space-x-2">
+                  <div className="h-4 w-4 bg-blue-600 rounded flex items-center justify-center">
+                    <div className="h-2 w-2 bg-white rounded-full"></div>
+                  </div>
+                  <Label className="text-sm font-medium text-blue-800">
+                    Personalized Questions (Loaded from Configuration)
+                  </Label>
+                </div>
+                
+                <div className="space-y-3">
+                  <p className="text-xs text-blue-600">
+                    These personal questions will be asked before technical questions. They are for review only and won't be scored.
+                  </p>
+                  
+                  {formData.personalizedQuestions.map((question, index) => (
+                    <div key={index} className="p-3 bg-white rounded border">
+                      <div className="flex items-center justify-between mb-2">
+                        <Label className="text-sm font-medium text-gray-700">
+                          Question {index + 1}
+                        </Label>
+                        <div className="text-xs text-gray-500">
+                          {question.timeLimit} min
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-700 bg-gray-50 p-2 rounded">
+                        {question.question}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

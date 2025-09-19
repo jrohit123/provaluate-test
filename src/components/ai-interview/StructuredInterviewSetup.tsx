@@ -98,7 +98,9 @@ const StructuredInterviewSetup: React.FC<StructuredInterviewSetupProps> = ({
   };
 
   const calculateTotalDuration = () => {
-    return questions.reduce((total, q) => total + q.timeLimit, 0);
+    const questionTime = questions.reduce((total, q) => total + q.timeLimit, 0);
+    const bufferTime = 3; // 3 minutes buffer time
+    return questionTime + bufferTime;
   };
 
   const handleSave = async () => {
@@ -185,7 +187,7 @@ const StructuredInterviewSetup: React.FC<StructuredInterviewSetupProps> = ({
               <div className="bg-green-50 rounded-lg p-3 border border-green-200">
                 <div className="text-green-600 font-medium">Total Duration</div>
                 <div className="text-2xl font-bold text-green-800">{calculateTotalDuration()} min</div>
-                <div className="text-xs text-green-600">Sum of all time limits</div>
+                <div className="text-xs text-green-600">Questions + 3 min buffer</div>
               </div>
               <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
                 <div className="text-purple-600 font-medium">Categories</div>
