@@ -268,8 +268,6 @@ const HRInterviewCreator = () => {
             personalizedQuestionsEnabled: true,
             personalizedQuestions: personalizedQuestions
           }));
-          // Recalculate duration with personalized questions
-          setTimeout(() => recalculateDurationWithPersonalizedQuestions(personalizedQuestions), 100);
         } else {
           setFormData(prev => ({
             ...prev,
@@ -283,7 +281,15 @@ const HRInterviewCreator = () => {
           if (customParams && Object.keys(customParams).length > 0) {
             setCustomParameters(customParams);
             setParametersSaved(true);
-            calculateDuration(customParams);
+            
+            // Calculate duration and questions - if personalized questions exist, use the combined function
+            if (personalizedQuestions && personalizedQuestions.length > 0) {
+              // Use the combined function that handles both technical and personalized questions
+              recalculateDurationWithPersonalizedQuestions(personalizedQuestions, customParams);
+            } else {
+              // Only technical questions, use the regular calculation
+              calculateDuration(customParams);
+            }
             toast({
               title: "Parameters Loaded",
               description: `Automatically loaded existing AI parameters for ${formData.position}`,
@@ -416,15 +422,18 @@ const HRInterviewCreator = () => {
     }));
   };
 
-  const recalculateDurationWithPersonalizedQuestions = (personalizedQuestions: Array<{question: string, timeLimit: number}>) => {
+  const recalculateDurationWithPersonalizedQuestions = (personalizedQuestions: Array<{question: string, timeLimit: number}>, parameters?: CustomParameters) => {
     // Calculate personalized questions duration
     const personalizedDuration = personalizedQuestions.reduce((total, q) => total + q.timeLimit, 0);
     
+    // Use provided parameters or fall back to current customParameters state
+    const paramsToUse = parameters || customParameters;
+    
     // Get base duration from parameters (without personalized questions)
     let baseDuration = 30; // Default fallback
-    if (Object.keys(customParameters).length > 0) {
+    if (Object.keys(paramsToUse).length > 0) {
       let calculatedDuration = 0;
-      Object.values(customParameters).forEach(param => {
+      Object.values(paramsToUse).forEach(param => {
         const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
         const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
         const avgQuestions = (minQuestions + maxQuestions) / 2;
@@ -437,12 +446,40 @@ const HRInterviewCreator = () => {
       baseDuration = Math.max(5, Math.min(120, calculatedDuration));
     }
     
+    // Calculate total questions (technical + personalized) - use same logic as AIsetup
+    let technicalQuestions = 0;
+    Object.values(paramsToUse).forEach(param => {
+      const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
+      const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
+      const questionsPerParam = (minQuestions + maxQuestions) / 2;
+      technicalQuestions += questionsPerParam;
+    });
+    
+    // Round to nearest whole number for technical questions (no decimals)
+    technicalQuestions = Math.round(technicalQuestions);
+    
+    // Ensure minimum of 1 technical question
+    technicalQuestions = Math.max(1, technicalQuestions);
+    
+    const totalQuestions = technicalQuestions + personalizedQuestions.length;
+    
     // Total duration = base duration + personalized questions duration
     const totalDuration = baseDuration + personalizedDuration;
     
+    console.log('🔄 HRInterviewCreator Duration recalculation:', {
+      personalizedQuestions: personalizedQuestions.length,
+      personalizedDuration,
+      baseDuration,
+      totalDuration,
+      technicalQuestions,
+      totalQuestions,
+      usingProvidedParams: !!parameters
+    });
+    
     setFormData(prev => ({
       ...prev,
-      duration: totalDuration
+      duration: totalDuration,
+      totalQuestions: totalQuestions
     }));
   };
 

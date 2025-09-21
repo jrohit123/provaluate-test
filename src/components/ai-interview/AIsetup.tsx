@@ -486,11 +486,14 @@ const HRInterviewCreator = () => {
           console.log('🔄 Setting customParameters to:', paramsWithDefaults);
           setCustomParameters(paramsWithDefaults);
           setParametersSaved(true);
-          calculateDuration(paramsWithDefaults);
           
-          // Recalculate duration with personalized questions if they exist
+          // Calculate duration and questions - if personalized questions exist, use the combined function
           if (personalizedQuestions && personalizedQuestions.length > 0) {
-            recalculateDurationWithPersonalizedQuestions(personalizedQuestions);
+            // Use the combined function that handles both technical and personalized questions
+            recalculateDurationWithPersonalizedQuestions(personalizedQuestions, paramsWithDefaults);
+          } else {
+            // Only technical questions, use the regular calculation
+            calculateDuration(paramsWithDefaults);
           }
           
           // Only show toast if we haven't loaded this position before
@@ -545,21 +548,34 @@ const HRInterviewCreator = () => {
       return;
     }
 
-    let totalQuestions = 0; // Will be calculated and rounded to whole number
+    let technicalQuestions = 0; // Will be calculated and rounded to whole number
 
     // Calculate questions per parameter: (min + max) ÷ 2, then round to nearest whole number
     Object.values(parameters).forEach(param => {
       const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
       const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
       const questionsPerParam = (minQuestions + maxQuestions) / 2;
-      totalQuestions += questionsPerParam;
+      technicalQuestions += questionsPerParam;
     });
 
-    // Round to nearest whole number for interview questions (no decimals)
-    totalQuestions = Math.round(totalQuestions);
+    // Round to nearest whole number for technical questions (no decimals)
+    technicalQuestions = Math.round(technicalQuestions);
     
-    // Ensure minimum of 1 question
-    totalQuestions = Math.max(1, totalQuestions);
+    // Ensure minimum of 1 technical question
+    technicalQuestions = Math.max(1, technicalQuestions);
+    
+    // Add personalized questions to total
+    const personalizedQuestionsCount = formData.personalizedQuestionsEnabled ? formData.personalizedQuestions.length : 0;
+    const totalQuestions = technicalQuestions + personalizedQuestionsCount;
+    
+    console.log('🔍 calculateDuration debug:', {
+      technicalQuestions,
+      personalizedQuestionsEnabled: formData.personalizedQuestionsEnabled,
+      personalizedQuestions: formData.personalizedQuestions,
+      personalizedQuestionsCount,
+      totalQuestions,
+      formDataPersonalizedQuestions: formData.personalizedQuestions
+    });
     
     // Calculate duration based on answer time + reading time for each parameter
     let calculatedDuration = 0;
@@ -605,13 +621,15 @@ const HRInterviewCreator = () => {
     
     console.log('🔄 Duration calculation summary:', {
       parameters: Object.keys(parameters).length,
+      technicalQuestions,
+      personalizedQuestionsCount,
       totalQuestions,
       calculatedDuration: calculatedDuration.toFixed(2),
       buffer: 2,
       finalDuration,
       breakdown: {
         answerTime: (calculatedDuration - 2).toFixed(2),
-        readingTime: (totalQuestions * 0.5).toFixed(2),
+        readingTime: (technicalQuestions * 0.5).toFixed(2),
         buffer: 2
       },
       parameterDetails: Object.values(parameters).map(p => ({
@@ -626,7 +644,9 @@ const HRInterviewCreator = () => {
     console.log('🔄 Setting form data:', {
       previousDuration: formData.duration,
       calculatedDuration: finalDuration,
-      totalQuestions: totalQuestions
+      technicalQuestions,
+      personalizedQuestionsCount,
+      totalQuestions
     });
     
     setFormData(prev => ({ 
@@ -1075,15 +1095,18 @@ const HRInterviewCreator = () => {
     });
   };
 
-  const recalculateDurationWithPersonalizedQuestions = (personalizedQuestions: Array<{question: string, timeLimit: number}>) => {
+  const recalculateDurationWithPersonalizedQuestions = (personalizedQuestions: Array<{question: string, timeLimit: number}>, parameters?: CustomParameters) => {
     // Calculate personalized questions duration
     const personalizedDuration = personalizedQuestions.reduce((total, q) => total + q.timeLimit, 0);
     
+    // Use provided parameters or fall back to current customParameters state
+    const paramsToUse = parameters || customParameters;
+    
     // Get base duration from parameters (without personalized questions)
     let baseDuration = 30; // Default fallback
-    if (Object.keys(customParameters).length > 0) {
+    if (Object.keys(paramsToUse).length > 0) {
       let calculatedDuration = 0;
-      Object.values(customParameters).forEach(param => {
+      Object.values(paramsToUse).forEach(param => {
         const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
         const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
         const avgQuestions = (minQuestions + maxQuestions) / 2;
@@ -1099,9 +1122,37 @@ const HRInterviewCreator = () => {
     // Total duration = base duration + personalized questions duration
     const totalDuration = baseDuration + personalizedDuration;
     
+    // Calculate total questions (technical + personalized) - use same logic as calculateDuration
+    let technicalQuestions = 0;
+    Object.values(paramsToUse).forEach(param => {
+      const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
+      const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
+      const questionsPerParam = (minQuestions + maxQuestions) / 2;
+      technicalQuestions += questionsPerParam;
+    });
+    
+    // Round to nearest whole number for technical questions (no decimals)
+    technicalQuestions = Math.round(technicalQuestions);
+    
+    // Ensure minimum of 1 technical question
+    technicalQuestions = Math.max(1, technicalQuestions);
+    
+    const totalQuestions = technicalQuestions + personalizedQuestions.length;
+    
+    console.log('🔄 Duration recalculation:', {
+      personalizedQuestions: personalizedQuestions.length,
+      personalizedDuration,
+      baseDuration,
+      totalDuration,
+      technicalQuestions,
+      totalQuestions,
+      usingProvidedParams: !!parameters
+    });
+    
     setFormData(prev => ({
       ...prev,
-      duration: totalDuration
+      duration: totalDuration,
+      totalQuestions: totalQuestions
     }));
   };
 
@@ -1313,6 +1364,7 @@ const HRInterviewCreator = () => {
                       id="personalizedQuestionsEnabled"
                       checked={formData.personalizedQuestionsEnabled}
                       onChange={(e) => {
+                        if (parametersSaved) return; // Prevent changes when saved
                         const enabled = e.target.checked;
                         setFormData(prev => {
                           const newQuestions = enabled ? prev.personalizedQuestions : [];
@@ -1330,9 +1382,14 @@ const HRInterviewCreator = () => {
                           recalculateDurationWithPersonalizedQuestions([]);
                         }
                       }}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      disabled={parametersSaved}
+                      className={`h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ${
+                        parametersSaved ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                     />
-                    <Label htmlFor="personalizedQuestionsEnabled" className="text-sm font-medium text-blue-800">
+                    <Label htmlFor="personalizedQuestionsEnabled" className={`text-sm font-medium text-blue-800 ${
+                      parametersSaved ? 'opacity-50' : ''
+                    }`}>
                       Enable Personalized Questions (Optional)
                     </Label>
                   </div>
@@ -1349,7 +1406,7 @@ const HRInterviewCreator = () => {
                             <Label className="text-sm font-medium text-gray-700">
                               Question {index + 1}
                             </Label>
-                            {formData.personalizedQuestions.length > 1 && (
+                            {!parametersSaved && formData.personalizedQuestions.length > 1 && (
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -1366,40 +1423,52 @@ const HRInterviewCreator = () => {
                               </Button>
                             )}
                           </div>
-                          <Textarea
-                            value={question.question}
-                            onChange={(e) => {
-                              const newQuestions = [...formData.personalizedQuestions];
-                              newQuestions[index].question = e.target.value;
-                              setFormData(prev => ({ ...prev, personalizedQuestions: newQuestions }));
-                              // Recalculate duration when changing question text (though time doesn't change)
-                              recalculateDurationWithPersonalizedQuestions(newQuestions);
-                            }}
-                            placeholder="Enter your personal question here..."
-                            rows={2}
-                            className="resize-none"
-                          />
-                          <div className="flex items-center gap-2">
-                            <Label className="text-xs text-gray-600">Time Limit (minutes):</Label>
-                            <Input
-                              type="number"
-                              min="1"
-                              max="10"
-                              value={question.timeLimit}
+                          {parametersSaved ? (
+                            <div className="text-sm text-gray-700 bg-gray-50 p-2 rounded border">
+                              {question.question}
+                            </div>
+                          ) : (
+                            <Textarea
+                              value={question.question}
                               onChange={(e) => {
                                 const newQuestions = [...formData.personalizedQuestions];
-                                newQuestions[index].timeLimit = parseInt(e.target.value) || 3;
+                                newQuestions[index].question = e.target.value;
                                 setFormData(prev => ({ ...prev, personalizedQuestions: newQuestions }));
-                                // Recalculate duration when changing time limit
+                                // Recalculate duration when changing question text (though time doesn't change)
                                 recalculateDurationWithPersonalizedQuestions(newQuestions);
                               }}
-                              className="w-20 h-8 text-sm"
+                              placeholder="Enter your personal question here..."
+                              rows={2}
+                              className="resize-none"
                             />
+                          )}
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs text-gray-600">Time Limit (minutes):</Label>
+                            {parametersSaved ? (
+                              <div className="text-sm font-semibold text-gray-900">
+                                {question.timeLimit}
+                              </div>
+                            ) : (
+                              <Input
+                                type="number"
+                                min="1"
+                                max="10"
+                                value={question.timeLimit}
+                                onChange={(e) => {
+                                  const newQuestions = [...formData.personalizedQuestions];
+                                  newQuestions[index].timeLimit = parseInt(e.target.value) || 3;
+                                  setFormData(prev => ({ ...prev, personalizedQuestions: newQuestions }));
+                                  // Recalculate duration when changing time limit
+                                  recalculateDurationWithPersonalizedQuestions(newQuestions);
+                                }}
+                                className="w-20 h-8 text-sm"
+                              />
+                            )}
                           </div>
                         </div>
                       ))}
                       
-                      {formData.personalizedQuestions.length < 2 && (
+                      {!parametersSaved && formData.personalizedQuestions.length < 2 && (
                         <Button
                           type="button"
                           variant="outline"
@@ -1664,8 +1733,8 @@ const HRInterviewCreator = () => {
                 </Button>
               )}
               
-              {/* Always show Save Parameters button when parameters exist */}
-              {Object.keys(customParameters).length > 0 && (
+              {/* Show Save Parameters button only when parameters exist but not yet saved */}
+              {Object.keys(customParameters).length > 0 && !parametersSaved && (
                 <Button
                   onClick={saveParameters}
                   disabled={isSavingParameters}
@@ -1683,6 +1752,24 @@ const HRInterviewCreator = () => {
                     </>
                   )}
                 </Button>
+              )}
+              
+              {/* Show "Parameters Saved" indicator and Edit button when parameters are saved */}
+              {Object.keys(customParameters).length > 0 && parametersSaved && (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-green-100 text-green-800 rounded-lg border border-green-200">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-sm font-medium">Parameters Saved</span>
+                  </div>
+                  <Button
+                    onClick={() => setParametersSaved(false)}
+                    variant="outline"
+                    size="sm"
+                    className="text-blue-600 hover:text-blue-700 border-blue-300 hover:border-blue-400"
+                  >
+                    Edit Parameters
+                  </Button>
+                </div>
               )}
             </div>
 
