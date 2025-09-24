@@ -247,26 +247,56 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
     }
   };
 
-  const handleRemind = (interviewId: string) => {
+  const handleRemind = async (interviewId: string) => {
     const interview = interviews.find(i => i.id === interviewId);
     if (!interview) return;
 
-    // Create reminder email content
-    const interviewLink = `${window.location.origin}/interview/${interviewId}`;
-    const subject = `Reminder: Complete Your Interview - ${interview.position} Position`;
-    const body = `Hello ${interview.candidate_name},\n\nThis is a friendly reminder that you have a pending interview for the ${interview.position} position.\n\nPlease complete your interview by clicking the link below:\n${interviewLink}\n\nIf you have already completed the interview, please ignore this reminder.\n\nBest regards,\nHR Team`;
-    
-    // Open Gmail compose with pre-filled content (same approach as HRInterviewCreator)
-    const gmailLink = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(interview.candidate_email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.open(gmailLink, '_blank');
-    
-    // Update reminder state to show it was "sent" (opened in Gmail)
-    setReminderStates(prev => ({...prev, [interviewId]: 'sent'}));
-    
-    // Auto-reset to idle after 3 seconds
-    setTimeout(() => {
-      setReminderStates(prev => ({...prev, [interviewId]: 'idle'}));
-    }, 3000);
+    // Set sending state
+    setReminderStates(prev => ({...prev, [interviewId]: 'sending'}));
+
+    try {
+      const interviewLink = `${window.location.origin}/interview/${interviewId}`;
+      
+      const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          candidate_email: interview.candidate_email,
+          candidate_name: interview.candidate_name,
+          interview_link: interviewLink,
+          position: interview.position,
+          interview_type: interview.interview_type || 'mixed'
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setReminderStates(prev => ({...prev, [interviewId]: 'sent'}));
+        
+        // Auto-reset to idle after 3 seconds
+        setTimeout(() => {
+          setReminderStates(prev => ({...prev, [interviewId]: 'idle'}));
+        }, 3000);
+      } else {
+        setReminderStates(prev => ({...prev, [interviewId]: 'error'}));
+        
+        // Auto-reset to idle after 3 seconds
+        setTimeout(() => {
+          setReminderStates(prev => ({...prev, [interviewId]: 'idle'}));
+        }, 3000);
+      }
+    } catch (error) {
+      console.error('Error sending reminder email:', error);
+      setReminderStates(prev => ({...prev, [interviewId]: 'error'}));
+      
+      // Auto-reset to idle after 3 seconds
+      setTimeout(() => {
+        setReminderStates(prev => ({...prev, [interviewId]: 'idle'}));
+      }, 3000);
+    }
   };
 
   // Add error boundary for debugging

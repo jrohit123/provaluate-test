@@ -8,7 +8,11 @@ import {
   Award,
   XCircle,
   FileText,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ChevronDown,
+  ChevronUp,
+  Sun,
+  Moon
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ExcelJS from 'exceljs';
@@ -19,19 +23,23 @@ const FinalResults = () => {
   const [loading, setLoading] = useState(true);
   const [reportData, setReportData] = useState(null);
   const [selectedParameter, setSelectedParameter] = useState(null);
+  const [expandedQuestions, setExpandedQuestions] = useState(new Set());
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem('finalResultsTheme');
+    return saved ? saved === 'dark' : true; // Default to dark mode
+  });
 
-  // Audio and video playback functions
-  const playAudio = (audioUrl) => {
-    if (audioUrl) {
-      const audio = new Audio(audioUrl);
-      audio.play().catch(error => {
-        console.error('Error playing audio:', error);
-        toast.error('Failed to play audio');
-      });
-    }
+  // Theme toggle function
+  const toggleTheme = () => {
+    const newTheme = !isDarkMode;
+    setIsDarkMode(newTheme);
+    localStorage.setItem('finalResultsTheme', newTheme ? 'dark' : 'light');
   };
 
+  // Audio and video playback functions
+
   const [playingVideo, setPlayingVideo] = useState(null);
+  const [playingAudio, setPlayingAudio] = useState(null);
 
   const playVideo = (videoUrl) => {
     if (videoUrl) {
@@ -41,6 +49,29 @@ const FinalResults = () => {
 
   const closeVideo = () => {
     setPlayingVideo(null);
+  };
+
+  const playAudio = (audioUrl) => {
+    if (audioUrl) {
+      setPlayingAudio(audioUrl);
+    }
+  };
+
+  const closeAudio = () => {
+    setPlayingAudio(null);
+  };
+
+  // Toggle question expansion
+  const toggleQuestion = (questionId) => {
+    setExpandedQuestions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(questionId)) {
+        newSet.delete(questionId);
+      } else {
+        newSet.add(questionId);
+      }
+      return newSet;
+    });
   };
 
 
@@ -881,9 +912,10 @@ const FinalResults = () => {
   };
 
   const getScoreColor = (score) => {
-    if (score >= 8) return 'text-green-400';
-    if (score >= 6) return 'text-yellow-400';
-    return 'text-red-400';
+    if (score >= 8) return isDarkMode ? 'text-green-400' : 'text-green-600';
+    if (score >= 6) return isDarkMode ? 'text-yellow-400' : 'text-yellow-600';
+    if (score >= 4) return isDarkMode ? 'text-orange-400' : 'text-red-400';
+    return isDarkMode ? 'text-red-400' : 'text-red-400';
   };
 
   const getScoreLabel = (score) => {
@@ -894,18 +926,22 @@ const FinalResults = () => {
   };
 
   const getScoreClass = (score) => {
-    if (score >= 8) return 'bg-green-500';
-    if (score >= 6) return 'bg-yellow-500';
-    if (score >= 4) return 'bg-orange-500';
-    return 'bg-red-500';
+    if (score >= 8) return isDarkMode ? 'bg-green-500' : 'bg-green-600';
+    if (score >= 6) return isDarkMode ? 'bg-yellow-500' : 'bg-yellow-600';
+    if (score >= 4) return isDarkMode ? 'bg-orange-500' : 'bg-red-400';
+    return isDarkMode ? 'bg-red-500' : 'bg-red-500';
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className={`min-h-screen flex items-center justify-center transition-colors duration-300 ${
+        isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
+      }`}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="text-gray-300 mt-4">Loading final results...</p>
+          <p className={`mt-4 ${
+            isDarkMode ? 'text-gray-300' : 'text-gray-600'
+          }`}>Loading final results...</p>
         </div>
       </div>
     );
@@ -913,11 +949,19 @@ const FinalResults = () => {
 
   if (!reportData) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className={`min-h-screen flex items-center justify-center transition-colors duration-300 ${
+        isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
+      }`}>
         <div className="text-center">
-          <XCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-white mb-2">Results Not Found</h2>
-          <p className="text-gray-300 mb-4">The interview results could not be loaded.</p>
+          <XCircle className={`h-12 w-12 mx-auto mb-4 ${
+            isDarkMode ? 'text-red-500' : 'text-red-400'
+          }`} />
+          <h2 className={`text-xl font-semibold mb-2 ${
+            isDarkMode ? 'text-white' : 'text-gray-900'
+          }`}>Results Not Found</h2>
+          <p className={`mb-4 ${
+            isDarkMode ? 'text-gray-300' : 'text-gray-600'
+          }`}>The interview results could not be loaded.</p>
           <button
             onClick={() => navigate('/dashboard', { state: { activeSection: 'interview-dashboard' } })}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
@@ -932,15 +976,25 @@ const FinalResults = () => {
   const { interview, parameters } = reportData;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white w-full h-full">
+    <div className={`min-h-screen w-full h-full transition-colors duration-300 ${
+      isDarkMode 
+        ? 'bg-gray-900 text-white' 
+        : 'bg-gray-50 text-gray-900'
+    }`}>
       {/* Header */}
-      <div className="bg-gray-800 w-full">
+      <div className={`w-full transition-colors duration-300 ${
+        isDarkMode ? 'bg-gray-800' : 'bg-white border-b border-gray-200'
+      }`}>
         <div className="py-4 px-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <button
                 onClick={() => navigate('/dashboard', { state: { activeSection: 'interview-dashboard' } })}
-                className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
+                className={`flex items-center space-x-2 transition-colors ${
+                  isDarkMode 
+                    ? 'text-gray-300 hover:text-white' 
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
               >
                 <ArrowLeft className="h-5 w-5" />
                 <span>Back to Dashboard</span>
@@ -948,8 +1002,24 @@ const FinalResults = () => {
             </div>
             <div className="flex items-center space-x-4">
               <button
+                onClick={toggleTheme}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                  isDarkMode 
+                    ? 'bg-gray-700 hover:bg-gray-600 text-white' 
+                    : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200'
+                }`}
+                title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                <span>{isDarkMode ? 'Light' : 'Dark'}</span>
+              </button>
+              <button
                 onClick={downloadReport}
-                className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors"
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                  isDarkMode 
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                    : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'
+                }`}
                 title="Download comprehensive text report with all questions, answers, scores, feedback, audio URLs, and video URLs"
               >
                 <FileText className="h-4 w-4" />
@@ -958,7 +1028,11 @@ const FinalResults = () => {
 
               <button
                 onClick={downloadExcel}
-                className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg transition-colors"
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                  isDarkMode 
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
+                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
+                }`}
                 title="Download comprehensive Excel report with multiple sheets including overview, parameters, questions, answers, media files, and score analysis"
               >
                 <FileSpreadsheet className="h-4 w-4" />
@@ -966,7 +1040,11 @@ const FinalResults = () => {
               </button>
               <button
                 onClick={shareReport}
-                className="flex items-center space-x-2 bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition-colors"
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                  isDarkMode 
+                    ? 'bg-gray-700 hover:bg-gray-600 text-white' 
+                    : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200'
+                }`}
               >
                 <Share2 className="h-4 w-4" />
                 <span>Share</span>
@@ -979,97 +1057,51 @@ const FinalResults = () => {
       {/* Main Content */}
       <div className="py-8 px-4 w-full">
         {/* Interview Overview */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-8">
+        <div className={`rounded-lg p-6 mb-8 transition-colors duration-300 ${
+          isDarkMode ? 'bg-gray-800' : 'bg-white border border-gray-200 shadow-sm'
+        }`}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="text-center">
-              <div className="text-3xl font-bold text-blue-400">{interview?.overall_score?.toFixed(1) || 'N/A'}/10</div>
-              <div className="text-sm text-gray-400">Overall Score</div>
-              <div className={`text-xs mt-1 px-2 py-1 rounded-full ${getScoreClass(interview?.overall_score || 0)}`}>
+              <div className={`text-3xl font-bold ${
+                isDarkMode ? 'text-blue-400' : 'text-blue-600'
+              }`}>{interview?.overall_score?.toFixed(1) || 'N/A'}/10</div>
+              <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Overall Score</div>
+              <div className={`text-xs mt-1 px-2 py-1 rounded-full text-white ${getScoreClass(interview?.overall_score || 0)}`}>
                 {getScoreLabel(interview?.overall_score || 0)} Performance
               </div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-green-400">{parameters?.length || 0}</div>
-              <div className="text-sm text-gray-400">Parameters Assessed</div>
+              <div className={`text-3xl font-bold ${
+                isDarkMode ? 'text-green-400' : 'text-green-600'
+              }`}>{parameters?.length || 0}</div>
+              <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Parameters Assessed</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-yellow-400">{interview?.total_questions || 0}</div>
-              <div className="text-sm text-gray-400">Total Questions</div>
+              <div className={`text-3xl font-bold ${
+                isDarkMode ? 'text-yellow-400' : 'text-yellow-600'
+              }`}>{interview?.total_questions || 0}</div>
+              <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Questions</div>
             </div>
              <div className="text-center">
-               <div className="text-3xl font-bold text-purple-400">
+               <div className={`text-3xl font-bold ${
+                 isDarkMode ? 'text-purple-400' : 'text-purple-600'
+               }`}>
                  {interview.duration_minutes || 30} min
                </div>
-               <div className="text-sm text-gray-400">Duration</div>
+               <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Duration</div>
              </div>
           </div>
         </div>
 
-        {/* Personalized Questions Section */}
-        {reportData?.personalized_answers && reportData.personalized_answers.length > 0 && (
-          <div className="bg-gray-800 rounded-lg p-6 mb-6">
-            <h2 className="text-2xl font-bold mb-6 flex items-center">
-              <FileText className="h-6 w-6 mr-3" />
-              Personal Questions
-            </h2>
-            <p className="text-gray-400 mb-6">These questions are for review only - no scoring applied</p>
-            
-            <div className="space-y-6">
-              {reportData.personalized_answers.map((answer, index) => (
-                <div key={index} className="bg-gray-700 rounded-lg p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-white">
-                      Question {index + 1}
-                    </h3>
-                    <div className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-medium">
-                      Review Only
-                    </div>
-                  </div>
-                  
-                  <div className="mb-4">
-                    <p className="text-gray-300 text-lg leading-relaxed">
-                      {answer.question_text}
-                    </p>
-                  </div>
-                  
-                  <div className="mb-4">
-                    <h4 className="text-sm font-medium text-gray-400 mb-2">Answer:</h4>
-                    <p className="text-gray-300 bg-gray-600 p-3 rounded-lg">
-                      {answer.transcript || 'No transcript available'}
-                    </p>
-                  </div>
-                  
-                  <div className="flex gap-4">
-                    {answer.audio_url && (
-                      <button
-                        onClick={() => playAudio(answer.audio_url)}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                      >
-                        <Download className="h-4 w-4" />
-                        Play Audio
-                      </button>
-                    )}
-                    
-                    {answer.question_video_url && (
-                      <button
-                        onClick={() => playVideo(answer.question_video_url)}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
-                      >
-                        <Download className="h-4 w-4" />
-                        Play Video
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Unified Assessment Dashboard */}
         {reportData?.questions && reportData.questions.length > 0 && (
-          <div className="bg-gray-800 rounded-lg p-6">
-            <h2 className="text-2xl font-bold mb-8 flex items-center">
+          <div className={`rounded-lg p-6 transition-colors duration-300 ${
+            isDarkMode ? 'bg-gray-800' : 'bg-white border border-gray-200 shadow-sm'
+          }`}>
+            <h2 className={`text-2xl font-bold mb-8 flex items-center ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>
               <BarChart3 className="h-6 w-6 mr-3" />
               Assessment Dashboard
             </h2>
@@ -1079,7 +1111,9 @@ const FinalResults = () => {
               // Safety check - ensure data exists
               if (!reportData.questions || !reportData.answers) {
                 return (
-                  <div className="text-center py-12 text-gray-400">
+                  <div className={`text-center py-12 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
                     <Award className="w-16 h-16 mx-auto mb-4 opacity-50" />
                     <p className="text-lg">Loading assessment data...</p>
                     </div>
@@ -1107,15 +1141,35 @@ const FinalResults = () => {
                 }
               });
 
-              // Calculate average scores for each parameter
+              // Add Personal Questions as a parameter if they exist
+              if (reportData.personalized_answers && reportData.personalized_answers.length > 0) {
+                parameters['personal-questions'] = {
+                  name: 'Personal Questions',
+                  key: 'personal-questions',
+                  questions: reportData.personalized_answers.map((answer, index) => ({
+                    question: { question_text: answer.question_text, question_order: `personal-${index}` },
+                    answer: { ...answer, score: null } // No scoring for personal questions
+                  })),
+                  totalScore: 0,
+                  questionCount: reportData.personalized_answers.length,
+                  averageScore: null, // No scoring for personal questions
+                  isPersonal: true
+                };
+              }
+
+              // Calculate average scores for each parameter (except personal questions)
               Object.values(parameters).forEach((param: any) => {
-                param.averageScore = param.questionCount > 0 ? Math.round((param.totalScore / param.questionCount) * 10) / 10 : 0;
+                if (!param.isPersonal) {
+                  param.averageScore = param.questionCount > 0 ? Math.round((param.totalScore / param.questionCount) * 10) / 10 : 0;
+                }
               });
 
               // Check if we have any parameters with questions
               if (Object.keys(parameters).length === 0) {
                 return (
-                  <div className="text-center py-12 text-gray-400">
+                  <div className={`text-center py-12 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
                     <Award className="w-16 h-16 mx-auto mb-4 opacity-50" />
                     <p className="text-lg">No assessment data available</p>
                     <p className="text-sm">Assessment questions and answers are still being processed</p>
@@ -1133,40 +1187,72 @@ const FinalResults = () => {
                         onClick={() => setSelectedParameter(paramKey)}
                         className={`p-6 rounded-xl transition-all duration-200 text-left ${
                           selectedParameter === paramKey
-                            ? 'bg-blue-600 text-white shadow-lg transform scale-105'
-                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white hover:scale-102'
+                            ? isDarkMode 
+                              ? 'bg-blue-600 text-white shadow-lg transform scale-105'
+                              : 'bg-blue-50 text-blue-900 border-2 border-blue-200 shadow-lg transform scale-105'
+                            : isDarkMode 
+                              ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white hover:scale-102'
+                              : 'bg-white text-gray-800 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 hover:scale-102 shadow-sm hover:shadow-md'
                         }`}
                       >
                         <div className="space-y-4">
                           <div className="flex items-center justify-between">
                             <h4 className="font-bold text-lg leading-tight">{param.name}</h4>
-                            <div className={`text-3xl font-bold ${
-                              selectedParameter === paramKey ? 'text-white' : getScoreColor(param.averageScore)
-                            }`}>
-                              {param.averageScore}/10
-                    </div>
+                            {param.isPersonal ? (
+                              <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                                selectedParameter === paramKey && !isDarkMode
+                                  ? 'bg-blue-200 text-blue-800'
+                                  : isDarkMode
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-blue-100 text-blue-700 border border-blue-200'
+                              }`}>
+                                Review Only
+                              </div>
+                            ) : (
+                              <div className={`text-3xl font-bold ${
+                                selectedParameter === paramKey 
+                                  ? isDarkMode ? 'text-white' : 'text-blue-700'
+                                  : getScoreColor(param.averageScore)
+                              }`}>
+                                {param.averageScore}/10
+                              </div>
+                            )}
                           </div>
                           
                           <div className="space-y-3">
                             <div className="flex justify-between text-lg font-medium opacity-90">
-                              <span>Weight: {(() => {
-                                // Calculate weight based on question count relative to total
-                                const totalQuestions = Object.values(parameters).reduce((sum: number, p: any) => sum + (p.questionCount as number), 0) as number;
-                                const weight = totalQuestions > 0 ? Math.round(((param.questionCount as number) / totalQuestions) * 100) : 0;
-                                return weight;
-                              })()}%</span>
+                              {param.isPersonal ? (
+                                <span>No scoring applied</span>
+                              ) : (
+                                <span>Weight: {(() => {
+                                  // Calculate weight based on question count relative to total (excluding personal questions)
+                                  const technicalQuestions = Object.values(parameters).reduce((sum: number, p: any) => 
+                                    p.isPersonal ? sum : sum + (p.questionCount as number), 0) as number;
+                                  const weight = technicalQuestions > 0 ? Math.round(((param.questionCount as number) / technicalQuestions) * 100) : 0;
+                                  return weight;
+                                })()}%</span>
+                              )}
                               <span>{param.questionCount} questions</span>
                             </div>
                             
-                            {/* Performance Bar */}
-                            <div className="w-full bg-gray-600 rounded-full h-3">
-                              <div 
-                                className={`h-3 rounded-full transition-all duration-300 ${
-                                  selectedParameter === paramKey ? 'bg-white' : getScoreClass(param.averageScore)
-                                }`}
-                                style={{ width: `${param.averageScore * 10}%` }}
-                      ></div>
-                    </div>
+                            {/* Performance Bar - Only for scored parameters */}
+                            {!param.isPersonal ? (
+                              <div className={`w-full rounded-full h-3 ${
+                                isDarkMode ? 'bg-gray-600' : 'bg-gray-300'
+                              }`}>
+                                <div 
+                                  className={`h-3 rounded-full transition-all duration-300 ${
+                                    selectedParameter === paramKey 
+                                      ? isDarkMode ? 'bg-white' : 'bg-blue-600'
+                                      : getScoreClass(param.averageScore)
+                                  }`}
+                                  style={{ width: `${param.averageScore * 10}%` }}
+                                ></div>
+                              </div>
+                            ) : (
+                              /* Placeholder space for Personal Questions to maintain uniform card height */
+                              <div className="w-full h-3"></div>
+                            )}
                   </div>
                 </div>
                       </button>
@@ -1176,123 +1262,190 @@ const FinalResults = () => {
                   {/* Questions for Selected Parameter */}
                   {selectedParameter && parameters[selectedParameter] && (
             <div className="space-y-6">
-                      <div className="bg-gray-700 rounded-xl p-6 mb-6">
+                      <div className={`rounded-xl p-6 mb-6 transition-colors duration-300 ${
+                        isDarkMode ? 'bg-gray-700' : 'bg-gray-50 border border-gray-200 shadow-sm'
+                      }`}>
                         <div className="flex items-center justify-between">
                           <div>
-                            <h3 className="text-2xl font-bold text-white">
+                            <h3 className={`text-2xl font-bold ${
+                              isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>
                               {parameters[selectedParameter].name}
                             </h3>
-                            <p className="text-lg text-gray-300 mt-3 leading-relaxed">
-                              Detailed questions and feedback for this assessment area
+                            <p className={`text-lg mt-3 leading-relaxed ${
+                              isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                            }`}>
+                              {parameters[selectedParameter].isPersonal 
+                                ? 'These questions are for review only - no scoring applied'
+                                : 'Detailed questions and feedback for this assessment area'
+                              }
                             </p>
                           </div>
                           <div className="text-right">
-                            <div className={`text-4xl font-bold ${getScoreColor(parameters[selectedParameter].averageScore)}`}>
-                              {parameters[selectedParameter].averageScore}/10
-                            </div>
-                            <div className="text-lg text-gray-300 font-medium">
+                            {parameters[selectedParameter].isPersonal ? (
+                              <div className="bg-blue-600 text-white px-4 py-2 rounded-full text-lg font-medium">
+                                Review Only
+                              </div>
+                            ) : (
+                              <div className={`text-4xl font-bold ${getScoreColor(parameters[selectedParameter].averageScore)}`}>
+                                {parameters[selectedParameter].averageScore}/10
+                              </div>
+                            )}
+                            <div className={`text-lg font-medium ${
+                              isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                            }`}>
                               {parameters[selectedParameter].questionCount} questions
                             </div>
                           </div>
                         </div>
                       </div>
 
-                      {parameters[selectedParameter].questions.map(({ question, answer }, index) => (
-                        <div key={index} className="bg-gray-700 rounded-xl p-6">
-                          <div className="flex items-center justify-between mb-6">
-                            <h4 className="text-xl font-bold">Question {index + 1}</h4>
-                            <div className={`text-2xl font-bold ${getScoreColor(answer.score)}`}>
-                            {answer.score}/10
-                      </div>
-                    </div>
-                    
-                          <div className="mb-6">
-                            <p className="text-gray-200 text-lg leading-relaxed text-left">{question.question_text}</p>
-                    </div>
-
-                          <div className="mb-6">
-                            <h5 className="text-white font-bold mb-3 text-lg text-left">Answer:</h5>
-                            <p className="text-gray-200 text-lg leading-relaxed text-left">{answer.transcript || 'No transcript available'}</p>
-                        </div>
-
-                        {answer.audio_url && (
-                            <div className="mb-6">
-                              <h5 className="text-white font-bold mb-3 text-lg text-left">Audio Recording:</h5>
-                            <audio 
-                              controls 
-                              className="w-full"
-                              src={answer.audio_url}
+                      {parameters[selectedParameter].questions.map(({ question, answer }, index) => {
+                        const questionId = `${selectedParameter}-${index}`;
+                        const isExpanded = expandedQuestions.has(questionId);
+                        
+                        return (
+                          <div key={index} className={`rounded-xl overflow-hidden transition-colors duration-300 ${
+                            isDarkMode ? 'bg-gray-700' : 'bg-white border border-gray-200 shadow-sm'
+                          }`}>
+                            {/* Question Header - Always Visible */}
+                            <div 
+                              className={`p-6 cursor-pointer transition-colors ${
+                                isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-50'
+                              }`}
+                              onClick={() => toggleQuestion(questionId)}
                             >
-                              Your browser does not support the audio element.
-                            </audio>
-                          </div>
-                        )}
-
-                        {answer.question_video_url && (
-                            <div className="mb-6">
-                              <h5 className="text-white font-bold mb-3 text-lg text-left">Video:</h5>
-                              <div className="bg-gray-600 rounded-xl p-3">
-                                {/* Video Thumbnail/Preview - Click to play */}
-                                <div 
-                                  className="relative bg-black rounded-lg overflow-hidden cursor-pointer group"
-                                onClick={() => playVideo(answer.question_video_url)}
-                                  title="Click to play video"
-                              >
-                                <video
-                                  src={answer.question_video_url}
-                                    className="w-full h-56 object-cover transition-transform duration-300 group-hover:scale-105"
-                                  autoPlay
-                                  muted
-                                  loop
-                                  playsInline
-                                />
-                                  {/* Play button overlay */}
-                                  <div className="absolute inset-0 bg-black bg-opacity-30 group-hover:bg-opacity-10 transition-all duration-300 flex items-center justify-center">
-                                    <div className="bg-white bg-opacity-90 rounded-full p-3 group-hover:scale-110 transition-transform duration-300">
-                                      <svg className="w-8 h-8 text-gray-800 ml-1" fill="currentColor" viewBox="0 0 24 24">
-                                      <path d="M8 5v14l11-7z"/>
-                                    </svg>
-                                  </div>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                  <h4 className={`text-xl font-bold ${
+                                    isDarkMode ? 'text-white' : 'text-gray-900'
+                                  }`}>Question {index + 1}</h4>
+                                  {parameters[selectedParameter].isPersonal ? (
+                                    <div className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+                                      Review Only
+                                    </div>
+                                  ) : (
+                                    <div className={`text-2xl font-bold ${getScoreColor(answer.score)}`}>
+                                      {answer.score}/10
+                                    </div>
+                                  )}
                                 </div>
-                                  
-                                  {/* Download link - subtle and positioned at bottom right */}
-                                  <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                    <a
-                                      href={answer.question_video_url}
-                                      download
-                                      className="bg-black bg-opacity-70 hover:bg-opacity-90 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:scale-105"
-                                      onClick={(e) => e.stopPropagation()}
-                                      title="Download video"
-                                    >
-                                      Download
-                                    </a>
-                                  </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-sm ${
+                                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                  }`}>
+                                    {isExpanded ? 'Click to collapse' : 'Click to expand'}
+                                  </span>
+                                  {isExpanded ? (
+                                    <ChevronUp className={`h-5 w-5 ${
+                                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                    }`} />
+                                  ) : (
+                                    <ChevronDown className={`h-5 w-5 ${
+                                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                    }`} />
+                                  )}
+                                </div>
+                              </div>
+                              
+                              {/* Question Preview - Always Visible */}
+                              <div className="mt-3">
+                                <p className={`text-sm leading-relaxed ${
+                                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                }`}>
+                                  {question.question_text.length > 100 
+                                    ? `${question.question_text.substring(0, 100)}...` 
+                                    : question.question_text
+                                  }
+                                </p>
                               </div>
                             </div>
-                          </div>
-                        )}
+                            
+                            {/* Expandable Content */}
+                            {isExpanded && (
+                              <div className={`px-6 pb-6 border-t ${
+                                isDarkMode ? 'border-gray-600' : 'border-gray-200'
+                              }`}>
+                                <div className="pt-6 space-y-6">
+                                  {/* Full Question */}
+                                  <div>
+                                    <h5 className={`font-bold mb-3 text-lg ${
+                                      isDarkMode ? 'text-white' : 'text-gray-900'
+                                    }`}>Question:</h5>
+                                    <p className={`text-lg leading-relaxed ${
+                                      isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                                    }`}>{question.question_text}</p>
+                                  </div>
 
-                        {answer.feedback && (
-                            <div className="mb-6">
-                              <h5 className="text-white font-bold mb-3 text-lg text-left">AI Feedback:</h5>
-                              <p className="text-gray-200 text-lg leading-relaxed text-left">{answer.feedback}</p>
-                          </div>
-                        )}
+                                  {/* Answer */}
+                                  <div>
+                                    <h5 className={`font-bold mb-3 text-lg ${
+                                      isDarkMode ? 'text-white' : 'text-gray-900'
+                                    }`}>Answer:</h5>
+                                    <p className={`text-lg leading-relaxed ${
+                                      isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                                    }`}>{answer.transcript || 'No transcript available'}</p>
+                                  </div>
 
-                        {!answer.feedback && (
-                            <div className="mb-6">
-                              <h5 className="text-white font-bold mb-3 text-lg text-left">AI Feedback:</h5>
-                              <p className="text-gray-400 italic text-lg text-left">Feedback analysis pending - will be available soon</p>
+                                  {/* Audio/Video Buttons */}
+                                  <div className="flex gap-4">
+                                    {answer.audio_url && (
+                                      <button
+                                        onClick={() => playAudio(answer.audio_url)}
+                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                                      >
+                                        <Download className="h-4 w-4" />
+                                        Play Audio
+                                      </button>
+                                    )}
+                                    
+                                    {answer.question_video_url && (
+                                      <button
+                                        onClick={() => playVideo(answer.question_video_url)}
+                                        className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                                      >
+                                        <Download className="h-4 w-4" />
+                                        Play Video
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* AI Feedback - Only for scored parameters */}
+                                  {!parameters[selectedParameter].isPersonal && (
+                                    answer.feedback ? (
+                                      <div>
+                                        <h5 className={`font-bold mb-3 text-lg ${
+                                          isDarkMode ? 'text-white' : 'text-gray-900'
+                                        }`}>AI Feedback:</h5>
+                                        <p className={`text-lg leading-relaxed ${
+                                          isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                                        }`}>{answer.feedback}</p>
+                                      </div>
+                                    ) : (
+                                      <div>
+                                        <h5 className={`font-bold mb-3 text-lg ${
+                                          isDarkMode ? 'text-white' : 'text-gray-900'
+                                        }`}>AI Feedback:</h5>
+                                        <p className={`italic text-lg ${
+                                          isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                        }`}>Feedback analysis pending - will be available soon</p>
+                                      </div>
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 
                   {/* No Parameter Selected Message */}
                   {!selectedParameter && (
-                    <div className="text-center py-16 text-gray-400">
+                    <div className={`text-center py-16 ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`}>
                       <BarChart3 className="w-20 h-20 mx-auto mb-6 opacity-50" />
                       <p className="text-xl font-medium">Select a parameter above to view detailed questions and feedback</p>
                       <p className="text-lg mt-3 leading-relaxed">Each parameter card shows performance metrics and clicking reveals detailed questions, answers, audio, videos, and AI feedback</p>
@@ -1308,16 +1461,28 @@ const FinalResults = () => {
 
         {/* Complete Session Video */}
         {reportData.interview?.session_video_url && (
-          <div className="bg-gray-800 rounded-lg p-6 mb-6">
-            <h3 className="text-xl font-semibold mb-4">Complete Session Video</h3>
-            <div className="bg-gray-700 rounded-lg p-4">
+          <div className={`rounded-lg p-6 mb-6 transition-colors duration-300 ${
+            isDarkMode ? 'bg-gray-800' : 'bg-white border border-gray-200 shadow-sm'
+          }`}>
+            <h3 className={`text-xl font-semibold mb-4 ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>Complete Session Video</h3>
+            <div className={`rounded-lg p-4 transition-colors duration-300 ${
+              isDarkMode ? 'bg-gray-700' : 'bg-gray-50 border border-gray-200'
+            }`}>
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h4 className="font-medium text-white">🎥 Full Interview Session</h4>
-                  <p className="text-sm text-gray-300">
+                  <h4 className={`font-medium ${
+                    isDarkMode ? 'text-white' : 'text-gray-900'
+                  }`}>🎥 Full Interview Session</h4>
+                  <p className={`text-sm ${
+                    isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                  }`}>
                     Complete video recording from start to finish
                   </p>
-                  <p className="text-sm text-gray-400">
+                  <p className={`text-sm ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
                     Size: {reportData.interview.session_video_size ? `${(reportData.interview.session_video_size / 1024 / 1024).toFixed(1)} MB` : 'Unknown'} | Format: WebM
                   </p>
                 </div>
@@ -1337,9 +1502,15 @@ const FinalResults = () => {
                   </a>
                 </div>
               </div>
-              <div className="bg-gray-600 rounded p-3">
-                <h5 className="font-medium text-white mb-2">📹 This video contains the complete interview session including:</h5>
-                <ul className="text-sm text-gray-300 space-y-1">
+              <div className={`rounded p-3 transition-colors duration-300 ${
+                isDarkMode ? 'bg-gray-600' : 'bg-gray-100 border border-gray-300'
+              }`}>
+                <h5 className={`font-medium mb-2 ${
+                  isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>📹 This video contains the complete interview session including:</h5>
+                <ul className={`text-sm space-y-1 ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                }`}>
                   <li>• Candidate's facial expressions and body language</li>
                   <li>• Complete audio from all questions</li>
                   <li>• Full session duration: {reportData.interview.duration_minutes || 30} minutes</li>
@@ -1357,12 +1528,18 @@ const FinalResults = () => {
       {/* Video Modal */}
       {playingVideo && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+          <div className={`rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden transition-colors duration-300 ${
+            isDarkMode ? 'bg-gray-800' : 'bg-white shadow-xl'
+          }`}>
             <div className="flex items-center justify-between p-4">
-              <h3 className="text-lg font-semibold text-white">Question Video Player</h3>
+              <h3 className={`text-lg font-semibold ${
+                isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>Question Video Player</h3>
               <button
                 onClick={closeVideo}
-                className="text-gray-400 hover:text-white transition-colors"
+                className={`transition-colors ${
+                  isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'
+                }`}
               >
                 <XCircle className="h-6 w-6" />
               </button>
@@ -1377,6 +1554,59 @@ const FinalResults = () => {
               >
                 Your browser does not support the video element.
               </video>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Audio Modal */}
+      {playingAudio && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className={`rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden transition-colors duration-300 ${
+            isDarkMode ? 'bg-gray-800' : 'bg-white shadow-xl'
+          }`}>
+            <div className="flex items-center justify-between p-4">
+              <h3 className={`text-lg font-semibold ${
+                isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>Question Audio Player</h3>
+              <button
+                onClick={closeAudio}
+                className={`transition-colors ${
+                  isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                <XCircle className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className={`rounded-lg p-6 text-center transition-colors duration-300 ${
+                isDarkMode ? 'bg-gray-700' : 'bg-gray-50 border border-gray-200'
+              }`}>
+                <div className="mb-6">
+                  <div className="w-24 h-24 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Download className="h-12 w-12 text-white" />
+                  </div>
+                  <h4 className={`text-xl font-semibold mb-2 ${
+                    isDarkMode ? 'text-white' : 'text-gray-900'
+                  }`}>Audio Recording</h4>
+                  <p className={`${
+                    isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                  }`}>Question answer audio playback</p>
+                </div>
+                <audio
+                  controls
+                  autoPlay
+                  className="w-full max-w-md mx-auto"
+                  src={playingAudio}
+                >
+                  Your browser does not support the audio element.
+                </audio>
+                <div className={`mt-4 text-sm ${
+                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                }`}>
+                  Use the controls above to play, pause, and seek through the audio
+                </div>
+              </div>
             </div>
           </div>
         </div>

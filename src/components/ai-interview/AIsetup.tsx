@@ -1035,7 +1035,12 @@ const HRInterviewCreator = () => {
           max_questions: 5,
           max_time: 3,
           level: 'Regular' as 'Easy' | 'Regular' | 'Expert',
-          scoring_criteria: ['', '', '', '']
+          scoring_criteria: [
+            'Excellent (9-10): Demonstrates exceptional understanding and application',
+            'Good (7-8): Shows strong competency with minor areas for improvement',
+            'Average (5-6): Meets basic requirements with some gaps in knowledge',
+            'Below Average (1-4): Shows significant gaps and needs improvement'
+          ]
         }
       };
       
@@ -1249,7 +1254,7 @@ const HRInterviewCreator = () => {
       </div>
 
       {/* Interview Configuration Section */}
-      <Card>
+      <Card className="animate-fade-in">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
@@ -1613,7 +1618,7 @@ const HRInterviewCreator = () => {
 
       {/* Interview Summary Section */}
             {formData.position && Object.keys(customParameters).length > 0 && (
-        <Card>
+        <Card className="animate-fade-in">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
@@ -1699,8 +1704,106 @@ const HRInterviewCreator = () => {
       {/* Conditional Rendering based on Interview Mode */}
       {formData.interviewMode === 'ai' ? (
         <div>
+        {/* Parameter Weightage Summary Section */}
+        {formData.position && Object.keys(customParameters).length > 0 && (
+        <Card className="animate-fade-in">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              Parameter Weightage Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Total Weightage Display */}
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="text-green-600 font-medium text-lg">Total Weightage</div>
+                  <div className={`text-3xl font-bold ${calculateTotalWeightage() === 100 ? 'text-green-600' : 'text-red-600'}`}>
+                    {calculateTotalWeightage()}%
+                  </div>
+                </div>
+                <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  calculateTotalWeightage() === 100 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-red-100 text-red-800'
+                }`}>
+                  {calculateTotalWeightage() === 100 ? '✓ Balanced' : '⚠️ Unbalanced'}
+                </div>
+              </div>
+              
+              {/* Weightage Status Message */}
+              <div className={`mt-2 text-sm ${
+                calculateTotalWeightage() === 100 
+                  ? 'text-green-600' 
+                  : 'text-red-600'
+              }`}>
+                {calculateTotalWeightage() === 100 
+                  ? '✅ All parameters are properly balanced with 100% total weightage.'
+                  : `⚠️ Total weightage should equal 100%. Currently ${calculateTotalWeightage()}%. Please adjust parameter weights.`
+                }
+              </div>
+            </div>
+            
+            {/* Individual Parameter Weightages */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Object.entries(customParameters).map(([key, param], index) => (
+                <div key={key} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm font-medium text-gray-700 truncate" title={param.name}>
+                      {param.name}
+                    </div>
+                    <div className={`text-lg font-bold ${
+                      param.weight > 0 ? 'text-green-600' : 'text-gray-400'
+                    }`}>
+                      {param.weight}%
+                    </div>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="h-2 rounded-full transition-all duration-300"
+                      style={{ 
+                        width: `${param.weight}%`,
+                        backgroundColor: getWeightageColor(index, param.weight)
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            {/* Weightage Distribution Chart */}
+            {Object.keys(customParameters).length > 0 && (
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div className="text-sm font-medium text-gray-700 mb-3">Weightage Distribution</div>
+                <div className="flex h-8 rounded-lg overflow-hidden">
+                  {Object.entries(customParameters).map(([key, param], index) => (
+                    <div
+                      key={key}
+                      className="h-full transition-all duration-300 hover:opacity-80"
+                      style={{ 
+                        width: `${param.weight}%`,
+                        backgroundColor: getWeightageColor(index, param.weight)
+                      }}
+                      title={`${param.name}: ${param.weight}%`}
+                    ></div>
+                  ))}
+                </div>
+                <div className="flex justify-between text-xs text-gray-500 mt-2">
+                  <span>0%</span>
+                  <span>25%</span>
+                  <span>50%</span>
+                  <span>75%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        )}
+
         {/* AI Interview - Assessment Parameters Section */}
-        <Card>
+        <Card className="animate-fade-in">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="h-5 w-5" />
@@ -1805,13 +1908,16 @@ const HRInterviewCreator = () => {
                             {param.name}
                           </div>
                         ) : (
-                        <Input
-                          type="text"
-                          value={param.name}
-                          onChange={(e) => updateParameter(key, 'name', e.target.value)}
-                          placeholder="Parameter name"
-                          className="text-lg font-semibold bg-transparent border-none outline-none w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent rounded px-2 py-1"
-                        />
+                          <div className="w-full">
+                            <Label>Parameter Name</Label>
+                            <Input
+                              type="text"
+                              value={param.name}
+                              onChange={(e) => updateParameter(key, 'name', e.target.value)}
+                              placeholder="Enter parameter name..."
+                              className="w-full"
+                            />
+                          </div>
                         )}
                       </div>
                       <Button
@@ -2027,100 +2133,6 @@ const HRInterviewCreator = () => {
         </CardContent>
       </Card>
 
-        {/* Weightage Summary Section */}
-        {formData.position && Object.keys(customParameters).length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              Parameter Weightage Summary
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Total Weightage Display */}
-            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="text-green-600 font-medium text-lg">Total Weightage</div>
-                  <div className={`text-3xl font-bold ${calculateTotalWeightage() === 100 ? 'text-green-600' : 'text-red-600'}`}>
-                    {calculateTotalWeightage()}%
-                  </div>
-                </div>
-                <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  calculateTotalWeightage() === 100 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-red-100 text-red-800'
-                }`}>
-                  {calculateTotalWeightage() === 100 ? '✓ Balanced' : '⚠️ Unbalanced'}
-                </div>
-              </div>
-              
-              {/* Weightage Status Message */}
-              <div className={`mt-2 text-sm ${
-                calculateTotalWeightage() === 100 
-                  ? 'text-green-600' 
-                  : 'text-red-600'
-              }`}>
-                {calculateTotalWeightage() === 100 
-                  ? '✅ All parameters are properly balanced with 100% total weightage.'
-                  : `⚠️ Total weightage should equal 100%. Currently ${calculateTotalWeightage()}%. Please adjust parameter weights.`
-                }
-              </div>
-            </div>
-            
-            {/* Individual Parameter Weightages */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {Object.entries(customParameters).map(([key, param]) => (
-                <div key={key} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-sm font-medium text-gray-700 truncate" title={param.name}>
-                      {param.name}
-                    </div>
-                    <div className={`text-lg font-bold ${
-                      param.weight > 0 ? 'text-green-600' : 'text-gray-400'
-                    }`}>
-                      {param.weight}%
-                    </div>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${param.weight}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            {/* Weightage Distribution Chart */}
-            {Object.keys(customParameters).length > 0 && (
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                <div className="text-sm font-medium text-gray-700 mb-3">Weightage Distribution</div>
-                <div className="flex h-8 rounded-lg overflow-hidden">
-                  {Object.entries(customParameters).map(([key, param], index) => (
-                    <div
-                      key={key}
-                      className="h-full transition-all duration-300 hover:opacity-80"
-                      style={{ 
-                        width: `${param.weight}%`,
-                        backgroundColor: getWeightageColor(index, param.weight)
-                      }}
-                      title={`${param.name}: ${param.weight}%`}
-                    ></div>
-                  ))}
-                </div>
-                <div className="flex justify-between text-xs text-gray-500 mt-2">
-                  <span>0%</span>
-                  <span>25%</span>
-                  <span>50%</span>
-                  <span>75%</span>
-                  <span>100%</span>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        )}
         </div>
       ) : (
         /* Structured Interview Section */

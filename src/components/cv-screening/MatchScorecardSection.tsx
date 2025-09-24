@@ -4,7 +4,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { BarChart3, User, Eye, Download, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Filter, Check } from 'lucide-react';
+import { BarChart3, User, Eye, Download, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Filter, Check, Briefcase, Grid, CheckCircle } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -42,6 +42,10 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc'); // Default to descending (highest first)
   const [recommendationFilter, setRecommendationFilter] = useState<string>('all');
   const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set());
+  const [jobDescriptions, setJobDescriptions] = useState<any[]>([]);
+  const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => sessionStorage.getItem('selectedJDId') || '');
+  const [criteriaGrids, setCriteriaGrids] = useState<any[]>([]);
+  const [selectedCriteriaGridId, setSelectedCriteriaGridId] = useState<string>(() => sessionStorage.getItem('selectedCriteriaGridId') || '');
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -278,15 +282,12 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
       console.log('Current user:', user);
       console.log('Company ID:', companyId);
       
-      // Get selected JD and criteria from session storage
-      const selectedJDId = sessionStorage.getItem('selectedJDId');
-      const selectedCriteriaGridId = sessionStorage.getItem('selectedCriteriaGridId');
-      
-      console.log('Session - Selected JD ID:', selectedJDId);
-      console.log('Session - Selected Criteria Grid ID:', selectedCriteriaGridId);
+      // Use current state values instead of session storage for real-time updates
+      console.log('Current state - Selected JD ID:', selectedJobDescriptionId);
+      console.log('Current state - Selected Criteria Grid ID:', selectedCriteriaGridId);
 
-      if (!selectedJDId || !selectedCriteriaGridId) {
-        console.log('No JD or criteria selected in session, showing empty state');
+      if (!selectedJobDescriptionId || !selectedCriteriaGridId) {
+        console.log('No JD or criteria selected in current state, showing empty state');
         setCandidates([]);
         setLoading(false);
         return;
@@ -296,11 +297,11 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
       const { data: jdData, error: jdError } = await supabase
         .from('job_descriptions')
         .select('jd_file')
-        .eq('jd_id', selectedJDId)
+        .eq('jd_id', selectedJobDescriptionId)
         .single();
 
       if (jdError || !jdData?.jd_file) {
-        console.log('No JD file found for ID:', selectedJDId);
+        console.log('No JD file found for ID:', selectedJobDescriptionId);
         setCandidates([]);
         setLoading(false);
         return;
@@ -392,7 +393,118 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     } finally {
       setLoading(false);
     }
-  }, [user?.profile?.company_id, user?.company?.company_id, toast]);
+  }, [user?.profile?.company_id, user?.company?.company_id, selectedJobDescriptionId, selectedCriteriaGridId, toast]);
+
+  // Load job descriptions from database
+  const loadJobDescriptions = useCallback(async () => {
+    console.log('loadJobDescriptions called, user:', user);
+    console.log('Company ID:', user?.profile?.company_id);
+    
+    if (!user?.profile?.company_id) {
+      console.log('No company_id, returning early');
+      return;
+    }
+    
+    try {
+      console.log('Fetching job descriptions...');
+      const { data, error } = await supabase
+        .from('job_descriptions')
+        .select('jd_id, title, jd_file, created_at')
+        .eq('company_id', user.profile.company_id)
+        .order('created_at', { ascending: false });
+        
+      if (error) throw error;
+      console.log('Job descriptions loaded:', data);
+      console.log('Job descriptions array length:', data?.length);
+      console.log('First job description:', data?.[0]);
+      setJobDescriptions(data || []);
+    } catch (error) {
+      console.error('Error loading job descriptions:', error);
+    }
+  }, [user?.profile?.company_id]);
+
+  // Load criteria grids from database
+  const loadCriteriaGrids = useCallback(async () => {
+    console.log('loadCriteriaGrids called, user:', user);
+    console.log('User ID:', user?.id);
+    console.log('Company ID:', user?.profile?.company_id);
+    
+    if (!user?.id) {
+      console.log('No user ID, returning early');
+      return;
+    }
+
+    try {
+      console.log('Fetching criteria grids...');
+      const { data: grids, error } = await supabase
+        .from('criteria')
+        .select('criteria_id, criteria_name, grid, created_at')
+        .eq('created_by', user.id)
+        .eq('company_id', user.profile?.company_id)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      if (!grids || grids.length === 0) {
+        setCriteriaGrids([]);
+        return;
+      }
+
+      // Get unique grids by criteria_name (latest entry for each name)
+      const uniqueGrids = grids.reduce((acc: { [key: string]: any }, curr) => {
+        if (!acc[curr.criteria_name] || new Date(curr.created_at) > new Date(acc[curr.criteria_name].created_at)) {
+          acc[curr.criteria_name] = curr;
+        }
+        return acc;
+      }, {});
+
+      // Convert to format with criteria count
+      const formattedGrids = Object.values(uniqueGrids).map((grid: any) => {
+        let criteriaCount = 0;
+        if (grid.grid && Array.isArray(grid.grid)) {
+          criteriaCount = grid.grid.length;
+        }
+        return {
+          id: grid.criteria_id,
+          name: grid.criteria_name,
+          criteriaCount
+        };
+      });
+
+      console.log('Formatted criteria grids:', formattedGrids);
+      console.log('Criteria grids array length:', formattedGrids.length);
+      console.log('First criteria grid:', formattedGrids[0]);
+      setCriteriaGrids(formattedGrids);
+    } catch (error) {
+      console.error('Error loading criteria grids:', error);
+    }
+  }, [user?.id, user?.profile?.company_id]);
+
+  // Handle job description selection
+  const handleJobDescriptionSelect = (jdId: string) => {
+    setSelectedJobDescriptionId(jdId);
+    sessionStorage.setItem('selectedJDId', jdId);
+    
+    const selectedJD = jobDescriptions.find(jd => jd.jd_id === jdId);
+    toast({
+      title: "Job Description Selected",
+      description: `Selected: ${selectedJD?.title || 'Unknown Job'}`,
+    });
+    
+  };
+
+  // Handle criteria grid selection
+  const handleCriteriaGridSelect = (gridId: string) => {
+    setSelectedCriteriaGridId(gridId);
+    sessionStorage.setItem('selectedCriteriaGridId', gridId);
+    
+    const selectedGrid = criteriaGrids.find(grid => grid.id === gridId);
+    toast({
+      title: "Criteria Grid Selected",
+      description: `Selected: ${selectedGrid?.name || 'Unknown Grid'}`,
+    });
+    
+  };
 
   useEffect(() => {
     console.log('useEffect triggered, user:', user);
@@ -410,6 +522,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
       console.log('No company_id, not fetching reports');
     }
   }, [user?.profile?.company_id, user?.company?.company_id, fetchAssessmentReports, selectedCandidateData]);
+
 
   // Apply sorting and filtering whenever candidates, sortOrder, or recommendationFilter changes
   useEffect(() => {
@@ -431,6 +544,20 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     
     setFilteredCandidates(filtered);
   }, [candidates, sortOrder, recommendationFilter]);
+
+  // Load job descriptions and criteria grids when component mounts
+  useEffect(() => {
+    console.log('useEffect for loading data triggered, user:', user);
+    console.log('Company ID:', user?.profile?.company_id);
+    
+    if (user?.profile?.company_id) {
+      console.log('Loading job descriptions and criteria grids...');
+      loadJobDescriptions();
+      loadCriteriaGrids();
+    } else {
+      console.log('No company_id, not loading data');
+    }
+  }, [user?.profile?.company_id, loadJobDescriptions, loadCriteriaGrids]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -662,42 +789,103 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     return statuses.filter(status => status && status !== 'Under Review');
   };
 
-  if (loading) {
-    return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
-          <span className="ml-2 text-muted-foreground">Loading assessment reports...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (candidates.length === 0) {
-    const selectedJDId = sessionStorage.getItem('selectedJDId');
-    const selectedCriteriaGridId = sessionStorage.getItem('selectedCriteriaGridId');
-    
-    return (
-      <div className="p-6 space-y-6">
-        <div className="text-center py-12">
-          <User className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-muted-foreground mb-2">No Assessment Reports Found</h3>
-          <p className="text-muted-foreground">
-            {!selectedJDId || !selectedCriteriaGridId 
-              ? "Please select a Job Description and Evaluation Criteria to view assessment reports."
-              : "No candidate evaluations found for the selected Job Description and Evaluation Criteria. Upload resumes and run evaluations to see results here."
-            }
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   // Use filteredCandidates for display
   const displayCandidates = filteredCandidates;
 
   return (
     <div className="p-6 space-y-6">
+      {/* Job Description and Criteria Grid Selection - Always Visible */}
+      <div className="flex gap-4 items-center flex-wrap mb-6">
+        {/* Job Description Selection */}
+        <div className="flex items-center gap-2">
+          <Briefcase className="w-4 h-4 text-primary-600" />
+          <span className="text-sm text-gray-600 font-medium">Job:</span>
+          <Select value={selectedJobDescriptionId} onValueChange={handleJobDescriptionSelect}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Select job description..." />
+            </SelectTrigger>
+            <SelectContent>
+              {jobDescriptions.map(jd => (
+                <SelectItem key={jd.jd_id} value={jd.jd_id}>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{jd.title}</span>
+                    <span className="text-xs text-muted-foreground">
+                      Created: {new Date(jd.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectedJobDescriptionId && (
+            <CheckCircle className="w-4 h-4 text-green-600" />
+          )}
+        </div>
+
+        {/* Evaluation Criteria Selection */}
+        <div className="flex items-center gap-2">
+          <Grid className="w-4 h-4 text-primary-600" />
+          <span className="text-sm text-gray-600 font-medium">Criteria:</span>
+          <Select value={selectedCriteriaGridId} onValueChange={handleCriteriaGridSelect}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Select criteria..." />
+            </SelectTrigger>
+            <SelectContent>
+              {criteriaGrids.map(grid => (
+                <SelectItem key={grid.id} value={grid.id}>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{grid.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {grid.criteriaCount} parameters
+                    </span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+              </Select>
+              {selectedCriteriaGridId && (
+                <CheckCircle className="w-4 h-4 text-green-600" />
+              )}
+            </div>
+
+        {/* Recommendation Filter */}
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm text-gray-600 font-medium">Filter by:</span>
+          <Select value={recommendationFilter} onValueChange={handleRecommendationFilter}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="Filter by recommendation" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Recommendations</SelectItem>
+              {getAvailableRecommendations().map((status) => (
+                <SelectItem key={status} value={status}>
+                  {status}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        
+        {/* Sort Button */}
+        <Button variant="outline" size="sm" onClick={handleSortToggle}>
+          {sortOrder === 'desc' ? (
+            <ArrowDown className="w-4 h-4 mr-2" />
+          ) : (
+            <ArrowUp className="w-4 h-4 mr-2" />
+          )}
+          Sort {sortOrder === 'desc' ? 'High→Low' : 'Low→High'}
+        </Button>
+        
+        {/* Export Button */}
+        <Button variant="outline" size="sm" onClick={handleExportReport}>
+          <Download className="w-4 h-4 mr-2" />
+          Export Report
+        </Button>
+      </div>
+
+      {/* Header Section */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-primary-800 mb-2">All Results</h2>
@@ -707,45 +895,6 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
              of {candidates.length} candidates)
           </p>
         </div>
-        {/* Only show action buttons when not in single candidate mode (popup) */}
-        {!selectedCandidateData && (
-          <div className="flex gap-2 items-center">
-            {/* Recommendation Filter */}
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm text-gray-600 font-medium">Filter by:</span>
-              <Select value={recommendationFilter} onValueChange={handleRecommendationFilter}>
-                <SelectTrigger className="w-44">
-                  <SelectValue placeholder="Filter by recommendation" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Recommendations</SelectItem>
-                  {getAvailableRecommendations().map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {/* Sort Button */}
-            <Button variant="outline" size="sm" onClick={handleSortToggle}>
-              {sortOrder === 'desc' ? (
-                <ArrowDown className="w-4 h-4 mr-2" />
-              ) : (
-                <ArrowUp className="w-4 h-4 mr-2" />
-              )}
-              Sort {sortOrder === 'desc' ? 'High→Low' : 'Low→High'}
-            </Button>
-            
-            {/* Export Button */}
-            <Button variant="outline" size="sm" onClick={handleExportReport}>
-              <Download className="w-4 h-4 mr-2" />
-              Export Report
-            </Button>
-          </div>
-        )}
         {/* Show only export button when in single candidate mode */}
         {selectedCandidateData && (
           <div className="flex gap-2">
@@ -757,8 +906,32 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
         )}
       </div>
 
-      <div className="grid gap-6">
-        {displayCandidates.map((candidate) => (
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+          <span className="ml-2 text-muted-foreground">Loading assessment reports...</span>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && candidates.length === 0 && (
+        <div className="text-center py-12">
+          <User className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-muted-foreground mb-2">No Assessment Reports Found</h3>
+          <p className="text-muted-foreground">
+            {!selectedJobDescriptionId || !selectedCriteriaGridId 
+              ? "Please select a Job Description and Evaluation Criteria to view assessment reports."
+              : "No candidate evaluations found for the selected Job Description and Evaluation Criteria. Upload resumes and run evaluations to see results here."
+            }
+          </p>
+        </div>
+      )}
+
+      {/* Assessment Reports */}
+      {!loading && candidates.length > 0 && (
+        <div className="grid gap-6">
+          {displayCandidates.map((candidate) => (
           <Card key={candidate.id} className="p-6 mb-6 shadow-md rounded-xl bg-white">
             {/* Header Section */}
             <div className="flex justify-between items-start mb-6">
@@ -852,7 +1025,8 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
 
           </Card>
         ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

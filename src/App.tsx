@@ -29,6 +29,7 @@ import CustomParameterManager from "./components/ai-interview/CustomParameterMan
 
 import { supabase } from "@/integrations/supabase/client";
 import { InterviewProvider } from "@/contexts/InterviewContext";
+import { SessionProvider } from "@/contexts/SessionContext";
 import './App.css';
 
 const queryClient = new QueryClient();
@@ -62,7 +63,8 @@ const App = () => {
       <TooltipProvider>
         <BrowserRouter>
           <InterviewProvider>
-            <Routes>
+            <SessionProvider>
+              <Routes>
             {/* Authentication Routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
@@ -77,13 +79,6 @@ const App = () => {
             
             {/* Main Dashboard - Original CV Screening Interface - Protected */}
             <Route path="/dashboard" element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            } />
-            
-            {/* Direct Job Upload Section - Protected */}
-            <Route path="/cv-screening/job-upload" element={
               <ProtectedRoute>
                 <Dashboard />
               </ProtectedRoute>
@@ -109,6 +104,7 @@ const App = () => {
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<NotFound />} />
             </Routes>
+            </SessionProvider>
           </InterviewProvider>
           
           {/* Toast Providers */}

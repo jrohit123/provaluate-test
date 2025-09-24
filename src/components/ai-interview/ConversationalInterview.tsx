@@ -619,10 +619,25 @@ const ConversationalInterview = () => {
        setSubmissionStatus('uploading');
        
        try {
-         // Convert audio to base64
+         // Convert audio to base64 with error handling
          const reader = new FileReader();
+         
+         reader.onerror = (error) => {
+           console.error('❌ FileReader error:', error);
+           toast.error('Failed to process audio. Please try again.');
+           dispatch(interviewActions.setSubmitting(false));
+           setSubmissionStatus('idle');
+         };
+         
          reader.onload = async () => {
            const audioData = reader.result;
+           
+           // Validate audio data
+           if (!audioData || (typeof audioData === 'string' && audioData.length < 100)) {
+             throw new Error('Invalid audio data - too short or empty');
+           }
+           
+           console.log('✅ Audio data validated successfully');
            
            // Upload question video if available
            let questionVideoUrl = null;
@@ -683,14 +698,19 @@ const ConversationalInterview = () => {
            const answerController = new AbortController();
            const answerTimeout = setTimeout(() => answerController.abort(), API_CONFIG.TIMEOUTS.ANSWER_SUBMISSION);
            
-           try {
-             // Ensure we have a valid transcript
-             const finalTranscript = cleanedTranscript && cleanedTranscript.trim() !== "" 
-               ? cleanedTranscript 
-               : "No transcript provided";
-             
-             // Use audio data as-is (server.py handled large files fine)
-             let processedAudioData = audioData;
+           // Retry mechanism for first question submission
+           const maxRetries = 2;
+           let retryCount = 0;
+           
+           const attemptSubmission = async () => {
+             try {
+               // Ensure we have a valid transcript
+               const finalTranscript = cleanedTranscript && cleanedTranscript.trim() !== "" 
+                 ? cleanedTranscript 
+                 : "No transcript provided";
+               
+               // Use audio data as-is (server.py handled large files fine)
+               let processedAudioData = audioData;
              
              console.log('🔍 Final submission data:');
              console.log('🔍 interview_id:', interviewData.interviewId);
@@ -698,12 +718,36 @@ const ConversationalInterview = () => {
              console.log('🔍 audio_data size:', processedAudioData ? (typeof processedAudioData === 'string' ? processedAudioData.length : processedAudioData.byteLength) : 'null');
              console.log('🔍 question_video_url:', questionVideoUrl);
              
+             // Ensure we have valid question_id for first question
+             const questionId = currentQuestion?.id || currentQuestion?.question_id || `q${currentQuestionIndex}`;
+             
+             // Validate required fields before submission
+             if (!interviewData.interviewId) {
+               throw new Error('Interview ID is missing');
+             }
+             if (!questionId) {
+               throw new Error('Question ID is missing');
+             }
+             if (!finalTranscript || finalTranscript.trim() === '') {
+               throw new Error('Transcript is empty');
+             }
+             if (!processedAudioData) {
+               throw new Error('Audio data is missing');
+             }
+
+             console.log('🔍 Submission validation passed:');
+             console.log('🔍 interview_id:', interviewData.interviewId);
+             console.log('🔍 question_id:', questionId);
+             console.log('🔍 question_order:', currentQuestionIndex);
+             console.log('🔍 transcript length:', finalTranscript.length);
+             console.log('🔍 audio_data available:', !!processedAudioData);
+
              const response = await apiCall(API_CONFIG.ENDPOINTS.SUBMIT_ANSWER, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
                body: JSON.stringify({
                  interview_id: interviewData.interviewId,
-                 question_id: currentQuestion?.id || currentQuestion?.question_id || `q${currentQuestionIndex}`,
+                 question_id: questionId,
                  question_order: currentQuestionIndex,
                  transcript: finalTranscript, // Use final transcript
                  audio_data: processedAudioData, // Use processed audio data
@@ -766,10 +810,24 @@ const ConversationalInterview = () => {
                
              } else {
                console.error('❌ Answer submission failed with status:', response.status);
-               toast.error('Failed to submit answer');
-               // Reset states on failure
-               dispatch(interviewActions.setSubmitting(false));
-               setSubmissionStatus('idle');
+               const errorText = await response.text();
+               console.error('❌ Error response:', errorText);
+               
+               // Retry logic for first question
+               if (retryCount < maxRetries && currentQuestionIndex === 0) {
+                 retryCount++;
+                 console.log(`🔄 Retrying submission (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+                 toast.error(`Submission failed, retrying... (${retryCount}/${maxRetries})`);
+                 
+                 // Wait a bit before retry
+                 await new Promise(resolve => setTimeout(resolve, 1000));
+                 return attemptSubmission();
+               } else {
+                 toast.error('Failed to submit answer');
+                 // Reset states on failure
+                 dispatch(interviewActions.setSubmitting(false));
+                 setSubmissionStatus('idle');
+               }
              }
            } catch (fetchError) {
              clearTimeout(answerTimeout);
@@ -778,12 +836,28 @@ const ConversationalInterview = () => {
                toast.error('Submission timed out. Please try again.');
              } else {
                console.error('❌ Error during answer submission:', fetchError);
-               toast.error('Failed to submit answer. Please try again.');
+               
+               // Retry logic for first question
+               if (retryCount < maxRetries && currentQuestionIndex === 0) {
+                 retryCount++;
+                 console.log(`🔄 Retrying submission after error (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+                 toast.error(`Submission error, retrying... (${retryCount}/${maxRetries})`);
+                 
+                 // Wait a bit before retry
+                 await new Promise(resolve => setTimeout(resolve, 1000));
+                 return attemptSubmission();
+               } else {
+                 toast.error('Failed to submit answer. Please try again.');
+               }
              }
              // Reset states on error
              dispatch(interviewActions.setSubmitting(false));
              setSubmissionStatus('idle');
            }
+           };
+           
+           // Start the submission attempt
+           await attemptSubmission();
          };
          
          reader.readAsDataURL(audioBlob);
