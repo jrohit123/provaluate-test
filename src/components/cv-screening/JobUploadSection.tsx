@@ -702,10 +702,38 @@ export const JobUploadSection = () => {
         formData.append('company_id', user.profile.company_id);
 
         console.log('Sending complete workflow request to AI Analyzer...');
-        const response = await fetch(`${BACKEND_URLS.UNIFIED_SERVICE}/upload`, {
-          method: 'POST',
-          body: formData,
-        });
+        console.log('Backend URL:', `${BACKEND_URLS.UNIFIED_SERVICE}/upload`);
+        console.log('FormData contents:', Array.from(formData.entries()));
+        
+        // Test backend connectivity first
+        try {
+          const healthCheck = await fetch(`${BACKEND_URLS.UNIFIED_SERVICE}/health`);
+          console.log('Backend health check status:', healthCheck.status);
+          if (healthCheck.ok) {
+            const healthData = await healthCheck.json();
+            console.log('Backend health data:', healthData);
+          }
+        } catch (healthError) {
+          console.error('Backend health check failed:', healthError);
+          throw new Error(`Cannot connect to backend: ${healthError.message}`);
+        }
+        
+        let response;
+        try {
+          response = await fetch(`${BACKEND_URLS.UNIFIED_SERVICE}/upload`, {
+            method: 'POST',
+            body: formData,
+          });
+          
+          console.log('Response status:', response.status);
+          console.log('Response headers:', response.headers);
+        } catch (fetchError) {
+          console.error('Fetch error details:', fetchError);
+          console.error('Error name:', fetchError.name);
+          console.error('Error message:', fetchError.message);
+          console.error('Error stack:', fetchError.stack);
+          throw new Error(`Network error: ${fetchError.message}`);
+        }
 
         if (!response.ok) {
           throw new Error(`Upload workflow failed: ${await response.text()}`);
