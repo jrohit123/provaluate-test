@@ -23,8 +23,10 @@ const CandidateInterview = () => {
   useEffect(() => {
     const loadInterviewData = async () => {
       try {
+        console.log('🔍 CandidateInterview - Loading interview data for ID:', interviewId);
+        console.log('🔍 CandidateInterview - Full URL:', `http://localhost:5003/api/get-interview/${interviewId}`);
         setIsLoading(true);
-        const response = await fetch(`http://localhost:5000/api/get-interview/${interviewId}`, {
+        const response = await fetch(`http://localhost:5003/api/get-interview/${interviewId}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -34,13 +36,23 @@ const CandidateInterview = () => {
         if (response.ok) {
           const data = await response.json();
           console.log('📊 Interview data received:', data);
-          setInterviewData(data);
+          // The API returns nested structure: {interview: {...}, questions: [...], answers: [...]}
+          // We need to flatten it for the frontend components
+          const flattenedData = {
+            ...data.interview,
+            questions: data.questions || [],
+            answers: data.answers || []
+          };
+          setInterviewData(flattenedData);
           setIsLoading(false);
         } else if (response.status === 404) {
+          console.error('❌ Interview not found (404)');
           setError('Interview not found. Please check your link.');
           setIsLoading(false);
         } else {
+          console.error('❌ API Error:', response.status, response.statusText);
           const errorData = await response.json().catch(() => ({}));
+          console.error('❌ Error details:', errorData);
           setError(errorData.message || 'Failed to load interview. Please try again.');
           setIsLoading(false);
         }
@@ -64,7 +76,7 @@ const CandidateInterview = () => {
     
     try {
       // Call API to mark interview as started
-      const response = await fetch(`http://localhost:5000/api/start-interview/${interviewData.interview?.id}`, {
+      const response = await fetch(`http://localhost:5003/api/start-interview/${interviewData.id}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -84,15 +96,15 @@ const CandidateInterview = () => {
     // Navigate to the actual interview with the loaded data
     navigate('/conversational-interview', {
       state: {
-        interviewId: interviewData.interview?.id,
-        candidateName: interviewData.interview?.candidate_name,
-        position: interviewData.interview?.position,
-        duration: interviewData.interview?.duration_minutes,
+        interviewId: interviewData.id,
+        candidateName: interviewData.candidate_name,
+        position: interviewData.position,
+        duration: interviewData.duration_minutes,
         currentQuestion: interviewData.questions?.[0],
-        technicalWeight: interviewData.interview?.technical_weight,
-        softSkillsWeight: interviewData.interview?.soft_skills_weight,
-        customInstructions: interviewData.interview?.custom_instructions,
-        interviewType: interviewData.interview?.interview_type
+        technicalWeight: interviewData.technical_weight,
+        softSkillsWeight: interviewData.soft_skills_weight,
+        customInstructions: interviewData.custom_instructions,
+        interviewType: interviewData.interview_type
       }
     });
   };
@@ -133,10 +145,10 @@ const CandidateInterview = () => {
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6 text-center">
           <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            Welcome, {interviewData.interview?.candidate_name}!
+            Welcome, {interviewData.candidate_name}!
           </h1>
           <p className="text-gray-600 text-lg">
-            You're about to begin your {interviewData.interview?.position} interview
+            You're about to begin your {interviewData.position} interview
           </p>
         </div>
 
@@ -152,7 +164,7 @@ const CandidateInterview = () => {
               <User className="w-5 h-5 text-gray-600" />
                              <div>
                  <p className="text-sm text-gray-500">Position</p>
-                 <p className="font-medium">{interviewData.interview?.position}</p>
+                 <p className="font-medium">{interviewData.position}</p>
                </div>
              </div>
              
@@ -160,7 +172,7 @@ const CandidateInterview = () => {
                <Clock className="w-5 h-5 text-gray-600" />
                <div>
                  <p className="text-sm text-gray-500">Duration</p>
-                 <p className="font-medium">{interviewData.interview?.duration_minutes} minutes</p>
+                 <p className="font-medium">{interviewData.duration_minutes} minutes</p>
                </div>
             </div>
             
@@ -186,9 +198,9 @@ const CandidateInterview = () => {
             <h3 className="font-medium text-gray-800 mb-2">Interview Type</h3>
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                              <p className="text-blue-800">
-                 {interviewData.interview?.interview_type === 'technical' && '💻 Technical Interview'}
-                 {interviewData.interview?.interview_type === 'behavioral' && '🤝 Behavioral Interview'}
-                 {interviewData.interview?.interview_type === 'mixed' && '🎯 Mixed (Technical + Behavioral) Interview'}
+                 {interviewData.interview_type === 'technical' && '💻 Technical Interview'}
+                 {interviewData.interview_type === 'behavioral' && '🤝 Behavioral Interview'}
+                 {interviewData.interview_type === 'mixed' && '🎯 Mixed (Technical + Behavioral) Interview'}
                </p>
             </div>
           </div>
@@ -204,7 +216,7 @@ const CandidateInterview = () => {
           </div>
 
                      {/* Custom Instructions */}
-           {interviewData.interview?.custom_instructions && (
+           {interviewData.custom_instructions && (
              <div className="mb-6">
                <h3 className="font-medium text-gray-800 mb-2">Special Instructions</h3>
                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">

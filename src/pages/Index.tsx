@@ -9,7 +9,7 @@ const Index = () => {
     // Check if user is authenticated
     const isAuthenticated = localStorage.getItem('recruitai_auth') === 'true';
     if (isAuthenticated) {
-      navigate('/services');
+      navigate('/dashboard?section=main-dashboard');
     } else {
       // Redirect to login since this is the main entry point
       navigate('/');

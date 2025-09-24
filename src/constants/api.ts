@@ -1,6 +1,6 @@
 // API Configuration
 export const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:5000',
+  BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:5003',
   ENDPOINTS: {
     // Interview Management
     CREATE_INTERVIEW: '/api/create-interview',
@@ -33,11 +33,12 @@ export const API_CONFIG = {
   },
   TIMEOUTS: {
     DEFAULT: 30000, // 30 seconds
-    VIDEO_UPLOAD: 90000, // 1.5 minutes
+    VIDEO_UPLOAD: 180000, // 3 minutes (increased for large video files)
     ANSWER_SUBMISSION: 300000, // 5 minutes
     GENERATE_QUESTION: 120000, // 2 minutes for question generation
-    FILE_READER: 10000, // 10 seconds
+    FILE_READER: 15000, // 15 seconds (increased for large audio files)
     HEARTBEAT: 30000, // 30 seconds
+    AUDIO_PROCESSING: 120000, // 2 minutes for audio transcription
   },
   RETRY: {
     MAX_ATTEMPTS: 3,

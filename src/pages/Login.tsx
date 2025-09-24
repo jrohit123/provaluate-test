@@ -81,7 +81,7 @@ const Login = () => {
           title: "Welcome back!",
           description: "You've been logged in successfully.",
         });
-        navigate('/services');
+        navigate('/dashboard?section=main-dashboard');
       }
     } catch (error: any) {
       toast({

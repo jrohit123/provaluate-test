@@ -14,7 +14,9 @@ import {
   Save,
   Target,
   Loader2,
-  Link
+  Link,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,6 +38,8 @@ interface FormData {
   customInstructions: string;
   interviewType: string;
   interviewMode: 'ai' | 'structured';
+  personalizedQuestionsEnabled: boolean;
+  personalizedQuestions: Array<{question: string, timeLimit: number}>;
 }
 
 interface CustomParameter {
@@ -71,7 +75,9 @@ const HRInterviewCreator = () => {
     totalQuestions: 1,
     customInstructions: '',
     interviewType: 'mixed',
-    interviewMode: 'ai'
+    interviewMode: 'ai',
+    personalizedQuestionsEnabled: false,
+    personalizedQuestions: []
   });
 
   const [isCreating, setIsCreating] = useState(false);
@@ -81,6 +87,9 @@ const HRInterviewCreator = () => {
   const [isSavingParameters, setIsSavingParameters] = useState(false);
   const [parametersSaved, setParametersSaved] = useState(false);
   const [jobDescriptions, setJobDescriptions] = useState<any[]>([]);
+  const [expandedParameters, setExpandedParameters] = useState(new Set());
+  const [structuredQuestions, setStructuredQuestions] = useState<any[]>([]);
+  const [sendingEmails, setSendingEmails] = useState(new Set());
 
   // Check for selected candidates from View All Results
   useEffect(() => {
@@ -233,8 +242,14 @@ const HRInterviewCreator = () => {
     if (!formData.position) {
       setCustomParameters({});
       setParametersSaved(false);
+      setStructuredQuestions([]);
       return;
     }
+    
+    // Clear all parameters when loading new position
+    setCustomParameters({});
+    setParametersSaved(false);
+    setStructuredQuestions([]);
     
     setIsLoadingParameters(true);
     try {
@@ -243,7 +258,7 @@ const HRInterviewCreator = () => {
       // Try to load from custom_role_parameters table
       const { data, error } = await supabase
         .from('custom_role_parameters')
-        .select('custom_parameters, structured_questions')
+        .select('custom_parameters, structured_questions, personalized_questions')
         .eq('role_name', formData.position)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
@@ -255,13 +270,37 @@ const HRInterviewCreator = () => {
         const record = data[0];
         const customParams = record.custom_parameters;
         const structuredQuestions = record.structured_questions;
+        const personalizedQuestions = record.personalized_questions;
+        
+        // Load personalized questions from database
+        if (personalizedQuestions && personalizedQuestions.length > 0) {
+          setFormData(prev => ({
+            ...prev,
+            personalizedQuestionsEnabled: true,
+            personalizedQuestions: personalizedQuestions
+          }));
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            personalizedQuestionsEnabled: false,
+            personalizedQuestions: []
+          }));
+        }
         
         if (formData.interviewMode === 'ai') {
           // Load AI interview parameters
           if (customParams && Object.keys(customParams).length > 0) {
             setCustomParameters(customParams);
             setParametersSaved(true);
-            calculateDuration(customParams);
+            
+            // Calculate duration and questions - if personalized questions exist, use the combined function
+            if (personalizedQuestions && personalizedQuestions.length > 0) {
+              // Use the combined function that handles both technical and personalized questions
+              recalculateDurationWithPersonalizedQuestions(personalizedQuestions, customParams);
+            } else {
+              // Only technical questions, use the regular calculation
+              calculateDuration(customParams);
+            }
             toast({
               title: "Parameters Loaded",
               description: `Automatically loaded existing AI parameters for ${formData.position}`,
@@ -285,6 +324,7 @@ const HRInterviewCreator = () => {
             // For structured interviews, we don't need custom parameters
             setCustomParameters({});
             setParametersSaved(true);
+            setStructuredQuestions(structuredQuestions);
             
             // Calculate duration from structured questions
             calculateDurationFromStructuredQuestions(structuredQuestions);
@@ -305,17 +345,20 @@ const HRInterviewCreator = () => {
           } else {
             setCustomParameters({});
             setParametersSaved(false);
+            setStructuredQuestions([]);
           }
         }
       } else {
         // No existing data found
         setCustomParameters({});
         setParametersSaved(false);
+        setStructuredQuestions([]);
       }
     } catch (error) {
       console.error('Error loading parameters:', error);
       setCustomParameters({});
       setParametersSaved(false);
+      setStructuredQuestions([]);
     } finally {
       setIsLoadingParameters(false);
     }
@@ -394,6 +437,67 @@ const HRInterviewCreator = () => {
     }));
   };
 
+  const recalculateDurationWithPersonalizedQuestions = (personalizedQuestions: Array<{question: string, timeLimit: number}>, parameters?: CustomParameters) => {
+    // Calculate personalized questions duration
+    const personalizedDuration = personalizedQuestions.reduce((total, q) => total + q.timeLimit, 0);
+    
+    // Use provided parameters or fall back to current customParameters state
+    const paramsToUse = parameters || customParameters;
+    
+    // Get base duration from parameters (without personalized questions)
+    let baseDuration = 30; // Default fallback
+    if (Object.keys(paramsToUse).length > 0) {
+      let calculatedDuration = 0;
+      Object.values(paramsToUse).forEach(param => {
+        const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
+        const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
+        const avgQuestions = (minQuestions + maxQuestions) / 2;
+        const answerTime = typeof param.max_time === 'string' ? parseFloat(param.max_time) : (param.max_time || 3);
+        const readingTime = 0.5; // 30 seconds per question
+        const totalTimePerQuestion = answerTime + readingTime;
+        calculatedDuration += avgQuestions * totalTimePerQuestion;
+      });
+      calculatedDuration += 2; // Add buffer
+      baseDuration = Math.max(5, Math.min(120, calculatedDuration));
+    }
+    
+    // Calculate total questions (technical + personalized) - use same logic as AIsetup
+    let technicalQuestions = 0;
+    Object.values(paramsToUse).forEach(param => {
+      const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
+      const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
+      const questionsPerParam = (minQuestions + maxQuestions) / 2;
+      technicalQuestions += questionsPerParam;
+    });
+    
+    // Round to nearest whole number for technical questions (no decimals)
+    technicalQuestions = Math.round(technicalQuestions);
+    
+    // Ensure minimum of 1 technical question
+    technicalQuestions = Math.max(1, technicalQuestions);
+    
+    const totalQuestions = technicalQuestions + personalizedQuestions.length;
+    
+    // Total duration = base duration + personalized questions duration
+    const totalDuration = baseDuration + personalizedDuration;
+    
+    console.log('🔄 HRInterviewCreator Duration recalculation:', {
+      personalizedQuestions: personalizedQuestions.length,
+      personalizedDuration,
+      baseDuration,
+      totalDuration,
+      technicalQuestions,
+      totalQuestions,
+      usingProvidedParams: !!parameters
+    });
+    
+    setFormData(prev => ({
+      ...prev,
+      duration: totalDuration,
+      totalQuestions: totalQuestions
+    }));
+  };
+
   const calculateDurationFromQuestions = (questions: number) => {
     // Calculate duration when user manually edits question count
     const calculatedDuration = Math.round(questions * 4 + 2);
@@ -455,13 +559,22 @@ const HRInterviewCreator = () => {
     }
   }, [formData.position, formData.interviewMode, loadParameters]);
 
-  // Clear parameters when switching to structured mode
+  // Clear parameters when switching modes
   useEffect(() => {
     if (formData.interviewMode === 'structured') {
       setCustomParameters({});
       setParametersSaved(false);
+    } else if (formData.interviewMode === 'ai') {
+      setStructuredQuestions([]);
     }
   }, [formData.interviewMode]);
+
+  // Clear all data when position changes
+  useEffect(() => {
+    setCustomParameters({});
+    setParametersSaved(false);
+    setStructuredQuestions([]);
+  }, [formData.position]);
 
 
   const saveParameters = async () => {
@@ -477,7 +590,7 @@ const HRInterviewCreator = () => {
     try {
       console.log('🔄 Saving parameters for role:', formData.position, customParameters);
       
-      const response = await fetch('http://localhost:5000/api/custom-parameters', {
+      const response = await fetch('http://localhost:5003/api/custom-parameters', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -518,7 +631,9 @@ const HRInterviewCreator = () => {
       totalQuestions: 1,
       customInstructions: '',
       interviewType: 'mixed',
-      interviewMode: 'ai'
+      interviewMode: 'ai',
+      personalizedQuestionsEnabled: false,
+      personalizedQuestions: []
     });
     setCreatedInterviews([]);
   };
@@ -559,52 +674,184 @@ const HRInterviewCreator = () => {
     }
   };
 
-  const sendInterviewLink = () => {
+  const sendInterviewLink = async () => {
     if (createdInterviews.length > 0) {
       const interviewType = formData.interviewType || 'mixed';
       
-      if (createdInterviews.length === 1) {
-        // Single candidate - send individual email
-        const interview = createdInterviews[0];
-        const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
-        const template = getEmailTemplate(interview.candidate_name, interviewType, interviewLink);
-        
-        const gmailLink = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(interview.candidate_email)}&su=${encodeURIComponent(template.subject)}&body=${encodeURIComponent(template.body)}`;
-        window.open(gmailLink, '_blank');
-      } else {
-        // Multiple candidates - send bulk email with all links
-        const emailList = createdInterviews.map(i => i.candidate_email).join(',');
-        const template = getEmailTemplate('', interviewType);
-        const allLinks = createdInterviews.map(interview => 
-          `${interview.candidate_name}: ${window.location.origin}/interview/${interview.interview_id}`
-        ).join('\n\n');
-        const emailBody = template.body.replace('{INTERVIEW_LINK}', allLinks);
-        
-        const gmailLink = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(emailList)}&su=${encodeURIComponent(template.subject)}&body=${encodeURIComponent(emailBody)}`;
-        window.open(gmailLink, '_blank');
+      try {
+        if (createdInterviews.length === 1) {
+          // Single candidate - send individual email
+          const interview = createdInterviews[0];
+          const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
+          
+          const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              candidate_email: interview.candidate_email,
+              candidate_name: interview.candidate_name,
+              interview_link: interviewLink,
+              position: formData.position,
+              interview_type: interviewType
+            })
+          });
+          
+          const result = await response.json();
+          
+          if (result.success) {
+            toast({
+              title: "Email Sent Successfully",
+              description: `Interview email sent to ${interview.candidate_name} (${interview.candidate_email})`,
+            });
+          } else {
+            toast({
+              title: "Email Failed",
+              description: result.message || "Failed to send email",
+              variant: "destructive",
+            });
+          }
+        } else {
+          // Multiple candidates - send individual emails to each
+          let successCount = 0;
+          let failCount = 0;
+          
+          for (const interview of createdInterviews) {
+            try {
+              const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
+              
+              const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  candidate_email: interview.candidate_email,
+                  candidate_name: interview.candidate_name,
+                  interview_link: interviewLink,
+                  position: formData.position,
+                  interview_type: interviewType
+                })
+              });
+              
+              const result = await response.json();
+              
+              if (result.success) {
+                successCount++;
+              } else {
+                failCount++;
+              }
+              
+              // Small delay between emails to avoid overwhelming the server
+              await new Promise(resolve => setTimeout(resolve, 500));
+              
+            } catch (error) {
+              failCount++;
+            }
+          }
+          
+          if (successCount > 0 && failCount === 0) {
+            toast({
+              title: "All Emails Sent Successfully",
+              description: `Interview emails sent to all ${successCount} candidates`,
+            });
+          } else if (successCount > 0 && failCount > 0) {
+            toast({
+              title: "Partial Success",
+              description: `Sent to ${successCount} candidates, failed for ${failCount} candidates`,
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Email Failed",
+              description: "Failed to send emails to all candidates",
+              variant: "destructive",
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error sending emails:', error);
+        toast({
+          title: "Email Error",
+          description: "Failed to send emails. Please check your connection and try again.",
+          variant: "destructive",
+        });
       }
     }
   };
 
-  const sendIndividualEmails = () => {
+  const sendIndividualEmails = async () => {
     if (createdInterviews.length > 0) {
       const interviewType = formData.interviewType || 'mixed';
       
-      // Send individual emails to each candidate with their specific interview link
-      createdInterviews.forEach((interview, index) => {
-        setTimeout(() => {
-          const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
-          const template = getEmailTemplate(interview.candidate_name, interviewType, interviewLink);
-          
-          const gmailLink = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(interview.candidate_email)}&su=${encodeURIComponent(template.subject)}&body=${encodeURIComponent(template.body)}`;
-          window.open(gmailLink, '_blank');
-        }, index * 1000); // Stagger emails by 1 second to avoid overwhelming Gmail
-      });
-      
-      toast({
-        title: "Individual Emails Opening",
-        description: `Opening ${createdInterviews.length} individual Gmail compose windows with ${interviewType} interview templates...`,
-      });
+      try {
+        let successCount = 0;
+        let failCount = 0;
+        
+        // Send individual emails to each candidate with their specific interview link
+        for (const [index, interview] of createdInterviews.entries()) {
+          try {
+            const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
+            
+            const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                candidate_email: interview.candidate_email,
+                candidate_name: interview.candidate_name,
+                interview_link: interviewLink,
+                position: formData.position,
+                interview_type: interviewType
+              })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+              successCount++;
+            } else {
+              failCount++;
+            }
+            
+            // Stagger emails by 1 second to avoid overwhelming the server
+            if (index < createdInterviews.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            
+          } catch (error) {
+            failCount++;
+          }
+        }
+        
+        if (successCount > 0 && failCount === 0) {
+          toast({
+            title: "All Emails Sent Successfully",
+            description: `Interview emails sent to all ${successCount} candidates`,
+          });
+        } else if (successCount > 0 && failCount > 0) {
+          toast({
+            title: "Partial Success",
+            description: `Sent to ${successCount} candidates, failed for ${failCount} candidates`,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Email Failed",
+            description: "Failed to send emails to all candidates",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        console.error('Error sending individual emails:', error);
+        toast({
+          title: "Email Error",
+          description: "Failed to send emails. Please check your connection and try again.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -689,7 +936,7 @@ const HRInterviewCreator = () => {
         });
         console.log(`📤 Sending to server: total_questions=${formData.totalQuestions}, duration=${formData.duration}`);
         
-        const response = await fetch('http://localhost:5000/api/create-interview', {
+        const response = await fetch('http://localhost:5003/api/create-interview', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -702,7 +949,9 @@ const HRInterviewCreator = () => {
             total_questions: formData.totalQuestions,
             custom_instructions: formData.customInstructions,
             interview_type: formData.interviewType,
-            interview_mode: formData.interviewMode
+            interview_mode: formData.interviewMode,
+            personalized_questions_enabled: formData.personalizedQuestionsEnabled,
+            personalized_questions: formData.personalizedQuestions
           }),
         });
 
@@ -783,6 +1032,36 @@ const HRInterviewCreator = () => {
     return colors[index % colors.length];
   };
 
+  // Helper function to format description with bullet points
+  const formatDescription = (description: string) => {
+    // Split by bullet points and format as proper list
+    const points = description.split('•').filter(point => point.trim());
+    if (points.length <= 1) {
+      return description; // Return original if no bullet points
+    }
+    
+    return points.map(point => point.trim()).filter(point => point.length > 0);
+  };
+
+  // Helper function to clean description for collapsed view (remove bullet points)
+  const cleanDescription = (description: string) => {
+    // Remove bullet points and join with spaces for collapsed view
+    return description.replace(/•/g, '').replace(/\s+/g, ' ').trim();
+  };
+
+  // Toggle parameter expansion
+  const toggleParameter = (parameterKey: string) => {
+    setExpandedParameters(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(parameterKey)) {
+        newSet.delete(parameterKey);
+      } else {
+        newSet.add(parameterKey);
+      }
+      return newSet;
+    });
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="mb-6">
@@ -791,7 +1070,7 @@ const HRInterviewCreator = () => {
       </div>
 
       {/* Interview Configuration Section */}
-      <Card>
+      <Card className="animate-fade-in">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
@@ -912,180 +1191,202 @@ const HRInterviewCreator = () => {
                 Structured Interview: Pre-defined questions set by HR
               </p>
             </div>
+
           </div>
         </CardContent>
       </Card>
 
-      {/* Interview Summary Section - Only for AI Interviews */}
+      {/* Unified Interview Summary Section - Only for AI Interviews */}
       {formData.position && Object.keys(customParameters).length > 0 && formData.interviewMode === 'ai' && (
-        <Card>
+        <Card className="animate-fade-in">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              Interview Summary
+              Interview Summary for {formData.position}
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
-              <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                <div className="text-blue-600 font-medium">Total Questions</div>
+          <CardContent className="space-y-6">
+            {/* Stats Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 text-center">
                 <div className="text-2xl font-bold text-blue-800">{formData.totalQuestions || 'Calculating...'}</div>
-                <div className="text-xs text-blue-600">Based on parameters</div>
+                <div className="text-sm text-blue-600 font-medium">Total Questions</div>
+                <div className="text-xs text-blue-500">Based on parameters</div>
               </div>
-              <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                <div className="text-blue-600 font-medium">Duration</div>
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 text-center">
                 <div className="text-2xl font-bold text-blue-800">{formData.duration || 'Calculating...'} min</div>
-                <div className="text-xs text-blue-600">Auto-calculated</div>
+                <div className="text-sm text-blue-600 font-medium">Duration</div>
+                <div className="text-xs text-blue-500">Auto-calculated</div>
               </div>
-              <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                <div className="text-blue-600 font-medium">Parameters</div>
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 text-center">
                 <div className="text-2xl font-bold text-blue-800">{Object.keys(customParameters).length}</div>
-                <div className="text-xs text-blue-600">Assessment areas</div>
+                <div className="text-sm text-blue-600 font-medium">Parameters</div>
+                <div className="text-xs text-blue-500">Assessment areas</div>
+              </div>
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 text-center">
+                <div className="text-2xl font-bold text-blue-800">{calculateTotalWeightage()}%</div>
+                <div className="text-sm text-blue-600 font-medium">Weightage</div>
+                <div className="text-xs text-blue-500">Total weightage</div>
               </div>
             </div>
-            
-            {/* Editable Duration and Questions Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="duration">Duration (minutes)</Label>
-                <div className="flex items-center gap-3">
-                  <Input
-                    id="duration"
-                    type="number"
-                    name="duration"
-                    value={formData.duration}
-                    onChange={handleInputChange}
-                    min="5"
-                    max="120"
-                    placeholder="Auto-calculated"
-                  />
-                  <div className="text-sm text-gray-500 min-w-fit">
-                    {formData.duration ? `${formData.duration} min` : 'Calculating...'}
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500">
-                  Duration includes answer time + 30 seconds reading time per question + 2 min buffer. You can edit this value manually.
-                </p>
-                <div className="text-xs text-blue-600 font-medium">
-                  💡 Formula: Sum of (questions × (answer time + 0.5 min reading)) for each parameter + 2 min buffer = {formData.duration} min
-                </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="totalQuestions">Total Questions</Label>
-                <div className="flex items-center gap-3">
-                  <Input
-                    id="totalQuestions"
-                    type="number"
-                    name="totalQuestions"
-                    value={formData.totalQuestions}
-                    onChange={handleInputChange}
-                    min="1"
-                    max="30"
-                    step="1"
-                    placeholder="Auto-calculated"
-                  />
-                  <div className="text-sm text-gray-500 min-w-fit">
-                    {formData.totalQuestions ? `${formData.totalQuestions} questions` : 'Calculating...'}
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500">
-                  Total questions = Sum of (min+max)/2 for each parameter, rounded to nearest whole number. You can edit this value manually.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Weightage Summary Section - Only for AI Interviews */}
-      {formData.position && Object.keys(customParameters).length > 0 && formData.interviewMode === 'ai' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              Parameter Weightage Summary
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Total Weightage Display */}
-            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="text-green-600 font-medium text-lg">Total Weightage</div>
-                  <div className={`text-3xl font-bold ${calculateTotalWeightage() === 100 ? 'text-green-600' : 'text-red-600'}`}>
-                    {calculateTotalWeightage()}%
-                  </div>
-                </div>
-                <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  calculateTotalWeightage() === 100 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-red-100 text-red-800'
-                }`}>
-                  {calculateTotalWeightage() === 100 ? '✓ Balanced' : '⚠️ Unbalanced'}
-                </div>
-              </div>
+            {/* Parameter Weightage Summary */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Parameter Weightage Summary</h3>
               
-              {/* Weightage Status Message */}
-              <div className={`mt-2 text-sm ${
-                calculateTotalWeightage() === 100 
-                  ? 'text-green-600' 
-                  : 'text-red-600'
-              }`}>
-                {calculateTotalWeightage() === 100 
-                  ? '✅ All parameters are properly balanced with 100% total weightage.'
-                  : `⚠️ Total weightage should equal 100%. Currently ${calculateTotalWeightage()}%. Please adjust parameter weights.`
-                }
+              {/* Individual Parameter Cards */}
+              <div className="space-y-3">
+                {Object.entries(customParameters).map(([key, param], index) => {
+                  const isExpanded = expandedParameters.has(key);
+                  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444']; // blue, green, orange, red
+                  const color = colors[index % colors.length];
+                  
+                  return (
+                    <div key={key} className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+                      {/* Parameter Header */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-start gap-3 flex-1">
+                          <div 
+                            className="w-3 h-3 rounded-full mt-1 flex-shrink-0"
+                            style={{ backgroundColor: color }}
+                          ></div>
+                          <div className="flex-1">
+                            <div className="text-sm font-semibold text-gray-900 mb-1">
+                              {param.name}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right ml-4">
+                          <div className="text-lg font-bold text-gray-900">
+                            {param.weight}%
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Progress Bar */}
+                      <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                        <div 
+                          className="h-2 rounded-full transition-all duration-300"
+                          style={{ 
+                            width: `${param.weight}%`,
+                            backgroundColor: color
+                          }}
+                        ></div>
+                      </div>
+                      
+                      {/* View Details Link */}
+                      <div 
+                        className="text-blue-600 text-xs font-medium cursor-pointer hover:text-blue-700 transition-colors"
+                        onClick={() => toggleParameter(key)}
+                      >
+                        {isExpanded ? 'Hide Details ▲' : 'View Details ▼'}
+                      </div>
+                      
+                      {/* Expandable Content */}
+                      {isExpanded && (
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <div className="space-y-4">
+                            {/* Full Description */}
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 mb-2">Full Description:</h4>
+                              <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded border">
+                                {(() => {
+                                  const formattedDesc = formatDescription(param.description);
+                                  if (Array.isArray(formattedDesc)) {
+                                    return (
+                                      <ul className="list-disc list-inside space-y-2">
+                                        {formattedDesc.map((point, idx) => (
+                                          <li key={idx}>{point}</li>
+                                        ))}
+                                      </ul>
+                                    );
+                                  } else {
+                                    return formattedDesc;
+                                  }
+                                })()}
+                              </div>
+                            </div>
+                            
+                            {/* Parameter Details */}
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 mb-2">Parameter Details:</h4>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <div className="text-center">
+                                  <div className="text-sm text-gray-500 mb-1">Weight</div>
+                                  <div className="text-base font-semibold text-gray-900">{param.weight}%</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-sm text-gray-500 mb-1">Min Questions</div>
+                                  <div className="text-base font-semibold text-gray-900">{param.min_questions}</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-sm text-gray-500 mb-1">Max Questions</div>
+                                  <div className="text-base font-semibold text-gray-900">{param.max_questions}</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-sm text-gray-500 mb-1">Time (min)</div>
+                                  <div className="text-base font-semibold text-gray-900">{param.max_time || 3}</div>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Scoring Criteria */}
+                            {param.scoring_criteria && Array.isArray(param.scoring_criteria) && param.scoring_criteria.length > 0 && (
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-900 mb-2">Scoring Criteria:</h4>
+                                <div className="space-y-2">
+                                  {param.scoring_criteria.map((criteria, criteriaIndex) => (
+                                    <div key={criteriaIndex} className="flex items-start gap-2">
+                                      <div 
+                                        className="w-2 h-2 rounded-full mt-1 flex-shrink-0"
+                                        style={{ backgroundColor: color }}
+                                      ></div>
+                                      <div className="text-sm text-gray-700">{criteria}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
-            
-            {/* Individual Parameter Weightages */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {Object.entries(customParameters).map(([key, param]) => (
-                <div key={key} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-sm font-medium text-gray-700 truncate" title={param.name}>
-                      {param.name}
-                    </div>
-                    <div className={`text-lg font-bold ${
-                      param.weight > 0 ? 'text-green-600' : 'text-gray-400'
-                    }`}>
-                      {param.weight}%
-                    </div>
+
+
+            {/* Personalized Questions Section */}
+            {formData.personalizedQuestionsEnabled && formData.personalizedQuestions.length > 0 && (
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                  <div className="h-4 w-4 bg-blue-600 rounded flex items-center justify-center">
+                    <div className="h-2 w-2 bg-white rounded-full"></div>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${param.weight}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            {/* Weightage Distribution Chart */}
-            {Object.keys(customParameters).length > 0 && (
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                <div className="text-sm font-medium text-gray-700 mb-3">Weightage Distribution</div>
-                <div className="flex h-8 rounded-lg overflow-hidden">
-                  {Object.entries(customParameters).map(([key, param], index) => (
-                    <div
-                      key={key}
-                      className="h-full transition-all duration-300 hover:opacity-80"
-                      style={{ 
-                        width: `${param.weight}%`,
-                        backgroundColor: getWeightageColor(index, param.weight)
-                      }}
-                      title={`${param.name}: ${param.weight}%`}
-                    ></div>
+                  Personalized Questions
+                </h3>
+                
+                <p className="text-sm text-gray-600 mb-4">
+                  These personal questions will be asked before technical questions. They are for review only and won't be scored.
+                </p>
+                
+                <div className="space-y-3">
+                  {formData.personalizedQuestions.map((question, index) => (
+                    <div key={index} className="p-3 bg-gray-50 rounded border border-gray-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <Label className="text-sm font-medium text-gray-700">
+                          Question {index + 1}
+                        </Label>
+                        <div className="text-xs text-gray-500">
+                          {question.timeLimit} min
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-700 bg-white p-2 rounded border">
+                        {question.question}
+                      </div>
+                    </div>
                   ))}
-                </div>
-                <div className="flex justify-between text-xs text-gray-500 mt-2">
-                  <span>0%</span>
-                  <span>25%</span>
-                  <span>50%</span>
-                  <span>75%</span>
-                  <span>100%</span>
                 </div>
               </div>
             )}
@@ -1093,143 +1394,137 @@ const HRInterviewCreator = () => {
         </Card>
       )}
 
-      {/* Assessment Parameters Section - Only for AI Interviews */}
-      {formData.interviewMode === 'ai' && (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5" />
-            Assessment Parameters for {formData.position || 'Selected Role'}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex gap-3">
-              <Button
-                onClick={saveParameters}
-                disabled={isSavingParameters || Object.keys(customParameters).length === 0}
-                variant="outline"
-                className="flex items-center gap-2"
-              >
-                {isSavingParameters ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4" />
-                    Save Parameters
-                  </>
-                )}
-              </Button>
+      {/* Unified Interview Summary Section - Only for Structured Interviews */}
+      {formData.position && structuredQuestions.length > 0 && formData.interviewMode === 'structured' && (
+        <Card className="animate-fade-in">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              Interview Summary for {formData.position}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Stats Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-green-50 rounded-lg p-4 border border-green-200 text-center">
+                <div className="text-2xl font-bold text-green-800">{structuredQuestions.length}</div>
+                <div className="text-sm text-green-600 font-medium">Total Questions</div>
+                <div className="text-xs text-green-500">Pre-defined questions</div>
+              </div>
+              <div className="bg-green-50 rounded-lg p-4 border border-green-200 text-center">
+                <div className="text-2xl font-bold text-green-800">{formData.duration || 'Calculating...'} min</div>
+                <div className="text-sm text-green-600 font-medium">Duration</div>
+                <div className="text-xs text-green-500">Auto-calculated</div>
+              </div>
+              <div className="bg-green-50 rounded-lg p-4 border border-green-200 text-center">
+                <div className="text-2xl font-bold text-green-800">Structured</div>
+                <div className="text-sm text-green-600 font-medium">Interview Type</div>
+                <div className="text-xs text-green-500">Pre-defined format</div>
+              </div>
             </div>
 
-            <div className="flex gap-2">
-              <Button
-                onClick={() => {
-                  setCustomParameters({});
-                  setParametersSaved(false);
-                  toast({
-                    title: "Parameters Cleared",
-                    description: "Parameters cleared successfully!",
-                  });
-                }}
-                disabled={Object.keys(customParameters).length === 0}
-                variant="destructive"
-                className="flex items-center gap-2"
-                title="Clear all current parameters"
-              >
-                <Trash2 className="h-4 w-4" />
-                Clear
-              </Button>
-            </div>
-          </div>
-
-          {Object.keys(customParameters).length > 0 ? (
-            <div className="space-y-4">
-              {Object.entries(customParameters).map(([key, param]) => (
-                <Card key={key} className="bg-gray-50">
-                  <CardContent className="pt-6">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <div className="text-lg font-semibold text-gray-900 px-2 py-1">
-                          {param.name}
+            {/* Structured Questions */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <div className="h-4 w-4 bg-green-600 rounded flex items-center justify-center">
+                  <div className="h-2 w-2 bg-white rounded-full"></div>
+                </div>
+                Structured Interview Questions
+              </h3>
+              
+              <p className="text-sm text-gray-600 mb-4">
+                These are the pre-defined questions that will be asked during the structured interview.
+              </p>
+              
+              <div className="space-y-3">
+                {structuredQuestions.map((question, index) => (
+                  <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">
+                          {index + 1}
                         </div>
-                      </div>
-                    </div>
-                    
-                    <div className="w-full mb-4 p-3 bg-white rounded border text-gray-700">
-                      {param.description}
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                      <div className="space-y-2">
-                        <Label>Weight (%)</Label>
-                        <div className="p-2 bg-white rounded border text-gray-700 font-medium">
-                          {param.weight}%
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Min Questions</Label>
-                        <div className="p-2 bg-white rounded border text-gray-700 font-medium">
-                          {param.min_questions}
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Max Questions</Label>
-                        <div className="p-2 bg-white rounded border text-gray-700 font-medium">
-                          {param.max_questions}
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Answer Time (min)</Label>
-                        <div className="p-2 bg-white rounded border text-gray-700 font-medium">
-                          {param.max_time || 3}
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Level</Label>
-                        <div className="p-2 bg-white rounded border text-gray-700 font-medium">
-                          {param.level || 'Regular'}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Scoring Criteria Section */}
-                    {param.scoring_criteria && Array.isArray(param.scoring_criteria) && param.scoring_criteria.length > 0 && (
-                      <div className="mt-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <Label>Scoring Criteria</Label>
-                        </div>
-                        <div className="space-y-2">
-                          {param.scoring_criteria.map((criteria, index) => (
-                            <div key={index} className="flex items-center gap-2">
-                              <div className="flex-1 p-2 bg-white rounded border text-sm text-gray-700">
-                                {criteria}
-                              </div>
+                        <div className="flex flex-col">
+                          <div className="text-sm font-medium text-gray-700">
+                            Question {index + 1}
+                          </div>
+                          {question.parameterType && (
+                            <div className="text-xs text-green-600 font-medium">
+                              {question.parameterType}
                             </div>
-                          ))}
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <div className="text-xs text-gray-500 bg-white px-2 py-1 rounded border">
+                          {question.timeLimit || 3} min
+                        </div>
+                        {question.difficulty && (
+                          <div className={`text-xs px-2 py-1 rounded border ${
+                            question.difficulty === 'Easy' ? 'bg-green-100 text-green-700 border-green-200' :
+                            question.difficulty === 'Regular' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                            'bg-red-100 text-red-700 border-red-200'
+                          }`}>
+                            {question.difficulty}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-700 bg-white p-3 rounded border">
+                      {question.question}
+                    </div>
+                    {question.expectedAnswer && (
+                      <div className="mt-3">
+                        <div className="text-xs font-medium text-gray-600 mb-1">Expected Answer:</div>
+                        <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded border">
+                          {question.expectedAnswer}
                         </div>
                       </div>
                     )}
-                  </CardContent>
-                </Card>
-              ))}
+                  </div>
+                ))}
+              </div>
             </div>
-          ) : (
-            <div className="text-center py-8">
-              <Target className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 text-lg">No assessment parameters configured yet.</p>
-              <p className="text-gray-400">Select a role to load existing parameters.</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+
+            {/* Personalized Questions Section */}
+            {formData.personalizedQuestionsEnabled && formData.personalizedQuestions.length > 0 && (
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                  <div className="h-4 w-4 bg-blue-600 rounded flex items-center justify-center">
+                    <div className="h-2 w-2 bg-white rounded-full"></div>
+                  </div>
+                  Personalized Questions
+                </h3>
+                
+                <p className="text-sm text-gray-600 mb-4">
+                  These personal questions will be asked before technical questions. They are for review only and won't be scored.
+                </p>
+                
+                <div className="space-y-3">
+                  {formData.personalizedQuestions.map((question, index) => (
+                    <div key={index} className="p-3 bg-gray-50 rounded border border-gray-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <Label className="text-sm font-medium text-gray-700">
+                          Question {index + 1}
+                        </Label>
+                        <div className="text-xs text-gray-500">
+                          {question.timeLimit} min
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-700 bg-white p-2 rounded border">
+                        {question.question}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Create Interview Button */}
-      <Card>
+      <Card className="animate-fade-in">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5 text-primary-600" />
@@ -1263,7 +1558,7 @@ const HRInterviewCreator = () => {
 
       {/* Interview Links Section */}
       {createdInterviews.length > 0 && (
-        <Card>
+        <Card className="animate-fade-in">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Link className="h-5 w-5" />
@@ -1296,19 +1591,80 @@ const HRInterviewCreator = () => {
                     Copy
                   </Button>
                   <Button
-                    onClick={() => {
-                      const interviewType = formData.interviewType || 'mixed';
-                      const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
-                      const template = getEmailTemplate(interview.candidate_name, interviewType, interviewLink);
-                      const gmailLink = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(interview.candidate_email)}&su=${encodeURIComponent(template.subject)}&body=${encodeURIComponent(template.body)}`;
-                      window.open(gmailLink, '_blank');
+                    onClick={async () => {
+                      const isSending = sendingEmails.has(interview.interview_id);
+                      if (isSending) return; // Prevent multiple clicks
+                      
+                      try {
+                        // Add to sending state
+                        setSendingEmails(prev => new Set(prev).add(interview.interview_id));
+                        
+                        const interviewType = formData.interviewType || 'mixed';
+                        const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
+                        
+                        const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                          },
+                          body: JSON.stringify({
+                            candidate_email: interview.candidate_email,
+                            candidate_name: interview.candidate_name,
+                            interview_link: interviewLink,
+                            position: formData.position,
+                            interview_type: interviewType
+                          })
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                          toast({
+                            title: "Email Sent Successfully",
+                            description: `Interview email sent to ${interview.candidate_name}`,
+                          });
+                        } else {
+                          toast({
+                            title: "Email Failed",
+                            description: result.message || "Failed to send email",
+                            variant: "destructive",
+                          });
+                        }
+                      } catch (error) {
+                        toast({
+                          title: "Email Error",
+                          description: "Failed to send email. Please try again.",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        // Remove from sending state
+                        setSendingEmails(prev => {
+                          const newSet = new Set(prev);
+                          newSet.delete(interview.interview_id);
+                          return newSet;
+                        });
+                      }
                     }}
                     size="sm"
                     variant="secondary"
-                    className="flex items-center gap-2"
+                    disabled={sendingEmails.has(interview.interview_id)}
+                    className={`flex items-center gap-2 ${
+                      sendingEmails.has(interview.interview_id) 
+                        ? 'opacity-50 cursor-not-allowed' 
+                        : 'hover:bg-gray-200'
+                    }`}
                   >
-                    <Send className="h-4 w-4" />
-                    Send Gmail
+                    {sendingEmails.has(interview.interview_id) ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" />
+                        Send Email
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>

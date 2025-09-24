@@ -11,7 +11,7 @@ const CandidateCompletion = () => {
     const trackCompletionView = async () => {
       if (interviewId) {
         try {
-          await fetch(`http://localhost:5000/api/track-completion-view/${interviewId}`, {
+          await fetch(`http://localhost:5003/api/track-completion-view/${interviewId}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

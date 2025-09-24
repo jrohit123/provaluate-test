@@ -3,22 +3,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, FileText, Grid, Save, Plus, Trash2, Download, Edit, RefreshCw } from 'lucide-react';
+import { Upload, FileText, Edit, RefreshCw } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { DatabaseService } from '@/integrations/supabase/db';
-import * as XLSX from 'xlsx';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/use-auth';
+import { useSession } from '@/contexts/SessionContext';
 import { Document, Page, pdfjs } from 'react-pdf';
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.js`;
-
-interface CriteriaItem {
-  id: string;
-  parameter: string;
-  weightage: number;
-  notes: string;
-}
 
 interface ResolvedJD {
   attributes?: {
@@ -33,19 +26,13 @@ interface ResolvedJD {
   jd_file_url?: string;
 }
 
-interface SavedCriteriaGrid {
-  id: string;
-  name: string;
-  criteria: CriteriaItem[];
-}
-
 const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
 //const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx'];
 const ALLOWED_FILE_TYPES = ['.pdf'];
 // Backend service URLs for integration - Updated to use correct ports
 const BACKEND_URLS = {
   UNIFIED_SERVICE: 'http://localhost:5003',      // app.py - unified backend service
-  AI_ANALYZER_SERVICE: 'http://localhost:5001',  // ai_analyzer.py - handles AI analysis
+  AI_ANALYZER_SERVICE: 'http://localhost:5001',  // jd_analyzer.py - handles AI analysis
   CV_ANALYZER_SERVICE: 'http://localhost:5002',  // cv_analyzer.py - handles CV analysis
   RESUME_SERVICE: 'http://localhost:5003',       // app.py - handles uploads
 };
@@ -54,38 +41,25 @@ const BACKEND_URLS = {
 //const JD_WEBHOOK_URL = "https://automations.aitamate.com/webhook/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
 export const JobUploadSection = () => {
   const { user, loading, error } = useAuth();
+  const { setCurrentJobDescription } = useSession();
   const [jobTitle, setJobTitle] = useState('');
   const [jobDescriptions, setJobDescriptions] = useState<any[]>([]);
-  const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => sessionStorage.getItem('selectedJDId') || '');
+  const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>('');
   const [selectedJDContent, setSelectedJDContent] = useState<string>('');
   const [selectedJDFileType, setSelectedJDFileType] = useState<string>('');
-  const [criteriaData, setCriteriaData] = useState<CriteriaItem[]>([
-    { id: '1', parameter: 'Technical Skills', weightage: 30, notes: 'Check the relevant experience in the given programming languages, frameworks, tools' },
-    { id: '2', parameter: 'Experience Level', weightage: 25, notes: 'Years of relevant experience' },
-    { id: '3', parameter: 'Education', weightage: 15, notes: 'Degree relevance and institution' },
-    { id: '4', parameter: 'Soft Skills', weightage: 20, notes: 'Communication, leadership, teamwork' },
-    { id: '5', parameter: 'Stability', weightage: 10, notes: 'Calculate the Stability Score based on the average years spent in each of the previous companies.' }
-  ]);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const criteriaFileInputRef = useRef<HTMLInputElement>(null);
   const jobTitleInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [criteriaUploading, setCriteriaUploading] = useState(false);
   const [resolvedJD, setResolvedJD] = useState<ResolvedJD | null>(null);
   const [isEditingResolvedJD, setIsEditingResolvedJD] = useState(false);
   const [resolvedJDId, setResolvedJDId] = useState<string | null>(null);
-  const [savedGrids, setSavedGrids] = useState<SavedCriteriaGrid[]>([]);
-  const [selectedGridId, setSelectedGridId] = useState<string>(() => sessionStorage.getItem('selectedCriteriaGridId') || '');
-  const [gridName, setGridName] = useState('');
   const [processingStatus, setProcessingStatus] = useState<'idle' | 'processing' | 'completed' | 'failed'>('idle');
   const [numPages, setNumPages] = useState<number>(1);
   const [pageNumber, setPageNumber] = useState<number>(1);
   const [isWaitingForResolvedJD, setIsWaitingForResolvedJD] = useState(false);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<NodeJS.Timeout | null>(null);
 
-  const totalPercentage = criteriaData.reduce((sum, item) => sum + item.weightage, 0);
-  const isValidTotal = totalPercentage === 0 || totalPercentage === 100;
 
   // Auto-refresh functions
   const startAutoRefresh = (jdId: string) => {
@@ -208,7 +182,6 @@ export const JobUploadSection = () => {
     console.log('JobUploadSection - User state:', { user, loading, error });
     console.log('User object details:', user);
     if (user?.id) {
-      loadSavedGrids();
       loadJobDescriptions();
     }
   }, [user, loading, error]);
@@ -255,75 +228,6 @@ export const JobUploadSection = () => {
     }
   }, [selectedJobDescriptionId, jobDescriptions]);
 
-  const loadSavedGrids = async () => {
-    if (!user?.id) return;
-
-    try {
-      console.log('Loading saved grids for user:', user.id);
-      
-      // Get unique criteria grids by criteria_name with their grid JSON data and criteria_id
-      const { data: grids, error } = await supabase
-        .from('criteria')
-        .select('criteria_id, criteria_name, grid, created_at')
-        .eq('created_by', user.id)
-        .eq('company_id', user.profile?.company_id)
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error('Error fetching grids:', error);
-        throw error;
-      }
-
-      console.log('Fetched grids:', grids);
-      
-      if (!grids || grids.length === 0) {
-        console.log('No grids found');
-        setSavedGrids([]);
-        return;
-      }
-
-      // Get unique grids by criteria_name (latest entry for each name)
-      const uniqueGrids = grids.reduce((acc: { [key: string]: any }, curr) => {
-        if (!acc[curr.criteria_name] || new Date(curr.created_at) > new Date(acc[curr.criteria_name].created_at)) {
-          acc[curr.criteria_name] = curr;
-        }
-        return acc;
-      }, {});
-
-      console.log('Unique grids:', uniqueGrids);
-
-      // Convert to SavedCriteriaGrid format using grid JSON data
-      const formattedGrids: SavedCriteriaGrid[] = Object.values(uniqueGrids).map((grid: any) => {
-        let criteria: CriteriaItem[] = [];
-        
-        // Parse grid JSON data
-        if (grid.grid && Array.isArray(grid.grid)) {
-          criteria = grid.grid.map((item: any, index: number) => ({
-            id: `${Date.now()}_${index}`, // Generate unique ID
-            parameter: item.parameter || '',
-            weightage: item.weightage || 0,
-            notes: item.calc_note || ''
-          }));
-        }
-
-        return {
-          id: grid.criteria_id, // Use actual criteria_id from database
-          name: grid.criteria_name,
-          criteria
-        };
-      });
-
-      console.log('Formatted grids:', formattedGrids);
-      setSavedGrids(formattedGrids);
-    } catch (error) {
-      console.error('Error loading saved grids:', error);
-      toast({
-        title: "Error Loading Grids",
-        description: "Failed to load saved evaluation criteria.",
-        variant: "destructive"
-      });
-    }
-  };
 
   const loadJobDescriptions = async () => {
     if (!user?.profile?.company_id) return;
@@ -338,22 +242,6 @@ export const JobUploadSection = () => {
       const jobDescriptions = data || [];
       setJobDescriptions(jobDescriptions);
       
-      // Validate selectedJobDescriptionId against loaded job descriptions
-      // Clear it if it doesn't exist for this user (prevents stale sessionStorage data)
-      if (selectedJobDescriptionId && jobDescriptions.length > 0) {
-        const isValidSelection = jobDescriptions.some(jd => jd.jd_id === selectedJobDescriptionId);
-        if (!isValidSelection) {
-          console.log('Clearing invalid selectedJobDescriptionId from sessionStorage:', selectedJobDescriptionId);
-          setSelectedJobDescriptionId('');
-          sessionStorage.removeItem('selectedJDId');
-          // This will trigger the useEffect to clear resolvedJD
-        }
-      } else if (selectedJobDescriptionId && jobDescriptions.length === 0) {
-        // No job descriptions exist for this user, clear any stale selection
-        console.log('Clearing selectedJobDescriptionId - no job descriptions found for this user');
-        setSelectedJobDescriptionId('');
-        sessionStorage.removeItem('selectedJDId');
-      }
     } catch (error) {
       toast({
         title: 'Error Loading Job Descriptions',
@@ -531,40 +419,6 @@ export const JobUploadSection = () => {
     });
   };
 
-  const handleCriteriaUpload = async () => {
-    if (!isValidTotal) {
-      toast({
-        title: "Invalid Criteria Weightage",
-        description: "Total percentage must be either 0% (no criteria) or 100%.",
-        variant: "destructive",
-      });
-      return;
-    }
-    try {
-      // Save each criteria item to the database
-      await Promise.all(
-        criteriaData.map(item =>
-          DatabaseService.createCriteria({
-            criteria_name: item.parameter,
-            parameter: item.parameter,
-            weightage: item.weightage,
-            calc_note: item.notes,
-            // Add other fields as needed (created_by, company_id, etc.)
-          })
-        )
-      );
-      toast({
-        title: "Evaluation Criteria Saved",
-        description: "Your evaluation criteria has been saved and is ready to use.",
-      });
-    } catch (err: any) {
-      toast({
-        title: "Error Saving Evaluation Criteria",
-        description: err.message || "An error occurred.",
-        variant: "destructive",
-      });
-    }
-  };
 
   // Drag and drop handlers for job description
   const handleJobDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -591,63 +445,6 @@ export const JobUploadSection = () => {
     }
   };
 
-  // Drag and drop handlers for criteria
-  const handleCriteriaDrop = async (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      await handleCriteriaFile(e.dataTransfer.files[0]);
-    }
-  };
-  const handleCriteriaDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-  };
-  const handleCriteriaClick = () => {
-    criteriaFileInputRef.current?.click();
-  };
-  const handleCriteriaFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files && files.length > 0) {
-      await handleCriteriaFile(files[0]);
-    }
-  };
-  const handleCriteriaFile = async (file: File) => {
-    setCriteriaUploading(true);
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { type: 'array' });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const json: any[] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-      // Expecting header row: [Parameter, Weightage, Notes]
-      if (
-        json.length < 2 ||
-        !json[0] ||
-        json[0][0]?.toString().toLowerCase().includes('parameter') === false
-      ) {
-        throw new Error('Excel sheet must have a header row: Parameter, Weightage, Notes');
-      }
-      const newCriteria: CriteriaItem[] = json.slice(1).map((row, idx) => ({
-        id: Date.now().toString() + idx,
-        parameter: row[0] || '',
-        weightage: Number(row[1]) || 0,
-        notes: row[2] || '',
-      }));
-      if (newCriteria.length === 0) throw new Error('No criteria found in Excel sheet.');
-      setCriteriaData(newCriteria);
-      toast({
-        title: 'Criteria Grid Updated',
-        description: 'Evaluation criteria loaded from Excel.',
-      });
-    } catch (err: any) {
-      toast({
-        title: 'Error Parsing Excel',
-        description: err.message || 'Check the Excel sheet and re-upload.',
-        variant: 'destructive',
-      });
-    } finally {
-      setCriteriaUploading(false);
-    }
-  };
 
   const handleProcessJobDescription = async () => {
     if (!user) {
@@ -799,157 +596,7 @@ export const JobUploadSection = () => {
     }
   };
 
-  const updateCriteria = (id: string, field: keyof CriteriaItem, value: string | number) => {
-    setCriteriaData(prev => prev.map(item => 
-      item.id === id ? { ...item, [field]: value } : item
-    ));
-  };
 
-  const addCriteria = () => {
-    const newCriteria: CriteriaItem = {
-      id: Date.now().toString(),
-      parameter: 'New Parameter',
-      weightage: 0,
-      notes: 'Add description here'
-    };
-    setCriteriaData(prev => [...prev, newCriteria]);
-  };
-
-  const deleteCriteria = (id: string) => {
-    setCriteriaData(prev => prev.filter(item => item.id !== id));
-  };
-
-  const handleDownloadTemplate = () => {
-    // Create workbook
-    const wb = XLSX.utils.book_new();
-    
-    // Create sample data
-    const sampleData = [
-      ['Parameter', 'Weightage', 'Notes'],
-      ['Technical Skills', 30, 'Check the relevant experience in the given Programming languages, frameworks, tools'],
-      ['Experience Level', 25, 'Years of relevant experience in similar roles'],
-      ['Education', 15, 'Degree relevance and institution quality'],
-      ['Soft Skills', 20, 'Communication, leadership, teamwork abilities'],
-      ['Stability', 10, 'Calculate the Stability Score based on the average years spent in each of the previous companies.']
-    ];
-    
-    // Convert to worksheet
-    const ws = XLSX.utils.aoa_to_sheet(sampleData);
-    
-    // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(wb, ws, 'Evaluation Criteria');
-    
-    // Generate and download file
-    XLSX.writeFile(wb, 'evaluation-criteria-template.xlsx');
-    
-    toast({
-      title: "Template Downloaded",
-      description: "Sample evaluation criteria template has been downloaded.",
-    });
-  };
-
-  const handleSaveCriteria = async () => {
-    if (!gridName) {
-      toast({
-        title: "Name Required",
-        description: "Please provide a name for this criteria grid.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!user) {
-      toast({
-        title: "Authentication Error",
-        description: "Please sign in to save criteria grids.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!user.profile) {
-      toast({
-        title: "Profile Error",
-        description: "Your user profile is not properly set up. Please contact support.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Validate UUID format
-    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!UUID_REGEX.test(user.id) || !UUID_REGEX.test(user.profile.company_id)) {
-      toast({
-        title: "Invalid ID Format",
-        description: "User or company ID is not in the correct format. Please contact support.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      console.log('Saving criteria with data:', {
-        user_id: user.id,
-        company_id: user.profile.company_id,
-        gridName,
-        criteriaData
-      });
-
-      // Only save parameter, weightage, calc_note in the grid JSON
-      const grid = criteriaData.map(item => ({
-        parameter: item.parameter,
-        weightage: item.weightage,
-        calc_note: item.notes
-      }));
-
-      const { data, error } = await supabase
-        .from('criteria')
-        .insert({
-          criteria_name: gridName,
-          grid,
-          created_by: user.id,
-          company_id: user.profile.company_id,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select('criteria_id')
-        .single();
-      if (error) {
-        console.error('Error saving criteria:', error);
-        throw error;
-      }
-      console.log('Save result:', data);
-
-      toast({
-        title: "Criteria Grid Saved",
-        description: "Your evaluation criteria has been saved successfully.",
-      });
-
-      setGridName('');
-      await loadSavedGrids();
-      // Store the new grid's criteria_id in sessionStorage
-      if (data?.criteria_id) {
-        setSelectedGridId(data.criteria_id);
-        sessionStorage.setItem('selectedCriteriaGridId', data.criteria_id);
-      }
-    } catch (err: any) {
-      console.error('Error saving grid:', err);
-      toast({
-        title: "Error Saving Grid",
-        description: err.message || "An error occurred.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleGridSelect = async (gridId: string) => {
-    setSelectedGridId(gridId);
-    sessionStorage.setItem('selectedCriteriaGridId', gridId);
-    const selected = savedGrids.find(grid => grid.id === gridId);
-    if (selected) {
-      setCriteriaData(selected.criteria);
-    }
-  };
 
   // When a JD is selected from dropdown, store in sessionStorage
   const handleJDSelect = (jdId: string) => {
@@ -967,13 +614,12 @@ export const JobUploadSection = () => {
   return (
     <div className="p-6 space-y-6">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-primary-800 mb-2">Job Description & Criteria Setup</h2>
-        <p className="text-muted-foreground">Upload your job description and configure evaluation criteria</p>
+        <h2 className="text-2xl font-bold text-primary-800 mb-2">Job Description Setup</h2>
+        <p className="text-muted-foreground">Upload your job description file and process it for analysis</p>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Job Description Upload */}
-        <Card className="animate-fade-in">
+      {/* Job Description Upload */}
+      <Card className="animate-fade-in">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary-600" />
@@ -989,7 +635,7 @@ export const JobUploadSection = () => {
             <div className="mb-3">
               <Select value={selectedJobDescriptionId} onValueChange={handleJDSelect}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select existing Job Description..." />
+                  <SelectValue placeholder="Choose job description" />
                 </SelectTrigger>
                 <SelectContent>
                   {jobDescriptions.map(jd => (
@@ -1080,6 +726,31 @@ export const JobUploadSection = () => {
               <Button onClick={handleProcessJobDescription} className="w-full">
                 Process Job Description
               </Button>
+              
+              {/* Select for Session Button */}
+              {selectedJobDescriptionId && (
+                <Button 
+                  onClick={() => {
+                    const selectedJD = jobDescriptions.find(jd => jd.jd_id === selectedJobDescriptionId);
+                    if (selectedJD) {
+                      // Set in session context
+                      setCurrentJobDescription({
+                        id: selectedJD.jd_id,
+                        title: selectedJD.title,
+                        file: selectedJD.jd_file
+                      });
+                      
+                      toast({
+                        title: "Success",
+                        description: `"${selectedJD.title}" set for current session`
+                      });
+                    }
+                  }} 
+                  className="w-full bg-gray-500 hover:bg-gray-600"
+                >
+                  Select for Session
+                </Button>
+              )}
               
               {/* Show refresh button and auto-refresh status */}
               {selectedJobDescriptionId && (
@@ -1205,140 +876,6 @@ export const JobUploadSection = () => {
           </CardContent>
         </Card>
 
-        {/* Criteria Grid */}
-        <Card className="animate-fade-in">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Grid className="w-5 h-5 text-primary-600" />
-                Evaluation Criteria
-              </div>
-              <Select value={selectedGridId} onValueChange={handleGridSelect}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Load saved grid..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {savedGrids.map(grid => (
-                    <SelectItem key={grid.id} value={grid.id}>
-                      {grid.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </CardTitle>
-            <CardDescription>
-              Configure your evaluation parameters and weights
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
-              {criteriaData.map((criteria) => (
-                <div key={criteria.id} className="bg-gray-50 p-3 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <Input
-                      value={criteria.parameter}
-                      onChange={(e) => updateCriteria(criteria.id, 'parameter', e.target.value)}
-                      className="font-medium text-sm bg-transparent border-none p-0 h-auto focus:bg-white focus:border focus:px-2 focus:py-1"
-                    />
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center">
-                        <Input
-                          type="number"
-                          value={criteria.weightage}
-                          onChange={(e) => updateCriteria(criteria.id, 'weightage', parseInt(e.target.value) || 0)}
-                          className="w-16 h-8 text-xs text-center bg-primary-100 border-primary-200"
-                          min="0"
-                          max="100"
-                        />
-                        <span className="text-xs font-medium text-primary-800 ml-1">%</span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => deleteCriteria(criteria.id)}
-                        className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <Input
-                    value={criteria.notes}
-                    onChange={(e) => updateCriteria(criteria.id, 'notes', e.target.value)}
-                    className="text-xs text-muted-foreground bg-transparent border-none p-0 h-auto focus:bg-white focus:border focus:px-2 focus:py-1"
-                    placeholder="Add description..."
-                  />
-                </div>
-              ))}
-            </div>
-
-            <Button
-              variant="outline"
-              onClick={addCriteria}
-              className="w-full border-dashed"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Parameter
-            </Button>
-
-            <div className="flex items-center justify-between p-3 bg-gray-100 rounded-lg">
-              <span className="font-medium text-sm">Total Weightage:</span>
-              <span className={`font-bold text-sm ${isValidTotal ? 'text-green-600' : 'text-red-600'}`}>
-                {totalPercentage}%
-                {isValidTotal && totalPercentage > 0 && <span className="ml-2 text-xs">✓</span>}
-                {!isValidTotal && <span className="ml-2 text-xs">⚠ Must be 0% or 100%</span>}
-              </span>
-            </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDownloadTemplate}
-              className="flex items-center gap-1 text-xs mb-2"
-            >
-              <Download className="w-3 h-3" />
-              Template
-            </Button>
-
-            <div 
-              className="border-2 border-dashed border-accent-200 rounded-lg p-4 text-center hover:border-accent-400 transition-colors cursor-pointer"
-              onClick={handleCriteriaClick}
-              onDrop={handleCriteriaDrop}
-              onDragOver={handleCriteriaDragOver}
-            >
-              <Upload className="w-6 h-6 text-accent-500 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">
-                Upload Excel/CSV criteria file
-              </p>
-            </div>
-            
-            <input
-              ref={criteriaFileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={handleCriteriaFileChange}
-              className="hidden"
-            />
-            
-            <div className="flex gap-2">
-              <Input
-                placeholder="Grid Name"
-                value={gridName}
-                onChange={(e) => setGridName(e.target.value)}
-                className="flex-1"
-              />
-              <Button 
-                onClick={handleSaveCriteria} 
-                className="whitespace-nowrap"
-                disabled={!gridName || !isValidTotal}
-              >
-                <Save className="w-4 h-4 mr-2" />
-                Save as New
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 };

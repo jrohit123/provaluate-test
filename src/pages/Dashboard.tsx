@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/cv-screening/AppSidebar';
 import { JobUploadSection } from '@/components/cv-screening/JobUploadSection';
 import { ResumeUploadSection } from '@/components/cv-screening/ResumeUploadSection';
 import { MatchScorecardSection } from '@/components/cv-screening/MatchScorecardSection';
 import { Header } from '@/components/cv-screening/Header';
+import { MainDashboard } from '@/components/cv-screening/MainDashboard';
+import { EvaluationCriteriaSection } from '@/components/cv-screening/EvaluationCriteriaSection';
 import AdminUserManagement from '@/components/cv-screening/AdminUserManagement';
 import HRInterviewCreator from '@/components/ai-interview/HRInterviewCreator';
 import AIsetup from '@/components/ai-interview/AIsetup';
@@ -13,30 +15,35 @@ import InterviewDashboard from '@/components/ai-interview/InterviewDashboard';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, Users, ArrowRight } from 'lucide-react';
+import { FileText, Users, ArrowRight, Upload, BarChart3, Wrench, Monitor } from 'lucide-react';
+import { useSession } from '@/contexts/SessionContext';
 
-export type ActiveSection = 'job-upload' | 'resume-upload' | 'match-scorecard' | 'interview-creation' | 'ai-interview' | 'setup' | 'interview-dashboard' | 'settings';
+export type ActiveSection = 'main-dashboard' | 'job-upload' | 'evaluation-criteria' | 'resume-upload' | 'match-scorecard' | 'interview-creation' | 'ai-interview' | 'setup' | 'interview-dashboard' | 'settings';
 
 const Dashboard = () => {
-  const [activeSection, setActiveSection] = useState<ActiveSection>('job-upload');
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const { isSessionComplete } = useSession();
 
-  // Check if we're on the direct job upload route or if we have navigation state
-  useEffect(() => {
-    if (location.pathname === '/cv-screening/job-upload') {
-      setActiveSection('job-upload');
-    } else if (location.state?.activeSection) {
-      setActiveSection(location.state.activeSection);
-    }
-  }, [location.pathname, location.state]);
+  // Get activeSection from URL parameter, default to 'main-dashboard'
+  const activeSection = (searchParams.get('section') as ActiveSection) || 'main-dashboard';
+
+  // Function to update the active section and URL
+  const setActiveSection = (section: ActiveSection) => {
+    setSearchParams({ section });
+  };
 
   const renderMainContent = () => {
     switch (activeSection) {
+      case 'main-dashboard':
+        return <MainDashboard onSectionChange={setActiveSection} />;
       case 'job-upload':
         return <JobUploadSection />;
+      case 'evaluation-criteria':
+        return <EvaluationCriteriaSection />;
       case 'resume-upload':
         return <ResumeUploadSection />;
       case 'match-scorecard':
@@ -52,7 +59,7 @@ const Dashboard = () => {
       case 'settings':
         return <AdminUserManagement />;
       default:
-        return <JobUploadSection />;
+        return <MainDashboard onSectionChange={setActiveSection} />;
     }
   };
 
