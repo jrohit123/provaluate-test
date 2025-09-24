@@ -18,12 +18,12 @@ interface ResolvedJD {
     [key: string]: any;
   };
   attributes_summary?: string;
-  ai_provider?: string;
-  analysis_timestamp?: string;
-  status?: string;
-  original_length?: number;
-  cleaned_length?: number;
-  jd_file_url?: string;
+  //ai_provider?: string;
+  //analysis_timestamp?: string;
+  //status?: string;
+  //original_length?: number;
+  //cleaned_length?: number;
+  //jd_file_url?: string;
 }
 
 const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB

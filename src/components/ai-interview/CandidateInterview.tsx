@@ -36,13 +36,32 @@ const CandidateInterview = () => {
         if (response.ok) {
           const data = await response.json();
           console.log('📊 Interview data received:', data);
-          // The API returns nested structure: {interview: {...}, questions: [...], answers: [...]}
-          // We need to flatten it for the frontend components
+          
+          // Handle both possible API response formats
+          let interviewData, questions, answers;
+          
+          if (data.status === 'success') {
+            // First endpoint format: {status: 'success', interview: {...}, questions: [...], answers: [...]}
+            interviewData = data.interview;
+            questions = data.questions || [];
+            answers = data.answers || [];
+          } else {
+            // Second endpoint format: {interview: {...}, questions: [...], answers: [...]}
+            interviewData = data.interview;
+            questions = data.questions || [];
+            answers = data.answers || [];
+          }
+          
+          // Flatten the data for frontend components
           const flattenedData = {
-            ...data.interview,
-            questions: data.questions || [],
-            answers: data.answers || []
+            ...interviewData,
+            questions: questions,
+            answers: answers
           };
+          
+          console.log('🔍 Flattened interview data keys:', Object.keys(flattenedData));
+          console.log('🔍 Interview type in flattened data:', flattenedData.interview_type);
+          
           setInterviewData(flattenedData);
           setIsLoading(false);
         } else if (response.status === 404) {
@@ -193,17 +212,6 @@ const CandidateInterview = () => {
             </div>
           </div>
 
-          {/* Interview Type */}
-          <div className="mb-6">
-            <h3 className="font-medium text-gray-800 mb-2">Interview Type</h3>
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                             <p className="text-blue-800">
-                 {interviewData.interview_type === 'technical' && '💻 Technical Interview'}
-                 {interviewData.interview_type === 'behavioral' && '🤝 Behavioral Interview'}
-                 {interviewData.interview_type === 'mixed' && '🎯 Mixed (Technical + Behavioral) Interview'}
-               </p>
-            </div>
-          </div>
 
           {/* Instructions */}
           <div className="mb-6">
@@ -220,7 +228,7 @@ const CandidateInterview = () => {
              <div className="mb-6">
                <h3 className="font-medium text-gray-800 mb-2">Special Instructions</h3>
                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                 <p className="text-yellow-800">{interviewData.interview.custom_instructions}</p>
+                 <p className="text-yellow-800">{interviewData.custom_instructions}</p>
                </div>
              </div>
            )}

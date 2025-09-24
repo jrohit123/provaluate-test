@@ -14,6 +14,7 @@ import {
   Sun,
   Moon
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import toast from 'react-hot-toast';
 import ExcelJS from 'exceljs';
 
@@ -24,6 +25,7 @@ const FinalResults = () => {
   const [reportData, setReportData] = useState(null);
   const [selectedParameter, setSelectedParameter] = useState(null);
   const [expandedQuestions, setExpandedQuestions] = useState(new Set());
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('finalResultsTheme');
     return saved ? saved === 'dark' : true; // Default to dark mode
@@ -975,6 +977,210 @@ const FinalResults = () => {
 
   const { interview, parameters } = reportData;
 
+  // PDF Generation Function
+  const generatePDFReport = async () => {
+    if (isGeneratingPDF) return; // Prevent multiple clicks
+    
+    setIsGeneratingPDF(true);
+    try {
+      // Import jsPDF dynamically
+      const { jsPDF } = await import('jspdf');
+      const { autoTable } = await import('jspdf-autotable');
+      
+      const doc = new jsPDF();
+      
+      // Add logo (if available) - using async/await approach
+      let logoAdded = false;
+      try {
+        const logoImg = new Image();
+        logoImg.crossOrigin = 'anonymous';
+        
+        // Wait for image to load
+        await new Promise((resolve, reject) => {
+          logoImg.onload = () => {
+            try {
+              doc.addImage(logoImg, 'PNG', 20, 10, 30, 15);
+              logoAdded = true;
+              resolve(true);
+            } catch (error) {
+              console.log('Error adding logo to PDF:', error);
+              resolve(false);
+            }
+          };
+          logoImg.onerror = () => {
+            console.log('Logo image failed to load');
+            resolve(false);
+          };
+          logoImg.src = '/assets/Logo-transparent_bg.png';
+        });
+      } catch (error) {
+        console.log('Logo not found, continuing without logo');
+      }
+
+      // Add candidate info with reduced spacing
+      doc.setFontSize(11);
+      doc.text(`Candidate: ${interview.candidate_name}`, 20, 45);
+      doc.text(`Email: ${interview.candidate_email || 'N/A'}`, 20, 52);
+      doc.text(`Position: ${interview.position}`, 20, 59);
+      doc.text(`Overall Score: ${interview.overall_score || 'N/A'}`, 20, 66);
+      doc.text(`Interview Date: ${new Date(interview.created_at).toLocaleDateString()}`, 20, 73);
+
+      // Add name image beside candidate info
+      try {
+        await new Promise<boolean>((resolve) => {
+          const nameImg = new Image();
+          nameImg.crossOrigin = 'anonymous';
+          nameImg.onload = () => {
+            try {
+              // Position name image beside candidate info (on the right side of the page)
+              const pageWidth = doc.internal.pageSize.getWidth();
+              const nameWidth = 35;
+              const nameHeight = 25;
+              const nameX = pageWidth - nameWidth - 40; // Right side with 40pt margin (closer to left)
+              const nameY = 38; // Align with candidate info
+              
+              doc.addImage(nameImg, 'JPEG', nameX, nameY, nameWidth, nameHeight);
+              resolve(true);
+            } catch (error) {
+              console.log('Error adding name image to PDF:', error);
+              resolve(false);
+            }
+          };
+          nameImg.onerror = () => {
+            console.log('Name image failed to load');
+            resolve(false);
+          };
+          nameImg.src = '/assets/NAME.jpg';
+        });
+      } catch (error) {
+        console.log('Name image not found, continuing without name image');
+      }
+      
+      // Prepare table data
+      const tableData: any[][] = [];
+      
+      // Check if we have parameter_scores data (from interview_parameter_scores table)
+      if (interview.parameter_scores) {
+        // Parse parameter_scores JSON data
+        const parameterScores = typeof interview.parameter_scores === 'string' 
+          ? JSON.parse(interview.parameter_scores) 
+          : interview.parameter_scores;
+        
+        // Iterate through each parameter
+        Object.entries(parameterScores).forEach(([paramKey, paramData]: [string, any]) => {
+          const individualScores = paramData.individual_question_scores || [];
+          
+          // Process each question and answer for this parameter
+          individualScores.forEach((questionData: any) => {
+            // Format feedback with bullet points
+            const formatFeedback = (feedback: string) => {
+              if (!feedback) return 'No feedback available';
+              
+              // Split by periods and create bullet points
+              const sentences = feedback.split('.').filter(sentence => sentence.trim().length > 0);
+              return sentences.map(sentence => `• ${sentence.trim()}`).join('\n');
+            };
+            
+            tableData.push([
+              paramData.parameter_name || paramKey,
+              questionData.question_text || 'N/A',
+              questionData.transcript || 'No answer provided',
+              formatFeedback(questionData.feedback),
+              questionData.score || 'N/A'
+            ]);
+          });
+        });
+      } else {
+        // Fallback to old data structure if parameter_scores doesn't exist
+        Object.entries(parameters).forEach(([paramKey, paramData]: [string, any]) => {
+          const questions = paramData.questions || [];
+          const answers = paramData.answers || [];
+          
+          if (questions.length > 0) {
+            questions.forEach((question: any, questionIndex: number) => {
+              const answer = answers.find((ans: any) => 
+                ans.question_order === question.question_order || 
+                answers.indexOf(ans) === questionIndex
+              ) || answers[questionIndex] || {};
+              
+              tableData.push([
+                paramData.name || paramKey,
+                question.question_text || 'N/A',
+                answer.transcript || 'No answer provided',
+                answer.feedback || 'No feedback available',
+                answer.score || answer.parameter_score || 'N/A'
+              ]);
+            });
+          } else {
+            const parameterAnswer = answers[0] || {};
+            tableData.push([
+              paramData.name || paramKey,
+              'Parameter-based assessment',
+              parameterAnswer.transcript || 'No answer provided',
+              parameterAnswer.feedback || paramData.feedback || 'No feedback available',
+              parameterAnswer.score || parameterAnswer.parameter_score || paramData.score || 'N/A'
+            ]);
+          }
+        });
+      }
+      
+      // Add table with proper column widths
+      autoTable(doc, {
+        head: [['Parameter', 'Questions', 'Answers', 'AI Feedback', 'Scores']],
+        body: tableData,
+        startY: 85,
+        styles: {
+          fontSize: 7,
+          cellPadding: 2,
+          overflow: 'linebreak',
+          halign: 'left'
+        },
+        headStyles: {
+          fillColor: [59, 130, 246], // Blue color
+          textColor: 255,
+          fontStyle: 'bold',
+          fontSize: 8
+        },
+        columnStyles: {
+          0: { cellWidth: 30 }, // Parameter - larger
+          1: { cellWidth: 40 }, // Questions - larger
+          2: { cellWidth: 40 }, // Answers - larger
+          3: { cellWidth: 40 }, // AI Feedback - larger
+          4: { cellWidth: 18 }  // Scores - larger
+        },
+        margin: { left: 15, right: 15 },
+        pageBreak: 'auto',
+        rowPageBreak: 'avoid',
+        didDrawPage: function (data: any) {
+          // Add page numbers
+          const pageCount = (doc as any).internal.getNumberOfPages();
+          doc.setFontSize(8);
+          doc.text(`Page ${data.pageNumber} of ${pageCount}`, 
+            data.settings.margin.left, 
+            (doc as any).internal.pageSize.height - 10);
+        }
+      });
+      
+      // Save the PDF with proper filename
+      const candidateName = interview.candidate_name.replace(/[^a-zA-Z0-9]/g, '_');
+      const fileName = `Interview_Report_${candidateName}_${new Date().toISOString().split('T')[0]}.pdf`;
+      
+      // Generate and download the PDF
+      doc.save(fileName);
+      
+      // Show success message after a small delay to ensure download started
+      setTimeout(() => {
+        toast.success('PDF report downloaded successfully!');
+      }, 500);
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate PDF report');
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
+
   return (
     <div className={`min-h-screen w-full h-full transition-colors duration-300 ${
       isDarkMode 
@@ -1611,6 +1817,28 @@ const FinalResults = () => {
           </div>
         </div>
       )}
+
+      {/* PDF Download Button */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <Button
+          onClick={generatePDFReport}
+          disabled={isGeneratingPDF}
+          className="bg-red-600 hover:bg-red-700 text-white shadow-lg px-6 py-3 rounded-full flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          size="lg"
+        >
+          {isGeneratingPDF ? (
+            <>
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+              Generating PDF...
+            </>
+          ) : (
+            <>
+              <FileText className="h-5 w-5" />
+              Download PDF Report
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 };
