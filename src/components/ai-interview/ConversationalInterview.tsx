@@ -55,6 +55,58 @@ const cleanTranscription = (transcript) => {
   return cleaned.trim();
 };
 
+// Analyze text and create realistic speech patterns
+const createSpeechPattern = (text: string) => {
+  const words = text.toLowerCase().split(/\s+/);
+  const pattern: number[] = [];
+  
+  words.forEach(word => {
+    const wordLength = word.length;
+    const hasPunctuation = /[.!?,;:]/.test(word);
+    const isQuestion = word.includes('?');
+    const isExclamation = word.includes('!');
+    
+    // Base height for normal speech
+    let baseHeight = 42;
+    
+    // Adjust based on word characteristics
+    if (wordLength <= 3) {
+      // Short words (articles, prepositions) - lower
+      baseHeight = 38;
+    } else if (wordLength >= 7) {
+      // Long words - higher
+      baseHeight = 48;
+    }
+    
+    // Punctuation effects
+    if (isExclamation) {
+      baseHeight += 8; // Emphasis
+    } else if (isQuestion) {
+      baseHeight += 6; // Slight emphasis
+    } else if (hasPunctuation) {
+      baseHeight += 2; // Minor emphasis
+    }
+    
+    // Add some variation
+    const variation = (Math.random() - 0.5) * 4;
+    const finalHeight = Math.max(35, Math.min(55, baseHeight + variation));
+    
+    // Create multiple pattern points for each word (simulate syllables)
+    const syllables = Math.max(1, Math.floor(wordLength / 3));
+    for (let i = 0; i < syllables; i++) {
+      pattern.push(finalHeight);
+    }
+    
+    // Add pause after punctuation
+    if (hasPunctuation) {
+      pattern.push(35); // Pause
+      pattern.push(35); // Longer pause
+    }
+  });
+  
+  return pattern;
+};
+
 const ConversationalInterview = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -103,6 +155,9 @@ const ConversationalInterview = () => {
   const [isAnswerTimerActive, setIsAnswerTimerActive] = useState(false);
   const [hasRequestedScreenPermissions, setHasRequestedScreenPermissions] = useState(false);
   const [answerSubmitted, setAnswerSubmitted] = useState(false);
+  const [waveformHeights, setWaveformHeights] = useState<number[]>([]);
+  const [speechPattern, setSpeechPattern] = useState<number[]>([]);
+  const [patternIndex, setPatternIndex] = useState(0);
   
   // Per-question timer states
   const [questionTimeRemaining, setQuestionTimeRemaining] = useState(0);
@@ -170,7 +225,9 @@ const ConversationalInterview = () => {
          await loadInterviewData();
          // Initialize camera
          await initializeCamera();
-         // Don't request screen permissions yet - wait for first question
+         // Request screen permissions immediately - before welcome message
+         console.log('🖥️ Requesting screen permissions before interview starts...');
+         await requestScreenPermissions();
          // Log state for debugging
          logSpokenState();
        } catch (error) {
@@ -877,6 +934,7 @@ const ConversationalInterview = () => {
     finishInterviewRef.current = finishInterview;
   }, [speakWithAI, finishInterview]);
 
+
   const terminateInterview = useCallback(async (reason) => {
     try {
       console.log('🚫 Terminating interview due to:', reason);
@@ -912,7 +970,7 @@ const ConversationalInterview = () => {
   // Timer effect - only start after AI completes intro
   useEffect(() => {
     // Don't start timer until AI has finished speaking the welcome message
-    if (timeRemaining > 0 && hasSpokenWelcomeRef.current && !aiSpeaking) {
+    if (timeRemaining > 0 && hasSpokenWelcomeRef.current) {
       intervalRef.current = setInterval(() => {
         setTimeRemaining(prev => {
           const newTime = prev - 1;
@@ -948,7 +1006,7 @@ const ConversationalInterview = () => {
         });
       }, 1000);
     } else {
-      // Clear timer if AI is still speaking or welcome not spoken
+      // Clear timer if welcome not spoken yet
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -1005,7 +1063,7 @@ const ConversationalInterview = () => {
         intervalRef.current = null;
       }
     };
-  }, [timeRemaining, isRecording, isVideoRecording, finishInterview, navigate, aiSpeaking]);
+  }, [timeRemaining, isRecording, isVideoRecording, finishInterview, navigate]);
 
   // Question timer effect - per-question countdown with auto-advance
   useEffect(() => {
@@ -1106,38 +1164,23 @@ const ConversationalInterview = () => {
       console.log('🖥️ Starting screen recording...');
       console.log('🔍 Current state - isRecording:', isRecording, 'isVideoOn:', isVideoOn, 'screenPermissionGranted:', screenPermissionGranted, 'hasRequestedScreenPermissions:', hasRequestedScreenPermissions);
       
-      // For subsequent questions, start timer immediately since we already have permissions
-      if (hasRequestedScreenPermissions && screenPermissionGranted) {
-        console.log('⏰ Starting timer immediately for subsequent question - permissions already granted');
-        // Only initialize timer if we don't already have correct values from API response
-        if (currentQuestionMaxTime === 0) {
-          // For structured interviews, don't initialize timer here - it should come from API response
-          if (interviewData?.interview_mode === 'structured') {
-            console.log('⏰ Structured interview - timer should come from API response, not parameter initialization');
-          } else {
-            initializeTimerForExistingQuestion(interviewData.position, currentQuestionIndex);
-          }
-        } else {
-          console.log('⏰ Timer already set from API response, skipping initialization');
-        }
+      // Check if screen permissions are already granted
+      if (!screenPermissionGranted || !screenStream) {
+        toast.error('❌ Screen recording permissions required. Please allow screen access first.');
+        return;
       }
       
-      // Request screen permissions only once when starting recording for the first time
-      if (!hasRequestedScreenPermissions) {
-        console.log('🖥️ First time recording - requesting screen permissions...');
-        setHasRequestedScreenPermissions(true);
-        await requestScreenPermissions();
-        if (!screenPermissionGranted || !screenStream) {
-          toast.error('❌ Screen recording permissions required. Please allow screen access.');
-          return;
-        }
-      } else if (!screenPermissionGranted || !screenStream) {
-        // If permissions were lost, re-request them
-        console.log('🖥️ Screen permissions lost, re-requesting...');
-        await requestScreenPermissions();
-        if (!screenPermissionGranted || !screenStream) {
-          toast.error('❌ Screen recording permissions required. Please allow screen access.');
-          return;
+      // Start timer for current question
+      if (currentQuestionMaxTime > 0) {
+        console.log('⏰ Starting timer for current question:', currentQuestionMaxTime, 'seconds');
+        setQuestionTimeRemaining(currentQuestionMaxTime);
+        setIsQuestionTimerActive(true);
+      } else {
+        // Initialize timer if not set
+          if (interviewData?.interview_mode === 'structured') {
+          console.log('⏰ Structured interview - timer should come from API response');
+          } else {
+            initializeTimerForExistingQuestion(interviewData.position, currentQuestionIndex);
         }
       }
       
@@ -1439,84 +1482,8 @@ const ConversationalInterview = () => {
           console.log('🎯 Clean question text from interviewData:', cleanQuestionText);
         }
         
-        // Start AI assistant with welcome message (only if not already spoken)
-        console.log('🔍 Welcome message check - hasSpokenWelcome:', hasSpokenWelcomeRef.current, 'aiSpeaking:', aiSpeaking);
-        if (!hasSpokenWelcomeRef.current && !aiSpeaking) {
-          const welcomeMessage = `Hello ${interviewData.candidateName}! Welcome to your ${interviewData.position} interview. I'm excited to meet you today and learn more about your experience and skills. This is a great opportunity to showcase your talents, so take a deep breath and remember - you've got this! I'll be your AI interviewer today, and I'm here to make this experience as comfortable as possible for you. All the best for your interview! Let's begin with our first question.`;
-          console.log('🎤 Setting welcome message:', welcomeMessage);
-          // Don't set welcome message visually - only speak it
-          setIsWelcomeMessage(true);
-          
-          // Conversation history removed to reduce complexity
-          
-          // Speak welcome message after a short delay
-          console.log('🎤 Scheduling welcome message to speak in 1 second...');
-          setTimeout(() => {
-            // Double-check to prevent multiple welcome messages
-            if (!hasSpokenWelcomeRef.current && !aiSpeaking) {
-              console.log('🎤 Speaking welcome message now...');
-              // Ensure recording button is hidden during welcome message
-              setQuestionFinishedSpeaking(false);
-              try {
-                if (speakWithAIRef.current) {
-                  speakWithAIRef.current(welcomeMessage);
-                } else {
-                  console.log('⚠️ speakWithAIRef not ready, using direct call');
-                  speakWithAI(welcomeMessage);
-                }
-              } catch (speechError) {
-                console.error('❌ Error speaking welcome message:', speechError);
-                // Fallback: just show the message without speaking
-              }
-              hasSpokenWelcomeRef.current = true;
-            } else {
-              console.log('⚠️ Welcome message already spoken or AI is speaking, skipping...');
-            }
-          }, INTERVIEW_CONSTANTS.TIMEOUTS.UI_UPDATE_DELAY);
-          
-                     // If we have a first question, speak it after welcome
-           if (cleanQuestionText && cleanQuestionText.length > 0 && !hasSpokenFirstQuestionRef.current) {
-             console.log('🎤 Scheduling first question to speak in 4 seconds...');
-             setTimeout(() => {
-               // Double-check to prevent multiple first questions
-               if (!hasSpokenFirstQuestionRef.current && !aiSpeaking) {
-                 // Don't auto-start recording - let candidate start manually after question is read
-                 
-                                   const questionMessage = `Question 1: ${cleanQuestionText}`;
-                 console.log('🎤 Speaking first question:', questionMessage);
-                 setAiMessage(questionMessage);
-                 setIsWelcomeMessage(false); // Show the question visually
-                 
-                 // Timer will be initialized when recording starts, not when question is spoken
-                 console.log('⏰ Timer will start when recording begins');
-                 
-                 // Reset question finished speaking state for first question
-                 setQuestionFinishedSpeaking(false);
-                 
-                 speakWithAI(questionMessage);
-                 hasSpokenFirstQuestionRef.current = true;
-                 
-                 // Conversation history removed to reduce complexity
-               } else {
-                 console.log('⚠️ First question already spoken or AI is speaking, skipping...');
-               }
-             }, 4000); // 4 seconds after welcome
-           } else {
-             console.log('❌ No clean question text found. Original text:', firstQuestion?.question_text);
-           }
-        } else {
-          // If already spoken, just set the current message without speaking
-          if (hasSpokenFirstQuestionRef.current) {
-            const currentMessage = `Question 1: ${cleanQuestionText}`;
-            setAiMessage(currentMessage);
-            setIsWelcomeMessage(false);
-          } else {
-            // Don't show welcome message visually if already spoken
-            setIsWelcomeMessage(true);
-          }
-          
-          // Don't auto-start recording - let candidate start manually after question is read
-        }
+        // Welcome message and first question will be handled after screen access is granted
+        console.log('🔍 Interview data loaded, waiting for screen access to start welcome message');
         
       } else {
         console.error('❌ Failed to load interview data:', response.status);
@@ -1625,6 +1592,47 @@ const ConversationalInterview = () => {
     }
   }, [interviewData]);
 
+  // Initialize and animate waveform heights
+  useEffect(() => {
+    // Initialize with consistent heights
+    setWaveformHeights(Array(15).fill(0).map(() => Math.random() * 20 + 40));
+  }, []);
+
+  // Animate waveform when AI is speaking - using speech patterns
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    if (aiSpeaking && !aiMessage?.includes('Question') && speechPattern.length > 0) {
+      interval = setInterval(() => {
+        setWaveformHeights(prev => {
+          const newHeights = [...prev];
+          
+          // Get current pattern value
+          const currentHeight = speechPattern[patternIndex] || 42;
+          
+          // Update 3-5 bars with the current pattern height
+          const barsToUpdate = Math.floor(Math.random() * 3) + 3;
+          const indices = [...Array(15)].map((_, i) => i).sort(() => 0.5 - Math.random()).slice(0, barsToUpdate);
+          
+          indices.forEach(index => {
+            // Add slight variation to make it look natural
+            const variation = (Math.random() - 0.5) * 6;
+            newHeights[index] = Math.max(35, Math.min(55, currentHeight + variation));
+          });
+          
+          return newHeights;
+        });
+        
+        // Move to next pattern point
+        setPatternIndex(prev => (prev + 1) % speechPattern.length);
+      }, 300); // Faster updates for smoother speech rhythm
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [aiSpeaking, aiMessage, speechPattern, patternIndex]);
+
   // Start timer when recording begins
   useEffect(() => {
     if (isRecording && currentQuestionMaxTime > 0 && !isQuestionTimerActive) {
@@ -1685,8 +1693,70 @@ const ConversationalInterview = () => {
       console.log('✅ Screen stream obtained successfully');
       setScreenStream(stream);
       setScreenPermissionGranted(true);
+      setHasRequestedScreenPermissions(true);
       
-      toast.success('🖥️ Screen recording permissions granted!');
+      toast.success('✅ Screen access granted! Starting interview...');
+      
+      // Start welcome message after screen access is granted
+      setTimeout(() => {
+        if (!hasSpokenWelcomeRef.current) {
+          console.log('🎤 Starting welcome message after screen access granted...');
+          const welcomeMessage = `Hello ${interviewData.candidateName}! Welcome to your ${interviewData.position} interview. I'm excited to meet you today and learn more about your experience and skills. This is a great opportunity to showcase your talents, so take a deep breath and remember - you've got this! I'll be your AI interviewer today, and I'm here to make this experience as comfortable as possible for you. All the best for your interview! Let's begin with our first question.`;
+          
+          // Speak welcome message
+          if (aiAudioEnabled && 'speechSynthesis' in window) {
+            console.log('🎤 Setting aiSpeaking to true and aiMessage to welcome message');
+            
+            // Create speech pattern for the welcome message
+            const pattern = createSpeechPattern(welcomeMessage);
+            setSpeechPattern(pattern);
+            setPatternIndex(0);
+            
+            setAiSpeaking(true);
+            setAiMessage(welcomeMessage); // Set welcome message for animated AI robot
+            const utterance = new SpeechSynthesisUtterance(welcomeMessage);
+            utterance.rate = 0.9;
+            utterance.pitch = 1.0;
+            utterance.volume = 0.8;
+            
+            utterance.onend = () => {
+              console.log('🎤 Welcome message finished, starting first question...');
+              setAiSpeaking(false);
+              setAiMessage(''); // Clear welcome message
+              hasSpokenWelcomeRef.current = true;
+              
+               // Start first question after welcome
+               setTimeout(() => {
+                 if (currentQuestion && (currentQuestion.question || currentQuestion.question_text)) {
+                   const questionText = currentQuestion.question || currentQuestion.question_text;
+                   const questionMessage = `Question 1: ${questionText}`;
+                   
+                   console.log('📝 FIRST: Displaying question and keeping it visible:', questionMessage);
+                   setAiMessage(questionMessage);
+                   setIsWelcomeMessage(false); // Ensure welcome message is off
+                   
+                   // Mark first question as displayed to prevent it from disappearing
+                   hasSpokenFirstQuestionRef.current = true;
+                   
+                   // THEN: Speak the question after a short delay
+                   setTimeout(() => {
+                     console.log('🎤 THEN: Speaking question after display');
+                     speakWithAI(questionMessage);
+                   }, 500); // 500ms delay to show question first
+                 }
+               }, 1000);
+            };
+            
+            utterance.onerror = (error) => {
+              console.error('❌ Error speaking welcome message:', error);
+              setAiSpeaking(false);
+              hasSpokenWelcomeRef.current = true;
+            };
+            
+            speechSynthesis.speak(utterance);
+          }
+        }
+      }, 1000);
       
       // Monitor if user stops sharing
       stream.getVideoTracks()[0].onended = () => {
@@ -2205,109 +2275,31 @@ const ConversationalInterview = () => {
             </div>
             
                          <div className="bg-gray-800/50 rounded-xl p-1 h-[520px] flex items-center justify-center">
-              {aiSpeaking ? (
+              {aiSpeaking && !aiMessage?.includes('Question') ? (
                 <div className="text-center w-full">
-                  {/* Animated AI Robot */}
-                  <div className="relative mb-1">
-                    {/* Robot Head */}
-                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full mx-auto relative overflow-hidden">
-                      {/* Eyes */}
-                      <div className="absolute top-2 left-2 w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                      <div className="absolute top-2 right-2 w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                      
-                      {/* Animated Mouth */}
-                      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-                        <div className="w-6 h-2 bg-white rounded-full animate-pulse"></div>
-                        <div className="w-4 h-1 bg-white rounded-full mt-1 mx-auto animate-pulse" style={{animationDelay: '0.2s'}}></div>
-                      </div>
-                      
-                      {/* Speaking Waveform */}
-                      <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 flex items-end gap-1">
-                        {[...Array(5)].map((_, i) => (
-                          <div
-                            key={i}
-                            className="w-1 bg-blue-400 rounded-full animate-pulse"
-                            style={{
-                              height: `${Math.random() * 35 + 20}px`,
-                              animationDelay: `${i * 0.1}s`,
-                              animationDuration: '0.6s'
-                            }}
-                          ></div>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    {/* Floating Particles */}
-                    <div className="absolute inset-0 pointer-events-none">
-                      {[...Array(6)].map((_, i) => (
-                        <div
-                          key={i}
-                          className="absolute w-2 h-2 bg-blue-400 rounded-full animate-bounce opacity-60"
-                          style={{
-                            left: `${Math.random() * 100}%`,
-                            top: `${Math.random() * 100}%`,
-                            animationDelay: `${i * 0.5}s`,
-                            animationDuration: '2s'
-                          }}
-                        ></div>
-                      ))}
-                    </div>
-                  </div>
+                  {/* Animated AI Speaking - Clean waveform only */}
                   
                   {/* Audio Waveform */}
-                  <div className="flex items-end justify-center gap-1 mb-1">
-                    {[...Array(12)].map((_, i) => (
+                  <div className="flex items-end justify-center gap-1 mb-4 h-20">
+                    {[...Array(15)].map((_, i) => (
                       <div
                         key={i}
-                        className="w-1 bg-gradient-to-t from-blue-400 to-purple-400 rounded-full animate-pulse"
+                        className="w-1.5 bg-gradient-to-t from-blue-400 via-purple-400 to-pink-400 rounded-full transition-all duration-500 ease-in-out"
                         style={{
-                          height: `${Math.random() * 45 + 25}px`,
-                          animationDelay: `${i * 0.1}s`,
-                          animationDuration: '0.8s'
+                          height: `${waveformHeights[i] || 42}px`
                         }}
                       ></div>
                     ))}
                   </div>
                   
-                  <p className="text-white text-sm font-medium">AI is speaking...</p>
+                  {/* Speaking Text */}
+                  <div className="text-blue-300 text-lg font-medium mt-4">
+                    🤖 AI is speaking...
+                  </div>
                 </div>
               ) : (
                 <div className="text-center w-full">
-                  {/* Static AI Robot */}
-                  <div className="relative mb-1">
-                    {/* Robot Head */}
-                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full mx-auto relative overflow-hidden">
-                      {/* Eyes with blinking */}
-                      <div className="absolute top-2 left-2 w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                      <div className="absolute top-2 right-2 w-2 h-2 bg-white rounded-full animate-pulse" style={{animationDelay: '0.5s'}}></div>
-                      
-                      {/* Static Mouth */}
-                      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-                        <div className="w-4 h-1 bg-white rounded-full"></div>
-                      </div>
-                      
-                      {/* Subtle Glow Effect */}
-                      <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full opacity-20 animate-pulse"></div>
-                    </div>
-                    
-                    {/* Subtle Floating Elements */}
-                    <div className="absolute inset-0 pointer-events-none">
-                      {[...Array(3)].map((_, i) => (
-                        <div
-                          key={i}
-                          className="absolute w-1 h-1 bg-blue-300 rounded-full animate-pulse opacity-40"
-                          style={{
-                            left: `${20 + i * 30}%`,
-                            top: `${30 + i * 20}%`,
-                            animationDelay: `${i * 1}s`,
-                            animationDuration: '3s'
-                          }}
-                        ></div>
-                      ))}
-                    </div>
-                  </div>
-                  
-                                     {/* Submission Status Indicator */}
+                   {/* Submission Status Indicator */}
                    {answerSubmitted && (
                      <div className="bg-green-600/20 border border-green-500/30 rounded-lg p-3 mb-3 animate-pulse">
                        <div className="flex items-center gap-2">
@@ -2317,31 +2309,20 @@ const ConversationalInterview = () => {
                      </div>
                    )}
 
-                   {/* AI Message */}
+                   {/* AI Message - clean during question reading */}
                    {!isWelcomeMessage && (
                      <div className="bg-gray-700/50 rounded-lg p-3 mb-3">
                        <p className="text-white text-xl font-medium leading-relaxed">{aiMessage}</p>
-                       
-                       
-                       
-                       {aiSpeaking && (
-                         <div className="mt-3 p-2 bg-blue-500/20 border border-blue-500/30 rounded-lg">
-                           <div className="flex items-center gap-2">
-                             <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                             <span className="text-blue-300 text-sm">AI is reading the question...</span>
-                           </div>
-                         </div>
-                       )}
                      </div>
                    )}
                    
-
-                   
-                   {/* Status Indicator */}
-                   <div className="flex items-center justify-center gap-2 mb-3">
-                     <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                     <p className="text-gray-300 text-sm">Ready to speak</p>
-                   </div>
+                   {/* Status Indicator - only show when AI is not speaking */}
+                   {!aiSpeaking && (
+                     <div className="flex items-center justify-center gap-2 mb-3">
+                       <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                       <p className="text-gray-300 text-sm">Ready to speak</p>
+                     </div>
+                   )}
                    
                    {/* Auto-start interview */}
                    {!hasSpokenWelcomeRef.current && !aiSpeaking && (
@@ -2420,7 +2401,14 @@ const ConversationalInterview = () => {
                  {/* Instructions */}
          <div className="glass rounded-2xl p-4 border border-white/10 mb-6">
            <div className="text-center">
-             {!questionFinishedSpeaking && !isRecording ? (
+              {!screenPermissionGranted ? (
+                <div className="text-blue-300 text-sm transition-all duration-500 ease-in-out">
+                  <p>🖥️ Setting up screen access for interview security...</p>
+                  <div className="mt-2 text-xs text-gray-400">
+                    Screen sharing is required and will be requested automatically
+                  </div>
+                </div>
+              ) : !questionFinishedSpeaking && !isRecording ? (
                <div className="text-gray-300 text-sm transition-all duration-500 ease-in-out">
                  <p>🎤 Wait for the AI to finish reading the question. Then click "Start Recording" when ready.</p>
                </div>
@@ -2428,28 +2416,70 @@ const ConversationalInterview = () => {
                <div className="text-green-300 text-sm transition-all duration-500 ease-in-out">
                  <div>
                    <p>✅ Question finished! Click "Start Recording" to begin recording your answer.</p>
-                   <div className="mt-2 text-xs text-yellow-300">
-                     🎥 Screen access will be requested when you click the button
+                   <div className="mt-2 text-xs text-green-400">
+                     🎥 Screen access already granted - ready to record
                    </div>
                  </div>
                </div>
              ) : isRecording ? (
-               <div className="text-red-300 text-sm">
-                 <p>🎥 Screen + Camera recording in progress... Click "Stop Recording" when you're done.</p>
-                 
-                 {/* Recording Status Display */}
-                 {isRecording && (
-                   <div className="mt-4 p-3 bg-gray-800/50 rounded-lg border border-gray-600">
-                     <div className="flex items-center justify-center gap-3 mb-2">
-                       <Mic className="w-5 h-5 text-blue-400" />
-                       <span className="text-lg font-bold text-blue-300">Recording Status</span>
+               <div>
+                 {/* Original Long Timer Bar */}
+                 {isQuestionTimerActive && questionTimeRemaining > 0 && (
+                   <div className="mt-2 w-full max-w-2xl mx-auto">
+                     <div className="flex items-center justify-between mb-2">
+                       <div className="flex items-center gap-2">
+                         <Clock className={`w-4 h-4 ${
+                           questionTimeRemaining <= 30 
+                             ? 'text-red-400' 
+                             : questionTimeRemaining <= 60 
+                               ? 'text-yellow-400' 
+                               : 'text-green-400'
+                         }`} />
+                         <span className={`text-sm font-medium ${
+                           questionTimeRemaining <= 30 
+                             ? 'text-red-400' 
+                             : questionTimeRemaining <= 60 
+                               ? 'text-yellow-400' 
+                               : 'text-green-400'
+                         }`}>
+                           Question Time: {formatTime(questionTimeRemaining)} / {formatTime(currentQuestionMaxTime)}
+                         </span>
+                       </div>
+                       <span className="text-xs text-gray-500">
+                         {Math.round((questionTimeRemaining / currentQuestionMaxTime) * 100)}% remaining
+                       </span>
                      </div>
-                     <div className="text-3xl font-bold mb-2 text-green-400">
-                       Recording
+                     
+                     {/* Progress Bar */}
+                     <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                       <div 
+                         className={`h-full transition-all duration-1000 ease-linear ${
+                           questionTimeRemaining <= 30 
+                             ? 'bg-gradient-to-r from-red-500 to-red-600 animate-pulse' 
+                             : questionTimeRemaining <= 60 
+                               ? 'bg-gradient-to-r from-yellow-500 to-yellow-600' 
+                               : 'bg-gradient-to-r from-green-500 to-green-600'
+                         }`}
+                         style={{ 
+                           width: `${(questionTimeRemaining / currentQuestionMaxTime) * 100}%`,
+                           transition: 'width 1s linear'
+                         }}
+                       ></div>
                      </div>
-                     <div className="text-sm text-gray-400 mb-3">
-                       Recording in progress - take your time to provide a detailed answer
-                     </div>
+                     
+                     {/* Warning Messages */}
+                     {questionTimeRemaining <= 30 && (
+                       <div className="mt-2 text-red-400 text-sm font-medium animate-pulse flex items-center gap-2">
+                         <AlertTriangle className="w-4 h-4" />
+                         ⚠️ Time running out! Answer will auto-submit in {questionTimeRemaining} seconds
+                       </div>
+                     )}
+                     {questionTimeRemaining <= 60 && questionTimeRemaining > 30 && (
+                       <div className="mt-2 text-yellow-400 text-sm font-medium flex items-center gap-2">
+                         <AlertTriangle className="w-4 h-4" />
+                         ⚠️ Less than 1 minute remaining for this question
+                       </div>
+                     )}
                    </div>
                  )}
                </div>
@@ -2476,15 +2506,16 @@ const ConversationalInterview = () => {
 
                  {/* Controls */}
          <div className="flex items-center justify-center gap-4">
-                                           {/* Start Recording Button - show when question is finished and not recording */}
-             {questionFinishedSpeaking && !isRecording && (
+
+             {/* Start Recording Button - show when screen access granted and question finished */}
+             {screenPermissionGranted && questionFinishedSpeaking && !isRecording && (
                <button
                  onClick={startQuestionRecording}
                  disabled={!isVideoOn || isSubmitting}
-                 className="flex items-center gap-2 px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-all duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                 className="flex items-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-medium transition-all duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                >
                  <Mic className="w-5 h-5" />
-                 {screenPermissionGranted ? 'Start Recording' : 'Request Screen Access'}
+                 Start Recording
                </button>
              )}
            
@@ -2539,6 +2570,7 @@ const ConversationalInterview = () => {
               )}
             </button>
             
+            
             {/* End Interview Button - always visible */}
             <button
               onClick={() => {
@@ -2554,65 +2586,6 @@ const ConversationalInterview = () => {
 
          </div>
 
-         {/* Per-Question Timer Progress Bar */}
-         {isQuestionTimerActive && questionTimeRemaining > 0 && (
-           <div className="mt-4 w-full max-w-2xl mx-auto">
-             <div className="flex items-center justify-between mb-2">
-               <div className="flex items-center gap-2">
-                 <Clock className={`w-4 h-4 ${
-                   questionTimeRemaining <= 30 
-                     ? 'text-red-400' 
-                     : questionTimeRemaining <= 60 
-                       ? 'text-yellow-400' 
-                       : 'text-green-400'
-                 }`} />
-                 <span className={`text-sm font-medium ${
-                   questionTimeRemaining <= 30 
-                     ? 'text-red-400' 
-                     : questionTimeRemaining <= 60 
-                       ? 'text-yellow-400' 
-                       : 'text-green-400'
-                 }`}>
-                   Question Time: {formatTime(questionTimeRemaining)} / {formatTime(currentQuestionMaxTime)}
-                 </span>
-               </div>
-               <span className="text-xs text-gray-500">
-                 {Math.round((questionTimeRemaining / currentQuestionMaxTime) * 100)}% remaining
-               </span>
-             </div>
-             
-             {/* Progress Bar */}
-             <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-               <div 
-                 className={`h-full transition-all duration-1000 ease-linear ${
-                   questionTimeRemaining <= 30 
-                     ? 'bg-gradient-to-r from-red-500 to-red-600 animate-pulse' 
-                     : questionTimeRemaining <= 60 
-                       ? 'bg-gradient-to-r from-yellow-500 to-yellow-600' 
-                       : 'bg-gradient-to-r from-green-500 to-green-600'
-                 }`}
-                 style={{ 
-                   width: `${(questionTimeRemaining / currentQuestionMaxTime) * 100}%`,
-                   transition: 'width 1s linear'
-                 }}
-               ></div>
-             </div>
-             
-             {/* Warning Messages */}
-             {questionTimeRemaining <= 30 && (
-               <div className="mt-2 text-red-400 text-sm font-medium animate-pulse flex items-center gap-2">
-                 <AlertTriangle className="w-4 h-4" />
-                 ⚠️ Time running out! Answer will auto-submit in {questionTimeRemaining} seconds
-               </div>
-             )}
-             {questionTimeRemaining <= 60 && questionTimeRemaining > 30 && (
-               <div className="mt-2 text-yellow-400 text-sm font-medium flex items-center gap-2">
-                 <AlertTriangle className="w-4 h-4" />
-                 ⚠️ Less than 1 minute remaining for this question
-               </div>
-             )}
-           </div>
-         )}
       </div>
     </div>
   );

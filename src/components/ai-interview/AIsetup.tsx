@@ -82,6 +82,7 @@ const HRInterviewCreator = () => {
   const [parametersSaved, setParametersSaved] = useState(false);
   const [isExpandDialogOpen, setIsExpandDialogOpen] = useState(false);
   const [loadedPositions, setLoadedPositions] = useState<Set<string>>(new Set());
+  const [expandedParameters, setExpandedParameters] = useState<Set<string>>(new Set());
 
   // Load job descriptions from both CV screening and AI interview tables
   const loadJobDescriptions = async () => {
@@ -1246,6 +1247,19 @@ const HRInterviewCreator = () => {
     return colors[index % colors.length];
   };
 
+  // Function to toggle parameter expansion
+  const toggleParameter = (key: string) => {
+    setExpandedParameters(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="mb-6">
@@ -1360,144 +1374,6 @@ const HRInterviewCreator = () => {
                 </div>
               )}
 
-              {/* Personalized Questions Section - Only for AI Interviews */}
-              {formData.interviewMode === 'ai' && (
-                <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="personalizedQuestionsEnabled"
-                      checked={formData.personalizedQuestionsEnabled}
-                      onChange={(e) => {
-                        if (parametersSaved) return; // Prevent changes when saved
-                        const enabled = e.target.checked;
-                        setFormData(prev => {
-                          const newQuestions = enabled ? prev.personalizedQuestions : [];
-                          return { 
-                            ...prev, 
-                            personalizedQuestionsEnabled: enabled,
-                            personalizedQuestions: newQuestions
-                          };
-                        });
-                        
-                        // Recalculate duration when enabling/disabling personalized questions
-                        if (enabled) {
-                          recalculateDurationWithPersonalizedQuestions(formData.personalizedQuestions);
-                        } else {
-                          recalculateDurationWithPersonalizedQuestions([]);
-                        }
-                      }}
-                      disabled={parametersSaved}
-                      className={`h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ${
-                        parametersSaved ? 'opacity-50 cursor-not-allowed' : ''
-                      }`}
-                    />
-                    <Label htmlFor="personalizedQuestionsEnabled" className={`text-sm font-medium text-blue-800 ${
-                      parametersSaved ? 'opacity-50' : ''
-                    }`}>
-                      Enable Personalized Questions (Optional)
-                    </Label>
-                  </div>
-                  
-                  {formData.personalizedQuestionsEnabled && (
-                    <div className="space-y-3">
-                      <p className="text-xs text-blue-600">
-                        Add 1-2 personal questions that will be asked before technical questions. These are for review only and won't be scored.
-                      </p>
-                      
-                      {formData.personalizedQuestions.map((question, index) => (
-                        <div key={index} className="space-y-2 p-3 bg-white rounded border">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-sm font-medium text-gray-700">
-                              Question {index + 1}
-                            </Label>
-                            {!parametersSaved && formData.personalizedQuestions.length > 1 && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  const newQuestions = formData.personalizedQuestions.filter((_, i) => i !== index);
-                                  setFormData(prev => ({ ...prev, personalizedQuestions: newQuestions }));
-                                  // Recalculate duration when removing a question
-                                  recalculateDurationWithPersonalizedQuestions(newQuestions);
-                                }}
-                                className="text-red-500 hover:text-red-700 h-6 w-6 p-0"
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            )}
-                          </div>
-                          {parametersSaved ? (
-                            <div className="text-sm text-gray-700 bg-gray-50 p-2 rounded border">
-                              {question.question}
-                            </div>
-                          ) : (
-                            <Textarea
-                              value={question.question}
-                              onChange={(e) => {
-                                const newQuestions = [...formData.personalizedQuestions];
-                                newQuestions[index].question = e.target.value;
-                                setFormData(prev => ({ ...prev, personalizedQuestions: newQuestions }));
-                                // Recalculate duration when changing question text (though time doesn't change)
-                                recalculateDurationWithPersonalizedQuestions(newQuestions);
-                              }}
-                              placeholder="Enter your personal question here..."
-                              rows={2}
-                              className="resize-none"
-                            />
-                          )}
-                          <div className="flex items-center gap-2">
-                            <Label className="text-xs text-gray-600">Time Limit (minutes):</Label>
-                            {parametersSaved ? (
-                              <div className="text-sm font-semibold text-gray-900">
-                                {question.timeLimit}
-                              </div>
-                            ) : (
-                              <Input
-                                type="number"
-                                min="1"
-                                max="10"
-                                value={question.timeLimit}
-                                onChange={(e) => {
-                                  const newQuestions = [...formData.personalizedQuestions];
-                                  newQuestions[index].timeLimit = parseInt(e.target.value) || 3;
-                                  setFormData(prev => ({ ...prev, personalizedQuestions: newQuestions }));
-                                  // Recalculate duration when changing time limit
-                                  recalculateDurationWithPersonalizedQuestions(newQuestions);
-                                }}
-                                className="w-20 h-8 text-sm"
-                              />
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                      
-                      {!parametersSaved && formData.personalizedQuestions.length < 2 && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const newQuestion = { question: '', timeLimit: 3 };
-                            const newQuestions = [...formData.personalizedQuestions, newQuestion];
-                            setFormData(prev => ({
-                              ...prev,
-                              personalizedQuestions: newQuestions
-                            }));
-                            // Recalculate duration when adding a question
-                            recalculateDurationWithPersonalizedQuestions(newQuestions);
-                          }}
-                          className="w-full border-dashed border-blue-300 text-blue-600 hover:bg-blue-50"
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add Personal Question
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
 
             </div>
 
@@ -1704,110 +1580,13 @@ const HRInterviewCreator = () => {
       {/* Conditional Rendering based on Interview Mode */}
       {formData.interviewMode === 'ai' ? (
         <div>
-        {/* Parameter Weightage Summary Section */}
-        {formData.position && Object.keys(customParameters).length > 0 && (
-        <Card className="animate-fade-in">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              Parameter Weightage Summary
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Total Weightage Display */}
-            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="text-green-600 font-medium text-lg">Total Weightage</div>
-                  <div className={`text-3xl font-bold ${calculateTotalWeightage() === 100 ? 'text-green-600' : 'text-red-600'}`}>
-                    {calculateTotalWeightage()}%
-                  </div>
-                </div>
-                <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  calculateTotalWeightage() === 100 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-red-100 text-red-800'
-                }`}>
-                  {calculateTotalWeightage() === 100 ? '✓ Balanced' : '⚠️ Unbalanced'}
-                </div>
-              </div>
-              
-              {/* Weightage Status Message */}
-              <div className={`mt-2 text-sm ${
-                calculateTotalWeightage() === 100 
-                  ? 'text-green-600' 
-                  : 'text-red-600'
-              }`}>
-                {calculateTotalWeightage() === 100 
-                  ? '✅ All parameters are properly balanced with 100% total weightage.'
-                  : `⚠️ Total weightage should equal 100%. Currently ${calculateTotalWeightage()}%. Please adjust parameter weights.`
-                }
-              </div>
-            </div>
-            
-            {/* Individual Parameter Weightages */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {Object.entries(customParameters).map(([key, param], index) => (
-                <div key={key} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-sm font-medium text-gray-700 truncate" title={param.name}>
-                      {param.name}
-                    </div>
-                    <div className={`text-lg font-bold ${
-                      param.weight > 0 ? 'text-green-600' : 'text-gray-400'
-                    }`}>
-                      {param.weight}%
-                    </div>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="h-2 rounded-full transition-all duration-300"
-                      style={{ 
-                        width: `${param.weight}%`,
-                        backgroundColor: getWeightageColor(index, param.weight)
-                      }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            {/* Weightage Distribution Chart */}
-            {Object.keys(customParameters).length > 0 && (
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                <div className="text-sm font-medium text-gray-700 mb-3">Weightage Distribution</div>
-                <div className="flex h-8 rounded-lg overflow-hidden">
-                  {Object.entries(customParameters).map(([key, param], index) => (
-                    <div
-                      key={key}
-                      className="h-full transition-all duration-300 hover:opacity-80"
-                      style={{ 
-                        width: `${param.weight}%`,
-                        backgroundColor: getWeightageColor(index, param.weight)
-                      }}
-                      title={`${param.name}: ${param.weight}%`}
-                    ></div>
-                  ))}
-                </div>
-                <div className="flex justify-between text-xs text-gray-500 mt-2">
-                  <span>0%</span>
-                  <span>25%</span>
-                  <span>50%</span>
-                  <span>75%</span>
-                  <span>100%</span>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        )}
 
-        {/* AI Interview - Assessment Parameters Section */}
+        {/* AI Interview - Interview Questions Configuration Section */}
         <Card className="animate-fade-in">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="h-5 w-5" />
-              Assessment Parameters for {formData.position || 'Selected Role'}
+              Interview Questions Configuration for {formData.position || 'Selected Role'}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -1898,207 +1677,281 @@ const HRInterviewCreator = () => {
 
           {Object.keys(customParameters).length > 0 ? (
             <div className="space-y-4">
-              {Object.entries(customParameters).map(([key, param]) => (
-                <Card key={key} className="bg-gray-50">
-                  <CardContent className="pt-6">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        {parametersSaved ? (
-                          <div className="text-lg font-semibold text-gray-900 mb-2">
-                            {param.name}
-                          </div>
-                        ) : (
-                          <div className="w-full">
-                            <Label>Parameter Name</Label>
-                            <Input
-                              type="text"
-                              value={param.name}
-                              onChange={(e) => updateParameter(key, 'name', e.target.value)}
-                              placeholder="Enter parameter name..."
-                              className="w-full"
-                            />
-                          </div>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => deleteParameter(key)}
-                        className="text-red-500 hover:text-red-700 ml-2"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    
-                    {parametersSaved ? (
-                    <div className="w-full mb-4 p-3 bg-white rounded border text-gray-700 whitespace-pre-line">
-                      {param.description}
-                    </div>
-                    ) : (
-                      <div className="w-full mb-4">
-                        <Label>Description</Label>
-                        <Textarea
-                          value={param.description}
-                          onChange={(e) => updateParameter(key, 'description', e.target.value)}
-                          placeholder="Enter parameter description in bullet points..."
-                          rows={4}
-                          className="resize-none"
-                        />
-                      </div>
-                    )}
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                      <div className="space-y-2">
-                        <Label>Weight (%)</Label>
-                        {parametersSaved ? (
-                          <div className="text-lg font-semibold text-gray-900">
-                            {param.weight}%
-                          </div>
-                        ) : (
-                        <Input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={param.weight}
-                          onChange={(e) => updateParameter(key, 'weight', e.target.value)}
-                        />
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Min Questions</Label>
-                        {parametersSaved ? (
-                          <div className="text-lg font-semibold text-gray-900">
-                            {param.min_questions}
-                          </div>
-                        ) : (
-                        <Input
-                          type="number"
-                          min="1"
-                          max="10"
-                          value={param.min_questions}
-                          onChange={(e) => updateParameter(key, 'min_questions', e.target.value)}
-                        />
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Max Questions</Label>
-                        {parametersSaved ? (
-                          <div className="text-lg font-semibold text-gray-900">
-                            {param.max_questions}
-                          </div>
-                        ) : (
-                        <Input
-                          type="number"
-                          min="1"
-                          max="10"
-                          value={param.max_questions}
-                          onChange={(e) => updateParameter(key, 'max_questions', e.target.value)}
-                        />
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label title="Time allocated for candidate to answer (question reading time is additional)">Answer Time (min)</Label>
-                        {parametersSaved ? (
-                          <div className="text-lg font-semibold text-gray-900">
-                            {param.max_time}
-                          </div>
-                        ) : (
-                          <Input
-                            type="number"
-                            min="1"
-                            max="10"
-                            value={param.max_time}
-                            onChange={(e) => updateParameter(key, 'max_time', e.target.value)}
-                          />
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Level</Label>
-                        {parametersSaved ? (
-                          <div className="text-lg font-semibold text-gray-900">
-                            {param.level}
-                          </div>
-                        ) : (
-                          <Select
-                            value={param.level || 'Regular'}
-                            onValueChange={(value: 'Easy' | 'Regular' | 'Expert') => updateParameter(key, 'level', value)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Easy">Easy</SelectItem>
-                              <SelectItem value="Regular">Regular</SelectItem>
-                              <SelectItem value="Expert">Expert</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Scoring Criteria Section */}
-                    {param.scoring_criteria && Array.isArray(param.scoring_criteria) && (
-                      <div className="mt-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <Label>Scoring Criteria</Label>
-                          {!parametersSaved && (
-                          <Button
-                            onClick={() => {
-                              const newCriteria = [...param.scoring_criteria, ''];
-                              updateParameter(key, 'scoring_criteria', newCriteria);
-                            }}
-                            variant="ghost"
-                            size="sm"
-                            className="text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                          >
-                            <Plus className="w-4 h-4" />
-                            Add Criteria
-                          </Button>
-                          )}
-                        </div>
-                        <div className="space-y-2">
-                          {param.scoring_criteria.map((criteria, index) => (
-                            <div key={index} className="flex items-center gap-2">
-                              {parametersSaved ? (
-                                <div className="flex-1 text-sm text-gray-700 bg-white p-2 rounded border">
-                                  {criteria}
+              {Object.entries(customParameters).map(([key, param], index) => {
+                const isExpanded = expandedParameters.has(key);
+                const color = getWeightageColor(index, param.weight);
+                
+                return (
+                  <Card key={key} className="bg-gray-50">
+                    <CardContent className="pt-6">
+                      {parametersSaved ? (
+                        <div className="space-y-3">
+                          {/* Parameter Header with Circle Bullet and Percentage */}
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-start gap-3 flex-1">
+                              {/* Circle bullet point */}
+                              <div 
+                                className="w-3 h-3 rounded-full mt-1 flex-shrink-0"
+                                style={{ backgroundColor: color }}
+                              ></div>
+                              <div className="flex-1">
+                                <div className="text-sm font-semibold text-gray-900 mb-1">
+                                  {param.name}
                                 </div>
-                              ) : (
-                                <>
+                              </div>
+                            </div>
+                            <div className="text-right ml-4">
+                              <div className="text-lg font-bold text-gray-900">
+                                {param.weight}%
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Progress Bar */}
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="h-2 rounded-full transition-all duration-300"
+                              style={{ 
+                                width: `${param.weight}%`,
+                                backgroundColor: color
+                              }}
+                            ></div>
+                          </div>
+                          
+                          {/* View Details Link */}
+                          <div className="flex items-center justify-between">
+                            <div 
+                              className="text-blue-600 text-xs font-medium cursor-pointer hover:text-blue-700 transition-colors"
+                              onClick={() => toggleParameter(key)}
+                            >
+                              {isExpanded ? 'Hide Details ▲' : 'View Details ▼'}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => deleteParameter(key)}
+                              className="text-red-500 hover:text-red-700 h-6 w-6 p-0"
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <div className="w-full">
+                              <Label>Parameter Name</Label>
                               <Input
                                 type="text"
-                                value={criteria}
-                                onChange={(e) => {
-                                  const newCriteria = [...param.scoring_criteria];
-                                  newCriteria[index] = e.target.value;
-                                  updateParameter(key, 'scoring_criteria', newCriteria);
-                                }}
-                                placeholder={`Criteria ${index + 1}`}
-                                className="flex-1 text-sm"
+                                value={param.name}
+                                onChange={(e) => updateParameter(key, 'name', e.target.value)}
+                                placeholder="Enter parameter name..."
+                                className="w-full"
                               />
-                              {param.scoring_criteria.length > 1 && (
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteParameter(key)}
+                            className="text-red-500 hover:text-red-700 ml-2"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    
+                      {/* Expandable Content - Only show when parameters are saved and expanded */}
+                      {parametersSaved && isExpanded && (
+                        <div className="space-y-4">
+                          {/* Description */}
+                          <div className="w-full p-3 bg-white rounded border text-gray-700 whitespace-pre-line">
+                            {param.description}
+                          </div>
+                          
+                          {/* Parameter Details Grid */}
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                            <div className="space-y-2">
+                              <Label>Weight (%)</Label>
+                              <div className="text-lg font-semibold text-gray-900">
+                                {param.weight}%
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Min Questions</Label>
+                              <div className="text-lg font-semibold text-gray-900">
+                                {param.min_questions}
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Max Questions</Label>
+                              <div className="text-lg font-semibold text-gray-900">
+                                {param.max_questions}
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label title="Time allocated for candidate to answer (question reading time is additional)">Answer Time (min)</Label>
+                              <div className="text-lg font-semibold text-gray-900">
+                                {param.max_time}
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Level</Label>
+                              <div className="text-lg font-semibold text-gray-900">
+                                {param.level}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Scoring Criteria Section */}
+                          {param.scoring_criteria && Array.isArray(param.scoring_criteria) && (
+                            <div className="mt-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <Label>Scoring Criteria</Label>
+                              </div>
+                              <div className="space-y-2">
+                                {param.scoring_criteria.map((criteria, index) => (
+                                  <div key={index} className="flex items-center gap-2">
+                                    <div className="flex-1 text-sm text-gray-700 bg-white p-2 rounded border">
+                                      {criteria}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Editable Content - Only show when parameters are not saved */}
+                      {!parametersSaved && (
+                        <div className="space-y-4">
+                          <div className="w-full mb-4">
+                            <Label>Description</Label>
+                            <Textarea
+                              value={param.description}
+                              onChange={(e) => updateParameter(key, 'description', e.target.value)}
+                              placeholder="Enter parameter description in bullet points..."
+                              rows={4}
+                              className="resize-none"
+                            />
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                            <div className="space-y-2">
+                              <Label>Weight (%)</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={param.weight}
+                                onChange={(e) => updateParameter(key, 'weight', e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Min Questions</Label>
+                              <Input
+                                type="number"
+                                min="1"
+                                max="10"
+                                value={param.min_questions}
+                                onChange={(e) => updateParameter(key, 'min_questions', e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Max Questions</Label>
+                              <Input
+                                type="number"
+                                min="1"
+                                max="10"
+                                value={param.max_questions}
+                                onChange={(e) => updateParameter(key, 'max_questions', e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label title="Time allocated for candidate to answer (question reading time is additional)">Answer Time (min)</Label>
+                              <Input
+                                type="number"
+                                min="1"
+                                max="10"
+                                value={param.max_time}
+                                onChange={(e) => updateParameter(key, 'max_time', e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Level</Label>
+                              <Select
+                                value={param.level || 'Regular'}
+                                onValueChange={(value: 'Easy' | 'Regular' | 'Expert') => updateParameter(key, 'level', value)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Easy">Easy</SelectItem>
+                                  <SelectItem value="Regular">Regular</SelectItem>
+                                  <SelectItem value="Expert">Expert</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          
+                          {/* Scoring Criteria Section */}
+                          {param.scoring_criteria && Array.isArray(param.scoring_criteria) && (
+                            <div className="mt-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <Label>Scoring Criteria</Label>
                                 <Button
                                   onClick={() => {
-                                    const newCriteria = param.scoring_criteria.filter((_, i) => i !== index);
+                                    const newCriteria = [...param.scoring_criteria, ''];
                                     updateParameter(key, 'scoring_criteria', newCriteria);
                                   }}
                                   variant="ghost"
                                   size="sm"
-                                  className="text-red-500 hover:text-red-700 p-1"
+                                  className="text-blue-600 hover:text-blue-700 flex items-center gap-1"
                                 >
-                                  <X className="w-4 h-4" />
+                                  <Plus className="w-4 h-4" />
+                                  Add Criteria
                                 </Button>
-                                  )}
-                                </>
-                              )}
+                              </div>
+                              <div className="space-y-2">
+                                {param.scoring_criteria.map((criteria, index) => (
+                                  <div key={index} className="flex items-center gap-2">
+                                    <Input
+                                      type="text"
+                                      value={criteria}
+                                      onChange={(e) => {
+                                        const newCriteria = [...param.scoring_criteria];
+                                        newCriteria[index] = e.target.value;
+                                        updateParameter(key, 'scoring_criteria', newCriteria);
+                                      }}
+                                      placeholder={`Criteria ${index + 1}`}
+                                      className="flex-1 text-sm"
+                                    />
+                                    {param.scoring_criteria.length > 1 && (
+                                      <Button
+                                        onClick={() => {
+                                          const newCriteria = param.scoring_criteria.filter((_, i) => i !== index);
+                                          updateParameter(key, 'scoring_criteria', newCriteria);
+                                        }}
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-red-500 hover:text-red-700 p-1"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          ))}
+                          )}
                         </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
               
               {/* Add Parameter button - only show when parameters are not saved (i.e., when creating new parameters) */}
               {!parametersSaved && (
@@ -2130,6 +1983,159 @@ const HRInterviewCreator = () => {
           </Button>
             </div>
           )}
+
+          {/* Personalized Questions Section - Only for AI Interviews */}
+          {formData.interviewMode === 'ai' && (
+            <div className="space-y-4">
+              {/* Visual Separator */}
+              <div className="border-t border-gray-200 pt-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span className="text-blue-600 text-sm font-bold">👤</span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Personalized Questions (Optional)</h3>
+                </div>
+                
+                <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="personalizedQuestionsEnabled"
+                      checked={formData.personalizedQuestionsEnabled}
+                      onChange={(e) => {
+                        if (parametersSaved) return; // Prevent changes when saved
+                        const enabled = e.target.checked;
+                        setFormData(prev => {
+                          const newQuestions = enabled ? prev.personalizedQuestions : [];
+                          return { 
+                            ...prev, 
+                            personalizedQuestionsEnabled: enabled,
+                            personalizedQuestions: newQuestions
+                          };
+                        });
+                        
+                        // Recalculate duration when enabling/disabling personalized questions
+                        if (enabled) {
+                          recalculateDurationWithPersonalizedQuestions(formData.personalizedQuestions);
+                        } else {
+                          recalculateDurationWithPersonalizedQuestions([]);
+                        }
+                      }}
+                      disabled={parametersSaved}
+                      className={`h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ${
+                        parametersSaved ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    />
+                    <Label htmlFor="personalizedQuestionsEnabled" className={`text-sm font-medium text-blue-800 ${
+                      parametersSaved ? 'opacity-50' : ''
+                    }`}>
+                      Enable Personalized Questions
+                    </Label>
+                  </div>
+                  
+                  {formData.personalizedQuestionsEnabled && (
+                    <div className="space-y-3">
+                      <p className="text-xs text-blue-600">
+                        Add 1-2 personal questions that will be asked before technical questions. These are for review only and won't be scored.
+                      </p>
+                      
+                      {formData.personalizedQuestions.map((question, index) => (
+                        <div key={index} className="space-y-2 p-3 bg-white rounded border">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium text-gray-700">
+                              Question {index + 1}
+                            </Label>
+                            {!parametersSaved && formData.personalizedQuestions.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const newQuestions = formData.personalizedQuestions.filter((_, i) => i !== index);
+                                  setFormData(prev => ({ ...prev, personalizedQuestions: newQuestions }));
+                                  // Recalculate duration when removing a question
+                                  recalculateDurationWithPersonalizedQuestions(newQuestions);
+                                }}
+                                className="text-red-500 hover:text-red-700 h-6 w-6 p-0"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                          {parametersSaved ? (
+                            <div className="text-sm text-gray-700 bg-gray-50 p-2 rounded border">
+                              {question.question}
+                            </div>
+                          ) : (
+                            <Textarea
+                              value={question.question}
+                              onChange={(e) => {
+                                const newQuestions = [...formData.personalizedQuestions];
+                                newQuestions[index].question = e.target.value;
+                                setFormData(prev => ({ ...prev, personalizedQuestions: newQuestions }));
+                                // Recalculate duration when changing question text (though time doesn't change)
+                                recalculateDurationWithPersonalizedQuestions(newQuestions);
+                              }}
+                              placeholder="Enter your personal question here..."
+                              rows={2}
+                              className="resize-none"
+                            />
+                          )}
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs text-gray-600">Time Limit (minutes):</Label>
+                            {parametersSaved ? (
+                              <div className="text-sm font-semibold text-gray-900">
+                                {question.timeLimit}
+                              </div>
+                            ) : (
+                              <Input
+                                type="number"
+                                min="1"
+                                max="10"
+                                value={question.timeLimit}
+                                onChange={(e) => {
+                                  const newQuestions = [...formData.personalizedQuestions];
+                                  newQuestions[index].timeLimit = parseInt(e.target.value) || 3;
+                                  setFormData(prev => ({ ...prev, personalizedQuestions: newQuestions }));
+                                  // Recalculate duration when changing time limit
+                                  recalculateDurationWithPersonalizedQuestions(newQuestions);
+                                }}
+                                className="w-20 h-8 text-sm"
+                              />
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {!parametersSaved && formData.personalizedQuestions.length < 2 && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const newQuestion = { question: '', timeLimit: 3 };
+                            const newQuestions = [...formData.personalizedQuestions, newQuestion];
+                            setFormData(prev => ({
+                              ...prev,
+                              personalizedQuestions: newQuestions
+                            }));
+                            // Recalculate duration when adding a question
+                            recalculateDurationWithPersonalizedQuestions(newQuestions);
+                          }}
+                          className="w-full border-dashed border-blue-300 text-blue-600 hover:bg-blue-50"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Personal Question
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+
         </CardContent>
       </Card>
 

@@ -12,7 +12,8 @@ import {
   ChevronDown,
   ChevronUp,
   Sun,
-  Moon
+  Moon,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import toast from 'react-hot-toast';
@@ -304,7 +305,7 @@ const FinalResults = () => {
       // Interview details
       reportContent += `CANDIDATE: ${reportData.interview?.candidate_name || 'N/A'}\n`;
       reportContent += `POSITION: ${reportData.interview?.position || 'N/A'}\n`;
-      reportContent += `INTERVIEW TYPE: ${reportData.interview?.interview_type || 'N/A'}\n`;
+      // Remove Interview Type from text report - not needed
       reportContent += `OVERALL SCORE: ${reportData.interview?.overall_score || 'N/A'}/10\n`;
       reportContent += `TOTAL QUESTIONS: ${reportData.questions?.length || 0}\n`;
       reportContent += `ASSESSMENT DATE: ${new Date().toLocaleDateString()}\n`;
@@ -716,7 +717,7 @@ const FinalResults = () => {
       
       overviewSheet.addRow(['Overall Score', displayScore, 'Available']);
       overviewSheet.addRow(['Total Questions', reportData.questions?.length || 0, 'Available']);
-      overviewSheet.addRow(['Interview Type', reportData.interview?.interview_type || 'Not Specified', 'Available']);
+      // Remove Interview Type row - not needed
       overviewSheet.addRow(['Assessment Date', new Date().toLocaleDateString(), 'Available']);
       overviewSheet.addRow(['Report Generated', new Date().toLocaleTimeString(), 'Available']);
       overviewSheet.addRow(['Performance Level', getScoreLabel(reportData.interview?.overall_score || 0), 'Available']);
@@ -778,17 +779,29 @@ const FinalResults = () => {
           fgColor: { argb: 'FFE0E0E0' }
         };
         
-        // Add data rows
-        reportData.questions.forEach((question, index) => {
-          const answer = reportData.answers.find(a => a.question_order === index);
-          if (answer) {
-            const questionText = question.question_text || 'N/A';
-            const transcript = answer.transcript || 'No transcript available';
-            const score = answer.score || 'N/A';
-            const feedback = answer.feedback || 'No feedback available';
-            const parameter = question.parameter_name || question.parameter_key || 'N/A';
-            
-            qaSheet.addRow([index + 1, parameter, questionText, transcript, score, feedback]);
+        // Add data rows - match questions with answers properly using question_order
+        // Sort questions by question_order to ensure proper order
+        const sortedQuestions = [...reportData.questions].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
+        
+        sortedQuestions.forEach((question) => {
+          const questionOrder = question.question_order || 0;
+          const answer = reportData.answers.find(a => (a.question_order || 0) === questionOrder);
+          
+          const questionText = question.question_text || question.question || 'N/A';
+          const parameter = question.parameter_name || question.parameter_key || 'N/A';
+          
+          // Only add if we have a valid question (not N/A)
+          if (questionText !== 'N/A' && parameter !== 'N/A') {
+            if (answer) {
+              const transcript = answer.transcript || answer.answer || 'No transcript available';
+              const score = answer.score || 'N/A';
+              const feedback = answer.feedback || 'No feedback available';
+              
+              qaSheet.addRow([questionOrder + 1, parameter, questionText, transcript, score, feedback]);
+            } else {
+              // Handle case where answer is missing but question exists
+              qaSheet.addRow([questionOrder + 1, parameter, questionText, 'No answer recorded', 'N/A', 'No feedback available']);
+            }
           }
         });
       }
@@ -807,23 +820,30 @@ const FinalResults = () => {
       
       // Add data rows - Group all audio files first, then all video files
       if (reportData.answers) {
-        // First, add all audio files
-        reportData.answers.forEach((answer, index) => {
-          const question = reportData.questions?.find(q => q.question_order === index);
+        // Sort answers by question_order to ensure proper order
+        const sortedAnswers = [...reportData.answers].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
+        
+        // First, add all audio files using question_order matching
+        sortedAnswers.forEach((answer) => {
+          const questionOrder = answer.question_order || 0;
+          const question = reportData.questions?.find(q => (q.question_order || 0) === questionOrder);
           const parameter = question?.parameter_name || question?.parameter_key || 'N/A';
           
-          if (answer.audio_url) {
-            mediaSheet.addRow(['Audio Recording', index + 1, parameter, answer.audio_url, 'Available', 'Audio']);
+          // Only add if we have a valid parameter and audio URL
+          if (answer.audio_url && parameter !== 'N/A') {
+            mediaSheet.addRow(['Audio Recording', questionOrder + 1, parameter, answer.audio_url, 'Available', 'Audio']);
           }
         });
         
-        // Then, add all video files
-        reportData.answers.forEach((answer, index) => {
-          const question = reportData.questions?.find(q => q.question_order === index);
+        // Then, add all video files using question_order matching
+        sortedAnswers.forEach((answer) => {
+          const questionOrder = answer.question_order || 0;
+          const question = reportData.questions?.find(q => (q.question_order || 0) === questionOrder);
           const parameter = question?.parameter_name || question?.parameter_key || 'N/A';
           
-          if (answer.question_video_url) {
-            mediaSheet.addRow(['Question Video', index + 1, parameter, answer.question_video_url, 'Available', 'Video']);
+          // Only add if we have a valid parameter and video URL
+          if (answer.question_video_url && parameter !== 'N/A') {
+            mediaSheet.addRow(['Question Video', questionOrder + 1, parameter, answer.question_video_url, 'Available', 'Video']);
           }
         });
       }
@@ -845,22 +865,29 @@ const FinalResults = () => {
         const overallScore = reportData.interview?.overall_score;
         const averageScore = overallScore ? parseFloat(overallScore) : 0;
         
-        // Add data rows
-        reportData.answers.forEach((answer, index) => {
-          const question = reportData.questions?.find(q => q.question_order === index);
+        // Add data rows - only for valid questions using question_order matching
+        // Sort answers by question_order to ensure proper order
+        const sortedAnswers = [...reportData.answers].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
+        
+        sortedAnswers.forEach((answer) => {
+          const questionOrder = answer.question_order || 0;
+          const question = reportData.questions?.find(q => (q.question_order || 0) === questionOrder);
           const parameter = question?.parameter_name || question?.parameter_key || 'N/A';
           const score = answer.score || 0;
           
-          let performance = 'Needs Improvement';
-          if (score >= 8) performance = 'Excellent';
-          else if (score >= 6) performance = 'Good';
-          else if (score >= 4) performance = 'Fair';
-          
-          const notes = score >= 8 ? 'Strong performance' : 
-                       score >= 6 ? 'Good performance' : 
-                       score >= 4 ? 'Room for improvement' : 'Needs significant improvement';
-          
-          analysisSheet.addRow([index + 1, parameter, score, performance, notes]);
+          // Only add if we have a valid parameter (not N/A)
+          if (parameter !== 'N/A') {
+            let performance = 'Needs Improvement';
+            if (score >= 8) performance = 'Excellent';
+            else if (score >= 6) performance = 'Good';
+            else if (score >= 4) performance = 'Fair';
+            
+            const notes = score >= 8 ? 'Strong performance' : 
+                         score >= 6 ? 'Good performance' : 
+                         score >= 4 ? 'Room for improvement' : 'Needs significant improvement';
+            
+            analysisSheet.addRow([questionOrder + 1, parameter, score, performance, notes]);
+          }
         });
         
         // Add summary row with consistent formatting
@@ -1220,16 +1247,26 @@ const FinalResults = () => {
                 <span>{isDarkMode ? 'Light' : 'Dark'}</span>
               </button>
               <button
-                onClick={downloadReport}
+                onClick={generatePDFReport}
+                disabled={isGeneratingPDF}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
                   isDarkMode 
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                    : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'
-                }`}
-                title="Download comprehensive text report with all questions, answers, scores, feedback, audio URLs, and video URLs"
+                    ? 'bg-red-600 hover:bg-red-700 text-white' 
+                    : 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200'
+                } ${isGeneratingPDF ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title="Download comprehensive PDF report with all questions, answers, scores, feedback, and media files"
               >
-                <FileText className="h-4 w-4" />
-                <span>Text Report</span>
+                {isGeneratingPDF ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Generating PDF...</span>
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-4 w-4" />
+                    <span>Download PDF Report</span>
+                  </>
+                )}
               </button>
 
               <button
@@ -1818,27 +1855,6 @@ const FinalResults = () => {
         </div>
       )}
 
-      {/* PDF Download Button */}
-      <div className="fixed bottom-6 right-6 z-50">
-        <Button
-          onClick={generatePDFReport}
-          disabled={isGeneratingPDF}
-          className="bg-red-600 hover:bg-red-700 text-white shadow-lg px-6 py-3 rounded-full flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          size="lg"
-        >
-          {isGeneratingPDF ? (
-            <>
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-              Generating PDF...
-            </>
-          ) : (
-            <>
-              <FileText className="h-5 w-5" />
-              Download PDF Report
-            </>
-          )}
-        </Button>
-      </div>
     </div>
   );
 };
