@@ -224,9 +224,13 @@ const HRInterviewCreator = () => {
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Check file type
-      if (file.type !== 'application/pdf') {
-        toast.error('Please upload a PDF file only');
+      // Check file type - support PDF, DOCX, TXT (DOC not supported)
+      const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+      const allowedExtensions = ['.pdf', '.docx', '.txt'];
+      const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+      
+      if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension)) {
+        toast.error('Please upload a PDF, DOCX, or TXT file. DOC files are not supported - please convert to DOCX first.');
         return;
       }
       
@@ -295,6 +299,19 @@ const HRInterviewCreator = () => {
       console.log('✅ Text extracted successfully, length:', extractedText.length);
       console.log('🔄 Extracted text preview:', extractedText.substring(0, 200) + '...');
 
+      // Clean the extracted text to remove binary data corruption (same as other systems)
+      const cleanedText = extractedText
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
+        .replace(/\\u[0-9A-Fa-f]{4}/g, '') // Remove Unicode escape sequences
+        .replace(/\\[nrtbf]/g, ' ') // Replace escape sequences with spaces
+        .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, '') // Remove non-printable characters
+        .replace(/[&]{2,}/g, ' ') // Remove multiple ampersands
+        .replace(/[0-9]{6,}/g, '') // Remove long sequences of numbers
+        .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+        .trim(); // Remove leading/trailing whitespace
+
+      console.log('🔄 Cleaned text length:', cleanedText.length);
+
       // Save JD record to jd_for_interview table
       console.log('🔄 Saving JD record to database...');
       const { data: jdData, error: jdError } = await supabase
@@ -302,7 +319,7 @@ const HRInterviewCreator = () => {
         .insert({
           title: formData.newRole,
           jd_file: uploadData.path,
-          extracted_text: extractedText,
+          extracted_text: cleanedText,
           company_id: user?.profile?.company_id
         })
         .select()
@@ -314,8 +331,8 @@ const HRInterviewCreator = () => {
       }
       console.log('✅ JD record saved to database:', jdData);
       
-      // Update form data with extracted text
-      setFormData(prev => ({ ...prev, jobDescription: extractedText }));
+      // Update form data with cleaned text
+      setFormData(prev => ({ ...prev, jobDescription: cleanedText }));
       console.log('✅ Form data updated with extracted text');
       
       // Reload job descriptions to include the newly uploaded one
@@ -364,17 +381,22 @@ const HRInterviewCreator = () => {
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       const file = files[0];
-      if (file.type === 'application/pdf') {
+      // Support PDF, DOCX, TXT files (DOC not supported)
+      const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+      const allowedExtensions = ['.pdf', '.docx', '.txt'];
+      const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+      
+      if (allowedTypes.includes(file.type) || allowedExtensions.includes(fileExtension)) {
         if (file.size <= 3 * 1024 * 1024) {
           setUploadedFile(file);
           
-          // Extract text from PDF and upload to storage
+          // Extract text from file and upload to storage
           await extractTextAndUploadJD(file);
         } else {
           toast.error('File size must be less than 3MB');
         }
       } else {
-        toast.error('Please upload a PDF file only');
+        toast.error('Please upload a PDF, DOC, DOCX, or TXT file');
       }
     }
   };
@@ -405,11 +427,11 @@ const HRInterviewCreator = () => {
       // Only trigger if the value is substantial and user has stopped typing
       if (name === 'newRole' && formData.interviewMode === 'ai' && value.trim().length > 3) {
         // Clear any existing timeout
-        if (window.newRoleTimeout) {
-          clearTimeout(window.newRoleTimeout);
+        if ((window as any).newRoleTimeout) {
+          clearTimeout((window as any).newRoleTimeout);
         }
         // Add a delay to prevent loading while user is still typing
-        window.newRoleTimeout = setTimeout(() => {
+        (window as any).newRoleTimeout = setTimeout(() => {
           if (formData.newRole === value) { // Only load if the value hasn't changed
             loadParametersForPosition(value.trim());
           }
@@ -846,12 +868,13 @@ const HRInterviewCreator = () => {
         console.log('🔄 Received parameters from backend:', generatedParameters);
         console.log('🔄 Parameter keys:', Object.keys(generatedParameters));
         Object.entries(generatedParameters).forEach(([key, param]) => {
+          const paramObj = param as any;
           console.log(`  ${key}:`, {
-            name: param.name,
-            min_questions: param.min_questions,
-            max_questions: param.max_questions,
-            max_time: param.max_time,
-            weight: param.weight
+            name: paramObj.name,
+            min_questions: paramObj.min_questions,
+            max_questions: paramObj.max_questions,
+            max_time: paramObj.max_time,
+            weight: paramObj.weight
           });
         });
         
@@ -1397,14 +1420,14 @@ const HRInterviewCreator = () => {
                 >
                   <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
                   <p className="text-sm font-medium text-gray-900 mb-1">
-                    Drop files here or click to browse (PDF, DOC, DOCX, TXT)
+                    Drop files here or click to browse (PDF, DOCX, TXT)
                   </p>
                   <p className="text-xs text-gray-500 mb-3">
                     Maximum file size: 3MB
                   </p>
                   <Input
                     type="file"
-                    accept=".pdf,.doc,.docx,.txt"
+                    accept=".pdf,.docx,.txt"
                     onChange={handleFileUpload}
                     className="hidden"
                     id="file-upload"
