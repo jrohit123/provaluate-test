@@ -1397,14 +1397,14 @@ const HRInterviewCreator = () => {
                 >
                   <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
                   <p className="text-sm font-medium text-gray-900 mb-1">
-                    Drop PDF files here or click to browse
+                    Drop files here or click to browse (PDF, DOC, DOCX, TXT)
                   </p>
                   <p className="text-xs text-gray-500 mb-3">
                     Maximum file size: 3MB
                   </p>
                   <Input
                     type="file"
-                    accept=".pdf"
+                    accept=".pdf,.doc,.docx,.txt"
                     onChange={handleFileUpload}
                     className="hidden"
                     id="file-upload"
