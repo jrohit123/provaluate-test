@@ -185,12 +185,19 @@ const HRInterviewCreator = () => {
 
          console.log('File downloaded successfully, size:', fileData.size);
          
+         // Extract original file extension from the file path
+         const originalExtension = filePath.split('.').pop()?.toLowerCase() || 'pdf';
+         const fileNameWithExtension = `${selectedJD.title}.${originalExtension}`;
+         
+         console.log('Original file extension detected:', originalExtension);
+         console.log('Using filename:', fileNameWithExtension);
+         
          // Send file data directly to backend without creating File object
          const formDataForUpload = new FormData();
-         formDataForUpload.append('file', fileData, selectedJD.title + '.pdf');
+         formDataForUpload.append('file', fileData, fileNameWithExtension);
          formDataForUpload.append('title', selectedJD.title);
 
-         console.log('Sending to backend for text extraction...');
+         console.log(`Sending ${originalExtension.toUpperCase()} file to backend for text extraction...`);
          const response = await apiCall(API_CONFIG.ENDPOINTS.EXTRACT_JD_TEXT, {
            method: 'POST',
            body: formDataForUpload,

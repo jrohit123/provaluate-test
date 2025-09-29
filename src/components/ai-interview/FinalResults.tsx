@@ -250,16 +250,99 @@ const FinalResults = () => {
         extractedQuestions.sort((a, b) => a.question_order - b.question_order);
         extractedAnswers.sort((a, b) => a.question_order - b.question_order);
         
-        // Add extracted data to the response
-                 const processedData = {
+         // Convert parameters array to object structure for UI compatibility
+         const parametersObject = {};
+         if (data.parameters && Array.isArray(data.parameters)) {
+           data.parameters.forEach(param => {
+             // Map questions to the format expected by the UI
+             const mappedQuestions = (param.questions || []).map((questionData, index) => {
+               // Prefer exact 1-based match; fallback to 0-based
+               const oneBasedOrder = index + 1;
+               const correspondingAnswer =
+                 data.answers?.find(a => a.parameter_key === param.key && Number(a.question_order) === oneBasedOrder) ||
+                 data.answers?.find(a => a.parameter_key === param.key && Number(a.question_order) === index);
+
+               // Seed values from available sources
+               let realQuestionText = questionData.text;
+               let realTranscript = correspondingAnswer?.transcript || questionData.answer;
+               let realFeedback = correspondingAnswer?.feedback;
+               let realScore = correspondingAnswer?.score;
+               let realAudioUrl = correspondingAnswer?.audio_url || questionData.audio_url;
+               let realVideoUrl = correspondingAnswer?.question_video_url;
+
+               // Fallback to interview.parameter_scores.individual_question_scores matched by question_order
+               if (data.interview?.parameter_scores) {
+                 const parameterScores = typeof data.interview.parameter_scores === 'string'
+                   ? JSON.parse(data.interview.parameter_scores)
+                   : data.interview.parameter_scores;
+
+                 const iqs = parameterScores?.[param.key]?.individual_question_scores;
+                 if (Array.isArray(iqs) && iqs.length > 0) {
+                   const iqsItem = iqs.find((q: any) => Number(q.question_order) === oneBasedOrder) || iqs[index];
+                   if (iqsItem) {
+                     // If no direct answer match, use IQS entirely
+                     if (!correspondingAnswer) {
+                       realQuestionText = iqsItem.question_text || realQuestionText;
+                       realTranscript = iqsItem.transcript || realTranscript;
+                       realFeedback = iqsItem.feedback || realFeedback;
+                       realScore = iqsItem.score ?? realScore;
+                       realAudioUrl = iqsItem.audio_url || realAudioUrl;
+                     } else {
+                       // Only fill missing fields
+                       if (!realFeedback && iqsItem.feedback) realFeedback = iqsItem.feedback;
+                       if (realScore == null && iqsItem.score != null) realScore = iqsItem.score;
+                       if (!realQuestionText && iqsItem.question_text) realQuestionText = iqsItem.question_text;
+                       if (!realTranscript && iqsItem.transcript) realTranscript = iqsItem.transcript;
+                       if (!realAudioUrl && iqsItem.audio_url) realAudioUrl = iqsItem.audio_url;
+                     }
+                   }
+                 }
+               }
+
+               // Final fallbacks
+               if (realFeedback == null) realFeedback = `Assessment for ${param.name}: ${param.reason}`;
+               if (realScore == null) realScore = param.score;
+
+               return {
+                 question: {
+                   question_text: realQuestionText,
+                   question_order: index
+                 },
+                 answer: {
+                   transcript: realTranscript,
+                   score: realScore,
+                   feedback: realFeedback,
+                   audio_url: realAudioUrl,
+                   question_video_url: realVideoUrl
+                 }
+               };
+             });
+             
+             parametersObject[param.key] = {
+               name: param.name,
+               score: param.score,
+               weight: param.weight,
+               questions: mappedQuestions,
+               isPersonal: param.name?.toLowerCase().includes('personal') || false,
+               questionCount: param.questions?.length || 0,
+               totalScore: param.score * (param.questions?.length || 1)
+             };
+           });
+         }
+         
+         // Add extracted data to the response
+         const processedData = {
            ...data,
            questions: extractedQuestions,
-           answers: extractedAnswers
+           answers: extractedAnswers,
+           parameters: parametersObject
          };
          
          console.log('📊 Extracted questions:', extractedQuestions.length);
          console.log('📊 Extracted answers:', extractedAnswers.length);
          console.log('📊 Sample answer feedback:', extractedAnswers[0]?.feedback?.substring(0, 100) + '...');
+         console.log('📊 Parameters object:', parametersObject);
+         console.log('📊 Parameters keys:', Object.keys(parametersObject));
          
          // Debug duration data
          console.log('🔍 Interview data:', data.interview);
@@ -1003,6 +1086,13 @@ const FinalResults = () => {
   }
 
   const { interview, parameters } = reportData;
+  
+  // Normalize parameter count for both array and object structures
+  const parameterCount = Array.isArray(parameters)
+    ? parameters.length
+    : parameters
+      ? Object.keys(parameters).length
+      : 0;
 
   // PDF Generation Function
   const generatePDFReport = async () => {
@@ -1086,8 +1176,44 @@ const FinalResults = () => {
       // Prepare table data
       const tableData: any[][] = [];
       
-      // Check if we have parameter_scores data (from interview_parameter_scores table)
-      if (interview.parameter_scores) {
+      // Debug logging
+      console.log('🔍 PDF Generation Debug:');
+      console.log('🔍 Parameters object:', parameters);
+      console.log('🔍 Parameters keys:', Object.keys(parameters || {}));
+      console.log('🔍 Interview data:', interview);
+      console.log('🔍 Parameter scores:', interview.parameter_scores);
+      
+      // Check if we have parameters data (from our converted structure)
+      if (parameters && Object.keys(parameters).length > 0) {
+        // Iterate through each parameter
+        Object.entries(parameters).forEach(([paramKey, paramData]: [string, any]) => {
+          // Process each question and answer for this parameter
+          if (paramData.questions && Array.isArray(paramData.questions)) {
+            paramData.questions.forEach((questionData: any) => {
+              // Format feedback with bullet points
+              const formatFeedback = (feedback: string) => {
+                if (!feedback) return 'No feedback available';
+                
+                // Split by periods and create bullet points
+                const sentences = feedback.split('.').filter(sentence => sentence.trim().length > 0);
+                return sentences.map(sentence => `• ${sentence.trim()}`).join('\n');
+              };
+              
+              const rowData = [
+                paramData.name || paramKey,
+                questionData.question.question_text || 'N/A',
+                questionData.answer.transcript || 'No answer provided',
+                formatFeedback(questionData.answer.feedback),
+                questionData.answer.score || 'N/A'
+              ];
+              console.log('🔍 Adding row to PDF table:', rowData);
+              tableData.push(rowData);
+            });
+          }
+        });
+      }
+      // Fallback: Check if we have parameter_scores data (from interview_parameter_scores table)
+      else if (interview.parameter_scores) {
         // Parse parameter_scores JSON data
         const parameterScores = typeof interview.parameter_scores === 'string' 
           ? JSON.parse(interview.parameter_scores) 
@@ -1316,7 +1442,7 @@ const FinalResults = () => {
             <div className="text-center">
               <div className={`text-3xl font-bold ${
                 isDarkMode ? 'text-green-400' : 'text-green-600'
-              }`}>{parameters?.length || 0}</div>
+              }`}>{parameterCount}</div>
               <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Parameters Assessed</div>
             </div>
             <div className="text-center">
