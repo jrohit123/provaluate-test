@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import {
   User,
   Clock,
@@ -62,6 +62,28 @@ const CandidateInterview = () => {
           console.log('🔍 Flattened interview data keys:', Object.keys(flattenedData));
           console.log('🔍 Interview type in flattened data:', flattenedData.interview_type);
           
+          // If interview already completed, terminated, or has completion markers, redirect to completion page
+          const status = (flattenedData as any).status;
+          const assessmentStatus = (flattenedData as any).assessment_status;
+          const completedAt = (flattenedData as any).completed_at;
+          console.log('🏁 Completion check → status:', status, 'assessment_status:', assessmentStatus, 'completed_at:', completedAt);
+          if (
+            status === 'completed' ||
+            status === 'terminated' ||
+            assessmentStatus === 'completed' ||
+            !!completedAt
+          ) {
+            console.log('➡️ Redirecting to completion page...');
+            navigate(`/candidate-completion/${flattenedData.id}` , {
+              state: {
+                interviewId: flattenedData.id,
+                candidateName: flattenedData.candidate_name,
+                position: flattenedData.position
+              }
+            });
+            return;
+          }
+
           setInterviewData(flattenedData);
           setIsLoading(false);
         } else if (response.status === 404) {
@@ -155,6 +177,27 @@ const CandidateInterview = () => {
         </div>
       </div>
     );
+  }
+
+  // Safety net: if interview is already completed/terminated, redirect here as well
+  if (interviewData) {
+    const status = (interviewData as any).status;
+    const assessmentStatus = (interviewData as any).assessment_status;
+    const completedAt = (interviewData as any).completed_at;
+    if (status === 'completed' || status === 'terminated' || assessmentStatus === 'completed' || !!completedAt) {
+      console.log('🏁 (Render guard) Redirecting to completion page...');
+      return (
+        <Navigate
+          to={`/candidate-completion/${(interviewData as any).id}`}
+          replace
+          state={{
+            interviewId: (interviewData as any).id,
+            candidateName: (interviewData as any).candidate_name,
+            position: (interviewData as any).position
+          }}
+        />
+      );
+    }
   }
 
   return (
