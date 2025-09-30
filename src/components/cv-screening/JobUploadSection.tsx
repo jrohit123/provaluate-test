@@ -839,19 +839,53 @@ export const JobUploadSection = () => {
                     <label className="text-sm font-medium capitalize">
                       {key.replace(/_/g, ' ')}
                     </label>
-                    <Textarea
-                      value={typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value) || ''}
-                      onChange={(e) => 
-                        setResolvedJD(prev => ({
-                          ...prev!,
-                          attributes: {
-                            ...prev!.attributes,
-                            [key]: e.target.value
-                          }
-                        }))
-                      }
-                      className="min-h-[60px]"
-                    />
+                    {typeof value === 'object' && value !== null ? (
+                      <div className="space-y-2">
+                        {Object.entries(value).map(([subKey, subValue]) => (
+                          <div key={subKey} className="space-y-1">
+                            <label className="text-xs font-medium text-gray-600 capitalize">
+                              {subKey}:
+                            </label>
+                            <Textarea
+                              value={Array.isArray(subValue) ? subValue.join(', ') : String(subValue) || ''}
+                              onChange={(e) => {
+                                const newValue = Array.isArray(subValue) 
+                                  ? e.target.value.split(',').map(item => item.trim()).filter(item => item)
+                                  : e.target.value;
+                                
+                                setResolvedJD(prev => ({
+                                  ...prev!,
+                                  attributes: {
+                                    ...prev!.attributes,
+                                    [key]: {
+                                      ...(prev!.attributes![key] as any),
+                                      [subKey]: newValue
+                                    }
+                                  }
+                                }));
+                              }}
+                              className="min-h-[40px] text-sm"
+                              placeholder={`Enter ${subKey}...`}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <Textarea
+                        value={String(value) || ''}
+                        onChange={(e) => 
+                          setResolvedJD(prev => ({
+                            ...prev!,
+                            attributes: {
+                              ...prev!.attributes,
+                              [key]: e.target.value
+                            }
+                          }))
+                        }
+                        className="min-h-[60px]"
+                        placeholder={`Enter ${key.replace(/_/g, ' ')}...`}
+                      />
+                    )}
                   </div>
                 ))}
                 <div className="flex gap-2">
