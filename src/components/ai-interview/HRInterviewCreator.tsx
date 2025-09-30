@@ -1523,47 +1523,127 @@ const HRInterviewCreator = () => {
         </Card>
       )}
 
-      {/* Create Interview Button */}
-      <Card className="animate-fade-in">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UserPlus className="h-5 w-5 text-primary-600" />
-            Create Interview
-          </CardTitle>
-          <CardDescription>
-            Generate the interview link for your candidate
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button
-            onClick={createInterview}
-            disabled={isCreating}
-            className="w-full"
-            size="lg"
-          >
-            {isCreating ? (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                Creating Interview...
-              </>
-            ) : (
-              <>
-                <UserPlus className="h-5 w-5 mr-2" />
-                Create Interview
-              </>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
+      {/* Create Interview Link Button */}
+      <div className="flex justify-center">
+        <Button
+          onClick={createInterview}
+          disabled={isCreating}
+          className="px-8 py-2"
+          size="default"
+        >
+          {isCreating ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Creating Interview Link...
+            </>
+          ) : (
+            <>
+              <UserPlus className="h-4 w-4 mr-2" />
+              Create Interview Link
+            </>
+          )}
+        </Button>
+      </div>
 
       {/* Interview Links Section */}
       {createdInterviews.length > 0 && (
         <Card className="animate-fade-in">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Link className="h-5 w-5" />
-              Interview Links ({createdInterviews.length})
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Link className="h-5 w-5" />
+                Interview Links ({createdInterviews.length})
+              </CardTitle>
+              <Button
+                onClick={async () => {
+                  if (sendingEmails.size > 0) return; // Prevent multiple clicks
+                  
+                  try {
+                    // Add all interviews to sending state
+                    const allInterviewIds = createdInterviews.map(interview => interview.interview_id);
+                    setSendingEmails(new Set(allInterviewIds));
+                    
+                    const interviewType = formData.interviewType || 'mixed';
+                    let successCount = 0;
+                    let failCount = 0;
+                    
+                    // Send emails to all candidates
+                    for (const interview of createdInterviews) {
+                      try {
+                        const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
+                        
+                        const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                          },
+                          body: JSON.stringify({
+                            candidate_email: interview.candidate_email,
+                            candidate_name: interview.candidate_name,
+                            interview_link: interviewLink,
+                            position: formData.position,
+                            interview_type: interviewType
+                          })
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                          successCount++;
+                        } else {
+                          failCount++;
+                        }
+                      } catch (error) {
+                        failCount++;
+                      }
+                    }
+                    
+                    // Show summary toast
+                    if (successCount > 0 && failCount === 0) {
+                      toast({
+                        title: "All Emails Sent Successfully",
+                        description: `Interview emails sent to all ${successCount} candidates`,
+                      });
+                    } else if (successCount > 0 && failCount > 0) {
+                      toast({
+                        title: "Partial Success",
+                        description: `Sent to ${successCount} candidates, ${failCount} failed`,
+                        variant: "destructive",
+                      });
+                    } else {
+                      toast({
+                        title: "All Emails Failed",
+                        description: "Failed to send emails to all candidates",
+                        variant: "destructive",
+                      });
+                    }
+                  } catch (error) {
+                    toast({
+                      title: "Email Error",
+                      description: "Failed to send emails. Please try again.",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    // Clear all sending states
+                    setSendingEmails(new Set());
+                  }
+                }}
+                size="sm"
+                disabled={sendingEmails.size > 0}
+              >
+                {sendingEmails.size > 0 ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Send All Emails
+                  </>
+                )}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Individual Interview Links */}
@@ -1590,86 +1670,9 @@ const HRInterviewCreator = () => {
                     <Copy className="h-4 w-4 mr-2" />
                     Copy
                   </Button>
-                  <Button
-                    onClick={async () => {
-                      const isSending = sendingEmails.has(interview.interview_id);
-                      if (isSending) return; // Prevent multiple clicks
-                      
-                      try {
-                        // Add to sending state
-                        setSendingEmails(prev => new Set(prev).add(interview.interview_id));
-                        
-                        const interviewType = formData.interviewType || 'mixed';
-                        const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
-                        
-                        const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json',
-                          },
-                          body: JSON.stringify({
-                            candidate_email: interview.candidate_email,
-                            candidate_name: interview.candidate_name,
-                            interview_link: interviewLink,
-                            position: formData.position,
-                            interview_type: interviewType
-                          })
-                        });
-                        
-                        const result = await response.json();
-                        
-                        if (result.success) {
-                          toast({
-                            title: "Email Sent Successfully",
-                            description: `Interview email sent to ${interview.candidate_name}`,
-                          });
-                        } else {
-                          toast({
-                            title: "Email Failed",
-                            description: result.message || "Failed to send email",
-                            variant: "destructive",
-                          });
-                        }
-                      } catch (error) {
-                        toast({
-                          title: "Email Error",
-                          description: "Failed to send email. Please try again.",
-                          variant: "destructive",
-                        });
-                      } finally {
-                        // Remove from sending state
-                        setSendingEmails(prev => {
-                          const newSet = new Set(prev);
-                          newSet.delete(interview.interview_id);
-                          return newSet;
-                        });
-                      }
-                    }}
-                    size="sm"
-                    variant="secondary"
-                    disabled={sendingEmails.has(interview.interview_id)}
-                    className={`flex items-center gap-2 ${
-                      sendingEmails.has(interview.interview_id) 
-                        ? 'opacity-50 cursor-not-allowed' 
-                        : 'hover:bg-gray-200'
-                    }`}
-                  >
-                    {sendingEmails.has(interview.interview_id) ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="h-4 w-4" />
-                        Send Email
-                      </>
-                    )}
-                  </Button>
                 </div>
               </div>
             ))}
-            
             
             {/* Summary */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">

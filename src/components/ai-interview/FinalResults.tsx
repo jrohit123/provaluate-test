@@ -12,8 +12,10 @@ import {
   ChevronDown,
   ChevronUp,
   Sun,
-  Moon
+  Moon,
+  Loader2
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import toast from 'react-hot-toast';
 import ExcelJS from 'exceljs';
 
@@ -24,6 +26,7 @@ const FinalResults = () => {
   const [reportData, setReportData] = useState(null);
   const [selectedParameter, setSelectedParameter] = useState(null);
   const [expandedQuestions, setExpandedQuestions] = useState(new Set());
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('finalResultsTheme');
     return saved ? saved === 'dark' : true; // Default to dark mode
@@ -247,16 +250,99 @@ const FinalResults = () => {
         extractedQuestions.sort((a, b) => a.question_order - b.question_order);
         extractedAnswers.sort((a, b) => a.question_order - b.question_order);
         
-        // Add extracted data to the response
-                 const processedData = {
+         // Convert parameters array to object structure for UI compatibility
+         const parametersObject = {};
+         if (data.parameters && Array.isArray(data.parameters)) {
+           data.parameters.forEach(param => {
+             // Map questions to the format expected by the UI
+             const mappedQuestions = (param.questions || []).map((questionData, index) => {
+               // Prefer exact 1-based match; fallback to 0-based
+               const oneBasedOrder = index + 1;
+               const correspondingAnswer =
+                 data.answers?.find(a => a.parameter_key === param.key && Number(a.question_order) === oneBasedOrder) ||
+                 data.answers?.find(a => a.parameter_key === param.key && Number(a.question_order) === index);
+
+               // Seed values from available sources
+               let realQuestionText = questionData.text;
+               let realTranscript = correspondingAnswer?.transcript || questionData.answer;
+               let realFeedback = correspondingAnswer?.feedback;
+               let realScore = correspondingAnswer?.score;
+               let realAudioUrl = correspondingAnswer?.audio_url || questionData.audio_url;
+               let realVideoUrl = correspondingAnswer?.question_video_url;
+
+               // Fallback to interview.parameter_scores.individual_question_scores matched by question_order
+               if (data.interview?.parameter_scores) {
+                 const parameterScores = typeof data.interview.parameter_scores === 'string'
+                   ? JSON.parse(data.interview.parameter_scores)
+                   : data.interview.parameter_scores;
+
+                 const iqs = parameterScores?.[param.key]?.individual_question_scores;
+                 if (Array.isArray(iqs) && iqs.length > 0) {
+                   const iqsItem = iqs.find((q: any) => Number(q.question_order) === oneBasedOrder) || iqs[index];
+                   if (iqsItem) {
+                     // If no direct answer match, use IQS entirely
+                     if (!correspondingAnswer) {
+                       realQuestionText = iqsItem.question_text || realQuestionText;
+                       realTranscript = iqsItem.transcript || realTranscript;
+                       realFeedback = iqsItem.feedback || realFeedback;
+                       realScore = iqsItem.score ?? realScore;
+                       realAudioUrl = iqsItem.audio_url || realAudioUrl;
+                     } else {
+                       // Only fill missing fields
+                       if (!realFeedback && iqsItem.feedback) realFeedback = iqsItem.feedback;
+                       if (realScore == null && iqsItem.score != null) realScore = iqsItem.score;
+                       if (!realQuestionText && iqsItem.question_text) realQuestionText = iqsItem.question_text;
+                       if (!realTranscript && iqsItem.transcript) realTranscript = iqsItem.transcript;
+                       if (!realAudioUrl && iqsItem.audio_url) realAudioUrl = iqsItem.audio_url;
+                     }
+                   }
+                 }
+               }
+
+               // Final fallbacks
+               if (realFeedback == null) realFeedback = `Assessment for ${param.name}: ${param.reason}`;
+               if (realScore == null) realScore = param.score;
+
+               return {
+                 question: {
+                   question_text: realQuestionText,
+                   question_order: index
+                 },
+                 answer: {
+                   transcript: realTranscript,
+                   score: realScore,
+                   feedback: realFeedback,
+                   audio_url: realAudioUrl,
+                   question_video_url: realVideoUrl
+                 }
+               };
+             });
+             
+             parametersObject[param.key] = {
+               name: param.name,
+               score: param.score,
+               weight: param.weight,
+               questions: mappedQuestions,
+               isPersonal: param.name?.toLowerCase().includes('personal') || false,
+               questionCount: param.questions?.length || 0,
+               totalScore: param.score * (param.questions?.length || 1)
+             };
+           });
+         }
+         
+         // Add extracted data to the response
+         const processedData = {
            ...data,
            questions: extractedQuestions,
-           answers: extractedAnswers
+           answers: extractedAnswers,
+           parameters: parametersObject
          };
          
          console.log('📊 Extracted questions:', extractedQuestions.length);
          console.log('📊 Extracted answers:', extractedAnswers.length);
          console.log('📊 Sample answer feedback:', extractedAnswers[0]?.feedback?.substring(0, 100) + '...');
+         console.log('📊 Parameters object:', parametersObject);
+         console.log('📊 Parameters keys:', Object.keys(parametersObject));
          
          // Debug duration data
          console.log('🔍 Interview data:', data.interview);
@@ -302,7 +388,7 @@ const FinalResults = () => {
       // Interview details
       reportContent += `CANDIDATE: ${reportData.interview?.candidate_name || 'N/A'}\n`;
       reportContent += `POSITION: ${reportData.interview?.position || 'N/A'}\n`;
-      reportContent += `INTERVIEW TYPE: ${reportData.interview?.interview_type || 'N/A'}\n`;
+      // Remove Interview Type from text report - not needed
       reportContent += `OVERALL SCORE: ${reportData.interview?.overall_score || 'N/A'}/10\n`;
       reportContent += `TOTAL QUESTIONS: ${reportData.questions?.length || 0}\n`;
       reportContent += `ASSESSMENT DATE: ${new Date().toLocaleDateString()}\n`;
@@ -714,7 +800,7 @@ const FinalResults = () => {
       
       overviewSheet.addRow(['Overall Score', displayScore, 'Available']);
       overviewSheet.addRow(['Total Questions', reportData.questions?.length || 0, 'Available']);
-      overviewSheet.addRow(['Interview Type', reportData.interview?.interview_type || 'Not Specified', 'Available']);
+      // Remove Interview Type row - not needed
       overviewSheet.addRow(['Assessment Date', new Date().toLocaleDateString(), 'Available']);
       overviewSheet.addRow(['Report Generated', new Date().toLocaleTimeString(), 'Available']);
       overviewSheet.addRow(['Performance Level', getScoreLabel(reportData.interview?.overall_score || 0), 'Available']);
@@ -776,17 +862,29 @@ const FinalResults = () => {
           fgColor: { argb: 'FFE0E0E0' }
         };
         
-        // Add data rows
-        reportData.questions.forEach((question, index) => {
-          const answer = reportData.answers.find(a => a.question_order === index);
-          if (answer) {
-            const questionText = question.question_text || 'N/A';
-            const transcript = answer.transcript || 'No transcript available';
-            const score = answer.score || 'N/A';
-            const feedback = answer.feedback || 'No feedback available';
-            const parameter = question.parameter_name || question.parameter_key || 'N/A';
-            
-            qaSheet.addRow([index + 1, parameter, questionText, transcript, score, feedback]);
+        // Add data rows - match questions with answers properly using question_order
+        // Sort questions by question_order to ensure proper order
+        const sortedQuestions = [...reportData.questions].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
+        
+        sortedQuestions.forEach((question) => {
+          const questionOrder = question.question_order || 0;
+          const answer = reportData.answers.find(a => (a.question_order || 0) === questionOrder);
+          
+          const questionText = question.question_text || question.question || 'N/A';
+          const parameter = question.parameter_name || question.parameter_key || 'N/A';
+          
+          // Only add if we have a valid question (not N/A)
+          if (questionText !== 'N/A' && parameter !== 'N/A') {
+            if (answer) {
+              const transcript = answer.transcript || answer.answer || 'No transcript available';
+              const score = answer.score || 'N/A';
+              const feedback = answer.feedback || 'No feedback available';
+              
+              qaSheet.addRow([questionOrder + 1, parameter, questionText, transcript, score, feedback]);
+            } else {
+              // Handle case where answer is missing but question exists
+              qaSheet.addRow([questionOrder + 1, parameter, questionText, 'No answer recorded', 'N/A', 'No feedback available']);
+            }
           }
         });
       }
@@ -805,23 +903,30 @@ const FinalResults = () => {
       
       // Add data rows - Group all audio files first, then all video files
       if (reportData.answers) {
-        // First, add all audio files
-        reportData.answers.forEach((answer, index) => {
-          const question = reportData.questions?.find(q => q.question_order === index);
+        // Sort answers by question_order to ensure proper order
+        const sortedAnswers = [...reportData.answers].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
+        
+        // First, add all audio files using question_order matching
+        sortedAnswers.forEach((answer) => {
+          const questionOrder = answer.question_order || 0;
+          const question = reportData.questions?.find(q => (q.question_order || 0) === questionOrder);
           const parameter = question?.parameter_name || question?.parameter_key || 'N/A';
           
-          if (answer.audio_url) {
-            mediaSheet.addRow(['Audio Recording', index + 1, parameter, answer.audio_url, 'Available', 'Audio']);
+          // Only add if we have a valid parameter and audio URL
+          if (answer.audio_url && parameter !== 'N/A') {
+            mediaSheet.addRow(['Audio Recording', questionOrder + 1, parameter, answer.audio_url, 'Available', 'Audio']);
           }
         });
         
-        // Then, add all video files
-        reportData.answers.forEach((answer, index) => {
-          const question = reportData.questions?.find(q => q.question_order === index);
+        // Then, add all video files using question_order matching
+        sortedAnswers.forEach((answer) => {
+          const questionOrder = answer.question_order || 0;
+          const question = reportData.questions?.find(q => (q.question_order || 0) === questionOrder);
           const parameter = question?.parameter_name || question?.parameter_key || 'N/A';
           
-          if (answer.question_video_url) {
-            mediaSheet.addRow(['Question Video', index + 1, parameter, answer.question_video_url, 'Available', 'Video']);
+          // Only add if we have a valid parameter and video URL
+          if (answer.question_video_url && parameter !== 'N/A') {
+            mediaSheet.addRow(['Question Video', questionOrder + 1, parameter, answer.question_video_url, 'Available', 'Video']);
           }
         });
       }
@@ -843,22 +948,29 @@ const FinalResults = () => {
         const overallScore = reportData.interview?.overall_score;
         const averageScore = overallScore ? parseFloat(overallScore) : 0;
         
-        // Add data rows
-        reportData.answers.forEach((answer, index) => {
-          const question = reportData.questions?.find(q => q.question_order === index);
+        // Add data rows - only for valid questions using question_order matching
+        // Sort answers by question_order to ensure proper order
+        const sortedAnswers = [...reportData.answers].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
+        
+        sortedAnswers.forEach((answer) => {
+          const questionOrder = answer.question_order || 0;
+          const question = reportData.questions?.find(q => (q.question_order || 0) === questionOrder);
           const parameter = question?.parameter_name || question?.parameter_key || 'N/A';
           const score = answer.score || 0;
           
-          let performance = 'Needs Improvement';
-          if (score >= 8) performance = 'Excellent';
-          else if (score >= 6) performance = 'Good';
-          else if (score >= 4) performance = 'Fair';
-          
-          const notes = score >= 8 ? 'Strong performance' : 
-                       score >= 6 ? 'Good performance' : 
-                       score >= 4 ? 'Room for improvement' : 'Needs significant improvement';
-          
-          analysisSheet.addRow([index + 1, parameter, score, performance, notes]);
+          // Only add if we have a valid parameter (not N/A)
+          if (parameter !== 'N/A') {
+            let performance = 'Needs Improvement';
+            if (score >= 8) performance = 'Excellent';
+            else if (score >= 6) performance = 'Good';
+            else if (score >= 4) performance = 'Fair';
+            
+            const notes = score >= 8 ? 'Strong performance' : 
+                         score >= 6 ? 'Good performance' : 
+                         score >= 4 ? 'Room for improvement' : 'Needs significant improvement';
+            
+            analysisSheet.addRow([questionOrder + 1, parameter, score, performance, notes]);
+          }
         });
         
         // Add summary row with consistent formatting
@@ -974,6 +1086,253 @@ const FinalResults = () => {
   }
 
   const { interview, parameters } = reportData;
+  
+  // Normalize parameter count for both array and object structures
+  const parameterCount = Array.isArray(parameters)
+    ? parameters.length
+    : parameters
+      ? Object.keys(parameters).length
+      : 0;
+
+  // PDF Generation Function
+  const generatePDFReport = async () => {
+    if (isGeneratingPDF) return; // Prevent multiple clicks
+    
+    setIsGeneratingPDF(true);
+    try {
+      // Import jsPDF dynamically
+      const { jsPDF } = await import('jspdf');
+      const { autoTable } = await import('jspdf-autotable');
+      
+      const doc = new jsPDF();
+      
+      // Add logo (if available) - using async/await approach
+      let logoAdded = false;
+      try {
+        const logoImg = new Image();
+        logoImg.crossOrigin = 'anonymous';
+        
+        // Wait for image to load
+        await new Promise((resolve, reject) => {
+          logoImg.onload = () => {
+            try {
+              doc.addImage(logoImg, 'PNG', 20, 10, 30, 15);
+              logoAdded = true;
+              resolve(true);
+            } catch (error) {
+              console.log('Error adding logo to PDF:', error);
+              resolve(false);
+            }
+          };
+          logoImg.onerror = () => {
+            console.log('Logo image failed to load');
+            resolve(false);
+          };
+          logoImg.src = '/assets/Logo-transparent_bg.png';
+        });
+      } catch (error) {
+        console.log('Logo not found, continuing without logo');
+      }
+
+      // Add candidate info with reduced spacing
+      doc.setFontSize(11);
+      doc.text(`Candidate: ${interview.candidate_name}`, 20, 45);
+      doc.text(`Email: ${interview.candidate_email || 'N/A'}`, 20, 52);
+      doc.text(`Position: ${interview.position}`, 20, 59);
+      doc.text(`Overall Score: ${interview.overall_score || 'N/A'}`, 20, 66);
+      doc.text(`Interview Date: ${new Date(interview.created_at).toLocaleDateString()}`, 20, 73);
+
+      // Add name image beside candidate info
+      try {
+        await new Promise<boolean>((resolve) => {
+          const nameImg = new Image();
+          nameImg.crossOrigin = 'anonymous';
+          nameImg.onload = () => {
+            try {
+              // Position name image beside candidate info (on the right side of the page)
+              const pageWidth = doc.internal.pageSize.getWidth();
+              const nameWidth = 35;
+              const nameHeight = 25;
+              const nameX = pageWidth - nameWidth - 40; // Right side with 40pt margin (closer to left)
+              const nameY = 38; // Align with candidate info
+              
+              doc.addImage(nameImg, 'JPEG', nameX, nameY, nameWidth, nameHeight);
+              resolve(true);
+            } catch (error) {
+              console.log('Error adding name image to PDF:', error);
+              resolve(false);
+            }
+          };
+          nameImg.onerror = () => {
+            console.log('Name image failed to load');
+            resolve(false);
+          };
+          nameImg.src = '/assets/NAME.jpg';
+        });
+      } catch (error) {
+        console.log('Name image not found, continuing without name image');
+      }
+      
+      // Prepare table data
+      const tableData: any[][] = [];
+      
+      // Debug logging
+      console.log('🔍 PDF Generation Debug:');
+      console.log('🔍 Parameters object:', parameters);
+      console.log('🔍 Parameters keys:', Object.keys(parameters || {}));
+      console.log('🔍 Interview data:', interview);
+      console.log('🔍 Parameter scores:', interview.parameter_scores);
+      
+      // Check if we have parameters data (from our converted structure)
+      if (parameters && Object.keys(parameters).length > 0) {
+        // Iterate through each parameter
+        Object.entries(parameters).forEach(([paramKey, paramData]: [string, any]) => {
+          // Process each question and answer for this parameter
+          if (paramData.questions && Array.isArray(paramData.questions)) {
+            paramData.questions.forEach((questionData: any) => {
+              // Format feedback with bullet points
+              const formatFeedback = (feedback: string) => {
+                if (!feedback) return 'No feedback available';
+                
+                // Split by periods and create bullet points
+                const sentences = feedback.split('.').filter(sentence => sentence.trim().length > 0);
+                return sentences.map(sentence => `• ${sentence.trim()}`).join('\n');
+              };
+              
+              const rowData = [
+                paramData.name || paramKey,
+                questionData.question.question_text || 'N/A',
+                questionData.answer.transcript || 'No answer provided',
+                formatFeedback(questionData.answer.feedback),
+                questionData.answer.score || 'N/A'
+              ];
+              console.log('🔍 Adding row to PDF table:', rowData);
+              tableData.push(rowData);
+            });
+          }
+        });
+      }
+      // Fallback: Check if we have parameter_scores data (from interview_parameter_scores table)
+      else if (interview.parameter_scores) {
+        // Parse parameter_scores JSON data
+        const parameterScores = typeof interview.parameter_scores === 'string' 
+          ? JSON.parse(interview.parameter_scores) 
+          : interview.parameter_scores;
+        
+        // Iterate through each parameter
+        Object.entries(parameterScores).forEach(([paramKey, paramData]: [string, any]) => {
+          const individualScores = paramData.individual_question_scores || [];
+          
+          // Process each question and answer for this parameter
+          individualScores.forEach((questionData: any) => {
+            // Format feedback with bullet points
+            const formatFeedback = (feedback: string) => {
+              if (!feedback) return 'No feedback available';
+              
+              // Split by periods and create bullet points
+              const sentences = feedback.split('.').filter(sentence => sentence.trim().length > 0);
+              return sentences.map(sentence => `• ${sentence.trim()}`).join('\n');
+            };
+            
+            tableData.push([
+              paramData.parameter_name || paramKey,
+              questionData.question_text || 'N/A',
+              questionData.transcript || 'No answer provided',
+              formatFeedback(questionData.feedback),
+              questionData.score || 'N/A'
+            ]);
+          });
+        });
+      } else {
+        // Fallback to old data structure if parameter_scores doesn't exist
+        Object.entries(parameters).forEach(([paramKey, paramData]: [string, any]) => {
+          const questions = paramData.questions || [];
+          const answers = paramData.answers || [];
+          
+          if (questions.length > 0) {
+            questions.forEach((question: any, questionIndex: number) => {
+              const answer = answers.find((ans: any) => 
+                ans.question_order === question.question_order || 
+                answers.indexOf(ans) === questionIndex
+              ) || answers[questionIndex] || {};
+              
+              tableData.push([
+                paramData.name || paramKey,
+                question.question_text || 'N/A',
+                answer.transcript || 'No answer provided',
+                answer.feedback || 'No feedback available',
+                answer.score || answer.parameter_score || 'N/A'
+              ]);
+            });
+          } else {
+            const parameterAnswer = answers[0] || {};
+            tableData.push([
+              paramData.name || paramKey,
+              'Parameter-based assessment',
+              parameterAnswer.transcript || 'No answer provided',
+              parameterAnswer.feedback || paramData.feedback || 'No feedback available',
+              parameterAnswer.score || parameterAnswer.parameter_score || paramData.score || 'N/A'
+            ]);
+          }
+        });
+      }
+      
+      // Add table with proper column widths
+      autoTable(doc, {
+        head: [['Parameter', 'Questions', 'Answers', 'AI Feedback', 'Scores']],
+        body: tableData,
+        startY: 85,
+        styles: {
+          fontSize: 7,
+          cellPadding: 2,
+          overflow: 'linebreak',
+          halign: 'left'
+        },
+        headStyles: {
+          fillColor: [59, 130, 246], // Blue color
+          textColor: 255,
+          fontStyle: 'bold',
+          fontSize: 8
+        },
+        columnStyles: {
+          0: { cellWidth: 30 }, // Parameter - larger
+          1: { cellWidth: 40 }, // Questions - larger
+          2: { cellWidth: 40 }, // Answers - larger
+          3: { cellWidth: 40 }, // AI Feedback - larger
+          4: { cellWidth: 18 }  // Scores - larger
+        },
+        margin: { left: 15, right: 15 },
+        pageBreak: 'auto',
+        rowPageBreak: 'avoid',
+        didDrawPage: function (data: any) {
+          // Add page numbers
+          const pageCount = (doc as any).internal.getNumberOfPages();
+          doc.setFontSize(8);
+          doc.text(`Page ${data.pageNumber} of ${pageCount}`, 
+            data.settings.margin.left, 
+            (doc as any).internal.pageSize.height - 10);
+        }
+      });
+      
+      // Save the PDF with proper filename
+      const candidateName = interview.candidate_name.replace(/[^a-zA-Z0-9]/g, '_');
+      const fileName = `Interview_Report_${candidateName}_${new Date().toISOString().split('T')[0]}.pdf`;
+      
+      // Generate and download the PDF
+      doc.save(fileName);
+      
+      // Show success message after a small delay to ensure download started
+      setTimeout(() => {
+        toast.success('PDF report downloaded successfully!');
+      }, 500);
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate PDF report');
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
 
   return (
     <div className={`min-h-screen w-full h-full transition-colors duration-300 ${
@@ -1014,16 +1373,26 @@ const FinalResults = () => {
                 <span>{isDarkMode ? 'Light' : 'Dark'}</span>
               </button>
               <button
-                onClick={downloadReport}
+                onClick={generatePDFReport}
+                disabled={isGeneratingPDF}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
                   isDarkMode 
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                    : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'
-                }`}
-                title="Download comprehensive text report with all questions, answers, scores, feedback, audio URLs, and video URLs"
+                    ? 'bg-red-600 hover:bg-red-700 text-white' 
+                    : 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200'
+                } ${isGeneratingPDF ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title="Download comprehensive PDF report with all questions, answers, scores, feedback, and media files"
               >
-                <FileText className="h-4 w-4" />
-                <span>Text Report</span>
+                {isGeneratingPDF ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Generating PDF...</span>
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-4 w-4" />
+                    <span>Download PDF Report</span>
+                  </>
+                )}
               </button>
 
               <button
@@ -1073,7 +1442,7 @@ const FinalResults = () => {
             <div className="text-center">
               <div className={`text-3xl font-bold ${
                 isDarkMode ? 'text-green-400' : 'text-green-600'
-              }`}>{parameters?.length || 0}</div>
+              }`}>{parameterCount}</div>
               <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Parameters Assessed</div>
             </div>
             <div className="text-center">
@@ -1611,6 +1980,7 @@ const FinalResults = () => {
           </div>
         </div>
       )}
+
     </div>
   );
 };

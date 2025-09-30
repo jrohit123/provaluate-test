@@ -18,17 +18,16 @@ interface ResolvedJD {
     [key: string]: any;
   };
   attributes_summary?: string;
-  ai_provider?: string;
-  analysis_timestamp?: string;
-  status?: string;
-  original_length?: number;
-  cleaned_length?: number;
-  jd_file_url?: string;
+  //ai_provider?: string;
+  //analysis_timestamp?: string;
+  //status?: string;
+  //original_length?: number;
+  //cleaned_length?: number;
+  //jd_file_url?: string;
 }
 
 const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
-//const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx'];
-const ALLOWED_FILE_TYPES = ['.pdf'];
+const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx', '.txt'];
 // Backend service URLs for integration - Updated to use correct ports
 const BACKEND_URLS = {
   UNIFIED_SERVICE: 'http://localhost:5003',      // app.py - unified backend service
@@ -706,7 +705,7 @@ export const JobUploadSection = () => {
             >
               <Upload className="w-8 h-8 text-primary-400 mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">
-                Drop PDF files here or click to browse
+                Drop files here or click to browse (PDF, DOC, DOCX, TXT)
               </p>
               {uploadedFile && (
                 <div className="mt-2 text-xs text-primary-700">Selected file: {uploadedFile.name}</div>
@@ -716,8 +715,7 @@ export const JobUploadSection = () => {
             <input
               ref={fileInputRef}
               type="file"
-              //accept=".pdf,.doc,.docx"
-              accept=".pdf"
+              accept=".pdf,.doc,.docx,.txt"
               onChange={handleFileChange}
               className="hidden"
             />

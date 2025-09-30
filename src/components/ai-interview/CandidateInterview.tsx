@@ -36,13 +36,32 @@ const CandidateInterview = () => {
         if (response.ok) {
           const data = await response.json();
           console.log('📊 Interview data received:', data);
-          // The API returns nested structure: {interview: {...}, questions: [...], answers: [...]}
-          // We need to flatten it for the frontend components
+          
+          // Handle both possible API response formats
+          let interviewData, questions, answers;
+          
+          if (data.status === 'success') {
+            // First endpoint format: {status: 'success', interview: {...}, questions: [...], answers: [...]}
+            interviewData = data.interview;
+            questions = data.questions || [];
+            answers = data.answers || [];
+          } else {
+            // Second endpoint format: {interview: {...}, questions: [...], answers: [...]}
+            interviewData = data.interview;
+            questions = data.questions || [];
+            answers = data.answers || [];
+          }
+          
+          // Flatten the data for frontend components
           const flattenedData = {
-            ...data.interview,
-            questions: data.questions || [],
-            answers: data.answers || []
+            ...interviewData,
+            questions: questions,
+            answers: answers
           };
+          
+          console.log('🔍 Flattened interview data keys:', Object.keys(flattenedData));
+          console.log('🔍 Interview type in flattened data:', flattenedData.interview_type);
+          
           setInterviewData(flattenedData);
           setIsLoading(false);
         } else if (response.status === 404) {
@@ -153,60 +172,48 @@ const CandidateInterview = () => {
         </div>
 
         {/* Interview Details */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+        <div className="bg-white rounded-lg shadow-lg p-5 mb-5">
           <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <User className="text-blue-600" />
+            <User className="text-blue-600 w-5 h-5" />
             Interview Details
           </h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-2 gap-4 mb-5">
             <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
               <User className="w-5 h-5 text-gray-600" />
-                             <div>
-                 <p className="text-sm text-gray-500">Position</p>
-                 <p className="font-medium">{interviewData.position}</p>
-               </div>
-             </div>
+              <div>
+                <p className="text-sm text-gray-500">Position</p>
+                <p className="font-medium">{interviewData.position}</p>
+              </div>
+            </div>
              
-             <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-               <Clock className="w-5 h-5 text-gray-600" />
-               <div>
-                 <p className="text-sm text-gray-500">Duration</p>
-                 <p className="font-medium">{interviewData.duration_minutes} minutes</p>
-               </div>
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+              <Clock className="w-5 h-5 text-gray-600" />
+              <div>
+                <p className="text-sm text-gray-500">Duration</p>
+                <p className="font-medium">{interviewData.duration_minutes} minutes</p>
+              </div>
             </div>
             
             <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
               <Video className="w-5 h-5 text-gray-600" />
               <div>
-                <p className="text-sm text-gray-500">Camera Required</p>
-                <p className="font-medium">Yes</p>
+                <p className="text-sm text-gray-500">Camera</p>
+                <p className="font-medium">Required</p>
               </div>
             </div>
             
             <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
               <Mic className="w-5 h-5 text-gray-600" />
               <div>
-                <p className="text-sm text-gray-500">Microphone Required</p>
-                <p className="font-medium">Yes</p>
+                <p className="text-sm text-gray-500">Microphone</p>
+                <p className="font-medium">Required</p>
               </div>
             </div>
           </div>
 
-          {/* Interview Type */}
-          <div className="mb-6">
-            <h3 className="font-medium text-gray-800 mb-2">Interview Type</h3>
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                             <p className="text-blue-800">
-                 {interviewData.interview_type === 'technical' && '💻 Technical Interview'}
-                 {interviewData.interview_type === 'behavioral' && '🤝 Behavioral Interview'}
-                 {interviewData.interview_type === 'mixed' && '🎯 Mixed (Technical + Behavioral) Interview'}
-               </p>
-            </div>
-          </div>
-
           {/* Instructions */}
-          <div className="mb-6">
+          <div className="mb-4">
             <h3 className="font-medium text-gray-800 mb-2">Instructions</h3>
             <div className="space-y-2 text-sm text-gray-600">
               <p>• Please ensure your camera and microphone are working</p>
@@ -215,40 +222,40 @@ const CandidateInterview = () => {
             </div>
           </div>
 
-                     {/* Custom Instructions */}
-           {interviewData.custom_instructions && (
-             <div className="mb-6">
-               <h3 className="font-medium text-gray-800 mb-2">Special Instructions</h3>
-               <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                 <p className="text-yellow-800">{interviewData.interview.custom_instructions}</p>
-               </div>
-             </div>
-           )}
-        </div>
+          {/* Custom Instructions */}
+          {interviewData.custom_instructions && (
+            <div className="mb-4">
+              <h3 className="font-medium text-gray-800 mb-2">Special Instructions</h3>
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-yellow-800">{interviewData.custom_instructions}</p>
+              </div>
+            </div>
+          )}
 
-        {/* Requirements Check */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <AlertTriangle className="text-orange-600" />
-            System Requirements
-          </h2>
-          
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="w-4 h-4 bg-green-500 rounded-full"></div>
-              <span>Modern web browser (Chrome, Firefox, Safari, Edge)</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-4 h-4 bg-green-500 rounded-full"></div>
-              <span>Working camera and microphone</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-4 h-4 bg-green-500 rounded-full"></div>
-              <span>Stable internet connection</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-4 h-4 bg-green-500 rounded-full"></div>
-              <span>Permission to access camera and microphone</span>
+          {/* System Requirements */}
+          <div>
+            <h3 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-orange-600" />
+              System Requirements
+            </h3>
+            
+            <div className="space-y-2 text-sm text-gray-600">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                <span>Modern web browser (Chrome, Firefox, Safari, Edge)</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                <span>Working camera and microphone</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                <span>Stable internet connection</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                <span>Permission to access camera and microphone</span>
+              </div>
             </div>
           </div>
         </div>

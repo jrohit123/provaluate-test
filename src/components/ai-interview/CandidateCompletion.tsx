@@ -86,31 +86,13 @@ const CandidateCompletion = () => {
               <div>
                 <h3 className="font-semibold text-gray-800 mb-1">Follow-up</h3>
                 <p className="text-gray-600 text-sm">
-                  You'll receive an email within 3-5 business days with next steps.
+                  If you are selected for the next round, you will receive an email within 3-5 business days with further steps.
                 </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Contact Information */}
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h2 className="text-2xl font-semibold text-gray-800 mb-4 flex items-center justify-center gap-2">
-            <User className="w-6 h-6 text-blue-600" />
-            Questions?
-          </h2>
-          
-          <p className="text-gray-600 mb-4">
-            If you have any questions about your interview or the hiring process, please don't hesitate to reach out.
-          </p>
-          
-          <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-gray-700">
-              <strong>Contact:</strong> hr@company.com<br />
-              <strong>Subject:</strong> Interview Follow-up - {candidateName}
-            </p>
-          </div>
-        </div>
 
         {/* Footer */}
         <div className="mt-8 text-center">

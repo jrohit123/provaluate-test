@@ -42,8 +42,7 @@ interface ProcessingState {
 }
 
 const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
-//const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx'];
-const ALLOWED_FILE_TYPES = ['.pdf'];
+const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx', '.txt'];
 // Import API service instead of using webhooks
 import { apiService } from '@/services/api';
 
@@ -124,9 +123,9 @@ export const ResumeUploadSection = () => {
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
   const [showScorecard, setShowScorecard] = useState(false);
   const [jobDescriptions, setJobDescriptions] = useState<any[]>([]);
-  const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => sessionStorage.getItem('selectedJDId') || '');
+  const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>('');
   const [criteriaGrids, setCriteriaGrids] = useState<SavedCriteriaGrid[]>([]);
-  const [selectedCriteriaGridId, setSelectedCriteriaGridId] = useState<string>(() => sessionStorage.getItem('selectedCriteriaGridId') || '');
+  const [selectedCriteriaGridId, setSelectedCriteriaGridId] = useState<string>('');
   const [assessmentReports, setAssessmentReports] = useState<any[]>([]);
   const [loadingReports, setLoadingReports] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -421,7 +420,7 @@ export const ResumeUploadSection = () => {
     if (jobDescriptions.length > 0 && selectedJobDescriptionId) {
       const selectedJD = jobDescriptions.find(jd => jd.jd_id === selectedJobDescriptionId);
       if (selectedJD) {
-        console.log('Auto-selected Job Description from session:', selectedJD.title);
+        console.log('Selected Job Description:', selectedJD.title);
       }
     }
   }, [jobDescriptions, selectedJobDescriptionId, toast]);
@@ -1725,7 +1724,7 @@ export const ResumeUploadSection = () => {
                 <Upload className="w-12 h-12 text-primary-400 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Upload Candidate Resumes</h3>
                 <p className="text-muted-foreground mb-4">
-                  Drop multiple PDF files here or click to browse. Select files first, then click "Start Upload".
+                  Drop multiple files here or click to browse (PDF, DOC, DOCX, TXT). Select files first, then click "Start Upload".
                 </p>
                 <Button 
                   onClick={(e) => {
@@ -1967,8 +1966,7 @@ export const ResumeUploadSection = () => {
       <input
         ref={fileInputRef}
         type="file"
-        //accept=".pdf,.doc,.docx"
-        accept=".pdf"
+        accept=".pdf,.doc,.docx,.txt"
         multiple
         onChange={handleFileChange}
         className="hidden"
