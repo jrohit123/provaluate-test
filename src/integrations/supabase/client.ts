@@ -2,17 +2,13 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
+// Import from Vite env (must be prefixed with VITE_)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-//PROD Keys
-//const SUPABASE_URL = "https://supabase-6421997917235322.kloudbeansite.com";
-//const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzQyOTI5MjAwLCJleHAiOjE5MDA2OTU2MDB9.7jPHJpPlIGJPBbTPvm8rLjQuUsqlt1rYI5hJzvV8ocg";
-
-
-//DEV Keys - Updated to match Python backend
-const SUPABASE_URL = "https://geetjqhzkvblyophamdw.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdlZXRqcWh6a3ZibHlvcGhhbWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ4OTQ4NTAsImV4cCI6MjA3MDQ3MDg1MH0.0z_Qpo47MmAvh6gRI62tS-ni-5fBDJ550B-DeRw6uoY";
-
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
+// Optional: fail fast if missing
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+	console.error('Missing Supabase env vars. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+}
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
