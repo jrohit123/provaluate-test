@@ -97,6 +97,7 @@ const App = () => {
             <Route path="/conversational-interview" element={<ConversationalInterview />} />
             <Route path="/ai-interview/candidate-completion" element={<CandidateCompletion />} />
             <Route path="/candidate-completion" element={<CandidateCompletion />} />
+            <Route path="/candidate-completion/:interviewId" element={<CandidateCompletion />} />
             <Route path="/ai-interview/final-results/:interviewId" element={<FinalResults />} />
             <Route path="/final-results/:interviewId" element={<FinalResults />} />
             

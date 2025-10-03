@@ -1,30 +1,44 @@
-import React, { useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useParams } from 'react-router-dom';
 import { CheckCircle, Clock, User } from 'lucide-react';
 
 const CandidateCompletion = () => {
   const location = useLocation();
-  const { candidateName, position, interviewId } = location.state || {};
+  const params = useParams();
+  const [candidateName, setCandidateName] = useState<string | undefined>((location.state as any)?.candidateName);
+  const [position, setPosition] = useState<string | undefined>((location.state as any)?.position);
+  const interviewId = (location.state as any)?.interviewId || params.interviewId;
 
-  // Track completion page view
+  // Track completion page view and hydrate details when opened directly
   useEffect(() => {
-    const trackCompletionView = async () => {
-      if (interviewId) {
+    const run = async () => {
+      if (!interviewId) return;
+      try {
+        await fetch(`http://localhost:5003/api/track-completion-view/${interviewId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        console.log('✅ Completion page view tracked');
+      } catch (error) {
+        console.warn('⚠️ Could not track completion view:', error);
+      }
+
+      // If candidate name/position not provided via state, fetch interview details
+      if (!candidateName || !position) {
         try {
-          await fetch(`http://localhost:5003/api/track-completion-view/${interviewId}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          });
-          console.log('✅ Completion page view tracked');
-        } catch (error) {
-          console.warn('⚠️ Could not track completion view:', error);
+          const resp = await fetch(`http://localhost:5003/api/get-interview/${interviewId}`);
+          if (resp.ok) {
+            const data = await resp.json();
+            const interview = data.interview || data; // support both formats
+            setCandidateName(interview.candidate_name);
+            setPosition(interview.position);
+          }
+        } catch (e) {
+          console.warn('⚠️ Could not fetch interview details for completion page');
         }
       }
     };
-
-    trackCompletionView();
+    run();
   }, [interviewId]);
 
   return (
