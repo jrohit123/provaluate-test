@@ -709,6 +709,12 @@ export const JobUploadSection = () => {
                         title: selectedJD.title,
                         file: selectedJD.jd_file
                       });
+                      // Persist for other sections
+                      try {
+                        sessionStorage.setItem('selectedJDId', selectedJD.jd_id);
+                      } catch (e) {
+                        console.warn('Unable to write selectedJDId to sessionStorage', e);
+                      }
                       
                       toast({
                         title: "Success",

@@ -13,6 +13,19 @@ export const Header = () => {
   const handleLogout = () => {
     localStorage.removeItem('recruitai_auth');
     localStorage.removeItem('onboarding_complete');
+    // Clear persisted CV screening selections so UI resets consistently
+    localStorage.removeItem('cv-screening-session');
+    // Also clear transient selections kept in sessionStorage to avoid stale UI after logout
+    try {
+      sessionStorage.removeItem('selectedJDId');
+      sessionStorage.removeItem('selectedCriteriaGridId');
+      sessionStorage.removeItem('uploadedFiles');
+      sessionStorage.removeItem('selectedCandidatesForInterview');
+      // Notify interested components that the session state was cleared
+      window.dispatchEvent(new Event('session:cleared'));
+    } catch (e) {
+      // no-op
+    }
     toast({
       title: "Logged out successfully",
       description: "You've been logged out of your account.",

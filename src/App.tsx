@@ -18,14 +18,12 @@ import Onboarding from "./pages/Onboarding";
 // Import AI Interview components (now TypeScript)
 import InterviewDashboard from "./components/ai-interview/InterviewDashboard";
 import AIsetup from "./components/ai-interview/AIsetup";
-import WelcomePage from "./components/ai-interview/WelcomePage";
-import WhyAitamatePage from "./components/ai-interview/WhyAitamatePage";
 import HRInterviewCreator from "./components/ai-interview/HRInterviewCreator";
 import CandidateInterview from "./components/ai-interview/CandidateInterview";
 import FinalResults from "./components/ai-interview/FinalResults";
 import ConversationalInterview from "./components/ai-interview/ConversationalInterview";
 import CandidateCompletion from "./components/ai-interview/CandidateCompletion";
-import CustomParameterManager from "./components/ai-interview/CustomParameterManager";
+
 
 import { supabase } from "@/integrations/supabase/client";
 import { InterviewProvider } from "@/contexts/InterviewContext";
@@ -85,12 +83,9 @@ const App = () => {
             } />
             
             {/* AI Interview Routes - Original Interface */}
-            <Route path="/ai-interview" element={<WelcomePage />} />
             <Route path="/ai-interview/dashboard" element={<InterviewDashboard />} />
             <Route path="/ai-interview/setup" element={<AIsetup />} />
-            <Route path="/ai-interview/why-aitamate" element={<WhyAitamatePage />} />
             <Route path="/ai-interview/hr/create-interview" element={<HRInterviewCreator />} />
-            <Route path="/ai-interview/parameters" element={<CustomParameterManager roleName="" onParametersUpdated={() => {}} />} />
             <Route path="/ai-interview/interview/:interviewId" element={<CandidateInterview />} />
             <Route path="/interview/:interviewId" element={<CandidateInterview />} />
             <Route path="/ai-interview/conversational-interview" element={<ConversationalInterview />} />

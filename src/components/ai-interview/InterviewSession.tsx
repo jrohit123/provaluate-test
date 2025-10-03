@@ -1143,7 +1143,7 @@ const InterviewSession = () => {
             )}
 
             {/* Question Panel */}
-            {!showWelcome && (
+            {!showWelcome && (<>
               <div className="bg-white rounded-3xl p-8 hover:shadow-2xl transition-all duration-300 border border-slate-200 shadow-lg">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
@@ -1318,8 +1318,9 @@ const InterviewSession = () => {
                     </div>
                   </div>
                 </div>
-              </div>
             </div>
+          </div>
+            </>)}
           </div>
 
           {/* Side Panel */}
@@ -1461,12 +1462,10 @@ const InterviewSession = () => {
               </div>
             )}
             </div>
-            )}
 
           </div>
         </div>
       </div>
-    </div>
   );
 };
 

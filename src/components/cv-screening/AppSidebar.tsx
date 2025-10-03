@@ -62,13 +62,13 @@ const cvScreeningItems = [
 // Interview Management section items
 const interviewManagementItems = [
   {
-    title: 'Interview Configuration',
+    title: 'Interview Creation',
     icon: Cog,
     section: 'setup' as ActiveSection,
     description: 'Configure interview parameters and job descriptions'
   },
   {
-    title: 'Assessment Manager',
+    title: 'Send Interview',
     icon: Users,
     section: 'ai-interview' as ActiveSection,
     description: 'View and manage assessment frameworks'

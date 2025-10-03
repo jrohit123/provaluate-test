@@ -1293,8 +1293,8 @@ const HRInterviewCreator = () => {
   return (
     <div className="p-6 space-y-6">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-primary-800 mb-2">Interview Creation</h2>
-        <p className="text-muted-foreground">Set up an interview and generate a link for your candidate</p>
+        <h2 className="text-2xl font-bold text-primary-800 mb-2">Interview Parameters Setup</h2>
+        <p className="text-muted-foreground">Select the role and configure the interview settings</p>
       </div>
 
       {/* Interview Configuration Section */}
