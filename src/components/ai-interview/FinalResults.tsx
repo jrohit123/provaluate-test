@@ -348,6 +348,8 @@ const FinalResults = () => {
          console.log('🔍 Interview data:', data.interview);
          console.log('🔍 Duration minutes from API:', data.interview?.duration_minutes);
          console.log('🔍 Session duration from API:', data.interview?.session_duration);
+         console.log('🔍 Started at:', data.interview?.started_at);
+         console.log('🔍 Completed at:', data.interview?.completed_at);
          
          setReportData(processedData);
       } else {
@@ -1455,7 +1457,10 @@ const FinalResults = () => {
                <div className={`text-3xl font-bold ${
                  isDarkMode ? 'text-purple-400' : 'text-purple-600'
                }`}>
-                 {interview.duration_minutes || 30} min
+                 {interview.completed_at && interview.started_at 
+                   ? `${Math.round((new Date(interview.completed_at).getTime() - new Date(interview.started_at).getTime()) / 60000)} min` 
+                   : `${interview.duration_minutes || 30} min`
+                 }
                </div>
                <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Duration</div>
              </div>
