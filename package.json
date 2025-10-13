@@ -6,7 +6,6 @@
   "description": "Unified frontend for CV Screening and AI Interview services",
   "scripts": {
     "dev": "vite",
-    "build": "vite build --mode production",
     "build:testing": "vite build --mode testing",
     "build:prod": "vite build --mode production",
     "preview": "vite preview"
