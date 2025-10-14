@@ -33,7 +33,7 @@ const BACKEND_URLS = {
   UNIFIED_SERVICE: 'https://devprovaluate_py.aitamate.com',      // app.py - unified backend service
   AI_ANALYZER_SERVICE: 'http://localhost:5001',  // jd_analyzer.py - handles AI analysis
   CV_ANALYZER_SERVICE: 'http://localhost:5002',  // cv_analyzer.py - handles CV analysis
-  RESUME_SERVICE: 'http://localhost:5003',       // app.py - handles uploads
+  RESUME_SERVICE: 'https://devprovaluate_py.aitamate.com',       // app.py - handles uploads
 };
 
 // Legacy webhook URL (kept for compatibility)
