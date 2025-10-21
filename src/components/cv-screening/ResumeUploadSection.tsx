@@ -144,6 +144,22 @@ export const ResumeUploadSection = () => {
 
 
 
+  // Hydrate selections from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const storedJD = sessionStorage.getItem('selectedJDId');
+      const storedCriteria = sessionStorage.getItem('selectedCriteriaGridId');
+      if (storedJD) {
+        setSelectedJobDescriptionId(storedJD);
+      }
+      if (storedCriteria) {
+        setSelectedCriteriaGridId(storedCriteria);
+      }
+    } catch (e) {
+      console.warn('Unable to read selections from sessionStorage', e);
+    }
+  }, []);
+
   // Auto-refresh functions for assessment reports
   const startAutoRefreshAssessments = () => {
     setIsWaitingForAssessments(true);
@@ -1481,6 +1497,51 @@ export const ResumeUploadSection = () => {
     }
   };
 
+  // Helper: format possibly-JSON summary/recommendation into readable text for list preview
+  const formatPreviewText = (value: any): string => {
+    if (!value) return '';
+    if (typeof value !== 'string') {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return '';
+      }
+    }
+    const text = value.trim();
+    // If JSON, parse and pick a concise preview
+    try {
+      if (/^(\s*\{|\s*\[)/.test(text)) {
+        const parsed: any = JSON.parse(text);
+        if (Array.isArray(parsed)) {
+          return parsed.slice(0, 3).map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' ');
+        }
+        if (parsed && typeof parsed === 'object') {
+          const preferredOrder = [
+            'Summary',
+            'Key Strengths',
+            'Notable Gaps',
+            'Experience Relevance',
+            'Overall Fit Assessment',
+            'Recommendation'
+          ];
+          for (const key of preferredOrder) {
+            if (key in parsed) {
+              const v = parsed[key];
+              if (Array.isArray(v)) return v.slice(0, 2).join(' ');
+              if (typeof v === 'string') return v;
+              return JSON.stringify(v);
+            }
+          }
+          // fallback to first string-like field
+          const firstEntry = Object.entries(parsed).find(([, v]) => typeof v === 'string');
+          if (firstEntry) return firstEntry[1] as string;
+          return JSON.stringify(parsed);
+        }
+      }
+    } catch {}
+    return text;
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="mb-6">
@@ -1906,7 +1967,7 @@ export const ResumeUploadSection = () => {
                           'No file'
                         )}
                       </p>
-                      <p className="text-sm text-gray-700">{report.summary || report.recommendation || ''}</p>
+                      <p className="text-sm text-gray-700">{formatPreviewText(report.summary || report.recommendation || '')}</p>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">

@@ -361,6 +361,12 @@ export const EvaluationCriteriaSection = () => {
                         name: selectedGrid.criteria_name,
                         criteria: criteriaItems
                       });
+                      // Persist for other sections
+                      try {
+                        sessionStorage.setItem('selectedCriteriaGridId', selectedGrid.criteria_id);
+                      } catch (e) {
+                        console.warn('Unable to write selectedCriteriaGridId to sessionStorage', e);
+                      }
                       
                       toast({
                         title: "Success",

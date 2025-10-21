@@ -127,7 +127,7 @@ const ServicesSelection = () => {
                 </div>
               </div>
               
-              <Link to="/ai-interview">
+              <Link to="/ai-interview/dashboard">
                 <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 text-lg font-semibold">
                   Start AI Interview
                   <ArrowRight className="ml-2 h-5 w-5" />

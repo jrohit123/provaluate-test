@@ -46,6 +46,18 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
   const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => sessionStorage.getItem('selectedJDId') || '');
   const [criteriaGrids, setCriteriaGrids] = useState<any[]>([]);
   const [selectedCriteriaGridId, setSelectedCriteriaGridId] = useState<string>(() => sessionStorage.getItem('selectedCriteriaGridId') || '');
+
+  // Keep local state in sync with sessionStorage resets (e.g., on login/logout)
+  useEffect(() => {
+    const handleSessionCleared = () => {
+      const jd = sessionStorage.getItem('selectedJDId') || '';
+      const grid = sessionStorage.getItem('selectedCriteriaGridId') || '';
+      setSelectedJobDescriptionId(jd);
+      setSelectedCriteriaGridId(grid);
+    };
+    window.addEventListener('session:cleared', handleSessionCleared);
+    return () => window.removeEventListener('session:cleared', handleSessionCleared);
+  }, []);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -580,10 +592,87 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     return 'bg-orange-500';
   };
 
-  // Function to process summary text - remove asterisks and format headings
+  // Function to process summary text - handle JSON/object/array gracefully, remove asterisks and format headings
   const processSummaryText = (text: string) => {
     if (!text) return [];
     
+    // Try to detect and format JSON summaries into readable text
+    try {
+      const looksLikeJson = typeof text === 'string' && /^(\s*\{|\s*\[)/.test(text);
+      if (looksLikeJson) {
+        const parsed: any = JSON.parse(text);
+
+        const lines: Array<{ type: 'heading' | 'text'; text: string }> = [];
+
+        const pushHeading = (t: string) => {
+          const heading = t.trim().endsWith(':') ? t.trim() : `${t.trim()}:`;
+          lines.push({ type: 'heading', text: heading });
+        };
+        const pushBullets = (arr: any[]) => {
+          arr.forEach((item) => {
+            if (item == null) return;
+            const s = typeof item === 'string' ? item : JSON.stringify(item);
+            const clean = s.replace(/[\n\r]+/g, ' ').trim();
+            if (clean) lines.push({ type: 'text', text: `- ${clean}` });
+          });
+        };
+        const pushText = (label: string, value: any) => {
+          if (value == null) return;
+          const s = typeof value === 'string' ? value : JSON.stringify(value);
+          const clean = s.replace(/[\n\r]+/g, ' ').trim();
+          if (!clean) return;
+          if (label) pushHeading(label);
+          lines.push({ type: 'text', text: clean });
+        };
+
+        if (Array.isArray(parsed)) {
+          pushBullets(parsed);
+          return lines;
+        }
+
+        if (parsed && typeof parsed === 'object') {
+          // Render common keys in a sensible order
+          const preferredOrder = [
+            'Summary',
+            'Key Strengths',
+            'Notable Gaps',
+            'Experience Relevance',
+            'Employment History',
+            'Overall Fit Assessment',
+            'Recommendation'
+          ];
+
+          const keys = [
+            ...preferredOrder.filter((k) => k in parsed),
+            ...Object.keys(parsed).filter((k) => !preferredOrder.includes(k))
+          ];
+
+          keys.forEach((key) => {
+            const value = parsed[key];
+            if (Array.isArray(value)) {
+              pushHeading(key);
+              pushBullets(value);
+            } else if (value && typeof value === 'object') {
+              pushHeading(key);
+              // Flatten simple objects as key: value lines
+              Object.entries(value).forEach(([k, v]) => {
+                if (v == null) return;
+                const s = typeof v === 'string' ? v : JSON.stringify(v);
+                const clean = s.replace(/[\n\r]+/g, ' ').trim();
+                if (clean) lines.push({ type: 'text', text: `${k}: ${clean}` });
+              });
+            } else {
+              pushText(key, value);
+            }
+          });
+
+          return lines;
+        }
+      }
+    } catch (e) {
+      // Not JSON or failed to parse; continue with plaintext handling
+    }
+
     // Split text into lines
     const lines = text.split('\n');
     const processedLines = lines.map(line => {

@@ -30,10 +30,10 @@ const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
 const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx', '.txt'];
 // Backend service URLs for integration - Updated to use correct ports
 const BACKEND_URLS = {
-  UNIFIED_SERVICE: 'http://localhost:5003',      // app.py - unified backend service
+  UNIFIED_SERVICE: 'https://devprovaluate_py.aitamate.com',      // app.py - unified backend service
   AI_ANALYZER_SERVICE: 'http://localhost:5001',  // jd_analyzer.py - handles AI analysis
   CV_ANALYZER_SERVICE: 'http://localhost:5002',  // cv_analyzer.py - handles CV analysis
-  RESUME_SERVICE: 'http://localhost:5003',       // app.py - handles uploads
+  RESUME_SERVICE: 'https://devprovaluate_py.aitamate.com',       // app.py - handles uploads
 };
 
 // Legacy webhook URL (kept for compatibility)
@@ -737,6 +737,12 @@ export const JobUploadSection = () => {
                         title: selectedJD.title,
                         file: selectedJD.jd_file
                       });
+                      // Persist for other sections
+                      try {
+                        sessionStorage.setItem('selectedJDId', selectedJD.jd_id);
+                      } catch (e) {
+                        console.warn('Unable to write selectedJDId to sessionStorage', e);
+                      }
                       
                       toast({
                         title: "Success",

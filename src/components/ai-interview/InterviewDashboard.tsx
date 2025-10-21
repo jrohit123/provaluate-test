@@ -145,11 +145,12 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
   };
 
   const formatDuration = (minutes: number) => {
-    if (minutes < 60) {
-      return `${minutes}m`;
+    const roundedMinutes = Math.round(minutes);
+    if (roundedMinutes < 60) {
+      return `${roundedMinutes}m`;
     }
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
+    const hours = Math.floor(roundedMinutes / 60);
+    const remainingMinutes = roundedMinutes % 60;
     return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
   };
 

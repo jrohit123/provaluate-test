@@ -38,6 +38,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('cv-screening-session', JSON.stringify(session));
   }, [currentJobDescription, currentEvaluationCriteria]);
 
+  // React to global session clears (e.g., login/logout) to reset in-memory state immediately
+  useEffect(() => {
+    const handleSessionCleared = () => {
+      setCurrentJobDescription(null);
+      setCurrentEvaluationCriteria(null);
+    };
+    window.addEventListener('session:cleared', handleSessionCleared);
+    return () => window.removeEventListener('session:cleared', handleSessionCleared);
+  }, []);
+
   const clearSession = () => {
     setCurrentJobDescription(null);
     setCurrentEvaluationCriteria(null);

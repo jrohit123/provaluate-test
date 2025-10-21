@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => ({
     },
   },  
   build: {
-    outDir: '.',
+    outDir: 'build',      // Changed from 'dist' to 'build'
     emptyOutDir: true,
   }
 }));

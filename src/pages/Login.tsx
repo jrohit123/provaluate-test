@@ -77,6 +77,18 @@ const Login = () => {
         });
         if (error) throw error;
         localStorage.setItem('recruitai_auth', 'true');
+        // Clear any stale selections for a clean session on login
+        localStorage.removeItem('cv-screening-session');
+        try {
+          sessionStorage.removeItem('selectedJDId');
+          sessionStorage.removeItem('selectedCriteriaGridId');
+          sessionStorage.removeItem('uploadedFiles');
+          sessionStorage.removeItem('selectedCandidatesForInterview');
+          // Broadcast session cleared so sections re-sync immediately
+          window.dispatchEvent(new Event('session:cleared'));
+        } catch (e) {
+          // no-op
+        }
         toast({
           title: "Welcome back!",
           description: "You've been logged in successfully.",
