@@ -151,7 +151,10 @@ const Login = () => {
               </div>
               <h1 className="text-2xl font-bold text-gray-900">ProValuate</h1>
             </div>
-            <div className="text-right">
+            <div className="flex items-center space-x-6">
+              <a href="/pricing" className="text-gray-600 hover:text-gray-900 transition-colors">
+                Pricing
+              </a>
               <a href="mailto:rj@aitamate.com?&subject=Provaluate&body=Hi,%0D%0A%0D%0AI'm facing an issue with ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors">
                 <Mail className="h-8 w-8" />
               </a>

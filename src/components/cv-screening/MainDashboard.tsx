@@ -22,6 +22,8 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
     interviewJobDescriptions: 0
   });
   const [loading, setLoading] = useState(true);
+  const [planData, setPlanData] = useState<any>(null);
+  const [companyData, setCompanyData] = useState<any>(null);
 
   // Fetch real data from database
   const fetchStats = async () => {
@@ -29,6 +31,26 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
     
     try {
       setLoading(true);
+      
+      // Fetch company data to get selected plan
+      const { data: companyData } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('company_id', user.profile.company_id)
+        .single();
+      
+      setCompanyData(companyData);
+      
+      // Fetch plan data if company has a selected plan
+      if (companyData?.selected_plan) {
+        const { data: planData } = await supabase
+          .from('plans')
+          .select('*')
+          .eq('plan_name', companyData.selected_plan)
+          .single();
+        
+        setPlanData(planData);
+      }
       
       // Fetch job descriptions count (CV screening)
       const { count: jobCount } = await supabase
@@ -100,7 +122,7 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="mb-6">
-        <p className="text-sm text-gray-600 mb-2">Welcome to your CV screening workspace</p>
+        <p className="text-sm text-gray-600 mb-2">Welcome to your faster hiring workspace!</p>
         <h1 className="text-2xl font-bold text-primary-800">Dashboard</h1>
       </div>
 
@@ -112,10 +134,51 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
             <CardTitle>Company Plan</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="text-2xl font-bold text-gray-900">FreeTrial-30</div>
-              <div className="text-sm text-gray-600">Days remaining: 30</div>
-            </div>
+            {loading ? (
+              <div className="space-y-2">
+                <div className="text-2xl font-bold text-gray-900">Loading...</div>
+                <div className="text-sm text-gray-600">Fetching plan details...</div>
+              </div>
+            ) : planData ? (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <div className="text-2xl font-bold text-gray-900">{planData.plan_name}</div>
+                  <div className="text-sm text-gray-600">
+                    {planData.plan_cost ? `₹${planData.plan_cost}/month` : 'Free Plan'}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <div className="font-medium text-gray-700">Max CVs</div>
+                    <div className="text-gray-600">
+                      {planData.max_cvs === 0 ? 'Unlimited' : planData.max_cvs}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium text-gray-700">Max Users</div>
+                    <div className="text-gray-600">
+                      {planData.max_users || 'N/A'}
+                    </div>
+                  </div>
+                </div>
+                  {companyData?.subscription_end && (
+                    <div className="text-sm text-gray-600">
+                      Renews on: {(() => {
+                        const date = new Date(companyData.subscription_end);
+                        const day = date.getDate().toString().padStart(2, '0');
+                        const month = date.toLocaleDateString('en-GB', { month: 'short' }).substring(0, 3);
+                        const year = date.getFullYear().toString().slice(-2);
+                        return `${day}-${month}-${year}`;
+                      })()}
+                    </div>
+                  )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="text-2xl font-bold text-gray-900">No Plan Selected</div>
+                <div className="text-sm text-gray-600">Contact admin to select a plan</div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
