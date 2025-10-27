@@ -341,6 +341,22 @@ const Login = () => {
             
             <div className="mt-8 text-center text-sm text-gray-600">
               <p>Powered by AI | Automated JD parsing and resume ranking engine based on customized selection criteria</p>
+              <div className="mt-4 flex items-center justify-center space-x-2">
+                <span className="text-gray-500">Powered by</span>
+                <a 
+                  href="https://aitamate.com/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-1 hover:opacity-80 transition-opacity"
+                >
+                  <img 
+                    src="https://aitamate.com/Logo-transparent_bg.png" 
+                    alt="aitamate" 
+                    className="h-4 w-auto"
+                  />
+                  <span className="text-gray-600 font-medium">aitamate</span>
+                </a>
+              </div>
             </div>
           </div>
         </div>
