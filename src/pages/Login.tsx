@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Users, Clock, CheckCircle, Shield, Mail, FileText, BarChart, UserPlus, LogIn } from "lucide-react";
+import { SessionConflictDialog } from '@/components/session/SessionConflictDialog';
+import { SessionManager, SessionData } from '@/utils/sessionManager';
 
 // Test credentials
 const TEST_EMAIL = 'test@example.com';
@@ -21,6 +23,9 @@ const Login = () => {
   const [resetMessage, setResetMessage] = useState('');
   const [resetError, setResetError] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
+  const [showSessionConflict, setShowSessionConflict] = useState(false);
+  const [conflictingSession, setConflictingSession] = useState<SessionData | undefined>(undefined);
+  const [pendingUserId, setPendingUserId] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
   // Remove useAuth import and usage, use Supabase directly
@@ -71,29 +76,27 @@ const Login = () => {
         return;
       } else {
         // Sign in with Supabase Auth
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
-        localStorage.setItem('recruitai_auth', 'true');
-        // Clear any stale selections for a clean session on login
-        localStorage.removeItem('cv-screening-session');
-        try {
-          sessionStorage.removeItem('selectedJDId');
-          sessionStorage.removeItem('selectedCriteriaGridId');
-          sessionStorage.removeItem('uploadedFiles');
-          sessionStorage.removeItem('selectedCandidatesForInterview');
-          // Broadcast session cleared so sections re-sync immediately
-          window.dispatchEvent(new Event('session:cleared'));
-        } catch (e) {
-          // no-op
+        if (!data.user) throw new Error('Login failed: No user data returned');
+
+        // Check for existing sessions on other devices
+        const sessionConflict = await SessionManager.checkSessionConflict(data.user.id);
+        
+        if (sessionConflict.hasConflict && sessionConflict.existingSession) {
+          // There's an existing session - show conflict dialog
+          setPendingUserId(data.user.id);
+          setConflictingSession(sessionConflict.existingSession);
+          setShowSessionConflict(true);
+          setIsLoading(false);
+          return;
         }
-        toast({
-          title: "Welcome back!",
-          description: "You've been logged in successfully.",
-        });
-        navigate('/dashboard?section=main-dashboard');
+
+        // No conflict, proceed with login
+        await completeLogin(data.user.id);
       }
     } catch (error: any) {
       toast({
@@ -139,8 +142,125 @@ const Login = () => {
     setResetLoading(false);
   };
 
+  /**
+   * Complete the login process by creating a session and navigating to dashboard
+   * @param userId - The authenticated user ID
+   */
+  const completeLogin = async (userId: string) => {
+    try {
+      // Create a new session
+      const sessionData = await SessionManager.createSession(userId);
+      if (!sessionData) {
+        throw new Error('Failed to create session');
+      }
+
+      // Set auth flag
+      localStorage.setItem('recruitai_auth', 'true');
+      
+      // Clear any stale selections for a clean session on login
+      localStorage.removeItem('cv-screening-session');
+      try {
+        sessionStorage.removeItem('selectedJDId');
+        sessionStorage.removeItem('selectedCriteriaGridId');
+        sessionStorage.removeItem('uploadedFiles');
+        sessionStorage.removeItem('selectedCandidatesForInterview');
+        // Broadcast session cleared so sections re-sync immediately
+        window.dispatchEvent(new Event('session:cleared'));
+      } catch (e) {
+        // no-op
+      }
+
+      toast({
+        title: "Welcome back!",
+        description: "You've been logged in successfully.",
+      });
+
+      navigate('/dashboard?section=main-dashboard');
+    } catch (error: any) {
+      console.error('Error completing login:', error);
+      toast({
+        title: 'Login Error',
+        description: error.message || 'Failed to complete login process.',
+        variant: 'destructive',
+      });
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Handle user choosing to keep the existing session
+   * (Logout the new login attempt)
+   */
+  const handleKeepExistingSession = async () => {
+    try {
+      // Sign out the current Supabase session
+      await supabase.auth.signOut();
+      
+      setShowSessionConflict(false);
+      setPendingUserId(null);
+      setConflictingSession(undefined);
+
+      toast({
+        title: 'Session Preserved',
+        description: 'Your existing session remains active. Please use that device to continue.',
+      });
+
+      // Keep user on login page
+      setEmail('');
+      setPassword('');
+    } catch (error: any) {
+      console.error('Error keeping existing session:', error);
+      toast({
+        title: 'Error',
+        description: 'An error occurred while processing your choice.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  /**
+   * Handle user choosing to replace existing session with new login
+   * (Logout the old session and create new one)
+   */
+  const handleReplaceWithNewSession = async () => {
+    try {
+      if (!pendingUserId) throw new Error('User ID not found');
+
+      // End all other sessions for this user
+      await SessionManager.endAllOtherSessions(pendingUserId);
+
+      // Now complete the login with the new session
+      await completeLogin(pendingUserId);
+
+      setShowSessionConflict(false);
+      setPendingUserId(null);
+      setConflictingSession(undefined);
+
+      toast({
+        title: 'New Session Created',
+        description: 'Your previous session has been ended. You are now logged in here.',
+      });
+    } catch (error: any) {
+      console.error('Error replacing session:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create new session.',
+        variant: 'destructive',
+      });
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Session Conflict Dialog */}
+      <SessionConflictDialog
+        isOpen={showSessionConflict}
+        existingSession={conflictingSession}
+        onKeepExisting={handleKeepExistingSession}
+        onReplaceWithNew={handleReplaceWithNewSession}
+      />
+
       {/* Header Section */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">

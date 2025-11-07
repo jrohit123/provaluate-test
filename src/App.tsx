@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster as HotToaster } from 'react-hot-toast';
 import './App.css';
+import { useSessionTimeout } from '@/hooks/use-session-timeout';
+import { SessionTimeoutDialog } from '@/components/session/SessionTimeoutDialog';
 
 // Import existing pages
 import Login from "./pages/Login";
@@ -37,6 +39,12 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const location = useLocation();
+  const {
+    isTimeoutWarningVisible,
+    remainingMinutes,
+    continueSession,
+    logout,
+  } = useSessionTimeout();
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -53,7 +61,18 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
   if (loading) return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  return children;
+
+  return (
+    <>
+      {children}
+      <SessionTimeoutDialog
+        isOpen={isTimeoutWarningVisible}
+        remainingMinutes={remainingMinutes}
+        onContinue={continueSession}
+        onLogout={logout}
+      />
+    </>
+  );
 };
 
 const App = () => {
