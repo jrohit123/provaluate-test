@@ -260,6 +260,12 @@ const ConversationalInterview = () => {
     console.log('🎤 aiAudioEnabled:', aiAudioEnabled);
     console.log('🎤 aiSpeaking:', aiSpeaking);
     
+    // Reset question finished speaking flag when starting to speak a new question
+    if (text.includes('Question') || text.includes('question')) {
+      console.log('🔄 Resetting questionFinishedSpeaking for new question');
+      setQuestionFinishedSpeaking(false);
+    }
+    
     // Prevent multiple AI speech simultaneously
     if (aiSpeaking) {
       console.log('❌ AI is already speaking, skipping this message');
@@ -271,28 +277,27 @@ const ConversationalInterview = () => {
       return;
     }
     
-    console.log('🎤 Setting AI speaking state to true');
-    setAiSpeaking(true);
-    
-    // Emit AI speech events to backend for transcription filtering
-    if (socketRef.current && socketRef.current.connected) {
-      socketRef.current.emit('ai_started_speaking', {
-        interview_id: interviewData.interviewId
-      });
-      console.log('📡 Emitted ai_started_speaking event');
-    }
-    
     // Use browser's speech synthesis
     if ('speechSynthesis' in window) {
       console.log('🎤 Speech synthesis available, creating utterance...');
       
+      // Clear any pending speech to prevent queue issues
+      window.speechSynthesis.cancel();
+      console.log('🧹 Cleared any previous speech synthesis queue');
+      
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.9; // Slightly slower for clarity
-      utterance.pitch = 1.0;
-      utterance.volume = 0.8;
+      utterance.pitch = 1.0; // Normal pitch
+      utterance.volume = 0.8; // Slightly lower volume
+      
+      utterance.onstart = () => {
+        console.log('🎤 Speech started for:', text.slice(0, 50) + (text.length > 50 ? '...' : ''));
+        setAiSpeaking(true);
+        setQuestionFinishedSpeaking(false);
+      };
       
       utterance.onend = () => {
-        console.log('🎤 Speech ended');
+        console.log('🎤 Speech ended for:', text.slice(0, 50) + (text.length > 50 ? '...' : ''));
         setAiSpeaking(false);
         
         // Check if this was a question (not welcome or completion message)
@@ -301,25 +306,17 @@ const ConversationalInterview = () => {
         const isCompletion = text.includes('Thank you') || text.includes('completed') || text.includes('appreciate');
         
         if (isQuestion && !isWelcome && !isCompletion) {
-          console.log('🎤 Question finished speaking, ready for recording');
+          console.log('🎯 Question finished speaking — countdown can start');
           setQuestionFinishedSpeaking(true);
         } else {
-          console.log('🎤 Non-question message finished (welcome/completion), not showing recording button');
           setQuestionFinishedSpeaking(false);
-        }
-        
-        // Emit AI stopped speaking event to backend
-        if (socketRef.current && socketRef.current.connected) {
-          socketRef.current.emit('ai_stopped_speaking', {
-            interview_id: interviewData.interviewId
-          });
-          console.log('📡 Emitted ai_stopped_speaking event');
         }
       };
       
-      utterance.onerror = (error) => {
-        console.error('❌ Speech synthesis error:', error);
+      utterance.onerror = (event) => {
+        console.error('❌ Speech synthesis error:', event);
         setAiSpeaking(false);
+        setQuestionFinishedSpeaking(false);
         
         // Emit AI stopped speaking event even on error
         if (socketRef.current && socketRef.current.connected) {
@@ -330,12 +327,9 @@ const ConversationalInterview = () => {
         }
       };
       
-      utterance.onstart = () => {
-        console.log('🎤 Speech started');
-      };
-      
-      console.log('🎤 Starting speech synthesis...');
-      speechSynthesis.speak(utterance);
+      // Speak the text
+      window.speechSynthesis.speak(utterance);
+      console.log('🗣️ Speech synthesis started for:', text.slice(0, 50) + (text.length > 50 ? '...' : ''));
     } else {
       console.log('❌ Speech synthesis not available');
       // Fallback: just show the message
@@ -930,7 +924,14 @@ const ConversationalInterview = () => {
 
   // Assign refs after functions are defined
   useEffect(() => {
-    speakWithAIRef.current = speakWithAI;
+    speakWithAIRef.current = (text) => {
+      // Reset question finished speaking flag when starting to speak a new question
+      if (text.includes('Question') || text.includes('question')) {
+        console.log('🔄 [Ref] Resetting questionFinishedSpeaking for new question');
+        setQuestionFinishedSpeaking(false);
+      }
+      return speakWithAI(text);
+    };
     finishInterviewRef.current = finishInterview;
   }, [speakWithAI, finishInterview]);
 
@@ -1648,6 +1649,75 @@ const ConversationalInterview = () => {
       setIsQuestionTimerActive(true);
     }
   }, [isRecording, currentQuestionMaxTime, isQuestionTimerActive, questionTimeRemaining]);
+
+  // Refs for cleanup
+  const recordingDelayTimeoutRef = useRef<number | null>(null);
+  const recordingCountdownIntervalRef = useRef<number | null>(null);
+
+  // Lint-safe effect: starts countdown only after AI fully finished speaking
+  useEffect(() => {
+    // Only run when questionFinishedSpeaking flips to true AND aiSpeaking is false
+    if (questionFinishedSpeaking && !aiSpeaking && !isRecording && !isSubmitting) {
+      // Small stabilization delay to avoid React batching/race issues
+      recordingDelayTimeoutRef.current = window.setTimeout(() => {
+        console.log('✅ AI finished speaking (stable) — starting 3s countdown');
+
+        // Start the per-question timer once (if you want it to start immediately)
+        if (currentQuestionMaxTime > 0) {
+          setQuestionTimeRemaining(currentQuestionMaxTime);
+          setIsQuestionTimerActive(true);
+          console.log('⏰ Question timer set to', currentQuestionMaxTime);
+        }
+
+        // Initialize visual countdown
+        setRecordingCountdown(3);
+
+        // Start interval for countdown
+        recordingCountdownIntervalRef.current = window.setInterval(() => {
+          setRecordingCountdown(prev => {
+            if (prev <= 1) {
+              // Clear interval safely
+              if (recordingCountdownIntervalRef.current) {
+                window.clearInterval(recordingCountdownIntervalRef.current);
+                recordingCountdownIntervalRef.current = null;
+              }
+
+              console.log('🎥 Countdown finished — auto-start recording');
+              // start recording via ref (safe: ref is stable)
+              try {
+                startRecordingRef.current?.();
+              } catch (err) {
+                console.error('❌ startRecordingRef.current threw:', err);
+                toast.error('Failed to start recording automatically.');
+              }
+
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      }, 200); // 200ms stabilization delay
+    }
+
+    // Cleanup when dependencies change/unmount
+    return () => {
+      if (recordingDelayTimeoutRef.current) {
+        window.clearTimeout(recordingDelayTimeoutRef.current);
+        recordingDelayTimeoutRef.current = null;
+      }
+      if (recordingCountdownIntervalRef.current) {
+        window.clearInterval(recordingCountdownIntervalRef.current);
+        recordingCountdownIntervalRef.current = null;
+      }
+    };
+  }, [
+    questionFinishedSpeaking,
+    aiSpeaking,
+    isRecording,
+    isSubmitting,
+    currentQuestionMaxTime,
+    startRecordingRef
+  ]);
 
   const initializeCamera = useCallback(async () => {
     try {
@@ -2381,7 +2451,15 @@ const ConversationalInterview = () => {
                     className="w-full h-full object-cover rounded-lg shadow-2xl transform scale-105 hover:scale-110 transition-transform duration-300"
                     style={{ height: '480px', width: '100%' }}
                   />
-
+                  
+                  {/* Countdown Overlay */}
+                  {recordingCountdown > 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10 rounded-lg">
+                      <div className="text-white text-9xl font-bold animate-ping">
+                        {recordingCountdown}
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="text-center">
@@ -2408,11 +2486,18 @@ const ConversationalInterview = () => {
                     Screen sharing is required and will be requested automatically
                   </div>
                 </div>
+              ) : recordingCountdown > 0 ? (
+                <div className="text-blue-300 text-sm transition-all duration-500 ease-in-out">
+                  <p>🎥 Recording will start in {recordingCountdown}...</p>
+                  <div className="mt-1 text-xs text-gray-400">
+                    Get ready to answer the question
+                  </div>
+                </div>
               ) : !questionFinishedSpeaking && !isRecording ? (
-               <div className="text-gray-300 text-sm transition-all duration-500 ease-in-out">
-                 <p>🎤 Wait for the AI to finish reading the question. Then click "Start Recording" when ready.</p>
-               </div>
-             ) : questionFinishedSpeaking && !isRecording ? (
+                <div className="text-gray-300 text-sm transition-all duration-500 ease-in-out">
+                  <p>🎤 Listen carefully to the question...</p>
+                </div>
+              ) : questionFinishedSpeaking && !isRecording ? (
                <div className="text-green-300 text-sm transition-all duration-500 ease-in-out">
                  <div>
                    <p>✅ Question finished! Click "Start Recording" to begin recording your answer.</p>
@@ -2506,18 +2591,6 @@ const ConversationalInterview = () => {
 
                  {/* Controls */}
          <div className="flex items-center justify-center gap-4">
-
-             {/* Start Recording Button - show when screen access granted and question finished */}
-             {screenPermissionGranted && questionFinishedSpeaking && !isRecording && (
-               <button
-                 onClick={startQuestionRecording}
-                 disabled={!isVideoOn || isSubmitting}
-                 className="flex items-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-medium transition-all duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-               >
-                 <Mic className="w-5 h-5" />
-                 Start Recording
-               </button>
-             )}
            
                                            {/* Stop Recording Button - only show when recording */}
              {isRecording && (
