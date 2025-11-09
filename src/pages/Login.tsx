@@ -83,20 +83,31 @@ const Login = () => {
         if (error) throw error;
         if (!data.user) throw new Error('Login failed: No user data returned');
 
-        // Check for existing sessions on other devices
-        const sessionConflict = await SessionManager.checkSessionConflict(data.user.id);
+        // Temporarily skip session conflict checking until database is set up
+        console.log('⚠️ Skipping session management - database not set up yet');
         
-        if (sessionConflict.hasConflict && sessionConflict.existingSession) {
-          // There's an existing session - show conflict dialog
-          setPendingUserId(data.user.id);
-          setConflictingSession(sessionConflict.existingSession);
-          setShowSessionConflict(true);
-          setIsLoading(false);
-          return;
+        // Set auth flag and proceed with login
+        localStorage.setItem('recruitai_auth', 'true');
+        
+        // Clear any stale selections for a clean session on login
+        localStorage.removeItem('cv-screening-session');
+        try {
+          sessionStorage.removeItem('selectedJDId');
+          sessionStorage.removeItem('selectedCriteriaGridId');
+          sessionStorage.removeItem('uploadedFiles');
+          sessionStorage.removeItem('selectedCandidatesForInterview');
+          // Broadcast session cleared so sections re-sync immediately
+          window.dispatchEvent(new Event('session:cleared'));
+        } catch (e) {
+          // no-op
         }
-
-        // No conflict, proceed with login
-        await completeLogin(data.user.id);
+        
+        toast({
+          title: "Welcome back!",
+          description: "You've been logged in successfully.",
+        });
+        
+        navigate('/dashboard?section=main-dashboard');
       }
     } catch (error: any) {
       toast({
