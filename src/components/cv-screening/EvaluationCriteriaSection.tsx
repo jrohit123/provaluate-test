@@ -107,32 +107,40 @@ export const EvaluationCriteriaSection = () => {
   };
 
   const handleDownloadTemplate = () => {
-    // Create workbook
-    const wb = XLSX.utils.book_new();
-    
-    // Create sample data
-    const sampleData = [
-      ['Parameter', 'Weightage', 'Notes'],
-      ['Technical Skills', 30, 'Check the relevant experience in the given Programming languages, frameworks, tools'],
-      ['Experience Level', 25, 'Years of relevant experience in similar roles'],
-      ['Education', 15, 'Degree relevance and institution quality'],
-      ['Soft Skills', 20, 'Communication, leadership, teamwork abilities'],
-      ['Stability', 10, 'Calculate the Stability Score based on the average years spent in each of the previous companies.']
-    ];
-    
-    // Convert to worksheet
-    const ws = XLSX.utils.aoa_to_sheet(sampleData);
-    
-    // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(wb, ws, 'Evaluation Criteria');
-    
-    // Generate and download file
-    XLSX.writeFile(wb, 'evaluation-criteria-template.xlsx');
-    
-    toast({
-      title: "Template Downloaded",
-      description: "Sample evaluation criteria template has been downloaded.",
-    });
+    const TEMPLATE_PATH = '/templates/evaluation-criteria-template.xlsx';
+
+    const downloadTemplate = async () => {
+      try {
+        const response = await fetch(TEMPLATE_PATH);
+        if (!response.ok) {
+          throw new Error('Template file not found. Please ensure it exists in the public/templates directory.');
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'evaluation-criteria-template.xlsx';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+
+        toast({
+          title: "Template Downloaded",
+          description: "Preformatted evaluation criteria template has been downloaded.",
+        });
+      } catch (error: any) {
+        console.error('Error downloading template:', error);
+        toast({
+          title: "Download Failed",
+          description: error.message || 'Unable to download the template. Please try again.',
+          variant: "destructive",
+        });
+      }
+    };
+
+    void downloadTemplate();
   };
 
   // Drag and drop handlers for criteria
@@ -315,12 +323,6 @@ export const EvaluationCriteriaSection = () => {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-primary-800 mb-2">Evaluation Criteria</h2>
-          <p className="text-muted-foreground">Manage your CV screening evaluation parameters</p>
-        </div>
-      </div>
 
       <div className="grid lg:grid-cols-1 gap-6">
         {/* Evaluation Criteria - Now editable and with Select for Session button */}
@@ -331,107 +333,129 @@ export const EvaluationCriteriaSection = () => {
                 <Grid className="w-5 h-5 text-primary-600" />
                 Evaluation Criteria
               </div>
-              <div className="flex items-center gap-2">
-                <Select value={selectedGridId} onValueChange={handleGridSelect}>
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="Load saved grid..." />
-                  </SelectTrigger>
-                <SelectContent>
-                  {savedGrids.map(grid => (
-                    <SelectItem key={grid.criteria_id} value={grid.criteria_id}>
-                      {grid.criteria_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button 
-                onClick={() => {
-                  if (selectedGridId) {
-                    const selectedGrid = savedGrids.find(grid => grid.criteria_id === selectedGridId);
-                    if (selectedGrid) {
-                      // Convert grid data to match our interface
-                      const criteriaItems = selectedGrid.grid.map((item: any, index: number) => ({
-                        id: (index + 1).toString(),
-                        parameter: item.parameter || '',
-                        weightage: item.weightage || 0,
-                        notes: item.calc_note || ''
-                      }));
+              
+            </CardTitle>
+          <CardDescription>
+            Configure the parameters and weights for the CV evaluation
+          </CardDescription>
+          
+          </CardHeader>
+          
+          <CardContent className="space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-primary-700">Select a saved grid:</span>
+            <Select value={selectedGridId} onValueChange={handleGridSelect}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Load saved grid..." />
+              </SelectTrigger>
+              <SelectContent>
+                {savedGrids.map(grid => (
+                  <SelectItem key={grid.criteria_id} value={grid.criteria_id}>
+                    {grid.criteria_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button 
+              onClick={() => {
+                if (selectedGridId) {
+                  const selectedGrid = savedGrids.find(grid => grid.criteria_id === selectedGridId);
+                  if (selectedGrid) {
+                    // Convert grid data to match our interface
+                    const criteriaItems = selectedGrid.grid.map((item: any, index: number) => ({
+                      id: (index + 1).toString(),
+                      parameter: item.parameter || '',
+                      weightage: item.weightage || 0,
+                      notes: item.calc_note || ''
+                    }));
 
-                      setCurrentEvaluationCriteria({
-                        name: selectedGrid.criteria_name,
-                        criteria: criteriaItems
-                      });
-                      // Persist for other sections
-                      try {
-                        sessionStorage.setItem('selectedCriteriaGridId', selectedGrid.criteria_id);
-                      } catch (e) {
-                        console.warn('Unable to write selectedCriteriaGridId to sessionStorage', e);
-                      }
-                      
-                      toast({
-                        title: "Success",
-                        description: `"${selectedGrid.criteria_name}" set for current session`
-                      });
+                    setCurrentEvaluationCriteria({
+                      name: selectedGrid.criteria_name,
+                      criteria: criteriaItems
+                    });
+                    // Persist for other sections
+                    try {
+                      sessionStorage.setItem('selectedCriteriaGridId', selectedGrid.criteria_id);
+                    } catch (e) {
+                      console.warn('Unable to write selectedCriteriaGridId to sessionStorage', e);
                     }
-                  } else {
+                    
                     toast({
-                      title: "Error",
-                      description: "Please select a criteria set",
-                      variant: "destructive"
+                      title: "Success",
+                      description: `"${selectedGrid.criteria_name}" set for current session`
                     });
                   }
-                }} 
-                className="bg-gray-500 hover:bg-gray-600"
-                disabled={!selectedGridId}
-              >
-                Select for Session
-              </Button>
+                } else {
+                  toast({
+                    title: "Error",
+                    description: "Please select a criteria set",
+                    variant: "destructive"
+                  });
+                }
+              }} 
+              className="bg-gray-500 hover:bg-gray-600"
+              disabled={!selectedGridId}
+            >
+              Select for Session
+            </Button>
+          </div>
+            <div className="flex items-center gap-4 my-6 text-sm font-medium text-[#1e5da8]">
+              <span className="flex-1 h-px bg-[#1e5da8]/30" />
+              <span>OR Create a new criteria grid</span>
+              <span className="flex-1 h-px bg-[#1e5da8]/30" />
             </div>
-          </CardTitle>
-          <CardDescription>
-            Configure your evaluation parameters and weights
-          </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
-              {criteriaData.map((criteria) => (
-                <div key={criteria.id} className="bg-gray-50 p-3 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <Input
-                      value={criteria.parameter}
-                      onChange={(e) => updateCriteria(criteria.id, 'parameter', e.target.value)}
-                      className="font-medium text-sm bg-transparent border-none p-0 h-auto focus:bg-white focus:border focus:px-2 focus:py-1"
-                    />
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center">
+            <div className="overflow-x-auto border border-primary-100 rounded-lg">
+              <table className="w-full table-auto">
+                <thead className="bg-primary-50 text-left">
+                  <tr className="text-xs font-semibold text-primary-800 uppercase tracking-wide">
+                    <th className="px-4 py-3 w-[25%]">Parameters To Assess</th>
+                    <th className="px-4 py-3 w-[20%]">Weightage</th>
+                    <th className="px-4 py-3">How To Assess? (Prompt to AI)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-primary-100 bg-white">
+                  {criteriaData.map((criteria) => (
+                    <tr key={criteria.id} className="align-top">
+                      <td className="px-4 py-3">
                         <Input
-                          type="number"
-                          value={criteria.weightage}
-                          onChange={(e) => updateCriteria(criteria.id, 'weightage', parseInt(e.target.value) || 0)}
-                          className="w-16 h-8 text-xs text-center bg-primary-100 border-primary-200"
-                          min="0"
-                          max="100"
+                          value={criteria.parameter}
+                          onChange={(e) => updateCriteria(criteria.id, 'parameter', e.target.value)}
+                          className="font-medium text-sm bg-transparent border border-primary-100 focus:bg-white focus:border-primary-300"
                         />
-                        <span className="text-xs font-medium text-primary-800 ml-1">%</span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => deleteCriteria(criteria.id)}
-                        className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <Input
-                    value={criteria.notes}
-                    onChange={(e) => updateCriteria(criteria.id, 'notes', e.target.value)}
-                    className="text-xs text-muted-foreground bg-transparent border-none p-0 h-auto focus:bg-white focus:border focus:px-2 focus:py-1"
-                    placeholder="Add description..."
-                  />
-                </div>
-              ))}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            value={criteria.weightage}
+                            onChange={(e) => updateCriteria(criteria.id, 'weightage', parseInt(e.target.value) || 0)}
+                            className="w-20 h-9 text-sm text-center bg-primary-50 border border-primary-200"
+                            min="0"
+                            max="100"
+                          />
+                          <span className="text-xs font-semibold text-primary-800">%</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteCriteria(criteria.id)}
+                            className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Input
+                          value={criteria.notes}
+                          onChange={(e) => updateCriteria(criteria.id, 'notes', e.target.value)}
+                          className="text-xs text-muted-foreground bg-transparent border border-primary-100 focus:bg-white focus:border-primary-300"
+                          placeholder="Add description..."
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
             <Button
@@ -452,16 +476,22 @@ export const EvaluationCriteriaSection = () => {
               </span>
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDownloadTemplate}
-              className="flex items-center gap-1 text-xs mb-2"
-            >
-              <Download className="w-3 h-3" />
-              Template
-            </Button>
+            <div className="flex items-center gap-4 my-6 text-sm font-medium text-[#1e5da8]">
+              <span className="flex-1 h-px bg-[#1e5da8]/30" />
+              <span>OR Upload a new criteria grid in Excel format</span>
+              <span className="flex-1 h-px bg-[#1e5da8]/30" />
+            </div>
 
+            <Button
+                variant="default"
+                size="sm"
+                onClick={handleDownloadTemplate}
+                className="flex items-center gap-1 text-xs bg-primary-600 hover:bg-primary-700 text-gray-200 hover:text-white"
+              >
+                <Download className="w-3 h-3" />
+                Download Excel Template
+              </Button>
+            
             <div 
               className="border-2 border-dashed border-accent-200 rounded-lg p-4 text-center hover:border-accent-400 transition-colors cursor-pointer"
               onClick={handleCriteriaClick}
@@ -472,6 +502,7 @@ export const EvaluationCriteriaSection = () => {
               <p className="text-sm text-muted-foreground">
                 Upload Excel/CSV criteria file
               </p>
+              
             </div>
             
             <input
@@ -481,6 +512,7 @@ export const EvaluationCriteriaSection = () => {
               onChange={handleCriteriaFileChange}
               className="hidden"
             />
+            
             
             <div className="flex gap-2">
               <Input

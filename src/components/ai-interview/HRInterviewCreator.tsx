@@ -1065,7 +1065,7 @@ const HRInterviewCreator = () => {
   return (
     <div className="p-6 space-y-6">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-primary-800 mb-2">Final Overview</h2>
+        <h2 className="text-2xl font-bold text-primary-800 mb-2">Create and send an interview link</h2>
         <p className="text-muted-foreground">Set up an interview and generate a link for your candidate</p>
       </div>
 
