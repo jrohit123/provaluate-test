@@ -17,6 +17,8 @@ export interface SessionData {
   created_at: string;
   last_activity: string;
   device_info: string;
+  is_active?: boolean;
+  ended_at?: string | null;
 }
 
 export interface SessionConflict {
@@ -30,7 +32,10 @@ export class SessionManager {
    * Generate a unique session ID for this browser session
    */
   static generateSessionId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    // Use only alphanumeric characters to avoid database query issues
+    const timestamp = Date.now().toString();
+    const randomPart = Math.random().toString(36).substring(2, 11);
+    return `${timestamp}_${randomPart}`;
   }
 
   /**
@@ -196,26 +201,44 @@ export class SessionManager {
    * @param userId - The user ID
    * @returns Success indicator
    */
-  static async endAllOtherSessions(userId: string): Promise<boolean> {
+  static async endAllOtherSessions(userId: string, keepSessionId?: string): Promise<boolean> {
     try {
-      const currentSessionId = localStorage.getItem(SESSION_STORAGE_KEY);
-      if (!currentSessionId) return false;
+      const currentSessionId = keepSessionId || localStorage.getItem(SESSION_STORAGE_KEY) || undefined;
+      console.log(`🔄 Ending other sessions for user ${userId}, keeping session: ${currentSessionId}`);
 
-      const { error } = await supabase
+      // First, let's see what sessions exist
+      const { data: existingSessions } = await supabase
+        .from('user_sessions')
+        .select('session_id, is_active')
+        .eq('user_id', userId)
+        .eq('is_active', true);
+      
+      console.log('📋 Existing active sessions:', existingSessions);
+
+      let query = supabase
         .from('user_sessions')
         .update({
           is_active: false,
           ended_at: new Date().toISOString(),
         })
         .eq('user_id', userId)
-        .eq('is_active', true)
-        .neq('session_id', currentSessionId);
+        .eq('is_active', true);
+
+      if (currentSessionId) {
+        query = query.neq('session_id', currentSessionId);
+        console.log(`🔒 Will keep session: ${currentSessionId} active`);
+      } else {
+        console.log('⚠️ No session ID to keep - will end ALL sessions');
+      }
+
+      const { data, error } = await query.select();
 
       if (error) {
-        console.error('Error ending other sessions:', error);
+        console.error('❌ Error ending other sessions:', error);
         return false;
       }
 
+      console.log('✅ Sessions ended:', data);
       return true;
     } catch (error) {
       console.error('Error in endAllOtherSessions:', error);
@@ -284,6 +307,75 @@ export class SessionManager {
       CREATE INDEX IF NOT EXISTS idx_user_sessions_session_id ON user_sessions(session_id);
       CREATE INDEX IF NOT EXISTS idx_user_sessions_is_active ON user_sessions(is_active);
     `;
+  }
+
+  /**
+   * Get the current session data from Supabase
+   */
+  static async getCurrentSession(): Promise<SessionData | null> {
+    const sessionId = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!sessionId) {
+      console.log('🔍 No session ID in localStorage');
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('user_sessions')
+        .select('*')
+        .eq('session_id', sessionId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('❌ Error fetching current session:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          sessionId: sessionId
+        });
+        return null;
+      }
+
+      if (!data) {
+        console.log('🔍 No session found in database for ID:', sessionId);
+        return null;
+      }
+
+      return data as SessionData;
+    } catch (error) {
+      console.error('❌ Unexpected error in getCurrentSession:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Check whether the current session is active on the server
+   */
+  static async isCurrentSessionActive(): Promise<boolean> {
+    try {
+      const session = await this.getCurrentSession();
+      if (!session) {
+        console.log('🔍 No session found in database');
+        return false;
+      }
+      console.log(`🔍 Session data:`, {
+        session_id: session.session_id,
+        is_active: session.is_active,
+        user_id: session.user_id
+      });
+      return session.is_active === true;
+    } catch (error) {
+      console.error('❌ Error checking session activity:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get the current session ID stored locally
+   */
+  static getCurrentSessionId(): string | null {
+    return localStorage.getItem(SESSION_STORAGE_KEY);
   }
 }
 

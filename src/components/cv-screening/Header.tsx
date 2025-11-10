@@ -4,33 +4,44 @@ import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { SessionManager } from '@/utils/sessionManager';
+import { supabase } from '@/integrations/supabase/client';
 
 export const Header = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      const sessionId = SessionManager.getCurrentSessionId();
+      if (sessionId) {
+        await SessionManager.endSession(sessionId);
+      }
+      SessionManager.clearSession();
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+
     localStorage.removeItem('recruitai_auth');
     localStorage.removeItem('onboarding_complete');
-    // Clear persisted CV screening selections so UI resets consistently
     localStorage.removeItem('cv-screening-session');
-    // Also clear transient selections kept in sessionStorage to avoid stale UI after logout
     try {
       sessionStorage.removeItem('selectedJDId');
       sessionStorage.removeItem('selectedCriteriaGridId');
       sessionStorage.removeItem('uploadedFiles');
       sessionStorage.removeItem('selectedCandidatesForInterview');
-      // Notify interested components that the session state was cleared
       window.dispatchEvent(new Event('session:cleared'));
     } catch (e) {
       // no-op
     }
+
     toast({
       title: "Logged out successfully",
       description: "You've been logged out of your account.",
     });
-    navigate('/');
+    navigate('/login');
   };
 
   const userName = user?.profile ? `${user.profile.first_name || ''} ${user.profile.last_name || ''}`.trim() : '';
