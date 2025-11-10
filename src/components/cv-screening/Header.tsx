@@ -19,7 +19,7 @@ export const Header = () => {
         await SessionManager.endSession(sessionId);
       }
       SessionManager.clearSession();
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
     } catch (error) {
       console.error('Error signing out:', error);
     }
