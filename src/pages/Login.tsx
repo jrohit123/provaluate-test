@@ -6,8 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Users, Clock, CheckCircle, Shield, Mail, FileText, BarChart, UserPlus, LogIn } from "lucide-react";
-import { SessionConflictDialog } from '@/components/session/SessionConflictDialog';
-import { SessionManager, SessionData } from '@/utils/sessionManager';
+import { SessionManager } from '@/utils/sessionManager';
 
 // Test credentials
 const TEST_EMAIL = 'test@example.com';
@@ -23,9 +22,6 @@ const Login = () => {
   const [resetMessage, setResetMessage] = useState('');
   const [resetError, setResetError] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
-  const [showSessionConflict, setShowSessionConflict] = useState(false);
-  const [conflictingSession, setConflictingSession] = useState<SessionData | undefined>(undefined);
-  const [pendingUserId, setPendingUserId] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
   // Remove useAuth import and usage, use Supabase directly
@@ -83,31 +79,7 @@ const Login = () => {
         if (error) throw error;
         if (!data.user) throw new Error('Login failed: No user data returned');
 
-        // Temporarily skip session conflict checking until database is set up
-        console.log('⚠️ Skipping session management - database not set up yet');
-        
-        // Set auth flag and proceed with login
-        localStorage.setItem('recruitai_auth', 'true');
-        
-        // Clear any stale selections for a clean session on login
-        localStorage.removeItem('cv-screening-session');
-        try {
-          sessionStorage.removeItem('selectedJDId');
-          sessionStorage.removeItem('selectedCriteriaGridId');
-          sessionStorage.removeItem('uploadedFiles');
-          sessionStorage.removeItem('selectedCandidatesForInterview');
-          // Broadcast session cleared so sections re-sync immediately
-          window.dispatchEvent(new Event('session:cleared'));
-        } catch (e) {
-          // no-op
-        }
-        
-        toast({
-          title: "Welcome back!",
-          description: "You've been logged in successfully.",
-        });
-        
-        navigate('/dashboard?section=main-dashboard');
+        await completeLogin(data.user.id);
       }
     } catch (error: any) {
       toast({
@@ -159,10 +131,20 @@ const Login = () => {
    */
   const completeLogin = async (userId: string) => {
     try {
-      // Create a new session
+      // Create a new session first
       const sessionData = await SessionManager.createSession(userId);
       if (!sessionData) {
         throw new Error('Failed to create session');
+      }
+
+      // Wait a moment to ensure session is fully created, then end other sessions
+      try {
+        console.log(`🔄 About to end other sessions, keeping: ${sessionData.session_id}`);
+        // Small delay to ensure session is fully committed to database
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await SessionManager.endAllOtherSessions(userId, sessionData.session_id);
+      } catch (error) {
+        console.error('Error ending other sessions after login:', error);
       }
 
       // Set auth flag
@@ -170,19 +152,19 @@ const Login = () => {
       
       // Clear any stale selections for a clean session on login
       localStorage.removeItem('cv-screening-session');
-      try {
-        sessionStorage.removeItem('selectedJDId');
-        sessionStorage.removeItem('selectedCriteriaGridId');
-        sessionStorage.removeItem('uploadedFiles');
-        sessionStorage.removeItem('selectedCandidatesForInterview');
-        // Broadcast session cleared so sections re-sync immediately
-        window.dispatchEvent(new Event('session:cleared'));
-      } catch (e) {
-        // no-op
-      }
+        try {
+          sessionStorage.removeItem('selectedJDId');
+          sessionStorage.removeItem('selectedCriteriaGridId');
+          sessionStorage.removeItem('uploadedFiles');
+          sessionStorage.removeItem('selectedCandidatesForInterview');
+          // Broadcast session cleared so sections re-sync immediately
+          window.dispatchEvent(new Event('session:cleared'));
+        } catch (e) {
+          // no-op
+        }
 
       toast({
-        title: "Welcome back!",
+        title: "Welcome!",
         description: "You've been logged in successfully.",
       });
 
@@ -198,80 +180,8 @@ const Login = () => {
     }
   };
 
-  /**
-   * Handle user choosing to keep the existing session
-   * (Logout the new login attempt)
-   */
-  const handleKeepExistingSession = async () => {
-    try {
-      // Sign out the current Supabase session
-      await supabase.auth.signOut();
-      
-      setShowSessionConflict(false);
-      setPendingUserId(null);
-      setConflictingSession(undefined);
-
-      toast({
-        title: 'Session Preserved',
-        description: 'Your existing session remains active. Please use that device to continue.',
-      });
-
-      // Keep user on login page
-      setEmail('');
-      setPassword('');
-    } catch (error: any) {
-      console.error('Error keeping existing session:', error);
-      toast({
-        title: 'Error',
-        description: 'An error occurred while processing your choice.',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  /**
-   * Handle user choosing to replace existing session with new login
-   * (Logout the old session and create new one)
-   */
-  const handleReplaceWithNewSession = async () => {
-    try {
-      if (!pendingUserId) throw new Error('User ID not found');
-
-      // End all other sessions for this user
-      await SessionManager.endAllOtherSessions(pendingUserId);
-
-      // Now complete the login with the new session
-      await completeLogin(pendingUserId);
-
-      setShowSessionConflict(false);
-      setPendingUserId(null);
-      setConflictingSession(undefined);
-
-      toast({
-        title: 'New Session Created',
-        description: 'Your previous session has been ended. You are now logged in here.',
-      });
-    } catch (error: any) {
-      console.error('Error replacing session:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to create new session.',
-        variant: 'destructive',
-      });
-      setIsLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Session Conflict Dialog */}
-      <SessionConflictDialog
-        isOpen={showSessionConflict}
-        existingSession={conflictingSession}
-        onKeepExisting={handleKeepExistingSession}
-        onReplaceWithNew={handleReplaceWithNewSession}
-      />
-
       {/* Header Section */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -322,7 +232,7 @@ const Login = () => {
               <div className="w-16 h-16 mx-auto mb-4 rounded-full border-2 border-blue-200 flex items-center justify-center">
                 <CheckCircle className="h-8 w-8 text-blue-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">98% Accuracy</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">95% Accuracy</h3>
               <p className="text-gray-600">AI-powered assessment ensures consistent and objective candidate evaluation</p>
             </CardContent>
           </Card>
@@ -337,21 +247,6 @@ const Login = () => {
             </CardContent>
           </Card>
         </div>
-        
-        {/* Call to Action Section */}
-        <div className="bg-gradient-to-r from-purple-600 to-pink-500 py-6 rounded-lg">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h3 className="text-3xl font-bold text-white mb-1">
-              ⚡ 30-Day Free Trial
-            </h3>
-            <p className="text-xl text-white mb-4">
-              Start assessing candidates today - no credit card required!
-            </p>
-            <div className="flex items-center justify-center text-white">
-              <span className="text-lg">⭐ Join 50+ companies already using ProValuate</span>
-            </div>
-          </div>
-        </div><br></br>    
 
         {/* Login Section */}
         <div className="flex justify-center">
@@ -460,8 +355,8 @@ const Login = () => {
                     disabled={isLoading}
                   >
                     {isSignup 
-                      ? 'Already have an account? Sign in' 
-                      : "Don't have an account? Sign up"
+                      ? 'Already registered? Sign in' 
+                      : "Don't have an account? Register Now"
                     }
                   </button>
                 </div>
@@ -488,6 +383,21 @@ const Login = () => {
                   <span className="text-gray-600 font-medium">aitamate</span>
                 </a>
               </div>
+            </div>
+          </div>
+        </div><br></br>
+        
+        {/* Call to Action Section */}
+        <div className="bg-gradient-to-r from-purple-600 to-pink-500 py-6 rounded-lg">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h3 className="text-3xl font-bold text-white mb-1">
+              ⚡ 7-Day Free Trial
+            </h3>
+            <p className="text-xl text-white mb-4">
+              Start assessing candidates today - no credit card required!
+            </p>
+            <div className="flex items-center justify-center text-white">
+              <span className="text-lg">⭐ Join 50+ companies already using ProValuate</span>
             </div>
           </div>
         </div>

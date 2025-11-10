@@ -8,6 +8,7 @@ import { Toaster as HotToaster } from 'react-hot-toast';
 import './App.css';
 import { useSessionTimeout } from '@/hooks/use-session-timeout';
 import { SessionTimeoutDialog } from '@/components/session/SessionTimeoutDialog';
+import { SessionManager } from '@/utils/sessionManager';
 
 // Import existing pages
 import Login from "./pages/Login";
@@ -49,13 +50,27 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const checkAuth = async () => {
       setLoading(true);
-      
-      // Check if user is authenticated using localStorage (simplified for current setup)
+
       const isAuth = localStorage.getItem('recruitai_auth') === 'true';
-      setIsAuthenticated(isAuth);
+      if (!isAuth) {
+        setIsAuthenticated(false);
+        setLoading(false);
+        return;
+      }
+
+      const isActive = await SessionManager.isCurrentSessionActive();
+      if (!isActive) {
+        SessionManager.clearSession();
+        localStorage.removeItem('recruitai_auth');
+        setIsAuthenticated(false);
+        setLoading(false);
+        return;
+      }
+
+      setIsAuthenticated(true);
       setLoading(false);
     };
-    
+
     checkAuth();
   }, [location.pathname]);
 

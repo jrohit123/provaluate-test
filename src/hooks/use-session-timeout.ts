@@ -7,6 +7,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SessionManager } from '@/utils/sessionManager';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 interface UseSessionTimeoutOptions {
@@ -41,6 +42,7 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
   const warningShownRef = useRef(false);
   const checkTimeoutIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const activityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasLoggedOutRef = useRef(false);
 
   // Update remaining session time
   const updateRemainingTime = useCallback(() => {
@@ -50,7 +52,85 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
   }, []);
 
   // Check if session should timeout
-  const checkSessionTimeout = useCallback(() => {
+  const logoutAndRedirect = useCallback(async ({
+    title,
+    description,
+    variant = 'destructive',
+    skipEndSession = false,
+  }: {
+    title: string;
+    description: string;
+    variant?: 'default' | 'destructive';
+    skipEndSession?: boolean;
+  }) => {
+    if (hasLoggedOutRef.current) return;
+    hasLoggedOutRef.current = true;
+
+    try {
+      const sessionId = SessionManager.getCurrentSessionId();
+      if (sessionId && !skipEndSession) {
+        await SessionManager.endSession(sessionId);
+      }
+      SessionManager.clearSession();
+
+      localStorage.removeItem('recruitai_auth');
+      localStorage.removeItem('cv-screening-session');
+      sessionStorage.removeItem('selectedJDId');
+      sessionStorage.removeItem('selectedCriteriaGridId');
+      sessionStorage.removeItem('uploadedFiles');
+      sessionStorage.removeItem('selectedCandidatesForInterview');
+
+      // Try to sign out from Supabase Auth, but don't let it block the logout
+      // This prevents the 403 Forbidden error from stopping the logout process
+      try {
+        await supabase.auth.signOut();
+      } catch (authError) {
+        console.warn('Supabase auth signout failed, but continuing with logout:', authError);
+        // Don't throw or stop the logout process - our custom session management is independent
+      }
+
+      try {
+        window.dispatchEvent(new Event('session:cleared'));
+      } catch (eventError) {
+        // noop
+      }
+
+      toast({
+        title,
+        description,
+        variant,
+      });
+    } catch (error) {
+      console.error('Error during logout flow:', error);
+    } finally {
+      navigate('/login', { replace: true });
+    }
+  }, [navigate, toast]);
+
+  const handleTimeout = useCallback(async () => {
+    await logoutAndRedirect({
+      title: 'Session Expired',
+      description: 'Your session has expired due to inactivity. Please log in again.',
+    });
+  }, [logoutAndRedirect]);
+
+  const checkSessionTimeout = useCallback(async () => {
+    // Check if our custom session is still active (independent of Supabase Auth)
+    const sessionId = SessionManager.getCurrentSessionId();
+    if (sessionId) {
+      const isActive = await SessionManager.isCurrentSessionActive();
+      console.log(`🔍 Session check - ID: ${sessionId}, Active: ${isActive}`);
+      if (!isActive) {
+        console.log('❌ Session is inactive, logging out...');
+        await logoutAndRedirect({
+          title: 'Session Ended',
+          description: 'Your session was closed because you signed in from another device.',
+          skipEndSession: true,
+        });
+        return;
+      }
+    }
+
     const hasTimedOut = SessionManager.hasSessionTimedOut();
 
     if (hasTimedOut) {
@@ -82,42 +162,7 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
       warningShownRef.current = false;
       setIsTimeoutWarningVisible(false);
     }
-  }, [warningThresholdMinutes, onTimeout, onWarning, updateRemainingTime]);
-
-  // Handle timeout
-  const handleTimeout = useCallback(async () => {
-    try {
-      // Get current session ID
-      const sessionId = localStorage.getItem('provaluate_session_id');
-      if (sessionId) {
-        await SessionManager.endSession(sessionId);
-      }
-
-      // Clear local session data
-      SessionManager.clearSession();
-
-      // Clear other stored data
-      localStorage.removeItem('recruitai_auth');
-      localStorage.removeItem('cv-screening-session');
-      sessionStorage.removeItem('selectedJDId');
-      sessionStorage.removeItem('selectedCriteriaGridId');
-      sessionStorage.removeItem('uploadedFiles');
-      sessionStorage.removeItem('selectedCandidatesForInterview');
-
-      // Show notification
-      toast({
-        title: 'Session Expired',
-        description: 'Your session has expired due to inactivity. Please log in again.',
-        variant: 'destructive',
-      });
-
-      // Redirect to login
-      navigate('/login', { replace: true });
-    } catch (error) {
-      console.error('Error during session timeout:', error);
-      navigate('/login', { replace: true });
-    }
-  }, [navigate, toast]);
+  }, [warningThresholdMinutes, onTimeout, onWarning, updateRemainingTime, handleTimeout, logoutAndRedirect]);
 
   // Handle user activity (reset inactivity timer)
   const handleActivity = useCallback(() => {
@@ -128,11 +173,26 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
 
     // Set a timeout to update session activity
     // This debounces frequent activity events
-    activityTimeoutRef.current = setTimeout(() => {
-      SessionManager.updateSessionActivity();
+    activityTimeoutRef.current = setTimeout(async () => {
+      const updateSuccessful = await SessionManager.updateSessionActivity();
+      if (!updateSuccessful) {
+        // Check if our custom session is still active (independent of Supabase Auth)
+        const sessionId = SessionManager.getCurrentSessionId();
+        if (sessionId) {
+          const stillActive = await SessionManager.isCurrentSessionActive();
+          if (!stillActive) {
+            await logoutAndRedirect({
+              title: 'Session Ended',
+              description: 'Your session was closed because you signed in from another device.',
+              skipEndSession: true,
+            });
+            return;
+          }
+        }
+      }
       checkSessionTimeout(); // Re-check timeout after activity
     }, 1000);
-  }, [checkSessionTimeout]);
+  }, [checkSessionTimeout, logoutAndRedirect]);
 
   // Continue session (user responds to warning)
   const continueSession = useCallback(async () => {
@@ -174,7 +234,9 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
     checkSessionTimeout();
 
     // Check every 30 seconds
-    checkTimeoutIntervalRef.current = setInterval(checkSessionTimeout, 30000);
+    checkTimeoutIntervalRef.current = setInterval(() => {
+      checkSessionTimeout();
+    }, 30000);
 
     return () => {
       if (checkTimeoutIntervalRef.current) {
