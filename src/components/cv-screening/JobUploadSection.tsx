@@ -612,10 +612,7 @@ export const JobUploadSection = () => {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-primary-800 mb-2">Job Description Setup</h2>
-        <p className="text-muted-foreground">Upload your job description file and process it for analysis</p>
-      </div>
+      
 
       {/* Job Description Upload */}
       <Card className="animate-fade-in">
@@ -631,7 +628,10 @@ export const JobUploadSection = () => {
           <CardContent className="space-y-4">
 
             {/* Dropdown to select existing Job Description */}
-            <div className="mb-3">
+            <div className="mb-3 rounded-lg border border-primary-200 bg-primary-50/40 p-4">
+              <label className="mb-2 block text-sm font-medium text-primary-700">
+                Select an existing job description
+              </label>
               <Select value={selectedJobDescriptionId} onValueChange={handleJDSelect}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Choose job description" />
@@ -644,15 +644,55 @@ export const JobUploadSection = () => {
                   ))}
                 </SelectContent>
               </Select>
+              <br></br>
+              {/* Select for Session Button */}
+              {selectedJobDescriptionId && (
+                <Button 
+                  onClick={() => {
+                    const selectedJD = jobDescriptions.find(jd => jd.jd_id === selectedJobDescriptionId);
+                    if (selectedJD) {
+                      // Set in session context
+                      setCurrentJobDescription({
+                        id: selectedJD.jd_id,
+                        title: selectedJD.title,
+                        file: selectedJD.jd_file
+                      });
+                      // Persist for other sections
+                      try {
+                        sessionStorage.setItem('selectedJDId', selectedJD.jd_id);
+                      } catch (e) {
+                        console.warn('Unable to write selectedJDId to sessionStorage', e);
+                      }
+                      
+                      toast({
+                        title: "Success",
+                        description: `"${selectedJD.title}" set for current session`
+                      });
+                    }
+                  }} 
+                  className="w-full bg-gray-500 hover:bg-gray-600"
+                >
+                  Select for Session
+                </Button>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-4 my-6 text-sm font-medium text-[#1e5da8]">
+              <span className="flex-1 h-px bg-[#1e5da8]/30" />
+              <span>OR</span>
+              <span className="flex-1 h-px bg-[#1e5da8]/30" />
             </div>
 
-            <div>
+            <div className="rounded-lg border border-primary-200 bg-primary-50/40 p-4">
+              <label className="mb-2 block text-sm font-medium text-primary-700">
+                Create a new job description
+              </label>
               <Input
                 type="text"
                 placeholder="Job Title (e.g., Senior Software Engineer)"
                 value={jobTitle}
                 onChange={(e) => setJobTitle(e.target.value)}
-                className="mb-3"
+                className="mb-0"
                 ref={jobTitleInputRef}
               />
             </div>
@@ -698,7 +738,7 @@ export const JobUploadSection = () => {
             */}
 
             <div 
-              className="border-2 border-dashed border-primary-200 rounded-lg p-6 text-center hover:border-primary-400 transition-colors cursor-pointer"
+              className="rounded-lg border border-primary-200 bg-primary-50/40 p-4 border-2 border-dashed border-primary-200 rounded-lg p-6 text-center hover:border-primary-400 transition-colors cursor-pointer"
               onClick={handleJobDescriptionClick}
               onDrop={handleJobDrop}
               onDragOver={handleJobDragOver}
@@ -725,36 +765,7 @@ export const JobUploadSection = () => {
                 Process Job Description
               </Button>
               
-              {/* Select for Session Button */}
-              {selectedJobDescriptionId && (
-                <Button 
-                  onClick={() => {
-                    const selectedJD = jobDescriptions.find(jd => jd.jd_id === selectedJobDescriptionId);
-                    if (selectedJD) {
-                      // Set in session context
-                      setCurrentJobDescription({
-                        id: selectedJD.jd_id,
-                        title: selectedJD.title,
-                        file: selectedJD.jd_file
-                      });
-                      // Persist for other sections
-                      try {
-                        sessionStorage.setItem('selectedJDId', selectedJD.jd_id);
-                      } catch (e) {
-                        console.warn('Unable to write selectedJDId to sessionStorage', e);
-                      }
-                      
-                      toast({
-                        title: "Success",
-                        description: `"${selectedJD.title}" set for current session`
-                      });
-                    }
-                  }} 
-                  className="w-full bg-gray-500 hover:bg-gray-600"
-                >
-                  Select for Session
-                </Button>
-              )}
+              
               
               {/* Show refresh button and auto-refresh status */}
               {selectedJobDescriptionId && (

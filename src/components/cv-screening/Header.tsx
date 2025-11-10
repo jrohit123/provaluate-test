@@ -52,16 +52,16 @@ export const Header = () => {
     : 'Welcome back, Recruiter';
 
   return (
-    <header className="bg-white border-b px-6 py-4 flex items-center justify-between">
+    <header className="bg-[#1e5da8] border-b px-6 py-4 flex items-center justify-between">
       <div className="flex items-center gap-4">
-        <SidebarTrigger />
+        <SidebarTrigger className="text-white" />
         <div>
-          <h1 className="text-xl font-semibold text-primary-800">ProValuate</h1>
-          <p className="text-sm text-muted-foreground">Smart Resume Evaluation Platform</p>
+          <h1 className="text-xl font-semibold text-white">ProValuate</h1>
+          <p className="text-sm text-white">Smart Candidate Evaluation Platform</p>
         </div>
       </div>
       <div className="flex items-center gap-4">
-        <div className="text-sm text-muted-foreground">
+        <div className="text-sm text-white">
           {greeting}
         </div>
         <Button variant="outline" onClick={handleLogout}>

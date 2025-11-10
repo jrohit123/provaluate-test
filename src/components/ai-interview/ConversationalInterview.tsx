@@ -7,22 +7,7 @@ import { useInterview, interviewActions } from '@/contexts/InterviewContext';
 import { API_CONFIG, buildApiUrl, apiCall } from '@/constants/api';
 import { INTERVIEW_CONSTANTS } from '@/constants/interview';
 import { supabase } from '@/integrations/supabase/client';
-import {
-  Mic,
-  MicOff,
-  Video,
-  VideoOff,
-  Send,
-  Clock,
-  User,
-  Bot,
-  Volume2,
-  VolumeX,
-  AlertTriangle,
-  Camera,
-  CheckCircle,
-  X
-} from 'lucide-react';
+import {Mic, MicOff, Video, VideoOff, Send, Clock, User, Bot, Volume2, VolumeX, AlertTriangle, Camera, CheckCircle, X} from 'lucide-react';
 
 // Add transcription validation function
 const isCorruptedTranscription = (transcript) => {
@@ -158,6 +143,122 @@ const ConversationalInterview = () => {
   const [waveformHeights, setWaveformHeights] = useState<number[]>([]);
   const [speechPattern, setSpeechPattern] = useState<number[]>([]);
   const [patternIndex, setPatternIndex] = useState(0);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('');
+  const hasInitializedVoicesRef = useRef(false);
+  const getVoiceId = useCallback(
+    (voice: SpeechSynthesisVoice) => `${voice.name || 'unknown'}::${voice.lang || 'unknown'}`,
+    []
+  );
+  const selectedVoice = useMemo(
+    () => (selectedVoiceId ? availableVoices.find((voice) => getVoiceId(voice) === selectedVoiceId) || null : null),
+    [availableVoices, selectedVoiceId, getVoiceId]
+  );
+  const assignVoiceToUtterance = useCallback(
+    (utterance: SpeechSynthesisUtterance) => {
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+        return;
+      }
+      if (availableVoices.length > 0 && !utterance.voice) {
+        utterance.voice = availableVoices[0];
+      }
+    },
+    [availableVoices, selectedVoice]
+  );
+  const voiceOptions = useMemo(
+    () =>
+      availableVoices.map((voice) => ({
+        id: getVoiceId(voice),
+        label: `${voice.name}${voice.lang ? ` (${voice.lang})` : ''}`,
+      })),
+    [availableVoices, getVoiceId]
+  );
+  const handleVoiceChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedVoiceId(event.target.value);
+  }, []);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      return;
+    }
+
+    const synth = window.speechSynthesis;
+
+    const hydrateVoices = () => {
+      const voices = synth.getVoices();
+      if (!voices || voices.length === 0) {
+        return;
+      }
+
+      const sortedVoices = voices.slice().sort((a, b) => a.name.localeCompare(b.name));
+      setAvailableVoices(sortedVoices);
+
+      setSelectedVoiceId((currentId) => {
+        if (currentId && sortedVoices.some((voice) => getVoiceId(voice) === currentId)) {
+          hasInitializedVoicesRef.current = true;
+          return currentId;
+        }
+
+        let storedId = '';
+        try {
+          storedId = window.localStorage.getItem('selectedAiVoiceId') || '';
+        } catch {
+          storedId = '';
+        }
+
+        if (storedId && sortedVoices.some((voice) => getVoiceId(voice) === storedId)) {
+          hasInitializedVoicesRef.current = true;
+          return storedId;
+        }
+
+        if (!hasInitializedVoicesRef.current && sortedVoices.length > 0) {
+          hasInitializedVoicesRef.current = true;
+          return getVoiceId(sortedVoices[0]);
+        }
+
+        hasInitializedVoicesRef.current = true;
+        return currentId;
+      });
+    };
+
+    hydrateVoices();
+
+    let previousHandler: ((this: SpeechSynthesis, ev: Event) => any) | null = null;
+
+    if (typeof synth.addEventListener === 'function') {
+      synth.addEventListener('voiceschanged', hydrateVoices);
+    } else {
+      previousHandler = synth.onvoiceschanged;
+      synth.onvoiceschanged = (event: Event) => {
+        hydrateVoices();
+        if (typeof previousHandler === 'function') {
+          previousHandler.call(synth, event);
+        }
+      };
+    }
+
+    return () => {
+      if (typeof synth.removeEventListener === 'function') {
+        synth.removeEventListener('voiceschanged', hydrateVoices);
+      } else {
+        synth.onvoiceschanged = previousHandler;
+      }
+    };
+  }, [getVoiceId]);
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    try {
+      if (selectedVoiceId) {
+        window.localStorage.setItem('selectedAiVoiceId', selectedVoiceId);
+      } else {
+        window.localStorage.removeItem('selectedAiVoiceId');
+      }
+    } catch (error) {
+      console.warn('Unable to persist selected AI voice:', error);
+    }
+  }, [selectedVoiceId]);
   
   // Per-question timer states
   const [questionTimeRemaining, setQuestionTimeRemaining] = useState(0);
@@ -289,6 +390,7 @@ const ConversationalInterview = () => {
       utterance.rate = 0.9; // Slightly slower for clarity
       utterance.pitch = 1.0; // Normal pitch
       utterance.volume = 0.8; // Slightly lower volume
+      assignVoiceToUtterance(utterance);
       
       utterance.onstart = () => {
         console.log('🎤 Speech started for:', text.slice(0, 50) + (text.length > 50 ? '...' : ''));
@@ -1788,6 +1890,7 @@ const ConversationalInterview = () => {
             utterance.rate = 0.9;
             utterance.pitch = 1.0;
             utterance.volume = 0.8;
+            assignVoiceToUtterance(utterance);
             
             utterance.onend = () => {
               console.log('🎤 Welcome message finished, starting first question...');
@@ -2182,8 +2285,7 @@ const ConversationalInterview = () => {
                   </div>
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-white">Conversational AI Interview</h1>
-                  <p className="text-blue-200 text-sm">Live AI Assistant Interview Session</p>
+                  <h1 className="text-2xl font-bold text-white">Live AI Assistant Interview Session</h1>
                 </div>
               </div>
               
@@ -2323,17 +2425,38 @@ const ConversationalInterview = () => {
                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-1 mb-2">
           {/* AI Assistant Panel */}
           <div className="lg:col-span-2 glass rounded-2xl p-1 border border-white/10">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                  <Bot className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-white">AI Interviewer</h3>
-                  <p className="text-sm text-gray-300">Your AI Assistant</p>
-                </div>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+                <Bot className="w-6 h-6 text-white" />
               </div>
-              
+              <div>
+                <h3 className="text-lg font-semibold text-white">ProValuate AI</h3>
+                <p className="text-sm text-gray-300">Your AI Interview Assistant</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <div className="flex flex-col text-left sm:text-right">
+                <label htmlFor="ai-voice-select" className="text-xs font-semibold tracking-wide text-blue-200 uppercase mb-1">
+                  AI Voice
+                </label>
+                <select
+                  id="ai-voice-select"
+                  value={selectedVoiceId}
+                  onChange={handleVoiceChange}
+                  disabled={voiceOptions.length === 0}
+                  className="bg-gray-900/60 border border-blue-500/40 text-blue-100 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                >
+                  <option value="">Browser Default</option>
+                  {voiceOptions.map((voice) => (
+                    <option key={voice.id} value={voice.id}>
+                      {voice.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <button
                 onClick={toggleAIAudio}
                 className={`p-2 rounded-lg transition-colors ${
@@ -2343,6 +2466,7 @@ const ConversationalInterview = () => {
                 {aiAudioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
               </button>
             </div>
+          </div>
             
                          <div className="bg-gray-800/50 rounded-xl p-1 h-[520px] flex items-center justify-center">
               {aiSpeaking && !aiMessage?.includes('Question') ? (
@@ -2399,7 +2523,7 @@ const ConversationalInterview = () => {
                      <div className="text-center">
                        <div className="animate-pulse">
                          <div className="w-4 h-4 bg-blue-400 rounded-full mx-auto mb-2"></div>
-                         <p className="text-blue-300 text-sm">Starting interview automatically...</p>
+                         <p className="text-blue-300 text-sm">Starting interview...</p>
                        </div>
                      </div>
                    )}
