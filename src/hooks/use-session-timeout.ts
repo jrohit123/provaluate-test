@@ -80,10 +80,10 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
       sessionStorage.removeItem('uploadedFiles');
       sessionStorage.removeItem('selectedCandidatesForInterview');
 
-      // Try to sign out from Supabase Auth, but don't let it block the logout
-      // This prevents the 403 Forbidden error from stopping the logout process
+      // Try to sign out from Supabase Auth (local scope only), but don't let it block the logout
+      // Using local scope prevents other devices from being logged out unintentionally
       try {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: 'local' });
       } catch (authError) {
         console.warn('Supabase auth signout failed, but continuing with logout:', authError);
         // Don't throw or stop the logout process - our custom session management is independent
