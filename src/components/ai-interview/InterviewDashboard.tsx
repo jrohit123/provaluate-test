@@ -448,6 +448,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                     <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Duration</th>
                     <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Created</th>
                     <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">View Details</th>
+                    <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Score</th>
                     <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Decision</th>
                     <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Comments</th>
                     <th className="text-center py-3 px-4 font-medium text-gray-900">Action</th>
@@ -506,6 +507,11 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                             <BarChart3 className="w-4 h-4" />
                           </Button>
                         )}
+                      </td>
+                      <td className="py-3 px-4 border-r border-gray-200">
+                        <div className="flex items-center justify-center">
+                          <span>{interview.overall_score}</span>
+                        </div>
                       </td>
                       {/* Decision Column */}
                       <td className="py-3 px-4 border-r border-gray-200">
