@@ -497,12 +497,12 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                         </div>
                       </td>
                       <td className="py-3 px-4 text-center border-r border-gray-200">
-                        {interview.status === 'completed' && (
+                        {(interview.status === 'completed' || interview.status === 'terminated') && (
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => window.open(`/final-results/${interview.id}`, '_blank')}
-                            title="View Final Results"
+                            title={interview.status === 'terminated' ? 'View Interview Details (Terminated)' : 'View Final Results'}
                           >
                             <BarChart3 className="w-4 h-4" />
                           </Button>
@@ -511,7 +511,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                       <td className="py-3 px-4 border-r border-gray-200">
                         <div className="flex items-center justify-center">
                           <span>{interview.overall_score}</span>
-                        </div>
+                        </div> 
                       </td>
                       {/* Decision Column */}
                       <td className="py-3 px-4 border-r border-gray-200">
