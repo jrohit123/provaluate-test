@@ -255,10 +255,10 @@ const HRInterviewCreator = () => {
     try {
       console.log('🔄 Loading parameters for position:', formData.position, 'mode:', formData.interviewMode);
       
-      // Try to load from custom_role_parameters table
+      // Try to load from custom_role_parameters table - FETCH interview_type!
       const { data, error } = await supabase
         .from('custom_role_parameters')
-        .select('custom_parameters, structured_questions, personalized_questions')
+        .select('custom_parameters, structured_questions, personalized_questions, interview_type')
         .eq('role_name', formData.position)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
@@ -271,6 +271,17 @@ const HRInterviewCreator = () => {
         const customParams = record.custom_parameters;
         const structuredQuestions = record.structured_questions;
         const personalizedQuestions = record.personalized_questions;
+        const interviewType = record.interview_type;
+        
+        console.log(`📋 Loaded from DB - interview_type: ${interviewType}`);
+        
+        // Set the interview type FIRST, before anything else
+        if (interviewType && ['technical', 'behavioral', 'mixed'].includes(interviewType)) {
+          console.log(`✅ Setting interview_type from database: ${interviewType}`);
+          setFormData(prev => ({ ...prev, interviewType: interviewType }));
+        } else {
+          console.warn(`⚠️ Invalid or missing interview_type in DB: ${interviewType}`);
+        }
         
         // Load personalized questions from database
         if (personalizedQuestions && personalizedQuestions.length > 0) {
@@ -301,9 +312,12 @@ const HRInterviewCreator = () => {
               // Only technical questions, use the regular calculation
               calculateDuration(customParams);
             }
+            // Log the interview type being used
+            console.log(`✅ Using interview_type: ${interviewType || 'not set'}`);
+            
             toast({
               title: "Parameters Loaded",
-              description: `Automatically loaded existing AI parameters for ${formData.position}`,
+              description: `Automatically loaded existing AI parameters for ${formData.position} (${interviewType || 'mixed'})`,
             });
           } else if (structuredQuestions && Array.isArray(structuredQuestions) && structuredQuestions.length > 0) {
             // No AI parameters but structured questions exist - suggest switching mode
@@ -590,7 +604,7 @@ const HRInterviewCreator = () => {
     try {
       console.log('🔄 Saving parameters for role:', formData.position, customParameters);
       
-      const response = await fetch('https://devprovaluate_py.aitamate.com/api/custom-parameters', {
+      const response = await fetch('https://devprovaluate_py.aitamate.com//api/custom-parameters', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -684,7 +698,7 @@ const HRInterviewCreator = () => {
           const interview = createdInterviews[0];
           const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
           
-          const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
+          const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -721,7 +735,7 @@ const HRInterviewCreator = () => {
             try {
               const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
               
-              const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
+              const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -794,7 +808,7 @@ const HRInterviewCreator = () => {
           try {
             const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
             
-            const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
+            const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -936,7 +950,7 @@ const HRInterviewCreator = () => {
         });
         console.log(`📤 Sending to server: total_questions=${formData.totalQuestions}, duration=${formData.duration}`);
         
-        const response = await fetch('https://devprovaluate_py.aitamate.com/api/create-interview', {
+        const response = await fetch('https://devprovaluate_py.aitamate.com//api/create-interview', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1065,7 +1079,7 @@ const HRInterviewCreator = () => {
   return (
     <div className="p-6 space-y-6">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-primary-800 mb-2">Create and send an interview link</h2>
+        <h2 className="text-2xl font-bold text-primary-800 mb-2">Final Overview</h2>
         <p className="text-muted-foreground">Set up an interview and generate a link for your candidate</p>
       </div>
 
@@ -1572,7 +1586,7 @@ const HRInterviewCreator = () => {
                       try {
                         const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
                         
-                        const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
+                        const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
                           method: 'POST',
                           headers: {
                             'Content-Type': 'application/json',
