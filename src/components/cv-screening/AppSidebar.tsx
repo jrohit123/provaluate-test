@@ -34,7 +34,7 @@ const mainDashboardItem = {
 // CV Screening section items
 const cvScreeningItems = [
   {
-    title: 'Upload Job Description',
+    title: 'New Job Upload',
     icon: Upload,
     section: 'job-upload' as ActiveSection,
     description: 'Upload job descriptions and criteria'
@@ -46,7 +46,7 @@ const cvScreeningItems = [
     description: 'Set up assessment parameters and criteria'
   },
   {
-    title: 'Upload Resumes',
+    title: 'Resume Upload',
     icon: FileText,
     section: 'resume-upload' as ActiveSection,
     description: 'Upload and manage candidate resumes'
@@ -62,13 +62,13 @@ const cvScreeningItems = [
 // Interview Management section items
 const interviewManagementItems = [
   {
-    title: 'Create Interview Playbook',
+    title: 'Interview Creation',
     icon: Cog,
     section: 'setup' as ActiveSection,
     description: 'Configure interview parameters and job descriptions'
   },
   {
-    title: 'Send Interview Link',
+    title: 'Send Interview',
     icon: Users,
     section: 'ai-interview' as ActiveSection,
     description: 'View and manage assessment frameworks'
@@ -96,7 +96,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
   
   // State for collapsible sections
   const [isCvScreeningOpen, setIsCvScreeningOpen] = useState(true);
-  const [isInterviewManagementOpen, setIsInterviewManagementOpen] = useState(false);
+  const [isInterviewManagementOpen, setIsInterviewManagementOpen] = useState(true);
   
   // Check if user can access settings
   const canAccessSettings = user?.profile?.role === 'admin' || user?.profile?.role === 'superadmin';
@@ -136,7 +136,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
               <SidebarMenuButton className="cursor-pointer hover:bg-gray-50 flex items-center justify-between w-full">
                 <div className="flex items-center gap-2">
                   <Search className="w-4 h-4" />
-                  <span className="font-bold text-[#2C77CA]">CV Screening</span>
+                  <span className="font-bold text-[#1A56DB]">CV Screening</span>
                 </div>
                 {isCvScreeningOpen ? (
                   <ChevronDown className="w-4 h-4" />
@@ -174,7 +174,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
               <SidebarMenuButton className="cursor-pointer hover:bg-gray-50 flex items-center justify-between w-full">
                 <div className="flex items-center gap-2">
                   <Video className="w-4 h-4" />
-                  <span className="font-bold text-[#2C77CA]">Interview Management</span>
+                  <span className="font-bold text-[#1A56DB]">Interview Management</span>
                 </div>
                 {isInterviewManagementOpen ? (
                   <ChevronDown className="w-4 h-4" />
@@ -218,7 +218,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                     tooltip={settingsItem.title}
                   >
                     <settingsItem.icon className="w-4 h-4" />
-                    <span className="font-bold text-[#2C77CA]">{settingsItem.title}</span>
+                    <span className="font-bold text-[#1A56DB]">{settingsItem.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>

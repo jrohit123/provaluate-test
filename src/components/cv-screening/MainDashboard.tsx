@@ -236,8 +236,8 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
               onClick={() => onSectionChange('job-upload')}
               className="h-auto p-3 flex flex-col items-center space-y-1"
             >
-              <Upload className="w-5 h-5" />
-              <div className="font-semibold text-sm">1. Upload Job Description</div>
+              <FileText className="w-5 h-5" />
+              <div className="font-semibold text-sm">1. Manage Job Descriptions</div>
             </Button>
 
             {/* 2. Manage Evaluation Criteria */}
@@ -254,7 +254,7 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
               onClick={() => onSectionChange('resume-upload')}
               className="h-auto p-3 flex flex-col items-center space-y-1"
             >
-              <FileText className="w-5 h-5" />
+              <Upload className="w-5 h-5" />
               <div className="font-semibold text-sm">3. Upload Resumes</div>
             </Button>
 
@@ -279,7 +279,7 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
                 className="h-auto p-3 flex flex-col items-center space-y-1"
               >
                 <Cog className="w-5 h-5" />
-                <div className="font-semibold text-sm">1. Create Interview Playbook</div>
+                <div className="font-semibold text-sm">Interview Configuration</div>
               </Button>
 
               {/* Assessment Manager */}
@@ -288,7 +288,7 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
                 className="h-auto p-3 flex flex-col items-center space-y-1"
               >
                 <Users className="w-5 h-5" />
-                <div className="font-semibold text-sm">2. Send the Interview</div>
+                <div className="font-semibold text-sm">Assessment Manager</div>
               </Button>
 
               {/* Interview Dashboard */}
@@ -297,7 +297,7 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
                 className="h-auto p-3 flex flex-col items-center space-y-1"
               >
                 <Monitor className="w-5 h-5" />
-                <div className="font-semibold text-sm">3. Interview Dashboard</div>
+                <div className="font-semibold text-sm">Interview Dashboard</div>
               </Button>
             </div>
           </div>

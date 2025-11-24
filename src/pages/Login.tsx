@@ -188,9 +188,9 @@ const Login = () => {
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-3">
               <div>
-              <img src="/Logo_Transparent_BG.png" alt="ProValuate" className="h-20" />
+                <img src="/logo.png" alt="ProValuate" className="h-8 w-8" />
               </div>
-              <h1 className="text-2xl font-bold text-gray-900"></h1>
+              <h1 className="text-2xl font-bold text-gray-900">ProValuate</h1>
             </div>
             <div className="flex items-center space-x-6">
               <a href="/pricing" className="text-gray-600 hover:text-gray-900 transition-colors">
@@ -270,19 +270,7 @@ const Login = () => {
                     ? 'Welcome to ProValuate! Create your account' 
                     : 'Enter your credentials to access your dashboard'
                   }
-                </CardDescription> <br></br>
-                <div className="mt-6 text-center">
-                  <button
-                    onClick={() => setIsSignup(!isSignup)}
-                    className="text-indigo-600 hover:text-indigo-800 transition-colors"
-                    disabled={isLoading}
-                  >
-                    {isSignup 
-                      ? 'Already registered? Sign in' 
-                      : "Don't have an account? Register Now"
-                    }
-                  </button>
-                </div>
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {!showReset ? (
@@ -360,13 +348,25 @@ const Login = () => {
                     {resetError && <div className="text-red-600 text-sm">{resetError}</div>}
                   </form>
                 )}
-                
+                <div className="mt-6 text-center">
+                  <button
+                    onClick={() => setIsSignup(!isSignup)}
+                    className="text-indigo-600 hover:text-indigo-800 transition-colors"
+                    disabled={isLoading}
+                  >
+                    {isSignup 
+                      ? 'Already registered? Sign in' 
+                      : "Don't have an account? Register Now"
+                    }
+                  </button>
+                </div>
+
                 {/* Remove the test account credentials display at the bottom */}
               </CardContent>
             </Card>
             
             <div className="mt-8 text-center text-sm text-gray-600">
-              <p>Automated JD parsing and resume ranking engine based on customized selection criteria</p>
+              <p>Powered by AI | Automated JD parsing and resume ranking engine based on customized selection criteria</p>
               <div className="mt-4 flex items-center justify-center space-x-2">
                 <span className="text-gray-500">Powered by</span>
                 <a 
