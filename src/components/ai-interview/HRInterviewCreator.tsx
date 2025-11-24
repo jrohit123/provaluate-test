@@ -731,7 +731,7 @@ const HRInterviewCreator = () => {
           const interview = createdInterviews[0];
           const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
           
-          const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
+          const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
