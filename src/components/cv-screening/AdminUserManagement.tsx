@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,57 +25,249 @@ export default function AdminUserManagement() {
   const [loading, setLoading] = useState(false);
   const [changingPlan, setChangingPlan] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState('');
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('');
+  const [isVoicePreviewing, setIsVoicePreviewing] = useState(false);
 
   // Compute admin status after all hooks
   const isAdmin = user?.profile?.role === 'admin';
+  const isSpeechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+
+  const getVoiceId = useCallback(
+    (voice: SpeechSynthesisVoice) => `${voice.name || 'unknown'}::${voice.lang || 'unknown'}`,
+    []
+  );
+
+  const voiceOptions = useMemo(
+    () =>
+      availableVoices.map((voice) => ({
+        id: getVoiceId(voice),
+        label: `${voice.name}${voice.lang ? ` (${voice.lang})` : ''}`,
+      })),
+    [availableVoices, getVoiceId]
+  );
+  const selectedVoiceLabel = useMemo(() => {
+    if (!selectedVoiceId) {
+      return 'Browser default voice';
+    }
+    const match = voiceOptions.find((voice) => voice.id === selectedVoiceId);
+    return match ? match.label : 'Browser default voice';
+  }, [voiceOptions, selectedVoiceId]);
 
   useEffect(() => {
-    if (!isAdmin) return; // Only fetch if admin
-    setLoading(true);
-    const fetchData = async () => {
-      try {
-        // Fetch company info
-        const { data: companyData } = await supabase
-          .from('companies')
-          .select('*')
-          .eq('company_id', user.profile.company_id)
-          .single();
-        setCompany(companyData);
-        // Fetch available plans for plan changes (plan_cost > 0 and status = 'Active')
-        const { data: availablePlansData } = await supabase
-          .from('plans')
-          .select('*')
-          .gt('plan_cost', 0)
-          .eq('status', 'Active');
-        setAvailablePlans(availablePlansData || []);
-        console.log('Available plans:', availablePlansData);
-        // Fetch plan info
-        if (companyData?.selected_plan) {
-          const { data: planData } = await supabase
-            .from('plans')
-            .select('*')
-            .eq('plan_name', companyData.selected_plan)
-            .single();
-          console.log('Fetched plan:', planData);
-          setPlan(planData);
-        } else {
-          setPlan(null);
+    if (typeof window === 'undefined') {
+      return;
+    }
+    try {
+      const storedVoiceId = window.localStorage.getItem('selectedAiVoiceId');
+      if (storedVoiceId) {
+        setSelectedVoiceId(storedVoiceId);
+      }
+    } catch (error) {
+      console.warn('Unable to read stored AI voice:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isSpeechSupported) {
+      setAvailableVoices([]);
+      return;
+    }
+
+    const synth = window.speechSynthesis;
+
+    const hydrateVoices = () => {
+      const voices = synth.getVoices();
+      if (!voices || voices.length === 0) {
+        return;
+      }
+      const sortedVoices = voices.slice().sort((a, b) => a.name.localeCompare(b.name));
+      setAvailableVoices(sortedVoices);
+
+      setSelectedVoiceId((currentId) => {
+        if (currentId && sortedVoices.some((voice) => getVoiceId(voice) === currentId)) {
+          return currentId;
         }
-        // Fetch users in company
-        const { data: usersData } = await supabase
-          .from('users')
-          .select('user_id, company_id, first_name, last_name, role, user_status, created_at')
-          .eq('company_id', user.profile.company_id);
-        setUsers(usersData || []);
-      } finally {
-        setLoading(false);
+
+        let storedId = '';
+        try {
+          storedId = window.localStorage.getItem('selectedAiVoiceId') || '';
+        } catch (error) {
+          console.warn('Unable to access stored AI voice:', error);
+        }
+
+        if (storedId && sortedVoices.some((voice) => getVoiceId(voice) === storedId)) {
+          return storedId;
+        }
+
+        return sortedVoices.length > 0 ? getVoiceId(sortedVoices[0]) : currentId;
+      });
+    };
+
+    hydrateVoices();
+
+    let previousHandler: ((this: SpeechSynthesis, ev: Event) => any) | null = null;
+
+    if (typeof synth.addEventListener === 'function') {
+      synth.addEventListener('voiceschanged', hydrateVoices);
+    } else {
+      previousHandler = synth.onvoiceschanged;
+      synth.onvoiceschanged = (event: Event) => {
+        hydrateVoices();
+        if (typeof previousHandler === 'function') {
+          previousHandler.call(synth, event);
+        }
+      };
+    }
+
+    return () => {
+      if (typeof synth.removeEventListener === 'function') {
+        synth.removeEventListener('voiceschanged', hydrateVoices);
+      } else {
+        synth.onvoiceschanged = previousHandler;
       }
     };
-    fetchData();
-  }, [user?.profile?.company_id, isAdmin]);
+  }, [getVoiceId, isSpeechSupported]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    try {
+      if (selectedVoiceId) {
+        window.localStorage.setItem('selectedAiVoiceId', selectedVoiceId);
+      } else {
+        window.localStorage.removeItem('selectedAiVoiceId');
+      }
+    } catch (error) {
+      console.warn('Unable to persist AI voice selection:', error);
+    }
+  }, [selectedVoiceId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === 'selectedAiVoiceId') {
+        setSelectedVoiceId(event.newValue || '');
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (isSpeechSupported) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [isSpeechSupported]);
+
+  const loadCompanyData = useCallback(async () => {
+    if (!isAdmin || !user?.profile?.company_id) {
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data: companyData } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('company_id', user.profile.company_id)
+        .single();
+      setCompany(companyData);
+
+      const { data: availablePlansData } = await supabase
+        .from('plans')
+        .select('*')
+        .gt('plan_cost', 0)
+        .eq('status', 'Active');
+      setAvailablePlans(availablePlansData || []);
+      console.log('Available plans:', availablePlansData);
+
+      if (companyData?.selected_plan) {
+        const { data: planData } = await supabase
+          .from('plans')
+          .select('*')
+          .eq('plan_name', companyData.selected_plan)
+          .single();
+        console.log('Fetched plan:', planData);
+        setPlan(planData);
+      } else {
+        setPlan(null);
+      }
+
+      const { data: usersData } = await supabase
+        .from('users')
+        .select('user_id, company_id, first_name, last_name, role, user_status, created_at')
+        .eq('company_id', user.profile.company_id);
+      setUsers(usersData || []);
+    } finally {
+      setLoading(false);
+    }
+  }, [isAdmin, user?.profile?.company_id]);
+
+  useEffect(() => {
+    loadCompanyData();
+  }, [loadCompanyData]);
 
   const maxUsers = plan?.max_users ?? null;
   const slotsLeft = maxUsers !== null ? maxUsers - users.length : null;
+  const handleVoiceChange = useCallback(
+    (value: string) => {
+      if (isSpeechSupported) {
+        window.speechSynthesis.cancel();
+      }
+      setIsVoicePreviewing(false);
+      setSelectedVoiceId(value);
+    },
+    [isSpeechSupported]
+  );
+
+  const handlePreviewVoice = useCallback(() => {
+    if (!isSpeechSupported) {
+      toast({
+        title: 'Preview Unavailable',
+        description: 'Your browser does not support speech synthesis, so the AI voice cannot be previewed here.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const voice = availableVoices.find((item) => getVoiceId(item) === selectedVoiceId);
+    if (!voice) {
+      toast({
+        title: 'Select a Voice',
+        description: 'Please choose an AI voice before playing a preview.',
+      });
+      return;
+    }
+
+    try {
+      const sampleText =
+        'Hi there, this is the AI interviewer. This preview lets you hear how your candidates will experience the session.';
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(sampleText);
+      utterance.voice = voice;
+      utterance.rate = 0.95;
+      utterance.pitch = 1.0;
+      utterance.volume = 0.85;
+      utterance.onend = () => setIsVoicePreviewing(false);
+      utterance.onerror = () => setIsVoicePreviewing(false);
+      setIsVoicePreviewing(true);
+      window.speechSynthesis.speak(utterance);
+    } catch (error) {
+      console.error('Error previewing AI voice:', error);
+      setIsVoicePreviewing(false);
+      toast({
+        title: 'Preview Error',
+        description: 'We could not play the preview. Please try refreshing the page and try again.',
+        variant: 'destructive',
+      });
+    }
+  }, [availableVoices, getVoiceId, isSpeechSupported, selectedVoiceId, toast]);
 
   const handleInviteChange = (e: any) => {
     setInviteForm({ ...inviteForm, [e.target.name]: e.target.value });
@@ -338,6 +530,66 @@ export default function AdminUserManagement() {
         )}
       </CardHeader>
       <CardContent>
+        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50/60 p-4">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <h3 className="text-base font-semibold text-blue-900">AI Interview Voice</h3>
+            <span className="text-xs font-medium uppercase tracking-wide text-blue-700">
+              Current selection: {selectedVoiceLabel}
+            </span>
+          </div>
+          <ul className="mt-3 space-y-2 list-disc pl-5 text-sm text-blue-900">
+            <li>
+              Selecting a voice here sets the narrator that candidates hear throughout every conversational interview. The
+              choice applies to greetings, follow-up prompts, and wrap-up messages so the experience feels consistent and
+              on-brand for your organization.
+            </li>
+            <li>
+              Preview the audio before saving to ensure the tone matches your expectations. We store the selection
+              immediately, reload it for future sessions, and fall back gracefully if a browser updates or removes a voice.
+            </li>
+          </ul>
+          <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
+            <Select
+              value={selectedVoiceId}
+              onValueChange={handleVoiceChange}
+              disabled={!isSpeechSupported || voiceOptions.length === 0}
+            >
+              <SelectTrigger className="w-full md:w-72 bg-white">
+                <SelectValue placeholder={isSpeechSupported ? 'Select an AI voice...' : 'Speech synthesis unavailable'} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Browser default voice</SelectItem>
+                {voiceOptions.map((voice) => (
+                  <SelectItem key={voice.id} value={voice.id}>
+                    {voice.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              onClick={handlePreviewVoice}
+              disabled={
+                !isSpeechSupported || voiceOptions.length === 0 || !selectedVoiceId || isVoicePreviewing
+              }
+            >
+              {isVoicePreviewing ? 'Previewing...' : 'Preview Voice'}
+            </Button>
+          </div>
+          {!isSpeechSupported && (
+            <p className="mt-3 text-sm text-red-600">
+              Speech synthesis is not available in this browser. Use a recent version of Chrome, Edge, or Safari to manage
+              AI voice preferences.
+            </p>
+          )}
+          {isSpeechSupported && voiceOptions.length === 0 && (
+            <p className="mt-3 text-sm text-blue-700">
+              Voices are still loading from the browser. If the list stays empty, click inside the page or refresh to reload
+              the available options.
+            </p>
+          )}
+        </div>
+
         <div className="flex justify-between items-center mb-4">
           <div className="font-semibold text-lg">Company Users</div>
           <div className="flex gap-2">
