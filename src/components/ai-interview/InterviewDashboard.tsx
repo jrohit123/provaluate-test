@@ -310,7 +310,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
       <div className="p-6 space-y-6">
       {/* Header */}
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-primary-800 mb-2">Interview Sessions</h2>
+        <h2 className="text-2xl font-bold text-primary-800 mb-2">Interview Dashboard</h2>
         <p className="text-muted-foreground">Monitor and manage all interview sessions</p>
       </div>
 
