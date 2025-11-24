@@ -70,7 +70,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
   const fetchInterviews = async () => {
     try {
       setLoading(true);
-      const response = await fetch('https://devprovaluate_py.aitamate.com//api/get-all-interviews');
+      const response = await fetch('https://devprovaluate_py.aitamate.com/api/get-all-interviews');
       if (response.ok) {
         const data = await response.json();
         const interviewsData = data.interviews || [];
@@ -154,6 +154,26 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
     return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
   };
 
+  // Calculate duration from timestamps as fallback
+  const calculateDurationFromTimestamps = (interview: Interview): number | null => {
+    const startedAt = interview.started_at;
+    const endedAt = interview.terminated_at || interview.completed_at;
+    
+    if (startedAt && endedAt) {
+      try {
+        const start = new Date(startedAt);
+        const end = new Date(endedAt);
+        const diffMs = end.getTime() - start.getTime();
+        const diffMinutes = diffMs / (1000 * 60);
+        return Math.round(diffMinutes);
+      } catch (error) {
+        console.error('Error calculating duration from timestamps:', error);
+        return null;
+      }
+    }
+    return null;
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
@@ -199,7 +219,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
     setSaveStates(prev => ({...prev, [interviewId]: 'saving'}));
     
     try {
-      const response = await fetch('https://devprovaluate_py.aitamate.com//api/update-interview-decision', {
+      const response = await fetch('https://devprovaluate_py.aitamate.com/api/update-interview-decision', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -258,7 +278,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
     try {
       const interviewLink = `${window.location.origin}/interview/${interviewId}`;
       
-      const response = await fetch('https://devprovaluate_py.aitamate.com//api/send-interview-email', {
+      const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -485,7 +505,13 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                           <span>
                             {interview.actual_duration_minutes 
                               ? formatDuration(interview.actual_duration_minutes)
-                              : formatDuration(interview.duration_minutes)
+                              : (() => {
+                                  // Fallback: calculate from timestamps if available
+                                  const calculated = calculateDurationFromTimestamps(interview);
+                                  return calculated !== null 
+                                    ? formatDuration(calculated)
+                                    : formatDuration(interview.duration_minutes);
+                                })()
                             }
                           </span>
                         </div>
