@@ -4,9 +4,49 @@ import { toast } from 'react-hot-toast';
 import io from 'socket.io-client';
 import RecordRTC from 'recordrtc';
 import { useInterview, interviewActions } from '@/contexts/InterviewContext';
-import { API_CONFIG, apiCall } from '@/constants/api';
+
+// Extend the global Window interface to include Web Speech API types
+interface SpeechRecognitionEvent extends Event {
+  resultIndex: number;
+  results: {
+    isFinal: boolean;
+    [key: number]: {
+      transcript: string;
+    };
+  }[];
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message: string;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  maxAlternatives: number;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onresult: (event: SpeechRecognitionEvent) => void;
+  onerror: (event: SpeechRecognitionErrorEvent) => void;
+  onend: () => void;
+  _healthCheckInterval?: NodeJS.Timeout;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognition;
+    webkitSpeechRecognition: new () => SpeechRecognition;
+  }
+}
+import { useTimer } from '@/hooks/useTimer';
+import { useCountdownTimer } from '@/hooks/useCountdownTimer';
+import { API_CONFIG, buildApiUrl, apiCall } from '@/constants/api';
 import { INTERVIEW_CONSTANTS } from '@/constants/interview';
 import { supabase } from '@/integrations/supabase/client';
+import { Socket } from 'socket.io-client';
 import {
   Mic,
   MicOff,
@@ -162,68 +202,72 @@ const ConversationalInterview = () => {
   const [waveformHeights, setWaveformHeights] = useState<number[]>([]);
   const [speechPattern, setSpeechPattern] = useState<number[]>([]);
   const [patternIndex, setPatternIndex] = useState(0);
-  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('');
-  
-  const getVoiceId = useCallback(
-    (voice: SpeechSynthesisVoice) => `${voice.name || 'unknown'}::${voice.lang || 'unknown'}`,
-    []
-  );
-
-  const selectedVoice = useMemo(
-    () => (selectedVoiceId ? availableVoices.find((voice) => getVoiceId(voice) === selectedVoiceId) || null : null),
-    [availableVoices, selectedVoiceId, getVoiceId]
-  );
-
-  const assignVoiceToUtterance = useCallback(
-    (utterance: SpeechSynthesisUtterance) => {
-      if (!utterance) return;
-      if (selectedVoice) {
-        utterance.voice = selectedVoice;
-        return;
-      }
-      if (availableVoices.length > 0 && !utterance.voice) {
-        utterance.voice = availableVoices[0];
-      }
-    },
-    [availableVoices, selectedVoice]
-  );
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenAttempts, setFullscreenAttempts] = useState(0);
 
   // Per-question timer states
-  const [questionTimeRemaining, setQuestionTimeRemaining] = useState(0);
+  const [questionTimerSeconds, setQuestionTimerSeconds] = useState(0);
   const [currentQuestionMaxTime, setCurrentQuestionMaxTime] = useState(0);
   const [isQuestionTimerActive, setIsQuestionTimerActive] = useState(false);
   
   // Refs
-  const intervalRef = useRef(null);
-  const answerTimerRef = useRef(null);
-  const questionTimerRef = useRef(null);
-  const videoRef = useRef(null);
-  const socketRef = useRef(null);
-  const streamRef = useRef(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioWorkletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const audioWorkletStreamRef = useRef<MediaStream | null>(null);
+  const speakQueueRef = useRef<SpeechSynthesisUtterance[]>([]);
+  const handleSubmitAnswerRef = useRef<(() => Promise<void>) | null>(null);
+  const stopQuestionRecordingRef = useRef<(() => void) | null>(null);
+  const lastInterviewWarningRef = useRef<number | null>(null);
+  const lastQuestionWarningRef = useRef<number | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const hasSpokenWelcomeRef = useRef(false);
   const hasSpokenFirstQuestionRef = useRef(false);
   const hasSpokenCompletionRef = useRef(false);
   const hasInitializedRef = useRef(false);
-  const finishInterviewRef = useRef(null);
-  const speakWithAIRef = useRef(null);
-  
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
+  const finishInterviewRef = useRef<(() => Promise<void>) | null>(null);
+  const speakWithAIRef = useRef<((text: string) => void) | null>(null);
+
+  const terminateInterview = useCallback(async (reason) => {
     try {
-      const storedVoiceId = window.localStorage.getItem('selectedAiVoiceId');
-      if (storedVoiceId) {
-        setSelectedVoiceId(storedVoiceId);
+      console.log('🚫 Terminating interview due to:', reason);
+      const response = await apiCall(`${API_CONFIG.ENDPOINTS.TERMINATE_INTERVIEW}/${interviewData.interviewId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          reason,
+          timestamp: new Date().toISOString()
+        })
+      });
+
+      if (response.ok) {
+        console.log('✅ Interview status updated to terminated');
+        toast.error(`Interview terminated: ${reason}`);
+      } else {
+        console.error('❌ Failed to update interview status');
+        toast.error(`Interview terminated: ${reason} (status update failed)`);
       }
     } catch (error) {
-      console.warn('Unable to read stored AI voice selection:', error);
+      console.error('❌ Error terminating interview:', error);
+      toast.error(`Interview terminated: ${reason} (error updating status)`);
     }
-  }, []);
 
-  useEffect(() => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    navigate('/dashboard');
+  }, [navigate, interviewData?.interviewId]);
+
+  const tabChangeCountRef = useRef(0);
+  const tabWarningTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const escTerminateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTabViolationRef = useRef(0);
+  const isFullscreenRef = useRef(false);
+  const MAX_TAB_CHANGES = 2;
+
+  const handleTabViolation = useCallback((reason: string) => {
+    const now = Date.now();
+    if (now - lastTabViolationRef.current < 500) {
       return;
     }
     lastTabViolationRef.current = now;
@@ -337,25 +381,49 @@ const ConversationalInterview = () => {
       }
     };
 
-      setSelectedVoiceId((currentId) => {
-        if (currentId && sortedVoices.some((voice) => getVoiceId(voice) === currentId)) {
-          return currentId;
+    recognition.onend = () => {
+      console.log('🔚 Speech recognition ended');
+      
+      if (webSpeechActiveRef.current) {
+        if (restartTimeout) {
+          clearTimeout(restartTimeout);
         }
 
-        let storedId = '';
-        try {
-          storedId = window.localStorage.getItem('selectedAiVoiceId') || '';
-        } catch (error) {
-          console.warn('Unable to access stored AI voice selection:', error);
-          storedId = '';
+        const now = Date.now();
+        if (now - lastRestartTime < MIN_RESTART_INTERVAL) {
+          console.log('⚠️ Restart attempted too soon, scheduling delayed restart');
+          restartTimeout = setTimeout(() => {
+            if (webSpeechActiveRef.current) {
+              tryRestart();
+            }
+          }, MIN_RESTART_INTERVAL);
+          return;
         }
 
-        if (storedId && sortedVoices.some((voice) => getVoiceId(voice) === storedId)) {
-          return storedId;
-        }
+        tryRestart();
+      }
+    };
 
-        return sortedVoices.length > 0 ? getVoiceId(sortedVoices[0]) : currentId;
-      });
+    const tryRestart = () => {
+      try {
+        if (webSpeechActiveRef.current) {
+          lastRestartTime = Date.now();
+          recognition.start();
+          console.log('🔄 Speech recognition restarted successfully');
+        }
+      } catch (error: any) {
+        if (error.message && error.message.includes('already started')) {
+          console.log('✅ Recognition already running, no restart needed');
+        } else {
+          console.error('❌ Failed to restart recognition:', error);
+          if (webSpeechActiveRef.current && restartTimeout === null) {
+            restartTimeout = setTimeout(() => {
+              restartTimeout = null;
+              tryRestart();
+            }, 500);
+          }
+        }
+      }
     };
 
     // Add periodic health check
@@ -425,11 +493,18 @@ const ConversationalInterview = () => {
     return () => {
       stopWebSpeech();
     };
-  }, [getVoiceId]);
+  }, [stopWebSpeech]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
+  const handleInterviewTimerEnd = useCallback(() => {
+    console.log('⏰ Interview duration completed, finishing interview immediately...');
+    setIsInterviewTimerActive(false);
+
+    // Stop any ongoing recording immediately
+    if (isRecording || isVideoRecording) {
+      console.log('⏰ Time expired, stopping recording immediately');
+      if (stopQuestionRecordingRef.current) {
+        stopQuestionRecordingRef.current();
+      }
     }
 
     // Stop Web Speech immediately
@@ -484,25 +559,40 @@ const ConversationalInterview = () => {
       if (stopQuestionRecordingRef.current) {
         stopQuestionRecordingRef.current();
       }
-    } catch (error) {
-      console.warn('Unable to persist AI voice selection:', error);
-    }
-  }, [selectedVoiceId]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === 'selectedAiVoiceId') {
-        setSelectedVoiceId(event.newValue || '');
+      // Wait for recording to properly stop and blobs to be captured
+      setTimeout(() => {
+        console.log('🔄 Auto-submitting answer after recording stopped');
+        if (handleSubmitAnswerRef.current) {
+          handleSubmitAnswerRef.current();
+        }
+      }, 1500);
+
+    } else if (!isRecording && audioBlob) {
+      // If recording already stopped but not submitted, just submit
+      console.log('🔄 Recording already stopped, auto-submitting existing answer');
+      if (handleSubmitAnswerRef.current) {
+        handleSubmitAnswerRef.current();
       }
-    };
+    } else {
+      console.log('⏰ Timer expired but no valid recording state to submit');
+    }
+  }, [isSubmitting, answerSubmitted, isRecording, audioBlob]);
 
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+  const interviewTimeRemaining = useCountdownTimer(
+    interviewTimerSeconds,
+    isInterviewTimerActive,
+    { onEnd: handleInterviewTimerEnd }
+  );
 
+  const questionTimeRemaining = useTimer(
+    questionTimerSeconds,
+    isQuestionTimerActive,
+    { onEnd: handleQuestionTimerEnd }
+  );
+
+  const timeRemaining = interviewTimeRemaining;
+  
   // Debug function to log current state
   const logSpokenState = useCallback(() => {
     console.log('🔍 Current spoken state:');
@@ -662,16 +752,6 @@ const ConversationalInterview = () => {
           console.log('📡 Emitted ai_stopped_speaking event (error case)');
         }
       };
-      
-      // Speak the text
-      window.speechSynthesis.speak(utterance);
-      console.log('🗣️ Speech synthesis started for:', text.slice(0, 50) + (text.length > 50 ? '...' : ''));
-    } else {
-      console.log('❌ Speech synthesis not available');
-      // Fallback: just show the message
-      setAiSpeaking(false);
-    }
-  }, [aiAudioEnabled, aiSpeaking, assignVoiceToUtterance]);
 
       const queue = speakQueueRef.current;
       queue.push(utterance);
@@ -2560,8 +2640,8 @@ const ConversationalInterview = () => {
                   </div>
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-white">Conversational AI Interview</h1>
-                  <p className="text-blue-200 text-sm">Live AI Assistant Interview Session</p>
+                  <h1 className="font-semibold text-white">PROVALUATE AI INTERVIEW</h1>
+                  <p className="text-xs text-gray-400">Live AI Assistant Interview Session</p>
                 </div>
               </div>
               
@@ -2711,17 +2791,8 @@ const ConversationalInterview = () => {
                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-1 mb-2">
           {/* AI Assistant Panel - Question Card */}
           <div className="lg:col-span-2 glass rounded-2xl p-1 border border-white/10">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                  <Bot className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-white">AI Interviewer</h3>
-                  <p className="text-sm text-gray-300">Your AI Assistant</p>
-                </div>
-              </div>
-              
+                         <div className="bg-gray-800/50 rounded-xl p-1 h-[450px] flex items-center justify-center relative">
+              {/* Volume Button - Top Right Corner */}
               <button
                 onClick={toggleAIAudio}
                 className={`absolute top-3 right-3 p-2 rounded-lg transition-colors z-10 backdrop-blur-sm ${
@@ -2730,9 +2801,6 @@ const ConversationalInterview = () => {
               >
                 {aiAudioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
               </button>
-            </div>
-            
-                         <div className="bg-gray-800/50 rounded-xl p-1 h-[520px] flex items-center justify-center">
               {aiSpeaking && !aiMessage?.includes('Question') ? (
                 <div className="text-center w-full">
                   {/* Animated AI Speaking - Clean waveform only */}
@@ -2768,17 +2836,11 @@ const ConversationalInterview = () => {
                    )}
 
                    {/* AI Message - clean during question reading */}
-                  {!isWelcomeMessage && (
-                    <div className="bg-gray-700/50 rounded-lg p-3 mb-3">
-                      <p className="text-white text-xl font-medium leading-relaxed">{aiMessage}</p>
-                      {currentQuestionMaxTime > 0 && (
-                        <p className="mt-2 text-sm text-blue-200">
-                          Time to answer: {formatTime(currentQuestionMaxTime)}
-                        </p>
-                      )}
-                    </div>
-                    
-                  )}
+                   {!isWelcomeMessage && (
+                     <div className="bg-gray-700/50 rounded-lg p-3 mb-3">
+                       <p className="text-white text-lg font-medium leading-relaxed">{aiMessage}</p>
+                     </div>
+                   )}
                    
                    {/* Status Indicator - only show when AI is not speaking */}
                    {!aiSpeaking && (
