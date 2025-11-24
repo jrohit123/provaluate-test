@@ -275,30 +275,48 @@ const HRInterviewCreator = () => {
         
         console.log(`📋 Loaded from DB - interview_type: ${interviewType}`);
         
-        // Set the interview type FIRST, before anything else
+        // Determine interview mode based on what exists in database
+        // Priority: structured_questions > custom_parameters
+        const hasValidStructuredQuestions = structuredQuestions && 
+          (Array.isArray(structuredQuestions) ? structuredQuestions.length > 0 : 
+           typeof structuredQuestions === 'string' ? structuredQuestions !== '{}' && structuredQuestions !== '[]' :
+           Object.keys(structuredQuestions).length > 0);
+        const hasValidCustomParams = customParams && 
+          (typeof customParams === 'string' ? customParams !== '{}' : Object.keys(customParams).length > 0);
+        
+        // Auto-update interview mode based on what exists
+        // Priority: If only one type exists, use that. If both exist, prefer structured.
+        let detectedMode: 'ai' | 'structured' = 'ai'; // Default to AI
+        if (hasValidStructuredQuestions && !hasValidCustomParams) {
+          detectedMode = 'structured';
+        } else if (hasValidCustomParams && !hasValidStructuredQuestions) {
+          detectedMode = 'ai';
+        } else if (hasValidStructuredQuestions && hasValidCustomParams) {
+          // Both exist - prefer structured (since structured is more specific)
+          detectedMode = 'structured';
+        }
+        
+        // Set the interview type, mode, and personalized questions FIRST
         if (interviewType && ['technical', 'behavioral', 'mixed'].includes(interviewType)) {
           console.log(`✅ Setting interview_type from database: ${interviewType}`);
-          setFormData(prev => ({ ...prev, interviewType: interviewType }));
-        } else {
-          console.warn(`⚠️ Invalid or missing interview_type in DB: ${interviewType}`);
         }
         
-        // Load personalized questions from database
-        if (personalizedQuestions && personalizedQuestions.length > 0) {
-          setFormData(prev => ({
-            ...prev,
-            personalizedQuestionsEnabled: true,
-            personalizedQuestions: personalizedQuestions
-          }));
-        } else {
-          setFormData(prev => ({
-            ...prev,
-            personalizedQuestionsEnabled: false,
-            personalizedQuestions: []
-          }));
+        // Clear opposite type's data when switching modes
+        if (detectedMode === 'ai') {
+          setStructuredQuestions([]);
+        } else if (detectedMode === 'structured') {
+          setCustomParameters({});
         }
         
-        if (formData.interviewMode === 'ai') {
+        setFormData(prev => ({
+          ...prev,
+          interviewType: (interviewType && ['technical', 'behavioral', 'mixed'].includes(interviewType)) ? interviewType : prev.interviewType,
+          interviewMode: detectedMode, // Auto-update mode based on database content
+          personalizedQuestionsEnabled: !!personalizedQuestions,
+          personalizedQuestions: personalizedQuestions || []
+        }));
+        
+        if (detectedMode === 'ai') {
           // Load AI interview parameters
           if (customParams && Object.keys(customParams).length > 0) {
             setCustomParameters(customParams);
@@ -332,20 +350,35 @@ const HRInterviewCreator = () => {
             setCustomParameters({});
             setParametersSaved(false);
           }
-        } else if (formData.interviewMode === 'structured') {
+        } else if (detectedMode === 'structured') {
           // Load structured interview questions
-          if (structuredQuestions && Array.isArray(structuredQuestions) && structuredQuestions.length > 0) {
+          // Parse structured_questions if it's a string
+          let parsedStructuredQuestions = structuredQuestions;
+          if (typeof structuredQuestions === 'string') {
+            try {
+              parsedStructuredQuestions = JSON.parse(structuredQuestions);
+            } catch (e) {
+              console.error('Error parsing structured_questions:', e);
+              parsedStructuredQuestions = [];
+            }
+          }
+          
+          const questionsArray = Array.isArray(parsedStructuredQuestions) 
+            ? parsedStructuredQuestions 
+            : (parsedStructuredQuestions && Object.keys(parsedStructuredQuestions).length > 0 ? Object.values(parsedStructuredQuestions) : []);
+          
+          if (questionsArray.length > 0) {
             // For structured interviews, we don't need custom parameters
             setCustomParameters({});
             setParametersSaved(true);
-            setStructuredQuestions(structuredQuestions);
+            setStructuredQuestions(questionsArray);
             
             // Calculate duration from structured questions
-            calculateDurationFromStructuredQuestions(structuredQuestions);
+            calculateDurationFromStructuredQuestions(questionsArray);
             
             toast({
               title: "Structured Interview Loaded",
-              description: `Found existing structured interview for ${formData.position} (${structuredQuestions.length} questions)`,
+              description: `Found existing structured interview for ${formData.position} (${questionsArray.length} questions)`,
             });
           } else if (customParams && Object.keys(customParams).length > 0) {
             // No structured questions but AI parameters exist - suggest switching mode
@@ -604,7 +637,7 @@ const HRInterviewCreator = () => {
     try {
       console.log('🔄 Saving parameters for role:', formData.position, customParameters);
       
-      const response = await fetch('https://devprovaluate_py.aitamate.com//api/custom-parameters', {
+      const response = await fetch('https://devprovaluate_py.aitamate.com/api/custom-parameters', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -698,7 +731,7 @@ const HRInterviewCreator = () => {
           const interview = createdInterviews[0];
           const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
           
-          const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
+          const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -735,7 +768,7 @@ const HRInterviewCreator = () => {
             try {
               const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
               
-              const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
+              const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -808,7 +841,7 @@ const HRInterviewCreator = () => {
           try {
             const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
             
-            const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
+            const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -950,7 +983,7 @@ const HRInterviewCreator = () => {
         });
         console.log(`📤 Sending to server: total_questions=${formData.totalQuestions}, duration=${formData.duration}`);
         
-        const response = await fetch('https://devprovaluate_py.aitamate.com//api/create-interview', {
+        const response = await fetch('https://devprovaluate_py.aitamate.com/api/create-interview', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1586,7 +1619,7 @@ const HRInterviewCreator = () => {
                       try {
                         const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
                         
-                        const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
+                        const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
                           method: 'POST',
                           headers: {
                             'Content-Type': 'application/json',
