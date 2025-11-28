@@ -70,7 +70,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
   const fetchInterviews = async () => {
     try {
       setLoading(true);
-      const response = await fetch('https://devprovaluate_py.aitamate.com//api/get-all-interviews');
+      const response = await fetch('http://localhost:5003/api/get-all-interviews');
       if (response.ok) {
         const data = await response.json();
         const interviewsData = data.interviews || [];
@@ -152,6 +152,26 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
     const hours = Math.floor(roundedMinutes / 60);
     const remainingMinutes = roundedMinutes % 60;
     return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+  };
+
+  // Calculate duration from timestamps as fallback
+  const calculateDurationFromTimestamps = (interview: Interview): number | null => {
+    const startedAt = interview.started_at;
+    const endedAt = interview.terminated_at || interview.completed_at;
+    
+    if (startedAt && endedAt) {
+      try {
+        const start = new Date(startedAt);
+        const end = new Date(endedAt);
+        const diffMs = end.getTime() - start.getTime();
+        const diffMinutes = diffMs / (1000 * 60);
+        return Math.round(diffMinutes);
+      } catch (error) {
+        console.error('Error calculating duration from timestamps:', error);
+        return null;
+      }
+    }
+    return null;
   };
 
   const formatDate = (dateString: string) => {
@@ -258,7 +278,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
     try {
       const interviewLink = `${window.location.origin}/interview/${interviewId}`;
       
-      const response = await fetch('https://devprovaluate_py.aitamate.com//api/send-interview-email', {
+      const response = await fetch('http://localhost:5003/api/send-interview-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -448,6 +468,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                     <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Duration</th>
                     <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Created</th>
                     <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">View Details</th>
+                    <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Score</th>
                     <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Decision</th>
                     <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Comments</th>
                     <th className="text-center py-3 px-4 font-medium text-gray-900">Action</th>
@@ -484,7 +505,13 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                           <span>
                             {interview.actual_duration_minutes 
                               ? formatDuration(interview.actual_duration_minutes)
-                              : formatDuration(interview.duration_minutes)
+                              : (() => {
+                                  // Fallback: calculate from timestamps if available
+                                  const calculated = calculateDurationFromTimestamps(interview);
+                                  return calculated !== null 
+                                    ? formatDuration(calculated)
+                                    : formatDuration(interview.duration_minutes);
+                                })()
                             }
                           </span>
                         </div>
@@ -496,16 +523,21 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                         </div>
                       </td>
                       <td className="py-3 px-4 text-center border-r border-gray-200">
-                        {interview.status === 'completed' && (
+                        {(interview.status === 'completed' || interview.status === 'terminated') && (
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => window.open(`/final-results/${interview.id}`, '_blank')}
-                            title="View Final Results"
+                            title={interview.status === 'terminated' ? 'View Interview Details (Terminated)' : 'View Final Results'}
                           >
                             <BarChart3 className="w-4 h-4" />
                           </Button>
                         )}
+                      </td>
+                      <td className="py-3 px-4 border-r border-gray-200">
+                        <div className="flex items-center justify-center">
+                          <span>{interview.overall_score}</span>
+                        </div> 
                       </td>
                       {/* Decision Column */}
                       <td className="py-3 px-4 border-r border-gray-200">

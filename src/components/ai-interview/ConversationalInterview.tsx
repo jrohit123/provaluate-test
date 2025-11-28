@@ -4,9 +4,49 @@ import { toast } from 'react-hot-toast';
 import io from 'socket.io-client';
 import RecordRTC from 'recordrtc';
 import { useInterview, interviewActions } from '@/contexts/InterviewContext';
+
+// Extend the global Window interface to include Web Speech API types
+interface SpeechRecognitionEvent extends Event {
+  resultIndex: number;
+  results: {
+    isFinal: boolean;
+    [key: number]: {
+      transcript: string;
+    };
+  }[];
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message: string;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  maxAlternatives: number;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onresult: (event: SpeechRecognitionEvent) => void;
+  onerror: (event: SpeechRecognitionErrorEvent) => void;
+  onend: () => void;
+  _healthCheckInterval?: NodeJS.Timeout;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognition;
+    webkitSpeechRecognition: new () => SpeechRecognition;
+  }
+}
+import { useTimer } from '@/hooks/useTimer';
+import { useCountdownTimer } from '@/hooks/useCountdownTimer';
 import { API_CONFIG, buildApiUrl, apiCall } from '@/constants/api';
 import { INTERVIEW_CONSTANTS } from '@/constants/interview';
 import { supabase } from '@/integrations/supabase/client';
+import { Socket } from 'socket.io-client';
 import {
   Mic,
   MicOff,
@@ -21,8 +61,14 @@ import {
   AlertTriangle,
   Camera,
   CheckCircle,
-  X
+  X,
+  ChevronUp,
+  ChevronDown,
+  Expand,
+  Minimize2,
+  Maximize2
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 // Add transcription validation function
 const isCorruptedTranscription = (transcript) => {
@@ -116,7 +162,11 @@ const ConversationalInterview = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isVideoOn, setIsVideoOn] = useState(true); // Camera must stay on
   const [transcript, setTranscript] = useState('');
-  const [timeRemaining, setTimeRemaining] = useState(interviewData.duration * 60);
+  const [interviewTimerSeconds, setInterviewTimerSeconds] = useState(() => {
+    const duration = Number(interviewData.duration) || 0;
+    return Math.max(duration * 60, 0);
+  });
+  const [isInterviewTimerActive, setIsInterviewTimerActive] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [currentQuestion, setCurrentQuestion] = useState(interviewData.currentQuestion);
   
@@ -158,25 +208,398 @@ const ConversationalInterview = () => {
   const [waveformHeights, setWaveformHeights] = useState<number[]>([]);
   const [speechPattern, setSpeechPattern] = useState<number[]>([]);
   const [patternIndex, setPatternIndex] = useState(0);
-  
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenAttempts, setFullscreenAttempts] = useState(0);
+  const [isTranscriptDialogOpen, setIsTranscriptDialogOpen] = useState(false);
+  const transcriptTextareaRef = useRef<HTMLTextAreaElement>(null);
+
   // Per-question timer states
-  const [questionTimeRemaining, setQuestionTimeRemaining] = useState(0);
+  const [questionTimerSeconds, setQuestionTimerSeconds] = useState(0);
   const [currentQuestionMaxTime, setCurrentQuestionMaxTime] = useState(0);
   const [isQuestionTimerActive, setIsQuestionTimerActive] = useState(false);
   
   // Refs
-  const intervalRef = useRef(null);
-  const answerTimerRef = useRef(null);
-  const questionTimerRef = useRef(null);
-  const videoRef = useRef(null);
-  const socketRef = useRef(null);
-  const streamRef = useRef(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioWorkletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const audioWorkletStreamRef = useRef<MediaStream | null>(null);
+  const speakQueueRef = useRef<SpeechSynthesisUtterance[]>([]);
+  const handleSubmitAnswerRef = useRef<(() => Promise<void>) | null>(null);
+  const stopQuestionRecordingRef = useRef<(() => void) | null>(null);
+  const lastInterviewWarningRef = useRef<number | null>(null);
+  const lastQuestionWarningRef = useRef<number | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const hasSpokenWelcomeRef = useRef(false);
   const hasSpokenFirstQuestionRef = useRef(false);
   const hasSpokenCompletionRef = useRef(false);
   const hasInitializedRef = useRef(false);
-  const finishInterviewRef = useRef(null);
-  const speakWithAIRef = useRef(null);
+  const finishInterviewRef = useRef<(() => Promise<void>) | null>(null);
+  const speakWithAIRef = useRef<((text: string) => void) | null>(null);
+
+  const terminateInterview = useCallback(async (reason) => {
+    try {
+      console.log('🚫 Terminating interview due to:', reason);
+      const response = await apiCall(`${API_CONFIG.ENDPOINTS.TERMINATE_INTERVIEW}/${interviewData.interviewId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          reason,
+          timestamp: new Date().toISOString()
+        })
+      });
+
+      if (response.ok) {
+        console.log('✅ Interview status updated to terminated');
+        toast.error(`Interview terminated: ${reason}`);
+      } else {
+        console.error('❌ Failed to update interview status');
+        toast.error(`Interview terminated: ${reason} (status update failed)`);
+      }
+    } catch (error) {
+      console.error('❌ Error terminating interview:', error);
+      toast.error(`Interview terminated: ${reason} (error updating status)`);
+    }
+
+    navigate('/dashboard');
+  }, [navigate, interviewData?.interviewId]);
+
+  const tabChangeCountRef = useRef(0);
+  const tabWarningTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const escTerminateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTabViolationRef = useRef(0);
+  const isFullscreenRef = useRef(false);
+  const MAX_TAB_CHANGES = 2;
+
+  const handleTabViolation = useCallback((reason: string) => {
+    const now = Date.now();
+    if (now - lastTabViolationRef.current < 500) {
+      return;
+    }
+    lastTabViolationRef.current = now;
+    tabChangeCountRef.current += 1;
+    const currentCount = tabChangeCountRef.current;
+    console.log(`⚠️ Tab change detected via ${reason} (${currentCount}/${MAX_TAB_CHANGES})`);
+
+    if (currentCount === 1) {
+      toast('⚠️ Warning: Stay on this tab during the interview!', {
+        icon: '⚠️',
+        duration: 4000,
+        style: {
+          background: '#fbbf24',
+          color: '#92400e',
+        },
+      });
+    } else if (currentCount === 2) {
+      toast('🚨 Final Warning: Do not switch tabs! Interview will be terminated.', {
+        icon: '🚨',
+        duration: 4000,
+        style: {
+          background: '#ef4444',
+          color: '#fff',
+        },
+      });
+    } else if (currentCount > MAX_TAB_CHANGES) {
+      console.log('🚫 Too many tab changes, terminating interview');
+      toast.error('Interview terminated due to tab switching');
+      terminateInterview('Candidate switched tabs multiple times during interview');
+    }
+
+    if (tabWarningTimeoutRef.current) {
+      clearTimeout(tabWarningTimeoutRef.current);
+      tabWarningTimeoutRef.current = null;
+    }
+  }, [terminateInterview]);
+  
+  // Web Speech Refs - Single source of truth
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const webSpeechActiveRef = useRef(false);
+
+  // Web Speech Implementation
+  const initWebSpeech = useCallback(() => {
+    if (recognitionRef.current) return;
+    
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn('Web Speech API not supported in this browser.');
+      toast.error('Live transcription not supported in this browser.');
+      return;
+    }
+    
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    recognition.maxAlternatives = 1;
+
+    // Chrome-specific optimizations
+    if ('webkitSpeechRecognition' in window) {
+      recognition.interimResults = true;
+      recognition.continuous = true;
+    }
+
+    let accumulatedFinal = '';
+    let restartTimeout: NodeJS.Timeout | null = null;
+    let lastRestartTime = 0;
+    const MIN_RESTART_INTERVAL = 100;
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const res = event.results[i];
+        if (res.isFinal) {
+          accumulatedFinal += res[0].transcript + ' ';
+          console.log('✅ Final transcript segment:', res[0].transcript);
+        } else {
+          interim += res[0].transcript;
+        }
+      }
+      const liveText = (accumulatedFinal + interim).trim();
+      setTranscript(liveText);
+    };
+
+    recognition.onerror = (e: SpeechRecognitionErrorEvent) => {
+      const errorType = e?.error || 'unknown';
+      console.warn('SpeechRecognition error:', errorType, e);
+      
+      switch (errorType) {
+        case 'network':
+          console.log('🔄 Network error - will attempt restart');
+          break;
+        case 'no-speech':
+          console.log('⏸️ No speech detected - recognition will continue');
+          break;
+        case 'aborted':
+          console.log('⚠️ Recognition aborted - will restart if still active');
+          break;
+        case 'audio-capture':
+          console.error('❌ Audio capture error - microphone issue');
+          toast.error('Microphone error. Please check your microphone permissions.');
+          webSpeechActiveRef.current = false;
+          break;
+        case 'not-allowed':
+          console.error('❌ Microphone permission denied');
+          toast.error('Microphone permission denied. Please allow microphone access.');
+          webSpeechActiveRef.current = false;
+          break;
+        default:
+          console.warn('⚠️ Unknown speech recognition error:', errorType);
+      }
+    };
+
+    recognition.onend = () => {
+      console.log('🔚 Speech recognition ended');
+      
+      if (webSpeechActiveRef.current) {
+        if (restartTimeout) {
+          clearTimeout(restartTimeout);
+        }
+
+        const now = Date.now();
+        if (now - lastRestartTime < MIN_RESTART_INTERVAL) {
+          console.log('⚠️ Restart attempted too soon, scheduling delayed restart');
+          restartTimeout = setTimeout(() => {
+            if (webSpeechActiveRef.current) {
+              tryRestart();
+            }
+          }, MIN_RESTART_INTERVAL);
+          return;
+        }
+
+        tryRestart();
+      }
+    };
+
+    const tryRestart = () => {
+      try {
+        if (webSpeechActiveRef.current) {
+          lastRestartTime = Date.now();
+          recognition.start();
+          console.log('🔄 Speech recognition restarted successfully');
+        }
+      } catch (error: any) {
+        if (error.message && error.message.includes('already started')) {
+          console.log('✅ Recognition already running, no restart needed');
+        } else {
+          console.error('❌ Failed to restart recognition:', error);
+          if (webSpeechActiveRef.current && restartTimeout === null) {
+            restartTimeout = setTimeout(() => {
+              restartTimeout = null;
+              tryRestart();
+            }, 500);
+          }
+        }
+      }
+    };
+
+    // Add periodic health check
+    const healthCheckInterval = setInterval(() => {
+      if (webSpeechActiveRef.current) {
+        console.log('🏥 Health check - recognition active:', webSpeechActiveRef.current);
+      }
+    }, 5000);
+
+    // Store health check interval for cleanup
+    (recognition as any)._healthCheckInterval = healthCheckInterval;
+
+    recognitionRef.current = recognition;
+  }, []);
+
+  const startWebSpeech = useCallback(() => {
+    initWebSpeech();
+    if (!recognitionRef.current) return;
+    
+    try {
+      webSpeechActiveRef.current = true;
+      
+      // Reset any previous state
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {
+          // Ignore if already stopped
+        }
+      }
+      
+      // Small delay to ensure clean start
+      setTimeout(() => {
+        try {
+          recognitionRef.current?.start();
+          console.log('✅ Web Speech started successfully');
+        } catch (error: any) {
+          if (!error.message?.includes('already started')) {
+            console.error('❌ Failed to start Web Speech:', error);
+          }
+        }
+      }, 100);
+    } catch (error) {
+      console.error('❌ Error starting Web Speech:', error);
+    }
+  }, [initWebSpeech]);
+
+  const stopWebSpeech = useCallback(() => {
+    webSpeechActiveRef.current = false;
+    
+    // Clean up health check interval
+    if (recognitionRef.current && (recognitionRef.current as any)._healthCheckInterval) {
+      clearInterval((recognitionRef.current as any)._healthCheckInterval);
+      (recognitionRef.current as any)._healthCheckInterval = null;
+    }
+    
+    try {
+      recognitionRef.current?.stop();
+      console.log('✅ Web Speech stopped successfully');
+    } catch (error) {
+      console.warn('⚠️ Error stopping Web Speech:', error);
+    }
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopWebSpeech();
+    };
+  }, [stopWebSpeech]);
+
+  const handleInterviewTimerEnd = useCallback(() => {
+    console.log('⏰ Interview duration completed, finishing interview immediately...');
+    setIsInterviewTimerActive(false);
+
+    // Stop any ongoing recording immediately
+    if (isRecording || isVideoRecording) {
+      console.log('⏰ Time expired, stopping recording immediately');
+      if (stopQuestionRecordingRef.current) {
+        stopQuestionRecordingRef.current();
+      }
+    }
+
+    // Stop Web Speech immediately
+    stopWebSpeech();
+
+    // Stop all media streams immediately
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(track => track.stop());
+      audioStreamRef.current = null;
+    }
+    if (videoStreamRef.current) {
+      videoStreamRef.current.getTracks().forEach(track => track.stop());
+      videoStreamRef.current = null;
+    }
+    if (screenStream) {
+      screenStream.getTracks().forEach(track => track.stop());
+      setScreenStream(null);
+    }
+
+    toast.success('⏰ Interview time completed! Finishing interview...', { duration: 1500 });
+
+    // CRITICAL FIX: Immediate finalization with minimal delay
+    setTimeout(() => {
+      const finalizeInterview = async () => {
+        try {
+          if (finishInterviewRef.current) {
+            await finishInterviewRef.current();
+          }
+        } catch (error) {
+          console.error('❌ Error auto-finishing interview:', error);
+          toast.error('Failed to finish interview');
+          // Force navigation even on error
+          navigate('/dashboard');
+        }
+      };
+
+      finalizeInterview();
+    }, 500);
+
+  }, [isRecording, isVideoRecording, navigate, screenStream, stopWebSpeech]);
+
+  const handleQuestionTimerEnd = useCallback(() => {
+    console.log('⏰ Question timer expired, auto-advancing...');
+    setIsQuestionTimerActive(false);
+    setQuestionTimerSeconds(0);
+
+    // CRITICAL FIX: Stop recording first, then auto-submit
+    if (!isSubmitting && !answerSubmitted && isRecording) {
+      console.log('🔄 Question time expired - stopping recording and auto-submitting');
+
+      // Stop recording first
+      if (stopQuestionRecordingRef.current) {
+        stopQuestionRecordingRef.current();
+      }
+
+      // Wait for recording to properly stop and blobs to be captured
+      setTimeout(() => {
+        console.log('🔄 Auto-submitting answer after recording stopped');
+        if (handleSubmitAnswerRef.current) {
+          handleSubmitAnswerRef.current();
+        }
+      }, 1500);
+
+    } else if (!isRecording && audioBlob) {
+      // If recording already stopped but not submitted, just submit
+      console.log('🔄 Recording already stopped, auto-submitting existing answer');
+      if (handleSubmitAnswerRef.current) {
+        handleSubmitAnswerRef.current();
+      }
+    } else {
+      console.log('⏰ Timer expired but no valid recording state to submit');
+    }
+  }, [isSubmitting, answerSubmitted, isRecording, audioBlob]);
+
+  const interviewTimeRemaining = useCountdownTimer(
+    interviewTimerSeconds,
+    isInterviewTimerActive,
+    { onEnd: handleInterviewTimerEnd }
+  );
+
+  const questionTimeRemaining = useTimer(
+    questionTimerSeconds,
+    isQuestionTimerActive,
+    { onEnd: handleQuestionTimerEnd }
+  );
+
+  const timeRemaining = interviewTimeRemaining;
   
   // Debug function to log current state
   const logSpokenState = useCallback(() => {
@@ -225,6 +648,8 @@ const ConversationalInterview = () => {
          await loadInterviewData();
          // Initialize camera
          await initializeCamera();
+        // Initialize audio worklet
+        await initializeAudio();
          // Request screen permissions immediately - before welcome message
          console.log('🖥️ Requesting screen permissions before interview starts...');
          await requestScreenPermissions();
@@ -255,73 +680,79 @@ const ConversationalInterview = () => {
   }, [interviewData.interviewId]); // Simplified - functions defined below
 
   // AI Text-to-Speech
-  const speakWithAI = useCallback((text) => {
-    console.log('🎤 speakWithAI called with text:', text);
-    console.log('🎤 aiAudioEnabled:', aiAudioEnabled);
-    console.log('🎤 aiSpeaking:', aiSpeaking);
-    
-    // Prevent multiple AI speech simultaneously
-    if (aiSpeaking) {
-      console.log('❌ AI is already speaking, skipping this message');
-      return;
-    }
-    
-    if (!aiAudioEnabled) {
-      console.log('❌ AI audio is disabled, not speaking');
-      return;
-    }
-    
-    console.log('🎤 Setting AI speaking state to true');
-    setAiSpeaking(true);
-    
-    // Emit AI speech events to backend for transcription filtering
-    if (socketRef.current && socketRef.current.connected) {
-      socketRef.current.emit('ai_started_speaking', {
-        interview_id: interviewData.interviewId
-      });
-      console.log('📡 Emitted ai_started_speaking event');
-    }
-    
-    // Use browser's speech synthesis
-    if ('speechSynthesis' in window) {
-      console.log('🎤 Speech synthesis available, creating utterance...');
-      
+  const speakWithAI = useCallback(
+    (text: string) => {
+      if (!text) {
+        return;
+      }
+
+      console.log('🎤 speakWithAI called with text:', text);
+      console.log('🎤 aiAudioEnabled:', aiAudioEnabled);
+
+      if (!aiAudioEnabled) {
+        console.log('❌ AI audio is disabled, not speaking');
+        return;
+      }
+
+      if (!('speechSynthesis' in window)) {
+        console.log('❌ Speech synthesis not available');
+        setAiSpeaking(false);
+        setQuestionFinishedSpeaking(false);
+        return;
+      }
+
+      const isQuestion = /question/i.test(text);
+      const isWelcome = /(welcome|hello)/i.test(text);
+      const isCompletion = /(thank you|completed|appreciate)/i.test(text);
+
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.9; // Slightly slower for clarity
+      utterance.rate = 0.9;
       utterance.pitch = 1.0;
       utterance.volume = 0.8;
-      
-      utterance.onend = () => {
-        console.log('🎤 Speech ended');
-        setAiSpeaking(false);
-        
-        // Check if this was a question (not welcome or completion message)
-        const isQuestion = text.includes('Question') || text.includes('question');
-        const isWelcome = text.includes('Welcome') || text.includes('welcome') || text.includes('Hello');
-        const isCompletion = text.includes('Thank you') || text.includes('completed') || text.includes('appreciate');
-        
-        if (isQuestion && !isWelcome && !isCompletion) {
-          console.log('🎤 Question finished speaking, ready for recording');
-          setQuestionFinishedSpeaking(true);
-        } else {
-          console.log('🎤 Non-question message finished (welcome/completion), not showing recording button');
+
+      utterance.onstart = () => {
+        console.log(
+          '🎤 Speech started for:',
+          text.slice(0, 50) + (text.length > 50 ? '...' : '')
+        );
+        setAiSpeaking(true);
+        if (isQuestion) {
           setQuestionFinishedSpeaking(false);
         }
-        
-        // Emit AI stopped speaking event to backend
-        if (socketRef.current && socketRef.current.connected) {
-          socketRef.current.emit('ai_stopped_speaking', {
-            interview_id: interviewData.interviewId
-          });
-          console.log('📡 Emitted ai_stopped_speaking event');
+      };
+
+      utterance.onend = () => {
+        console.log(
+          '🎤 Speech ended for:',
+          text.slice(0, 50) + (text.length > 50 ? '...' : '')
+        );
+        setAiSpeaking(false);
+
+        if (isQuestion && !isWelcome && !isCompletion) {
+          console.log('🎯 Question finished speaking — countdown can start');
+          setQuestionFinishedSpeaking(true);
+        } else {
+          setQuestionFinishedSpeaking(false);
+        }
+
+        const queue = speakQueueRef.current;
+        queue.shift();
+        if (queue.length > 0) {
+          window.speechSynthesis.speak(queue[0]);
         }
       };
-      
-      utterance.onerror = (error) => {
-        console.error('❌ Speech synthesis error:', error);
+
+      utterance.onerror = (event) => {
+        console.error('❌ Speech synthesis error:', event);
         setAiSpeaking(false);
-        
-        // Emit AI stopped speaking event even on error
+        setQuestionFinishedSpeaking(false);
+
+        const queue = speakQueueRef.current;
+        queue.shift();
+        if (queue.length > 0) {
+          window.speechSynthesis.speak(queue[0]);
+        }
+
         if (socketRef.current && socketRef.current.connected) {
           socketRef.current.emit('ai_stopped_speaking', {
             interview_id: interviewData.interviewId
@@ -329,20 +760,24 @@ const ConversationalInterview = () => {
           console.log('📡 Emitted ai_stopped_speaking event (error case)');
         }
       };
-      
-      utterance.onstart = () => {
-        console.log('🎤 Speech started');
-      };
-      
-      console.log('🎤 Starting speech synthesis...');
-      speechSynthesis.speak(utterance);
-    } else {
-      console.log('❌ Speech synthesis not available');
-      // Fallback: just show the message
-      setAiSpeaking(false);
-    }
-  }, [aiAudioEnabled, aiSpeaking]);
 
+      const queue = speakQueueRef.current;
+      queue.push(utterance);
+
+      if (queue.length === 1) {
+        window.speechSynthesis.speak(utterance);
+        console.log(
+          '🗣️ Speech synthesis started for:',
+          text.slice(0, 50) + (text.length > 50 ? '...' : '')
+        );
+      } else {
+        console.log('🗂️ Queued speech synthesis item. Queue length:', queue.length);
+      }
+    },
+    [aiAudioEnabled, interviewData.interviewId]
+  );
+
+  // Web Speech API implementation is located at the top of the component
 
 
   const finishInterview = useCallback(async () => {
@@ -469,8 +904,7 @@ const ConversationalInterview = () => {
         // Check if interview is completed
         if (data.completed) {
           console.log('🏁 Interview completed, finishing...');
-          // Add extra time buffer for completion process
-          setTimeRemaining(prev => Math.max(prev, 300)); // At least 5 minutes for completion
+          // No longer extending the interview time - let it end naturally
           if (finishInterviewRef.current) {
             await finishInterviewRef.current();
           } else {
@@ -486,8 +920,22 @@ const ConversationalInterview = () => {
         const newQuestionIndex = currentQuestionIndex + 1;
         dispatch(interviewActions.setQuestionIndex(newQuestionIndex));
         setCurrentQuestion(data.question);
+
+        // CRITICAL FIX: Reset transcript and Web Speech accumulator before next question starts
         setTranscript('');
-        
+        stopWebSpeech();
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.abort();
+          } catch (e) {
+            console.log('⚠️ Error aborting recognition:', e);
+          }
+          recognitionRef.current = null;
+        }
+        webSpeechActiveRef.current = false;
+
+        console.log('🔄 Transcript and Web Speech fully reset for new question');
+
         // Reset all question-related states for new question
         setQuestionFinishedSpeaking(false);
         setRecordingCountdown(0);
@@ -508,7 +956,7 @@ const ConversationalInterview = () => {
         if (data.max_time) {
           const questionTimeInSeconds = data.max_time * 60;
           setCurrentQuestionMaxTime(questionTimeInSeconds);
-          setQuestionTimeRemaining(questionTimeInSeconds);
+          setQuestionTimerSeconds(questionTimeInSeconds);
           setIsQuestionTimerActive(false); // Don't start timer yet!
           
           console.log('⏰ Timer values set for new question:', questionTimeInSeconds, 'seconds for', data.max_time, 'min answer time');
@@ -519,12 +967,6 @@ const ConversationalInterview = () => {
           console.log('🔍 Available data keys:', Object.keys(data));
         }
         
-        // CRITICAL FIX: Clear any existing timer intervals to prevent timer conflicts
-        if (questionTimerRef.current) {
-          clearInterval(questionTimerRef.current);
-          questionTimerRef.current = null;
-          console.log('⏰ Cleared existing question timer interval');
-        }
         // Keep screen permissions state - don't reset this
         
         // Clean up question text and speak the question (only if not already spoken)
@@ -657,15 +1099,11 @@ const ConversationalInterview = () => {
          }
        }
        
-       // Transcript is now optional - will be generated from audio on server
-       if (!cleanedTranscript || !cleanedTranscript.trim()) {
-         console.log('📝 No transcript provided, will transcribe from audio on server');
-       }
-
-       if (!audioBlob || audioBlob.size === 0) {
-         toast.error('No audio recording found. Please record your answer first.');
-         return;
-       }
+      // Require transcript from Web Speech API
+      if (!cleanedTranscript || !cleanedTranscript.trim()) {
+        toast.error('No speech captured. Please speak your answer before submitting.');
+        return;
+      }
 
        if (!isVideoOn) {
          toast.error('Camera must be on to submit answer');
@@ -676,27 +1114,7 @@ const ConversationalInterview = () => {
        setSubmissionStatus('uploading');
        
        try {
-         // Convert audio to base64 with error handling
-         const reader = new FileReader();
-         
-         reader.onerror = (error) => {
-           console.error('❌ FileReader error:', error);
-           toast.error('Failed to process audio. Please try again.');
-           dispatch(interviewActions.setSubmitting(false));
-           setSubmissionStatus('idle');
-         };
-         
-         reader.onload = async () => {
-           const audioData = reader.result;
-           
-           // Validate audio data
-           if (!audioData || (typeof audioData === 'string' && audioData.length < 100)) {
-             throw new Error('Invalid audio data - too short or empty');
-           }
-           
-           console.log('✅ Audio data validated successfully');
-           
-           // Upload question video if available
+          // Upload question video if available
            let questionVideoUrl = null;
            console.log('🔍 Checking for question video blob:', questionVideoBlob);
            console.log('🔍 Video blob size:', questionVideoBlob?.size);
@@ -749,7 +1167,7 @@ const ConversationalInterview = () => {
              }
            }
            
-           // Submit answer with cleaned transcript (increased for 3-minute recordings)
+           // Submit answer with cleaned transcript (from Web Speech)
            console.log('🔄 Starting answer submission...');
            setSubmissionStatus('processing');
            const answerController = new AbortController();
@@ -765,14 +1183,10 @@ const ConversationalInterview = () => {
                const finalTranscript = cleanedTranscript && cleanedTranscript.trim() !== "" 
                  ? cleanedTranscript 
                  : "No transcript provided";
-               
-               // Use audio data as-is (server.py handled large files fine)
-               let processedAudioData = audioData;
              
              console.log('🔍 Final submission data:');
              console.log('🔍 interview_id:', interviewData.interviewId);
              console.log('🔍 transcript:', finalTranscript);
-             console.log('🔍 audio_data size:', processedAudioData ? (typeof processedAudioData === 'string' ? processedAudioData.length : processedAudioData.byteLength) : 'null');
              console.log('🔍 question_video_url:', questionVideoUrl);
              
              // Ensure we have valid question_id for first question
@@ -788,27 +1202,39 @@ const ConversationalInterview = () => {
              if (!finalTranscript || finalTranscript.trim() === '') {
                throw new Error('Transcript is empty');
              }
-             if (!processedAudioData) {
-               throw new Error('Audio data is missing');
-             }
 
              console.log('🔍 Submission validation passed:');
              console.log('🔍 interview_id:', interviewData.interviewId);
              console.log('🔍 question_id:', questionId);
              console.log('🔍 question_order:', currentQuestionIndex);
              console.log('🔍 transcript length:', finalTranscript.length);
-             console.log('🔍 audio_data available:', !!processedAudioData);
 
-             const response = await apiCall(API_CONFIG.ENDPOINTS.SUBMIT_ANSWER, {
+            // Prepare payload including audio blob (base64) and skip_transcription flag
+            let audioDataBase64: string | null = null;
+            if (audioBlob) {
+              audioDataBase64 = await new Promise<string>((resolve, reject) => {
+                try {
+                  const r = new FileReader();
+                  r.onload = () => resolve(String(r.result));
+                  r.onerror = reject;
+                  r.readAsDataURL(audioBlob);
+                } catch (e) {
+                  reject(e);
+                }
+              });
+            }
+
+            const response = await apiCall(API_CONFIG.ENDPOINTS.SUBMIT_ANSWER, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
                body: JSON.stringify({
                  interview_id: interviewData.interviewId,
                  question_id: questionId,
                  question_order: currentQuestionIndex,
-                 transcript: finalTranscript, // Use final transcript
-                 audio_data: processedAudioData, // Use processed audio data
-                 question_video_url: questionVideoUrl
+                transcript: finalTranscript, // Use final transcript
+                audio_data: audioDataBase64, // Send audio for storage (not for transcription)
+                skip_transcription: true,
+                question_video_url: questionVideoUrl
                }),
                signal: answerController.signal
              });
@@ -821,8 +1247,7 @@ const ConversationalInterview = () => {
                // Check if interview is completed
                if (result.interview_completed) {
                  console.log('🏁 Interview completed after answer submission!');
-                 // Add extra time buffer for completion process
-                 setTimeRemaining(prev => Math.max(prev, 300)); // At least 5 minutes for completion
+                 // No longer extending the interview time - let it end naturally
                  if (finishInterviewRef.current) {
                    await finishInterviewRef.current();
                  } else {
@@ -915,9 +1340,6 @@ const ConversationalInterview = () => {
            
            // Start the submission attempt
            await attemptSubmission();
-         };
-         
-         reader.readAsDataURL(audioBlob);
          
        } catch (error) {
          console.error('Error submitting answer:', error);
@@ -934,188 +1356,91 @@ const ConversationalInterview = () => {
     finishInterviewRef.current = finishInterview;
   }, [speakWithAI, finishInterview]);
 
+  useEffect(() => {
+    handleSubmitAnswerRef.current = handleSubmitAnswer;
+  }, [handleSubmitAnswer]);
 
-  const terminateInterview = useCallback(async (reason) => {
-    try {
-      console.log('🚫 Terminating interview due to:', reason);
-      
-      // Call backend API to update interview status
-      const response = await apiCall(`${API_CONFIG.ENDPOINTS.TERMINATE_INTERVIEW}/${interviewData.interviewId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          reason: reason,
-          timestamp: new Date().toISOString()
-        })
+  useEffect(() => {
+    if (!isInterviewTimerActive) {
+      return;
+    }
+
+    if (timeRemaining > 60 && lastInterviewWarningRef.current !== null) {
+      lastInterviewWarningRef.current = null;
+    }
+
+    if (timeRemaining <= 0) {
+      lastInterviewWarningRef.current = null;
+      return;
+    }
+
+    if (timeRemaining <= 30 && lastInterviewWarningRef.current !== 30) {
+      toast('⚠️ 30 seconds remaining! Please finish your current response.', {
+        icon: '⚠️',
+        style: {
+          background: '#fbbf24',
+          color: '#92400e'
+        }
       });
-
-      if (response.ok) {
-        console.log('✅ Interview status updated to terminated');
-        toast.error(`Interview terminated: ${reason}`);
-      } else {
-        console.error('❌ Failed to update interview status');
-        toast.error(`Interview terminated: ${reason} (status update failed)`);
-      }
-    } catch (error) {
-      console.error('❌ Error terminating interview:', error);
-      toast.error(`Interview terminated: ${reason} (error updating status)`);
+      lastInterviewWarningRef.current = 30;
+    } else if (timeRemaining <= 60 && lastInterviewWarningRef.current !== 60) {
+      toast('⚠️ 1 minute remaining in your interview!', {
+        icon: '⚠️',
+        style: {
+          background: '#fbbf24',
+          color: '#92400e'
+        }
+      });
+      lastInterviewWarningRef.current = 60;
+    } else if (timeRemaining <= 120 && timeRemaining > 0) {
+      console.log(`⏰ Time remaining: ${timeRemaining}s - approaching completion`);
     }
-    
-    // Navigate to dashboard regardless of API call success
-    navigate('/dashboard');
-  }, [navigate, interviewData?.interviewId]);
+  }, [timeRemaining, isInterviewTimerActive]);
 
-  // Timer effect - only start after AI completes intro
   useEffect(() => {
-    // Don't start timer until AI has finished speaking the welcome message
-    if (timeRemaining > 0 && hasSpokenWelcomeRef.current) {
-      intervalRef.current = setInterval(() => {
-        setTimeRemaining(prev => {
-          const newTime = prev - 1;
-          
-          // Add buffer time when approaching completion (last 2 minutes)
-          if (newTime <= 120 && newTime > 0) {
-            console.log(`⏰ Time remaining: ${newTime}s - approaching completion`);
-          }
-          
-          // Show warning when 1 minute remaining
-          if (newTime === 60) {
-            toast('⚠️ 1 minute remaining in your interview!', {
-              icon: '⚠️',
-              style: {
-                background: '#fbbf24',
-                color: '#92400e',
-              },
-            });
-          }
-          
-          // Show final warning when 30 seconds remaining
-          if (newTime === 30) {
-            toast('⚠️ 30 seconds remaining! Please finish your current response.', {
-              icon: '⚠️',
-              style: {
-                background: '#fbbf24',
-                color: '#92400e',
-              },
-            });
-          }
-          
-          return newTime;
-        });
-      }, 1000);
-    } else {
-      // Clear timer if welcome not spoken yet
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      
-      // Time's up - automatically finish the interview
-      if (timeRemaining <= 0) {
-        console.log('⏰ Interview duration completed, automatically finishing interview...');
-        
-        // Stop any ongoing recording
-        if (isRecording) {
-          console.log('⏰ Time expired, stopping recording');
-          stopQuestionRecording();
-        }
-        
-        // Stop video recording if active
-        if (isVideoRecording) {
-          console.log('⏰ Time expired, stopping video recording');
-          // stopQuestionRecording handles both audio and video recording
-          stopQuestionRecording();
-        }
-        
-        // Clear the timer
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-        
-        // Show completion message
-        toast.success('⏰ Interview time completed! Finishing interview automatically...');
-        
-        // Automatically finish the interview
-        setTimeout(async () => {
-          try {
-            if (finishInterviewRef.current) {
-              await finishInterviewRef.current();
-            } else {
-              console.log('⚠️ finishInterviewRef not ready, using direct call');
-              await finishInterview();
-            }
-          } catch (error) {
-            console.error('❌ Error auto-finishing interview:', error);
-            toast.error('Failed to auto-finish interview');
-            // Navigate to dashboard as fallback
-            navigate('/dashboard');
-          }
-        }, INTERVIEW_CONSTANTS.TIMEOUTS.AUTO_FINISH_DELAY);
-      }
+    if (!isQuestionTimerActive) {
+      lastQuestionWarningRef.current = null;
+      return;
     }
-    
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, [timeRemaining, isRecording, isVideoRecording, finishInterview, navigate]);
 
-  // Question timer effect - per-question countdown with auto-advance
-  useEffect(() => {
-    if (isQuestionTimerActive && questionTimeRemaining > 0) {
-      questionTimerRef.current = setInterval(() => {
-        setQuestionTimeRemaining(prev => {
-          const newTime = prev - 1;
-          if (newTime <= 0) {
-            // Auto-advance to next question when timer expires
-            console.log('⏰ Question timer expired, auto-advancing...');
-            setIsQuestionTimerActive(false);
-            if (questionTimerRef.current) {
-              clearInterval(questionTimerRef.current);
-              questionTimerRef.current = null;
-            }
-            // Auto-submit current answer and move to next question
-            // Only auto-submit if still recording and not already submitted
-            if (!isSubmitting && !answerSubmitted && isRecording) {
-              console.log('🔄 Auto-submitting answer due to timer expiry');
-              handleSubmitAnswer();
-            } else if (!isRecording) {
-              console.log('⏰ Timer expired but recording already stopped, skipping auto-submit');
-            }
-            return 0;
-          }
-          return newTime;
-        });
-      }, 1000);
-    } else if (questionTimerRef.current) {
-      clearInterval(questionTimerRef.current);
-      questionTimerRef.current = null;
+    if (questionTimeRemaining > 60) {
+      lastQuestionWarningRef.current = null;
     }
-    
-    return () => {
-      if (questionTimerRef.current) {
-        clearInterval(questionTimerRef.current);
-        questionTimerRef.current = null;
-      }
-    };
-  }, [isQuestionTimerActive, questionTimeRemaining, isSubmitting, answerSubmitted, isRecording, handleSubmitAnswer]);
 
-  // Camera enforcement
+    if (questionTimeRemaining <= 0) {
+      lastQuestionWarningRef.current = null;
+      return;
+    }
+
+    if (questionTimeRemaining <= 30 && lastQuestionWarningRef.current !== 30) {
+      toast('⚠️ Time running out! Answer will auto-submit soon.', {
+        icon: '⚠️',
+        style: {
+          background: '#fbbf24',
+          color: '#92400e'
+        }
+      });
+      lastQuestionWarningRef.current = 30;
+    } else if (questionTimeRemaining <= 60 && lastQuestionWarningRef.current !== 60) {
+      toast('⚠️ 1 minute remaining for this question.', {
+        icon: '⚠️',
+        style: {
+          background: '#fbbf24',
+          color: '#92400e'
+        }
+      });
+      lastQuestionWarningRef.current = 60;
+    }
+  }, [isQuestionTimerActive, questionTimeRemaining]);
   useEffect(() => {
     if (!isVideoOn) {
       toast.error('Camera must remain on during the interview!');
-      // Give 5 seconds to turn camera back on
       const timer = setTimeout(() => {
         if (!isVideoOn) {
           terminateInterview('Camera turned off');
         }
       }, 5000);
-      
+
       return () => clearTimeout(timer);
     }
   }, [isVideoOn, terminateInterview, videoRef]);
@@ -1157,6 +1482,160 @@ const ConversationalInterview = () => {
     };
   }, [isRecording, isVideoRecording, interviewData?.interview_id]);
 
+  // Tab change detection and termination
+  useEffect(() => {
+    if (!isInterviewTimerActive) {
+      tabChangeCountRef.current = 0;
+      if (tabWarningTimeoutRef.current) {
+        clearTimeout(tabWarningTimeoutRef.current);
+        tabWarningTimeoutRef.current = null;
+      }
+      lastTabViolationRef.current = 0;
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        handleTabViolation('visibilitychange');
+      } else if (tabChangeCountRef.current > 0 && tabChangeCountRef.current <= MAX_TAB_CHANGES) {
+        console.log('✅ Candidate returned to interview tab');
+
+        if (tabWarningTimeoutRef.current) {
+          clearTimeout(tabWarningTimeoutRef.current);
+        }
+
+        tabWarningTimeoutRef.current = setTimeout(() => {
+          if (!document.hidden) {
+            console.log('✅ Resetting tab change count - candidate stayed on tab');
+            tabChangeCountRef.current = 0;
+          }
+        }, 30000);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (tabWarningTimeoutRef.current) {
+        clearTimeout(tabWarningTimeoutRef.current);
+        tabWarningTimeoutRef.current = null;
+      }
+    };
+  }, [isInterviewTimerActive, handleTabViolation]);
+
+  useEffect(() => {
+    isFullscreenRef.current = isFullscreen;
+  }, [isFullscreen]);
+
+  // Additional: Detect new window/tab opening attempts via focus loss
+  useEffect(() => {
+    if (!isInterviewTimerActive) {
+      return;
+    }
+
+    const handleWindowBlur = () => {
+      if (!isInterviewTimerActive) {
+        return;
+      }
+
+      console.log('⚠️ Window lost focus - possible tab/window switch');
+      toast('⚠️ Stay focused on the interview window!', {
+        icon: '⚠️',
+        duration: 3000,
+        style: {
+          background: '#fbbf24',
+          color: '#92400e',
+        },
+      });
+
+      handleTabViolation('window blur');
+    };
+
+    window.addEventListener('blur', handleWindowBlur);
+
+    return () => {
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, [isInterviewTimerActive, handleTabViolation]);
+
+  // Fullscreen change monitoring
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isCurrentlyFullscreen = !!(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).msFullscreenElement
+      );
+
+      setIsFullscreen(isCurrentlyFullscreen);
+
+      if (!isInterviewTimerActive) {
+        return;
+      }
+
+      if (!isCurrentlyFullscreen) {
+        console.log('🚫 Fullscreen exited - terminating interview');
+        toast.error('Interview terminated: Fullscreen mode exited');
+        terminateInterview('Candidate exited fullscreen mode during interview');
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('msfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('msfullscreenchange', handleFullscreenChange);
+    };
+  }, [isInterviewTimerActive, terminateInterview]);
+
+  // ESC key detection warning
+  useEffect(() => {
+    if (!isInterviewTimerActive) {
+      if (escTerminateTimeoutRef.current) {
+        clearTimeout(escTerminateTimeoutRef.current);
+        escTerminateTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.key === 'Escape' || event.keyCode === 27) && isFullscreenRef.current) {
+        toast('🚨 STOP! Pressing ESC will exit fullscreen and terminate your interview!', {
+          icon: '🚨',
+          duration: 2000,
+          style: {
+            background: '#ef4444',
+            color: '#fff',
+            fontSize: '16px',
+            fontWeight: 'bold',
+          },
+        });
+
+        if (escTerminateTimeoutRef.current) {
+          clearTimeout(escTerminateTimeoutRef.current);
+        }
+
+        escTerminateTimeoutRef.current = setTimeout(() => {
+          terminateInterview('ESC key pressed during interview');
+        }, 300);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      if (escTerminateTimeoutRef.current) {
+        clearTimeout(escTerminateTimeoutRef.current);
+        escTerminateTimeoutRef.current = null;
+      }
+    };
+  }, [isInterviewTimerActive, terminateInterview]);
+
   const startRecordingRef = useRef<(() => Promise<void>) | null>(null);
   
     const startQuestionRecording = async () => {
@@ -1173,7 +1652,7 @@ const ConversationalInterview = () => {
       // Start timer for current question
       if (currentQuestionMaxTime > 0) {
         console.log('⏰ Starting timer for current question:', currentQuestionMaxTime, 'seconds');
-        setQuestionTimeRemaining(currentQuestionMaxTime);
+        setQuestionTimerSeconds(currentQuestionMaxTime);
         setIsQuestionTimerActive(true);
       } else {
         // Initialize timer if not set
@@ -1186,96 +1665,39 @@ const ConversationalInterview = () => {
       
       console.log('✅ Using approved screen stream for recording');
       
-      // Create audio recorder for candidate's microphone FIRST
+      // Re-enable microphone recording ONLY to capture audio blob for upload (not for transcription)
       let audioRecorder = null;
       let micStream = null;
-      
       try {
-        console.log('🎤 Getting candidate microphone audio stream for recording...');
-        micStream = await navigator.mediaDevices.getUserMedia({ 
+        micStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
             sampleRate: 44100,
-            channelCount: 1,  // Mono for better compatibility
-            // volume: 1.0       // Volume is not a valid MediaTrackConstraints property
+            channelCount: 1
           }
         });
-        
-        // Test if audio is actually working
-        const audioContext = new AudioContext();
-        const source = audioContext.createMediaStreamSource(micStream);
-        const analyser = audioContext.createAnalyser();
-        source.connect(analyser);
-        
-        console.log('🎤 Microphone stream obtained, testing audio levels...');
-        
         audioRecorder = new RecordRTC(micStream, {
           type: 'audio',
           mimeType: 'audio/wav',
-          numberOfAudioChannels: 1,      // Mono for better compatibility
-          desiredSampRate: 44100,        // Higher sample rate
+          numberOfAudioChannels: 1,
+          desiredSampRate: 44100,
           recorderType: RecordRTC.StereoAudioRecorder,
-          quality: 10,
-          timeSlice: 5000,               // 5-second chunks for better real-time transcription
-          disableLogs: false,
-          audioBitsPerSecond: INTERVIEW_CONSTANTS.MEDIA.AUDIO_BITRATE,
-          // Recording length will be handled dynamically based on parameter max_time
-          maxLength: 600, // 10 minutes maximum (will be adjusted based on parameter)
-          // Additional settings for better audio quality in 3-minute recordings
-          bufferSize: 8192, // Larger buffer for longer recordings
-          sampleRate: 44100, // Explicit sample rate
-          ondataavailable: function(blob) {
-            console.log('🎵 Candidate audio chunk available:', blob.type, blob.size);
-            // Send audio chunks for real-time transcription (lower threshold for better responsiveness)
-            if (socketRef.current && socketRef.current.connected && blob.size > 500) {
-              console.log('📡 Sending audio chunk for transcription, size:', blob.size);
-              const reader = new FileReader();
-              reader.onload = () => {
-                socketRef.current.emit('audio_chunk', {
-                  audio_data: reader.result,
-                  interview_id: interviewData.interviewId
-                });
-                console.log('📡 Audio chunk sent successfully');
-              };
-              reader.readAsDataURL(blob);
-            } else {
-              if (!socketRef.current?.connected) {
-                console.log('⚠️ Socket not connected, skipping audio chunk');
-              } else if (blob.size <= 500) {
-                console.log('⚠️ Audio chunk too small, skipping:', blob.size);
-              }
-            }
-          }
+          quality: 10
         });
-        
-        console.log('✅ Candidate microphone audio recorder created successfully');
-        
-        // Store microphone stream reference for cleanup
         audioStreamRef.current = micStream;
-        
-      } catch (micError) {
-        console.warn('⚠️ Failed to get candidate microphone audio, continuing without audio recording:', micError);
-        toast('⚠️ Microphone access failed. Video will be recorded but audio may be missing.', {
-          icon: '⚠️',
-          style: {
-            background: '#fbbf24',
-            color: '#92400e',
-          },
-        });
+      } catch (micErr) {
+        console.warn('⚠️ Failed to acquire microphone stream for audio blob:', micErr);
         audioRecorder = null;
       }
-      
-      // NOW create combined video recorder with screen + microphone audio
       const combinedStream = new MediaStream();
       
       // Add video tracks from screen stream
       screenStream.getVideoTracks().forEach(track => {
         combinedStream.addTrack(track);
       });
-      
-      // Add audio tracks from microphone stream (if available)
+
       if (micStream) {
         micStream.getAudioTracks().forEach(track => {
           combinedStream.addTrack(track);
@@ -1304,33 +1726,11 @@ const ConversationalInterview = () => {
       questionVideoRecorder.startRecording();
       console.log('🖥️ Video recording started');
       
-      // Start audio recorder if available
+      // Start browser Web Speech recognition for live transcript
+      startWebSpeech();
+      // Start audio recorder if available (for upload only, not transcription)
       if (audioRecorder) {
         audioRecorder.startRecording();
-        console.log('🎤 Audio recording started');
-        
-        // Test audio levels after starting
-        setTimeout(() => {
-          if (audioStreamRef.current) {
-            const tracks = audioStreamRef.current.getAudioTracks();
-            if (tracks.length > 0) {
-              const track = tracks[0];
-              console.log('🎤 Audio track settings:', track.getSettings());
-              console.log('🎤 Audio track enabled:', track.enabled);
-              console.log('🎤 Audio track muted:', track.muted);
-            }
-          }
-        }, INTERVIEW_CONSTANTS.TIMEOUTS.UI_UPDATE_DELAY);
-        
-      } else {
-        console.log('⚠️ No audio recorder available, continuing with video only');
-        toast('⚠️ Audio recording unavailable. Only video will be recorded.', {
-          icon: '⚠️',
-          style: {
-            background: '#fbbf24',
-            color: '#92400e',
-          },
-        });
       }
       
       // Store references
@@ -1372,20 +1772,9 @@ const ConversationalInterview = () => {
       // Show recording status
       toast.success('🖥️ Screen + Camera recording with your microphone audio started!');
       
-      // Add visual feedback for audio recording
-      if (audioRecorder) {
-        toast.success('🎤 Your voice will be recorded with the screen and camera video');
-      }
+      // Web Speech is active for voice capture; no separate audio recorder toast
       
-      // Don't start a new transcription session - let the existing one continue
-      // The transcription service should already be running from the socket connection
-      if (socketRef.current && socketRef.current.connected) {
-        console.log('📡 Transcription service already running, continuing with existing session');
-        // Just ensure we're connected to the transcription service
-        socketRef.current.emit('get_current_transcription');
-      } else {
-        console.log('⚠️ Socket not connected, transcription may not work properly');
-      }
+      // Do not use socket transcription; Web Speech handles transcription
       
     } catch (error) {
       console.error('❌ Automatic screen recording start error:', error);
@@ -1456,7 +1845,7 @@ const ConversationalInterview = () => {
         if (firstQuestion && firstQuestion.max_time) {
           const questionTimeInSeconds = firstQuestion.max_time * 60;
           setCurrentQuestionMaxTime(questionTimeInSeconds);
-          setQuestionTimeRemaining(questionTimeInSeconds);
+          setQuestionTimerSeconds(questionTimeInSeconds);
           setIsQuestionTimerActive(false); // Don't start timer yet!
           
           console.log('⏰ Timer initialized for first question:', questionTimeInSeconds, 'seconds for', firstQuestion.max_time, 'min answer time');
@@ -1517,7 +1906,7 @@ const ConversationalInterview = () => {
         // Fallback to default 3 minutes (answer time only)
         const questionTimeInSeconds = 3 * 60;
         setCurrentQuestionMaxTime(questionTimeInSeconds);
-        setQuestionTimeRemaining(questionTimeInSeconds);
+        setQuestionTimerSeconds(questionTimeInSeconds);
         setIsQuestionTimerActive(true);
         return;
       }
@@ -1539,7 +1928,7 @@ const ConversationalInterview = () => {
           const questionTimeInSeconds = questionMaxTime * 60;
           
           setCurrentQuestionMaxTime(questionTimeInSeconds);
-          setQuestionTimeRemaining(questionTimeInSeconds);
+          setQuestionTimerSeconds(questionTimeInSeconds);
           setIsQuestionTimerActive(true);
           
           console.log('⏰ Timer initialized for existing question:', questionTimeInSeconds, 'seconds for', questionMaxTime, 'min answer time');
@@ -1560,7 +1949,7 @@ const ConversationalInterview = () => {
           const questionTimeInSeconds = questionMaxTime * 60;
           
           setCurrentQuestionMaxTime(questionTimeInSeconds);
-          setQuestionTimeRemaining(questionTimeInSeconds);
+          setQuestionTimerSeconds(questionTimeInSeconds);
           setIsQuestionTimerActive(true);
           
           console.log('⏰ Timer initialized for existing question (fallback):', questionTimeInSeconds, 'seconds for', questionMaxTime, 'min answer time');
@@ -1570,7 +1959,7 @@ const ConversationalInterview = () => {
           // No parameters found, use default (answer time only)
           const questionTimeInSeconds = 3 * 60;
           setCurrentQuestionMaxTime(questionTimeInSeconds);
-          setQuestionTimeRemaining(questionTimeInSeconds);
+          setQuestionTimerSeconds(questionTimeInSeconds);
           setIsQuestionTimerActive(true);
           console.log('⏰ No parameters found, using default 3 minutes');
         }
@@ -1578,7 +1967,7 @@ const ConversationalInterview = () => {
         // No parameter data found, use default (answer time only)
         const questionTimeInSeconds = 3 * 60;
         setCurrentQuestionMaxTime(questionTimeInSeconds);
-        setQuestionTimeRemaining(questionTimeInSeconds);
+        setQuestionTimerSeconds(questionTimeInSeconds);
         setIsQuestionTimerActive(true);
         console.log('⏰ No parameter data found, using default 3.5 minutes');
       }
@@ -1587,7 +1976,7 @@ const ConversationalInterview = () => {
       // Fallback to default (answer time only)
       const questionTimeInSeconds = 3 * 60;
       setCurrentQuestionMaxTime(questionTimeInSeconds);
-      setQuestionTimeRemaining(questionTimeInSeconds);
+      setQuestionTimerSeconds(questionTimeInSeconds);
       setIsQuestionTimerActive(true);
     }
   }, [interviewData]);
@@ -1642,12 +2031,121 @@ const ConversationalInterview = () => {
       // CRITICAL FIX: Ensure timer starts with fresh values
       if (questionTimeRemaining !== currentQuestionMaxTime) {
         console.log('⏰ Resetting timer to max time before starting');
-        setQuestionTimeRemaining(currentQuestionMaxTime);
+        setQuestionTimerSeconds(currentQuestionMaxTime);
       }
       
       setIsQuestionTimerActive(true);
     }
   }, [isRecording, currentQuestionMaxTime, isQuestionTimerActive, questionTimeRemaining]);
+
+  // Refs for cleanup
+  const recordingDelayTimeoutRef = useRef<number | null>(null);
+  const recordingCountdownIntervalRef = useRef<number | null>(null);
+
+  // Lint-safe effect: starts countdown only after AI fully finished speaking
+  useEffect(() => {
+    // Only run when questionFinishedSpeaking flips to true AND aiSpeaking is false
+    if (questionFinishedSpeaking && !aiSpeaking && !isRecording && !isSubmitting) {
+      // Small stabilization delay to avoid React batching/race issues
+      recordingDelayTimeoutRef.current = window.setTimeout(() => {
+        console.log('✅ AI finished speaking (stable) — starting 3s countdown');
+
+        // Start the per-question timer once (if you want it to start immediately)
+        if (currentQuestionMaxTime > 0) {
+          setQuestionTimerSeconds(currentQuestionMaxTime);
+          setIsQuestionTimerActive(true);
+          console.log('⏰ Question timer set to', currentQuestionMaxTime);
+        }
+
+        // Initialize visual countdown
+        setRecordingCountdown(3);
+
+        // Start interval for countdown
+        recordingCountdownIntervalRef.current = window.setInterval(() => {
+          setRecordingCountdown(prev => {
+            if (prev <= 1) {
+              // Clear interval safely
+              if (recordingCountdownIntervalRef.current) {
+                window.clearInterval(recordingCountdownIntervalRef.current);
+                recordingCountdownIntervalRef.current = null;
+              }
+
+              console.log('🎥 Countdown finished — auto-start recording');
+              // start recording via ref (safe: ref is stable)
+              try {
+                startRecordingRef.current?.();
+              } catch (err) {
+                console.error('❌ startRecordingRef.current threw:', err);
+                toast.error('Failed to start recording automatically.');
+              }
+
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      }, 200); // 200ms stabilization delay
+    }
+
+    // Cleanup when dependencies change/unmount
+    return () => {
+      if (recordingDelayTimeoutRef.current) {
+        window.clearTimeout(recordingDelayTimeoutRef.current);
+        recordingDelayTimeoutRef.current = null;
+      }
+      if (recordingCountdownIntervalRef.current) {
+        window.clearInterval(recordingCountdownIntervalRef.current);
+        recordingCountdownIntervalRef.current = null;
+      }
+    };
+  }, [
+    questionFinishedSpeaking,
+    aiSpeaking,
+    isRecording,
+    isSubmitting,
+    currentQuestionMaxTime,
+    startRecordingRef
+  ]);
+
+  const initializeAudio = useCallback(async () => {
+    if (audioContextRef.current) {
+      console.log('🎧 Audio context already initialized');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioWorkletStreamRef.current = stream;
+
+      const AudioContextClass =
+        window.AudioContext || (window as any).webkitAudioContext;
+
+      if (!AudioContextClass) {
+        throw new Error('AudioContext is not supported in this browser.');
+      }
+
+      const audioContext = new AudioContextClass();
+      audioContextRef.current = audioContext;
+
+      await audioContext.audioWorklet.addModule('/worklets/MyProcessor.js');
+      const source = audioContext.createMediaStreamSource(stream);
+      const workletNode = new AudioWorkletNode(audioContext, 'my-processor');
+      audioWorkletNodeRef.current = workletNode;
+
+      source.connect(workletNode);
+
+      workletNode.port.onmessage = (event) => {
+        const samples = event.data;
+        // TODO: feed samples into transcription/recording logic
+        void samples;
+      };
+
+      console.log('✅ AudioWorklet initialized');
+    } catch (error) {
+      console.error('❌ Audio init failed:', error);
+      /*toast.error('Failed to initialize audio. Please check microphone permissions.');*/
+    }
+  }, []);
 
   const initializeCamera = useCallback(async () => {
     try {
@@ -1676,124 +2174,179 @@ const ConversationalInterview = () => {
     }
   }, [navigate]);
 
-  // Request screen sharing permissions once at the start
-  const requestScreenPermissions = useCallback(async () => {
+  const requestFullscreen = useCallback(async () => {
     try {
-      console.log('🖥️ Requesting screen sharing permissions...');
-      
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { 
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30 }
-        }, 
-        audio: true  // Enable system audio capture
-      });
-      
-      console.log('✅ Screen stream obtained successfully');
-      setScreenStream(stream);
-      setScreenPermissionGranted(true);
-      setHasRequestedScreenPermissions(true);
-      
-      toast.success('✅ Screen access granted! Starting interview...');
-      
-      // Start welcome message after screen access is granted
-      setTimeout(() => {
-        if (!hasSpokenWelcomeRef.current) {
-          console.log('🎤 Starting welcome message after screen access granted...');
-          const welcomeMessage = `Hello ${interviewData.candidateName}! Welcome to your ${interviewData.position} interview. I'm excited to meet you today and learn more about your experience and skills. This is a great opportunity to showcase your talents, so take a deep breath and remember - you've got this! I'll be your AI interviewer today, and I'm here to make this experience as comfortable as possible for you. All the best for your interview! Let's begin with our first question.`;
-          
-          // Speak welcome message
-          if (aiAudioEnabled && 'speechSynthesis' in window) {
-            console.log('🎤 Setting aiSpeaking to true and aiMessage to welcome message');
-            
-            // Create speech pattern for the welcome message
-            const pattern = createSpeechPattern(welcomeMessage);
-            setSpeechPattern(pattern);
-            setPatternIndex(0);
-            
-            setAiSpeaking(true);
-            setAiMessage(welcomeMessage); // Set welcome message for animated AI robot
-            const utterance = new SpeechSynthesisUtterance(welcomeMessage);
-            utterance.rate = 0.9;
-            utterance.pitch = 1.0;
-            utterance.volume = 0.8;
-            
-            utterance.onend = () => {
-              console.log('🎤 Welcome message finished, starting first question...');
-              setAiSpeaking(false);
-              setAiMessage(''); // Clear welcome message
-              hasSpokenWelcomeRef.current = true;
-              
-               // Start first question after welcome
-               setTimeout(() => {
-                 if (currentQuestion && (currentQuestion.question || currentQuestion.question_text)) {
-                   const questionText = currentQuestion.question || currentQuestion.question_text;
-                   const questionMessage = `Question 1: ${questionText}`;
-                   
-                   console.log('📝 FIRST: Displaying question and keeping it visible:', questionMessage);
-                   setAiMessage(questionMessage);
-                   setIsWelcomeMessage(false); // Ensure welcome message is off
-                   
-                   // Mark first question as displayed to prevent it from disappearing
-                   hasSpokenFirstQuestionRef.current = true;
-                   
-                   // THEN: Speak the question after a short delay
-                   setTimeout(() => {
-                     console.log('🎤 THEN: Speaking question after display');
-                     speakWithAI(questionMessage);
-                   }, 500); // 500ms delay to show question first
-                 }
-               }, 1000);
-            };
-            
-            utterance.onerror = (error) => {
-              console.error('❌ Error speaking welcome message:', error);
-              setAiSpeaking(false);
-              hasSpokenWelcomeRef.current = true;
-            };
-            
-            speechSynthesis.speak(utterance);
-          }
-        }
-      }, 1000);
-      
-      // Monitor if user stops sharing
-      stream.getVideoTracks()[0].onended = () => {
-        console.log('⚠️ User stopped screen sharing');
-        setScreenPermissionGranted(false);
-        setScreenStream(null);
-        toast('⚠️ Screen sharing stopped. Please refresh to restart.', {
+      const elem = document.documentElement;
+
+      if (elem.requestFullscreen) {
+        await elem.requestFullscreen();
+      } else if ((elem as any).webkitRequestFullscreen) {
+        await (elem as any).webkitRequestFullscreen();
+      } else if ((elem as any).msRequestFullscreen) {
+        await (elem as any).msRequestFullscreen();
+      }
+
+      setIsFullscreen(true);
+      console.log('✅ Fullscreen mode activated');
+      toast.success('Interview started in fullscreen mode');
+    } catch (error) {
+      console.error('❌ Fullscreen request failed:', error);
+      const attempts = fullscreenAttempts + 1;
+      setFullscreenAttempts(attempts);
+
+      if (attempts < 3) {
+        toast('⚠️ Please allow fullscreen for the interview', {
           icon: '⚠️',
+          duration: 4000,
           style: {
             background: '#fbbf24',
             color: '#92400e',
           },
         });
+      } else {
+        toast.error('Fullscreen is required. Interview will be terminated.');
+        setTimeout(() => {
+          terminateInterview('Fullscreen permission denied multiple times');
+        }, 2000);
+      }
+    }
+  }, [fullscreenAttempts, terminateInterview]);
+
+  // Request screen sharing permissions once at the start
+  const requestScreenPermissions = useCallback(async () => {
+    try {
+      console.log('🖥️ Requesting screen sharing permissions...');
+
+      const displayMediaOptions: any = {
+        video: {
+          displaySurface: 'browser',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 }
+        },
+        audio: true,
+        preferCurrentTab: false
       };
-      
-    } catch (error) {
+
+      const stream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
+
+      console.log('✅ Screen stream obtained successfully');
+      setScreenStream(stream);
+      setScreenPermissionGranted(true);
+      setHasRequestedScreenPermissions(true);
+
+      toast.success('✅ Screen access granted! Starting interview...');
+
+      // Start welcome message after screen access is granted
+      setTimeout(() => {
+        if (!hasSpokenWelcomeRef.current) {
+          console.log('🎤 Starting welcome message and requesting fullscreen...');
+
+          requestFullscreen();
+
+          const welcomeMessage = `Hello ${interviewData.candidateName}! Welcome to your ${interviewData.position} interview. I'm excited to meet you today and learn more about your experience and skills. This is a great opportunity to showcase your talents, so take a deep breath and remember - you've got this! I'll be your AI interviewer today, and I'm here to make this experience as comfortable as possible for you. All the best for your interview! Let's begin with our first question.`;
+
+          // Speak welcome message
+          if (aiAudioEnabled && 'speechSynthesis' in window) {
+            console.log('🎤 Setting aiSpeaking to true and aiMessage to welcome message');
+
+            // Create speech pattern for the welcome message
+            const pattern = createSpeechPattern(welcomeMessage);
+            setSpeechPattern(pattern);
+            setPatternIndex(0);
+
+            setAiSpeaking(true);
+            setAiMessage(welcomeMessage);
+            const utterance = new SpeechSynthesisUtterance(welcomeMessage);
+            utterance.rate = 0.9;
+            utterance.pitch = 1.0;
+            utterance.volume = 0.8;
+
+            utterance.onend = () => {
+              console.log('🎤 Welcome message finished, starting first question...');
+              setAiSpeaking(false);
+              setAiMessage('');
+              hasSpokenWelcomeRef.current = true;
+              setIsInterviewTimerActive(true);
+
+              // Start first question after welcome
+              setTimeout(() => {
+                if (currentQuestion && (currentQuestion.question || currentQuestion.question_text)) {
+                  const questionText = currentQuestion.question || currentQuestion.question_text;
+                  const questionMessage = `Question 1: ${questionText}`;
+
+                  console.log('📝 FIRST: Displaying question and keeping it visible:', questionMessage);
+                  setAiMessage(questionMessage);
+                  setIsWelcomeMessage(false);
+
+                  hasSpokenFirstQuestionRef.current = true;
+
+                  setTimeout(() => {
+                    console.log('🎤 THEN: Speaking question after display');
+                    speakWithAI(questionMessage);
+                  }, 500);
+                }
+              }, 1000);
+            };
+
+            utterance.onerror = (error) => {
+              console.error('❌ Error speaking welcome message:', error);
+              setAiSpeaking(false);
+              hasSpokenWelcomeRef.current = true;
+              setIsInterviewTimerActive(true);
+            };
+
+            speechSynthesis.speak(utterance);
+          } else {
+            console.log('🎤 Speech synthesis unavailable or disabled, skipping audio welcome');
+            setAiSpeaking(false);
+            setAiMessage('');
+            hasSpokenWelcomeRef.current = true;
+            setIsInterviewTimerActive(true);
+          }
+        }
+      }, 1000);
+
+      const [videoTrack] = stream.getVideoTracks();
+      if (videoTrack) {
+        videoTrack.onended = () => {
+          console.log('⚠️ User stopped screen sharing');
+          setScreenPermissionGranted(false);
+          setScreenStream(null);
+          setIsFullscreen(false);
+          toast('⚠️ Screen sharing stopped. Interview will be terminated.', {
+            icon: '⚠️',
+            style: {
+              background: '#fbbf24',
+              color: '#92400e',
+            },
+          });
+
+          // IMPROVEMENT: Auto-terminate if screen sharing stops
+          setTimeout(() => {
+            terminateInterview('Screen sharing stopped by candidate');
+          }, 3000);
+        };
+      }
+
+    } catch (error: any) {
       console.error('❌ Screen sharing permission denied:', error);
       setScreenPermissionGranted(false);
-      if (error.name === 'NotAllowedError') {
-        toast.error('❌ Screen sharing permission denied. Please allow screen access to continue.');
+      setScreenStream(null);
+      if (error?.name === 'NotAllowedError') {
+        toast.error('❌ Screen sharing permission denied. Interview cannot proceed.');
+        setTimeout(() => {
+          terminateInterview('Screen sharing permission denied');
+        }, 2000);
       } else {
         toast.error('❌ Screen sharing not supported in this browser.');
       }
     }
-  }, []);
+  }, [aiAudioEnabled, currentQuestion, interviewData, requestFullscreen, speakWithAI, terminateInterview]);
 
-
-
-  // Socket connection for transcription
   useEffect(() => {
-    // Only create socket if not already connected
-    if (socketRef.current && socketRef.current.connected) {
-      return;
-    }
-    
     const socket = io(API_CONFIG.BASE_URL, {
-      transports: ["websocket", "polling"], // Fallback to polling
+      transports: ['websocket', 'polling'], // Fallback to polling
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,
@@ -1819,41 +2372,53 @@ const ConversationalInterview = () => {
       }
     });
 
+    // ✅ CRITICAL: Listen for real-time transcription updates
     socket.on('transcription_update', (data) => {
-      console.log('📡 Received transcription update:', data);
-      if (data && (data.segment || data.text)) {
-        // Handle new segment format from server
-        const newSegment = data.segment || data.text;
-        
-        // Skip empty or very short segments
-        if (!newSegment || newSegment.trim().length < 2) {
-          console.log('📝 Skipping empty/short segment:', newSegment);
-          return;
-        }
-        
+      console.log('📡 Received transcription segment:', data.segment);
+      
+      if (data && data.segment && data.segment.trim().length > 0) {
         setTranscript(prevTranscript => {
-          // Clean the new segment
-          const cleanSegment = newSegment.trim();
+          const segment = data.segment.trim();
           
-          // Check if this exact segment is already at the end of the transcript
-          if (prevTranscript.endsWith(cleanSegment)) {
-            console.log('📝 Skipping duplicate segment at end:', cleanSegment);
-            return prevTranscript; // Skip duplicate
+          // ✅ Avoid duplicates - check if segment is already at the end
+          if (prevTranscript.endsWith(segment)) {
+            console.log('📝 Skipping duplicate segment at end:', segment);
+            return prevTranscript;
           }
           
-          // Check if the segment is already anywhere in the transcript
-          if (prevTranscript.includes(cleanSegment)) {
-            console.log('📝 Skipping duplicate segment anywhere:', cleanSegment);
-            return prevTranscript; // Skip duplicate
+          // ✅ Append new segment
+          const newTranscript = prevTranscript 
+            ? `${prevTranscript} ${segment}` 
+            : segment;
+          
+          console.log('✅ Transcript updated:', newTranscript);
+          return newTranscript;
+        });
+      } else if (data && data.text && data.text.trim().length > 0) {
+        // Fallback for 'text' key (backward compatibility)
+        setTranscript(prevTranscript => {
+          const segment = data.text.trim();
+          
+          if (prevTranscript.endsWith(segment)) {
+            return prevTranscript;
           }
           
-          // Append the new segment
-          const newTranscript = prevTranscript ? `${prevTranscript} ${cleanSegment}` : cleanSegment;
-          console.log('📝 Updated transcript:', newTranscript);
+          const newTranscript = prevTranscript 
+            ? `${prevTranscript} ${segment}` 
+            : segment;
+          
+          console.log('✅ Transcript updated (text key):', newTranscript);
           return newTranscript;
         });
       } else {
-        console.log('📝 No valid transcription data received:', data);
+        console.log('📝 Skipping empty/short segment');
+      }
+    });
+
+    socket.on('transcription_error', (data) => {
+      console.error('❌ Transcription error:', data);
+      if (data && data.error) {
+        toast.error(`Transcription error: ${data.error}`);
       }
     });
 
@@ -1882,15 +2447,16 @@ const ConversationalInterview = () => {
     };
   }, []);
 
-  // Start transcription when interview data is available
+  // Auto-scroll transcript to bottom when content updates during recording
   useEffect(() => {
-    if (interviewData?.interviewId && socketRef.current?.connected) {
-      console.log('🎤 Starting transcription for interview:', interviewData.interviewId);
-      socketRef.current.emit('start_transcription', {
-        interview_id: interviewData.interviewId
-      });
+    if (transcriptTextareaRef.current && isRecording) {
+      const textarea = transcriptTextareaRef.current;
+      // Scroll to bottom
+      textarea.scrollTop = textarea.scrollHeight;
     }
-  }, [interviewData?.interviewId]);
+  }, [transcript, isRecording]);
+
+  // Disable socket-started transcription; Web Speech is the single source of truth
 
   // Cleanup effect for screen stream when component unmounts
   useEffect(() => {
@@ -1904,18 +2470,40 @@ const ConversationalInterview = () => {
     };
   }, [screenStream]);
 
-         const stopQuestionRecording = () => {
+  useEffect(() => {
+    return () => {
+      if (audioWorkletNodeRef.current) {
+        try {
+          audioWorkletNodeRef.current.port.postMessage({ type: 'stop' });
+        } catch (error) {
+          console.warn('⚠️ Error signaling audio worklet stop:', error);
+        }
+        audioWorkletNodeRef.current.disconnect();
+        audioWorkletNodeRef.current = null;
+      }
+
+      if (audioWorkletStreamRef.current) {
+        audioWorkletStreamRef.current.getTracks().forEach(track => track.stop());
+        audioWorkletStreamRef.current = null;
+      }
+
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch((error) => {
+          console.warn('⚠️ Error closing audio context:', error);
+        });
+        audioContextRef.current = null;
+      }
+    };
+  }, []);
+
+  const stopQuestionRecording = () => {
     // Stop the question timer immediately when recording stops
     console.log('⏰ Stopping question timer - recording stopped manually');
     setIsQuestionTimerActive(false);
-    if (questionTimerRef.current) {
-      clearInterval(questionTimerRef.current);
-      questionTimerRef.current = null;
-    }
     
     // CRITICAL FIX: Reset timer values to prevent carryover to next question
     console.log('⏰ Resetting timer values for next question');
-    setQuestionTimeRemaining(0); // Reset to 0 so next question starts fresh
+    setQuestionTimerSeconds(0); // Reset to 0 so next question starts fresh
     
     if (!mediaRecorder && !videoRecorder) {
       setIsRecording(false);
@@ -1926,59 +2514,24 @@ const ConversationalInterview = () => {
     let audioBlobRetrieved = false;
     let videoBlobRetrieved = false;
     
-    // Don't stop the transcription service - let it continue running
-    // The transcription service should persist across recording sessions
-    if (socketRef.current && socketRef.current.connected) {
-      console.log('📡 Keeping transcription service running for continuous transcription');
-      // Just ensure we're still connected
-      socketRef.current.emit('get_current_transcription');
-    } else {
-      console.log('⚠️ Socket not connected, transcription may not work properly');
-    }
+    // Stop Web Speech recognition
+    stopWebSpeech();
     
-    // Stop audio recording
+    // Stop audio recording and capture blob for upload
     if (mediaRecorder && mediaRecorder.stopRecording) {
       try {
         mediaRecorder.stopRecording(() => {
           try {
-            console.log('🎵 Stopping audio recording, waiting for blob...');
-            
-            // Add a small delay to ensure the blob is ready
-            setTimeout(() => {
-              try {
-                const audioBlob = mediaRecorder.getBlob();
-                console.log('🎵 Retrieved audio blob:', audioBlob);
-                console.log('🎵 Audio blob size:', audioBlob?.size);
-                console.log('🎵 Audio blob type:', audioBlob?.type);
-                
-                if (audioBlob && audioBlob.size > 0) {
-                  setAudioBlob(audioBlob);
-                  audioBlobRetrieved = true;
-                  console.log('✅ Audio blob set successfully');
-                  toast.success(`✅ Audio recorded! (${(audioBlob.size / 1024).toFixed(1)} KB)`);
-                } else {
-                  console.log('❌ Audio blob is empty or null');
-                  toast('⚠️ Audio recording may be empty, please check microphone', {
-                    icon: '⚠️',
-                    style: {
-                      background: '#fbbf24',
-                      color: '#92400e',
-                    },
-                  });
-                }
-              } catch (delayedBlobError) {
-                console.error('❌ Error getting audio blob after delay:', delayedBlobError);
-                toast.error('❌ Error processing audio recording');
-              }
-            }, 500); // 500ms delay
-            
-          } catch (blobError) {
-            console.error('❌ Error getting audio blob:', blobError);
-            toast.error('❌ Error processing audio recording');
+            const blob = mediaRecorder.getBlob();
+            if (blob && blob.size > 0) {
+              setAudioBlob(blob);
+            }
+          } catch (e) {
+            console.error('❌ Error retrieving audio blob:', e);
           }
         });
-      } catch (stopError) {
-        console.error('❌ Error stopping audio recording:', stopError);
+      } catch (e) {
+        console.error('❌ Error stopping audio recorder:', e);
       }
     }
     
@@ -2010,7 +2563,7 @@ const ConversationalInterview = () => {
       }
     }
     
-    // Stop audio stream only (don't stop screen stream)
+    // Ensure no lingering mic tracks
     if (audioStreamRef.current) {
       audioStreamRef.current.getTracks().forEach(track => track.stop());
       audioStreamRef.current = null;
@@ -2019,19 +2572,7 @@ const ConversationalInterview = () => {
     // Don't stop videoStreamRef.current here as it's the camera stream
     // The screen stream is managed separately and should persist
     
-    // Fallback for audio
-    setTimeout(() => {
-      if (!audioBlobRetrieved && mediaRecorder) {
-        try {
-          const fallbackBlob = mediaRecorder.getBlob();
-          if (fallbackBlob && fallbackBlob.size > 0) {
-            setAudioBlob(fallbackBlob);
-          }
-        } catch (fallbackError) {
-          console.error('❌ Fallback audio blob retrieval failed:', fallbackError);
-        }
-      }
-    }, 1000);
+    // No audio fallback needed
     
     // Fallback for video
     setTimeout(() => {
@@ -2052,6 +2593,10 @@ const ConversationalInterview = () => {
     
     // Answer timer cleanup removed - will be handled dynamically
   };
+
+  useEffect(() => {
+    stopQuestionRecordingRef.current = stopQuestionRecording;
+  }, [stopQuestionRecording]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -2107,13 +2652,13 @@ const ConversationalInterview = () => {
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-4">
                 <div className="relative">
-                  <div className="w-10 h-10 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-xl flex items-center justify-center animate-pulse shadow-lg">
-                    <Bot className="w-6 h-6 text-white" />
+                  <div className="w-8 h-8 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-lg flex items-center justify-center animate-pulse shadow-lg">
+                    <Bot className="w-4 h-4 text-white" />
                   </div>
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-white">Conversational AI Interview</h1>
-                  <p className="text-blue-200 text-sm">Live AI Assistant Interview Session</p>
+                  <h1 className="font-semibold text-white">PROVALUATE AI INTERVIEW</h1>
+                  <p className="text-xs text-gray-400">Live AI Assistant Interview Session</p>
                 </div>
               </div>
               
@@ -2203,6 +2748,16 @@ const ConversationalInterview = () => {
             </div>
             
             <div className="flex items-center gap-4">
+              {isInterviewTimerActive && (
+                <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs ${
+                  isFullscreen ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
+                }`}>
+                  <div className={`w-2 h-2 rounded-full ${
+                    isFullscreen ? 'bg-green-400' : 'bg-red-400 animate-pulse'
+                  }`}></div>
+                  {isFullscreen ? 'Fullscreen' : 'Exit = Terminate'}
+                </div>
+              )}
               <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs ${
                 connectionStatus === 'connected' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
               }`}>
@@ -2251,30 +2806,18 @@ const ConversationalInterview = () => {
       {/* Main Interview Interface */}
       <div className="w-full px-1 py-1 relative z-10">
                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-1 mb-2">
-          {/* AI Assistant Panel */}
+          {/* AI Assistant Panel - Question Card */}
           <div className="lg:col-span-2 glass rounded-2xl p-1 border border-white/10">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                  <Bot className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-white">AI Interviewer</h3>
-                  <p className="text-sm text-gray-300">Your AI Assistant</p>
-                </div>
-              </div>
-              
+                         <div className="bg-gray-800/50 rounded-xl p-1 h-[450px] flex items-center justify-center relative">
+              {/* Volume Button - Top Right Corner */}
               <button
                 onClick={toggleAIAudio}
-                className={`p-2 rounded-lg transition-colors ${
-                  aiAudioEnabled ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
+                className={`absolute top-3 right-3 p-2 rounded-lg transition-colors z-10 backdrop-blur-sm ${
+                  aiAudioEnabled ? 'bg-green-500/30 text-green-300 hover:bg-green-500/40' : 'bg-red-500/30 text-red-300 hover:bg-red-500/40'
                 }`}
               >
                 {aiAudioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
               </button>
-            </div>
-            
-                         <div className="bg-gray-800/50 rounded-xl p-1 h-[520px] flex items-center justify-center">
               {aiSpeaking && !aiMessage?.includes('Question') ? (
                 <div className="text-center w-full">
                   {/* Animated AI Speaking - Clean waveform only */}
@@ -2312,7 +2855,7 @@ const ConversationalInterview = () => {
                    {/* AI Message - clean during question reading */}
                    {!isWelcomeMessage && (
                      <div className="bg-gray-700/50 rounded-lg p-3 mb-3">
-                       <p className="text-white text-xl font-medium leading-relaxed">{aiMessage}</p>
+                       <p className="text-white text-lg font-medium leading-relaxed">{aiMessage}</p>
                      </div>
                    )}
                    
@@ -2338,50 +2881,44 @@ const ConversationalInterview = () => {
             </div>
           </div>
 
-          {/* Candidate Panel */}
+          {/* Candidate Panel - Camera/Screen Sharing Card */}
           <div className="lg:col-span-3 glass rounded-2xl p-1 border border-white/10">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center">
-                  <User className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-white">{interviewData.candidateName}</h3>
-                  <p className="text-sm text-gray-300">Candidate</p>
-                </div>
-              </div>
+                         <div className="bg-gray-800/50 rounded-xl p-1 h-[450px] flex items-center justify-center overflow-hidden relative border border-gray-600/30">
+              {/* Camera Button - Top Right Corner */}
+              <button
+                onClick={toggleVideo}
+                className="absolute top-3 right-3 p-2 rounded-lg transition-colors z-20 backdrop-blur-sm bg-red-500/30 text-red-300 hover:bg-red-500/40"
+              >
+                {isVideoOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
+              </button>
               
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={toggleVideo}
-                  className={`p-2 rounded-lg transition-colors ${
-                    isVideoOn ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
-                  }`}
-                >
-                  {isVideoOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-                </button>
-                
-                {!isVideoOn && (
-                  <div className="flex items-center gap-1 px-2 py-1 bg-red-500/20 text-red-300 rounded-full text-xs">
-                    <AlertTriangle className="w-3 h-3" />
-                    Camera Required
-                  </div>
-                )}
-              </div>
-            </div>
-            
-                         <div className="bg-gray-800/50 rounded-xl p-1 h-[520px] flex items-center justify-center overflow-hidden relative border border-gray-600/30">
+              {/* Camera Required Warning - Top Left Corner */}
+              {!isVideoOn && (
+                <div className="absolute top-3 left-3 flex items-center gap-1 px-2 py-1 bg-red-500/30 text-red-300 rounded-full text-xs z-20 backdrop-blur-sm">
+                  <AlertTriangle className="w-3 h-3" />
+                  Camera Required
+                </div>
+              )}
               {isVideoOn ? (
                 <>
                   <video
                     ref={videoRef}
                     autoPlay
                     muted
+                    
                     playsInline
                     className="w-full h-full object-cover rounded-lg shadow-2xl transform scale-105 hover:scale-110 transition-transform duration-300"
-                    style={{ height: '480px', width: '100%' }}
+                    style={{ height: '430px', width: '100%' }}
                   />
-
+                  
+                  {/* Countdown Overlay */}
+                  {recordingCountdown > 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10 rounded-lg">
+                      <div className="text-white text-9xl font-bold animate-ping">
+                        {recordingCountdown}
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="text-center">
@@ -2393,6 +2930,135 @@ const ConversationalInterview = () => {
             </div>
           </div>
         </div>
+
+        {/* Real-time Editable Transcription Card - Full Width */}
+        <div className={`glass rounded-xl p-2 border transition-all duration-300 mb-2 ${
+          aiSpeaking
+            ? 'border-blue-500/30 bg-blue-900/10'
+            : answerSubmitted 
+              ? 'border-gray-600/30 bg-gray-800/30'
+              : 'border-green-500/30 bg-green-900/10'
+        }`}>
+          {/* Header with expand/collapse controls */}
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full animate-pulse ${
+                aiSpeaking
+                  ? 'bg-blue-400'
+                  : answerSubmitted 
+                    ? 'bg-gray-400'
+                    : 'bg-green-400'
+              }`} />
+              <span className={`text-xs font-medium ${
+                aiSpeaking
+                  ? 'text-blue-300'
+                    : answerSubmitted 
+                      ? 'text-gray-400'
+                      : 'text-green-300'
+              }`}>
+                {aiSpeaking
+                  ? '🎤 AI Speaking - Locked'
+                    : answerSubmitted 
+                      ? '✅ Answer Submitted'
+                      : recordingCountdown > 0
+                        ? '⏱️ Get Ready - Editable'
+                        : isRecording
+                          ? '🎙️ Recording - Editable'
+                          : '✏️ Editable'
+                }
+              </span>
+            </div>
+            <button
+              onClick={() => setIsTranscriptDialogOpen(true)}
+              className="p-1 rounded-lg transition-all duration-200 bg-gray-700/50 text-gray-400 hover:bg-gray-700/70"
+              title="View full transcript"
+            >
+              <Maximize2 className="w-3 h-3" />
+            </button>
+          </div>
+          
+          <textarea
+            ref={transcriptTextareaRef}
+            value={transcript}
+            onChange={(e) => {
+              // Allow editing during countdown, recording, and answer period (not submitted, and AI not speaking)
+              if (!answerSubmitted && !aiSpeaking) {
+                setTranscript(e.target.value);
+              }
+            }}
+            placeholder="Start speaking to see real-time transcription here..."
+            disabled={answerSubmitted || aiSpeaking}
+            className={`w-full rounded-lg p-3 transition-all duration-300 text-sm leading-relaxed resize-none ${
+              aiSpeaking
+                ? 'bg-gray-900/70 text-gray-300 cursor-not-allowed border border-blue-500/20'
+                : answerSubmitted 
+                  ? 'bg-gray-900/50 text-gray-400 cursor-not-allowed border border-gray-600/20'
+                  : 'bg-gray-800/50 text-white cursor-text border border-gray-600/30 focus:border-green-500/50 focus:outline-none focus:ring-2 focus:ring-green-500/20'
+            } min-h-[140px] max-h-[180px]`}
+            style={{
+              fontFamily: 'inherit',
+              opacity: aiSpeaking ? 0.7 : answerSubmitted ? 0.5 : 1
+            }}
+          />
+        </div>
+
+        {/* Transcript Dialog */}
+        <Dialog open={isTranscriptDialogOpen} onOpenChange={setIsTranscriptDialogOpen}>
+          <DialogContent className={`max-w-4xl max-h-[80vh] overflow-hidden ${
+            aiSpeaking
+              ? 'border-blue-500/30 bg-blue-900/10'
+              : answerSubmitted 
+                ? 'border-gray-600/30 bg-gray-800/30'
+                : 'border-green-500/30 bg-green-900/10'
+          }`}>
+            <DialogHeader>
+              <DialogTitle className={`${
+                aiSpeaking
+                  ? 'text-blue-300'
+                  : answerSubmitted 
+                    ? 'text-gray-400'
+                    : 'text-green-300'
+              }`}>Full Transcript - Review & Edit</DialogTitle>
+            </DialogHeader>
+            <div className="p-4">
+              <textarea
+                value={transcript}
+                onChange={(e) => {
+                  // Allow editing during countdown, recording, and answer period (not submitted, and AI not speaking)
+                  if (!answerSubmitted && !aiSpeaking) {
+                    setTranscript(e.target.value);
+                  }
+                }}
+                disabled={answerSubmitted || aiSpeaking}
+                className={`w-full rounded-lg p-4 transition-all duration-300 text-sm leading-relaxed resize-none ${
+                  aiSpeaking
+                    ? 'bg-gray-900/70 text-gray-300 cursor-not-allowed border border-blue-500/20'
+                    : answerSubmitted 
+                      ? 'bg-gray-900/50 text-gray-400 cursor-not-allowed border border-gray-600/20'
+                      : 'bg-gray-800/50 text-white cursor-text border border-gray-600/30 focus:border-green-500/50 focus:outline-none focus:ring-2 focus:ring-green-500/20'
+                } min-h-[400px] max-h-[500px]`}
+                style={{
+                  fontFamily: 'inherit',
+                  opacity: aiSpeaking ? 0.7 : answerSubmitted ? 0.5 : 1
+                }}
+              />
+              <div className={`mt-3 text-xs text-center ${
+                aiSpeaking
+                  ? 'text-blue-300'
+                  : answerSubmitted 
+                    ? 'text-gray-400'
+                    : 'text-green-300'
+              }`}>
+                {aiSpeaking
+                  ? '🎤 AI is speaking. Transcript will be editable during your answer.'
+                  : answerSubmitted 
+                    ? '📋 Answer has been submitted.'
+                    : '✏️ You can edit your transcript in this expanded view.'
+                }
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
 
 
@@ -2408,11 +3074,18 @@ const ConversationalInterview = () => {
                     Screen sharing is required and will be requested automatically
                   </div>
                 </div>
+              ) : recordingCountdown > 0 ? (
+                <div className="text-blue-300 text-sm transition-all duration-500 ease-in-out">
+                  <p>🎥 Recording will start in {recordingCountdown}...</p>
+                  <div className="mt-1 text-xs text-gray-400">
+                    {/*Get ready to answer the question*/}
+                  </div>
+                </div>
               ) : !questionFinishedSpeaking && !isRecording ? (
-               <div className="text-gray-300 text-sm transition-all duration-500 ease-in-out">
-                 <p>🎤 Wait for the AI to finish reading the question. Then click "Start Recording" when ready.</p>
-               </div>
-             ) : questionFinishedSpeaking && !isRecording ? (
+                <div className="text-gray-300 text-sm transition-all duration-500 ease-in-out">
+                  {/*<p>🎤 Listen carefully to the question...</p>*/}
+                </div>
+              ) : questionFinishedSpeaking && !isRecording ? (
                <div className="text-green-300 text-sm transition-all duration-500 ease-in-out">
                  <div>
                    <p>✅ Question finished! Click "Start Recording" to begin recording your answer.</p>
@@ -2506,18 +3179,6 @@ const ConversationalInterview = () => {
 
                  {/* Controls */}
          <div className="flex items-center justify-center gap-4">
-
-             {/* Start Recording Button - show when screen access granted and question finished */}
-             {screenPermissionGranted && questionFinishedSpeaking && !isRecording && (
-               <button
-                 onClick={startQuestionRecording}
-                 disabled={!isVideoOn || isSubmitting}
-                 className="flex items-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-medium transition-all duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-               >
-                 <Mic className="w-5 h-5" />
-                 Start Recording
-               </button>
-             )}
            
                                            {/* Stop Recording Button - only show when recording */}
              {isRecording && (
@@ -2575,7 +3236,7 @@ const ConversationalInterview = () => {
             <button
               onClick={() => {
                 if (window.confirm('Are you sure you want to end the interview? This action cannot be undone.')) {
-                  finishInterview();
+                  terminateInterview('Manual termination by candidate willingly');
                 }
               }}
               className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-all"

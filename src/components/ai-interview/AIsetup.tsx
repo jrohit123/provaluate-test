@@ -452,8 +452,8 @@ const HRInterviewCreator = () => {
   const loadParametersForPosition = async (position: string) => {
     console.log('🔍 loadParametersForPosition called with:', { position, interviewMode: formData.interviewMode, isLoadingParameters });
     
-    if (!position || formData.interviewMode !== 'ai') {
-      console.log('🔄 No position provided or not AI mode, clearing parameters');
+    if (!position) {
+      console.log('🔄 No position provided, clearing parameters');
       setCustomParameters({});
       setParametersSaved(false);
       return;
@@ -494,15 +494,44 @@ const HRInterviewCreator = () => {
         
         console.log('🔄 Found existing record:', { interviewType, hasCustomParams: !!customParams, hasStructuredQuestions: !!structuredQuestions, hasPersonalizedQuestions: !!personalizedQuestions });
         
-        // Set the interview type and personalized questions first
+        // Determine interview mode based on what exists in database
+        // Priority: structured_questions > custom_parameters
+        const hasValidStructuredQuestions = structuredQuestions && 
+          (Array.isArray(structuredQuestions) ? structuredQuestions.length > 0 : 
+           typeof structuredQuestions === 'string' ? structuredQuestions !== '{}' && structuredQuestions !== '[]' :
+           Object.keys(structuredQuestions).length > 0);
+        const hasValidCustomParams = customParams && 
+          (typeof customParams === 'string' ? customParams !== '{}' : Object.keys(customParams).length > 0);
+        
+        // Auto-update interview mode based on what exists
+        // Priority: If only one type exists, use that. If both exist, prefer structured.
+        let detectedMode: 'ai' | 'structured' = 'ai'; // Default to AI
+        if (hasValidStructuredQuestions && !hasValidCustomParams) {
+          detectedMode = 'structured';
+        } else if (hasValidCustomParams && !hasValidStructuredQuestions) {
+          detectedMode = 'ai';
+        } else if (hasValidStructuredQuestions && hasValidCustomParams) {
+          // Both exist - prefer structured (since structured is more specific)
+          detectedMode = 'structured';
+        }
+        
+        // Set the interview type, mode, and personalized questions
         setFormData(prev => ({ 
           ...prev, 
           interviewType: interviewType,
+          interviewMode: detectedMode, // Auto-update mode based on database content
           personalizedQuestionsEnabled: !!personalizedQuestions,
           personalizedQuestions: personalizedQuestions || []
         }));
         
-        if (customParams && Object.keys(customParams).length > 0) {
+        // Clear opposite type's data when switching modes
+        if (detectedMode === 'ai') {
+          setStructuredQuestions([]);
+        } else if (detectedMode === 'structured') {
+          setCustomParameters({});
+        }
+        
+        if (customParams && Object.keys(customParams).length > 0 && detectedMode === 'ai') {
           // Load AI interview parameters and ensure they have max_time and level values
           const paramsWithDefaults = Object.keys(customParams).reduce((acc, key) => {
             acc[key] = {
@@ -534,16 +563,31 @@ const HRInterviewCreator = () => {
             setLoadedPositions(prev => new Set(prev).add(normalizedPosition));
           }
           console.log('✅ Loaded existing AI parameters for', position);
-        } else if (structuredQuestions && structuredQuestions.length > 0) {
+        } else if (hasValidStructuredQuestions && detectedMode === 'structured') {
           // Load structured interview questions
-          console.log('🔄 Found structured interview questions:', structuredQuestions.length);
-          setStructuredQuestions(structuredQuestions);
+          // Parse structured_questions if it's a string
+          let parsedStructuredQuestions = structuredQuestions;
+          if (typeof structuredQuestions === 'string') {
+            try {
+              parsedStructuredQuestions = JSON.parse(structuredQuestions);
+            } catch (e) {
+              console.error('Error parsing structured_questions:', e);
+              parsedStructuredQuestions = [];
+            }
+          }
+          
+          const questionsArray = Array.isArray(parsedStructuredQuestions) 
+            ? parsedStructuredQuestions 
+            : (parsedStructuredQuestions && Object.keys(parsedStructuredQuestions).length > 0 ? Object.values(parsedStructuredQuestions) : []);
+          
+          console.log('🔄 Found structured interview questions:', questionsArray.length);
+          setStructuredQuestions(questionsArray);
           setParametersSaved(true);
           
           // Only show toast if we haven't loaded this position before
           const normalizedPosition = position.trim().toLowerCase();
           if (!loadedPositions.has(normalizedPosition)) {
-            toast.success(`Found existing structured interview for ${position} (${structuredQuestions.length} questions)`);
+            toast.success(`Found existing structured interview for ${position} (${questionsArray.length} questions)`);
             setLoadedPositions(prev => new Set(prev).add(normalizedPosition));
           }
           console.log('✅ Loaded existing structured interview for', position);
@@ -1512,9 +1556,10 @@ const HRInterviewCreator = () => {
                   name="jobDescription"
                   value={formData.jobDescription}
                   onChange={handleInputChange}
-                  placeholder="Job description will be auto-filled when you select a role above, or enter manually..."
+                  placeholder="Job description will be auto-filled when you select a role above..."
                   rows={4}
                   className="resize-none"
+                  readOnly
                 />
               </div>
             </div>

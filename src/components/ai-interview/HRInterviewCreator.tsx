@@ -255,10 +255,10 @@ const HRInterviewCreator = () => {
     try {
       console.log('🔄 Loading parameters for position:', formData.position, 'mode:', formData.interviewMode);
       
-      // Try to load from custom_role_parameters table
+      // Try to load from custom_role_parameters table - FETCH interview_type!
       const { data, error } = await supabase
         .from('custom_role_parameters')
-        .select('custom_parameters, structured_questions, personalized_questions')
+        .select('custom_parameters, structured_questions, personalized_questions, interview_type')
         .eq('role_name', formData.position)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
@@ -271,23 +271,52 @@ const HRInterviewCreator = () => {
         const customParams = record.custom_parameters;
         const structuredQuestions = record.structured_questions;
         const personalizedQuestions = record.personalized_questions;
+        const interviewType = record.interview_type;
         
-        // Load personalized questions from database
-        if (personalizedQuestions && personalizedQuestions.length > 0) {
-          setFormData(prev => ({
-            ...prev,
-            personalizedQuestionsEnabled: true,
-            personalizedQuestions: personalizedQuestions
-          }));
-        } else {
-          setFormData(prev => ({
-            ...prev,
-            personalizedQuestionsEnabled: false,
-            personalizedQuestions: []
-          }));
+        console.log(`📋 Loaded from DB - interview_type: ${interviewType}`);
+        
+        // Determine interview mode based on what exists in database
+        // Priority: structured_questions > custom_parameters
+        const hasValidStructuredQuestions = structuredQuestions && 
+          (Array.isArray(structuredQuestions) ? structuredQuestions.length > 0 : 
+           typeof structuredQuestions === 'string' ? structuredQuestions !== '{}' && structuredQuestions !== '[]' :
+           Object.keys(structuredQuestions).length > 0);
+        const hasValidCustomParams = customParams && 
+          (typeof customParams === 'string' ? customParams !== '{}' : Object.keys(customParams).length > 0);
+        
+        // Auto-update interview mode based on what exists
+        // Priority: If only one type exists, use that. If both exist, prefer structured.
+        let detectedMode: 'ai' | 'structured' = 'ai'; // Default to AI
+        if (hasValidStructuredQuestions && !hasValidCustomParams) {
+          detectedMode = 'structured';
+        } else if (hasValidCustomParams && !hasValidStructuredQuestions) {
+          detectedMode = 'ai';
+        } else if (hasValidStructuredQuestions && hasValidCustomParams) {
+          // Both exist - prefer structured (since structured is more specific)
+          detectedMode = 'structured';
         }
         
-        if (formData.interviewMode === 'ai') {
+        // Set the interview type, mode, and personalized questions FIRST
+        if (interviewType && ['technical', 'behavioral', 'mixed'].includes(interviewType)) {
+          console.log(`✅ Setting interview_type from database: ${interviewType}`);
+        }
+        
+        // Clear opposite type's data when switching modes
+        if (detectedMode === 'ai') {
+          setStructuredQuestions([]);
+        } else if (detectedMode === 'structured') {
+          setCustomParameters({});
+        }
+        
+        setFormData(prev => ({
+          ...prev,
+          interviewType: (interviewType && ['technical', 'behavioral', 'mixed'].includes(interviewType)) ? interviewType : prev.interviewType,
+          interviewMode: detectedMode, // Auto-update mode based on database content
+          personalizedQuestionsEnabled: !!personalizedQuestions,
+          personalizedQuestions: personalizedQuestions || []
+        }));
+        
+        if (detectedMode === 'ai') {
           // Load AI interview parameters
           if (customParams && Object.keys(customParams).length > 0) {
             setCustomParameters(customParams);
@@ -301,9 +330,12 @@ const HRInterviewCreator = () => {
               // Only technical questions, use the regular calculation
               calculateDuration(customParams);
             }
+            // Log the interview type being used
+            console.log(`✅ Using interview_type: ${interviewType || 'not set'}`);
+            
             toast({
               title: "Parameters Loaded",
-              description: `Automatically loaded existing AI parameters for ${formData.position}`,
+              description: `Automatically loaded existing AI parameters for ${formData.position} (${interviewType || 'mixed'})`,
             });
           } else if (structuredQuestions && Array.isArray(structuredQuestions) && structuredQuestions.length > 0) {
             // No AI parameters but structured questions exist - suggest switching mode
@@ -318,20 +350,35 @@ const HRInterviewCreator = () => {
             setCustomParameters({});
             setParametersSaved(false);
           }
-        } else if (formData.interviewMode === 'structured') {
+        } else if (detectedMode === 'structured') {
           // Load structured interview questions
-          if (structuredQuestions && Array.isArray(structuredQuestions) && structuredQuestions.length > 0) {
+          // Parse structured_questions if it's a string
+          let parsedStructuredQuestions = structuredQuestions;
+          if (typeof structuredQuestions === 'string') {
+            try {
+              parsedStructuredQuestions = JSON.parse(structuredQuestions);
+            } catch (e) {
+              console.error('Error parsing structured_questions:', e);
+              parsedStructuredQuestions = [];
+            }
+          }
+          
+          const questionsArray = Array.isArray(parsedStructuredQuestions) 
+            ? parsedStructuredQuestions 
+            : (parsedStructuredQuestions && Object.keys(parsedStructuredQuestions).length > 0 ? Object.values(parsedStructuredQuestions) : []);
+          
+          if (questionsArray.length > 0) {
             // For structured interviews, we don't need custom parameters
             setCustomParameters({});
             setParametersSaved(true);
-            setStructuredQuestions(structuredQuestions);
+            setStructuredQuestions(questionsArray);
             
             // Calculate duration from structured questions
-            calculateDurationFromStructuredQuestions(structuredQuestions);
+            calculateDurationFromStructuredQuestions(questionsArray);
             
             toast({
               title: "Structured Interview Loaded",
-              description: `Found existing structured interview for ${formData.position} (${structuredQuestions.length} questions)`,
+              description: `Found existing structured interview for ${formData.position} (${questionsArray.length} questions)`,
             });
           } else if (customParams && Object.keys(customParams).length > 0) {
             // No structured questions but AI parameters exist - suggest switching mode

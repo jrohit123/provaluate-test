@@ -33,7 +33,7 @@ export const API_CONFIG = {
     TRACK_COMPLETION_VIEW: '/api/track-completion-view',
   },
   TIMEOUTS: {
-    DEFAULT: 30000, // 30 seconds
+    DEFAULT: 300000, // 30 seconds
     VIDEO_UPLOAD: 180000, // 3 minutes (increased for large video files)
     ANSWER_SUBMISSION: 300000, // 5 minutes
     GENERATE_QUESTION: 120000, // 2 minutes for question generation
