@@ -151,10 +151,7 @@ const Login = () => {
               </div>
               <h1 className="text-2xl font-bold text-gray-900">ProValuate</h1>
             </div>
-            <div className="flex items-center space-x-6">
-              <a href="/pricing" className="text-gray-600 hover:text-gray-900 transition-colors">
-                Pricing
-              </a>
+            <div className="text-right">
               <a href="mailto:rj@aitamate.com?&subject=Provaluate&body=Hi,%0D%0A%0D%0AI'm facing an issue with ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors">
                 <Mail className="h-8 w-8" />
               </a>
@@ -341,22 +338,6 @@ const Login = () => {
             
             <div className="mt-8 text-center text-sm text-gray-600">
               <p>Powered by AI | Automated JD parsing and resume ranking engine based on customized selection criteria</p>
-              <div className="mt-4 flex items-center justify-center space-x-2">
-                <span className="text-gray-500">Powered by</span>
-                <a 
-                  href="https://aitamate.com/" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center space-x-1 hover:opacity-80 transition-opacity"
-                >
-                  <img 
-                    src="https://aitamate.com/Logo-transparent_bg.png" 
-                    alt="aitamate" 
-                    className="h-4 w-auto"
-                  />
-                  <span className="text-gray-600 font-medium">aitamate</span>
-                </a>
-              </div>
             </div>
           </div>
         </div>

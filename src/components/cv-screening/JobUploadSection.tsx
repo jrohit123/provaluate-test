@@ -30,10 +30,10 @@ const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
 const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx', '.txt'];
 // Backend service URLs for integration - Updated to use correct ports
 const BACKEND_URLS = {
-  UNIFIED_SERVICE: 'https://devprovaluate_py.aitamate.com',      // app.py - unified backend service
+  UNIFIED_SERVICE: 'http://localhost:5003',      // app.py - unified backend service
   AI_ANALYZER_SERVICE: 'http://localhost:5001',  // jd_analyzer.py - handles AI analysis
   CV_ANALYZER_SERVICE: 'http://localhost:5002',  // cv_analyzer.py - handles CV analysis
-  RESUME_SERVICE: 'https://devprovaluate_py.aitamate.com',       // app.py - handles uploads
+  RESUME_SERVICE: 'http://localhost:5003',       // app.py - handles uploads
 };
 
 // Legacy webhook URL (kept for compatibility)
@@ -498,38 +498,10 @@ export const JobUploadSection = () => {
         formData.append('company_id', user.profile.company_id);
 
         console.log('Sending complete workflow request to AI Analyzer...');
-        console.log('Backend URL:', `${BACKEND_URLS.UNIFIED_SERVICE}/upload`);
-        console.log('FormData contents:', Array.from(formData.entries()));
-        
-        // Test backend connectivity first
-        try {
-          const healthCheck = await fetch(`${BACKEND_URLS.UNIFIED_SERVICE}/health`);
-          console.log('Backend health check status:', healthCheck.status);
-          if (healthCheck.ok) {
-            const healthData = await healthCheck.json();
-            console.log('Backend health data:', healthData);
-          }
-        } catch (healthError) {
-          console.error('Backend health check failed:', healthError);
-          throw new Error(`Cannot connect to backend: ${healthError.message}`);
-        }
-        
-        let response;
-        try {
-          response = await fetch(`${BACKEND_URLS.UNIFIED_SERVICE}/upload`, {
-            method: 'POST',
-            body: formData,
-          });
-          
-          console.log('Response status:', response.status);
-          console.log('Response headers:', response.headers);
-        } catch (fetchError) {
-          console.error('Fetch error details:', fetchError);
-          console.error('Error name:', fetchError.name);
-          console.error('Error message:', fetchError.message);
-          console.error('Error stack:', fetchError.stack);
-          throw new Error(`Network error: ${fetchError.message}`);
-        }
+        const response = await fetch(`${BACKEND_URLS.UNIFIED_SERVICE}/upload`, {
+          method: 'POST',
+          body: formData,
+        });
 
         if (!response.ok) {
           throw new Error(`Upload workflow failed: ${await response.text()}`);

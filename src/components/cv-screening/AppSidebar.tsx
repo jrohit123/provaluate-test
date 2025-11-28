@@ -136,7 +136,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
               <SidebarMenuButton className="cursor-pointer hover:bg-gray-50 flex items-center justify-between w-full">
                 <div className="flex items-center gap-2">
                   <Search className="w-4 h-4" />
-                  <span className="font-bold text-[#1A56DB]">CV Screening</span>
+                  <span className="font-medium">CV Screening</span>
                 </div>
                 {isCvScreeningOpen ? (
                   <ChevronDown className="w-4 h-4" />
@@ -174,7 +174,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
               <SidebarMenuButton className="cursor-pointer hover:bg-gray-50 flex items-center justify-between w-full">
                 <div className="flex items-center gap-2">
                   <Video className="w-4 h-4" />
-                  <span className="font-bold text-[#1A56DB]">Interview Management</span>
+                  <span className="font-medium">Interview Management</span>
                 </div>
                 {isInterviewManagementOpen ? (
                   <ChevronDown className="w-4 h-4" />
@@ -218,7 +218,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                     tooltip={settingsItem.title}
                   >
                     <settingsItem.icon className="w-4 h-4" />
-                    <span className="font-bold text-[#1A56DB]">{settingsItem.title}</span>
+                    <span className="font-medium">{settingsItem.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>

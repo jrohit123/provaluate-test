@@ -7,7 +7,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useAuth } from '@/hooks/use-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { UsageTrackingService } from '@/services/usageTrackingService';
 
 export default function AdminUserManagement() {
   // All hooks must be called unconditionally
@@ -221,102 +220,6 @@ export default function AdminUserManagement() {
     }
   };
 
-  const handleRecharge = () => {
-    // Check if Razorpay is loaded
-    if (typeof window !== 'undefined' && (window as any).Razorpay) {
-      const options = {
-        key: "rzp_live_RW2RTMgCZSp9mL", // Enter the Key ID generated from the Dashboard
-        amount: "1000", // Amount is in currency subunits (₹10.00)
-        currency: "INR",
-        name: "aitamate", //your business name
-        description: "Account Recharge",
-        image: "https://example.com/your_logo",
-        order_id: "order_RW2wU3QWuqsHxA", //This is a sample Order ID. Pass the `id` obtained in the response of Step 1
-        handler: async function (response: any) {
-          // Handle successful payment
-          console.log('Payment successful:', response);
-          
-          try {
-            // Record the payment in the database
-            if (user?.profile?.company_id && plan) {
-              const subscriptionStartDate = new Date();
-              const subscriptionEndDate = new Date();
-              subscriptionEndDate.setMonth(subscriptionEndDate.getMonth() + 1); // 1 month from now
-              
-              await UsageTrackingService.recordPayment({
-                company_id: user.profile.company_id,
-                plan_id: plan.plan_id,
-                payment_amount: 10.00, // ₹10.00 (1000 paise)
-                currency: 'INR',
-                razorpay_order_id: "order_RW2wU3QWuqsHxA",
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                subscription_start_date: subscriptionStartDate.toISOString(),
-                subscription_end_date: subscriptionEndDate.toISOString(),
-                billing_cycle: 'monthly',
-                metadata: {
-                  payment_purpose: 'account_recharge',
-                  user_id: user.id,
-                  company_name: company?.company_name
-                }
-              });
-              
-              toast({
-                title: "Payment Successful",
-                description: `Payment recorded successfully. Your account has been recharged.`,
-              });
-              
-              // Refresh company data to show updated subscription
-              await loadCompanyData();
-            } else {
-              throw new Error('Missing company or plan information');
-            }
-          } catch (error) {
-            console.error('Error recording payment:', error);
-            toast({
-              title: "Payment Recorded",
-              description: `Payment successful but failed to update account. Please contact support.`,
-              variant: "destructive",
-            });
-          }
-        },
-        prefill: {
-          name: user?.profile?.first_name || user?.email?.split('@')[0] || "Customer",
-          email: user?.email || "",
-          contact: "" // Add phone number if available
-        },
-        notes: {
-          company_id: company?.company_id || "",
-          user_id: user?.id || "",
-          purpose: "Account Recharge"
-        },
-        theme: {
-          color: "#1A56DB" // Using your brand color
-        }
-      };
-      
-      const rzp1 = new (window as any).Razorpay(options);
-      
-      rzp1.on('payment.failed', function (response: any) {
-        console.error('Payment failed:', response.error);
-        toast({
-          title: "Payment Failed",
-          description: `Error: ${response.error.description}`,
-          variant: "destructive",
-        });
-      });
-      
-      rzp1.open();
-    } else {
-      console.error('Razorpay not loaded');
-      toast({
-        title: "Payment Error",
-        description: "Payment system not available. Please refresh the page and try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
   // Only render UI if admin
   if (!isAdmin) return null;
 
@@ -341,7 +244,6 @@ export default function AdminUserManagement() {
         <div className="flex justify-between items-center mb-4">
           <div className="font-semibold text-lg">Company Users</div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleRecharge}>Recharge</Button>
             <Dialog open={planChangeOpen} onOpenChange={setPlanChangeOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline">Change Plan</Button>
@@ -365,9 +267,7 @@ export default function AdminUserManagement() {
                       <SelectValue placeholder="Select new plan..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {availablePlans
-                        .sort((a, b) => (a.plan_cost || 0) - (b.plan_cost || 0))
-                        .map(availablePlan => (
+                      {availablePlans.map(availablePlan => (
                         <SelectItem key={availablePlan.plan_name} value={availablePlan.plan_name}>
                           <div className="flex flex-col">
                             <span className="font-medium">{availablePlan.plan_name}</span>
