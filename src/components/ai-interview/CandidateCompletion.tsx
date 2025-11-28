@@ -14,7 +14,7 @@ const CandidateCompletion = () => {
     const run = async () => {
       if (!interviewId) return;
       try {
-        await fetch(`https://devprovaluate_py.aitamate.com/api/track-completion-view/${interviewId}`, {
+        await fetch(`http://localhost:5003/api/track-completion-view/${interviewId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         });
@@ -26,7 +26,7 @@ const CandidateCompletion = () => {
       // If candidate name/position not provided via state, fetch interview details
       if (!candidateName || !position) {
         try {
-          const resp = await fetch(`https://devprovaluate_py.aitamate.com/api/get-interview/${interviewId}`);
+          const resp = await fetch(`http://localhost:5003/api/get-interview/${interviewId}`);
           if (resp.ok) {
             const data = await resp.json();
             const interview = data.interview || data; // support both formats
