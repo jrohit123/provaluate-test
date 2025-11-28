@@ -173,34 +173,97 @@ const FinalResults = () => {
           console.log('📊 Sample real feedback:', extractedAnswers[0]?.feedback?.substring(0, 100) + '...');
           console.log('🎥 Videos in extracted answers:', extractedAnswers.filter(a => a.question_video_url).length);
         } else if (data.answers && data.answers.length > 0) {
-          // Fallback: if we only have answers array, try to extract question text from it
-          console.log('⚠️ No questions array from API, trying to extract from answers data...');
+          // Fallback: if we only have answers array, try to extract question text from questions table
+          console.log('⚠️ No questions array from API, trying to fetch from questions table...');
           
-          data.answers.forEach((answer, index) => {
-            console.log(`🔍 Answer ${index} data:`, answer);
-            console.log(`🎥 Answer ${index} video URL:`, answer.question_video_url);
-            
-            // Try to get question text from answer data if available
-            const questionText = answer.question_text || `Question ${answer.question_order + 1}`;
-            
-            extractedQuestions.push({
-              question_order: answer.question_order,
-              question_text: questionText,
-              parameter_key: answer.parameter_key,
-              parameter_name: answer.parameter_name
+          // For structured interviews or when questions array is missing, fetch from questions table
+          try {
+            const questionsResponse = await fetch(`http://localhost:5003/api/get-questions/${interviewId}`);
+            if (questionsResponse.ok) {
+              const questionsData = await questionsResponse.json();
+              if (questionsData.questions && Array.isArray(questionsData.questions) && questionsData.questions.length > 0) {
+                console.log('✅ Fetched questions from questions table:', questionsData.questions.length);
+                
+                // Match questions with answers by question_order
+                data.answers.forEach((answer) => {
+                  const question = questionsData.questions.find((q: any) => 
+                    (q.question_order || 0) === (answer.question_order || 0)
+                  );
+                  
+                  // Use question_text from questions table (for structured interviews)
+                  const questionText = question?.question_text || question?.question || answer.question_text || `Question ${(answer.question_order || 0) + 1}`;
+                  
+                  extractedQuestions.push({
+                    question_order: answer.question_order,
+                    question_text: questionText,
+                    parameter_key: answer.parameter_key || question?.parameter_key,
+                    parameter_name: answer.parameter_name || question?.category
+                  });
+                  
+                  extractedAnswers.push({
+                    question_order: answer.question_order,
+                    transcript: answer.transcript,
+                    audio_url: answer.audio_url,
+                    question_video_url: answer.question_video_url,
+                    score: answer.score,
+                    feedback: answer.feedback,
+                    parameter_key: answer.parameter_key,
+                    parameter_name: answer.parameter_name
+                  });
+                });
+              } else {
+                // Fallback to answer data only
+                console.log('⚠️ No questions found in questions table, using answer data');
+                data.answers.forEach((answer, index) => {
+                  const questionText = answer.question_text || `Question ${(answer.question_order || 0) + 1}`;
+                  
+                  extractedQuestions.push({
+                    question_order: answer.question_order,
+                    question_text: questionText,
+                    parameter_key: answer.parameter_key,
+                    parameter_name: answer.parameter_name
+                  });
+                  
+                  extractedAnswers.push({
+                    question_order: answer.question_order,
+                    transcript: answer.transcript,
+                    audio_url: answer.audio_url,
+                    question_video_url: answer.question_video_url,
+                    score: answer.score,
+                    feedback: answer.feedback,
+                    parameter_key: answer.parameter_key,
+                    parameter_name: answer.parameter_name
+                  });
+                });
+              }
+            } else {
+              throw new Error('Failed to fetch questions');
+            }
+          } catch (error) {
+            console.error('Error fetching questions from API:', error);
+            // Fallback: use answer data only
+            data.answers.forEach((answer, index) => {
+              const questionText = answer.question_text || `Question ${(answer.question_order || 0) + 1}`;
+              
+              extractedQuestions.push({
+                question_order: answer.question_order,
+                question_text: questionText,
+                parameter_key: answer.parameter_key,
+                parameter_name: answer.parameter_name
+              });
+              
+              extractedAnswers.push({
+                question_order: answer.question_order,
+                transcript: answer.transcript,
+                audio_url: answer.audio_url,
+                question_video_url: answer.question_video_url,
+                score: answer.score,
+                feedback: answer.feedback,
+                parameter_key: answer.parameter_key,
+                parameter_name: answer.parameter_name
+              });
             });
-            
-            extractedAnswers.push({
-              question_order: answer.question_order,
-              transcript: answer.transcript,
-              audio_url: answer.audio_url,
-              question_video_url: answer.question_video_url, // Preserve video URL
-              score: answer.score,
-              feedback: answer.feedback,
-              parameter_key: answer.parameter_key,
-              parameter_name: answer.parameter_name
-            });
-          });
+          }
         } else {
           console.log('⚠️ No questions or answers arrays from API, extracting from parameters data...');
           
@@ -1246,37 +1309,71 @@ const FinalResults = () => {
           });
         });
       } else {
-        // Fallback to old data structure if parameter_scores doesn't exist
-        Object.entries(parameters).forEach(([paramKey, paramData]: [string, any]) => {
-          const questions = paramData.questions || [];
-          const answers = paramData.answers || [];
+        // Fallback: Use questions and answers arrays directly from API (for terminated/incomplete interviews)
+        if (reportData.questions && reportData.answers && reportData.questions.length > 0) {
+          console.log('🔍 Using questions and answers arrays for PDF (terminated/incomplete interview)');
           
-          if (questions.length > 0) {
-            questions.forEach((question: any, questionIndex: number) => {
-              const answer = answers.find((ans: any) => 
-                ans.question_order === question.question_order || 
-                answers.indexOf(ans) === questionIndex
-              ) || answers[questionIndex] || {};
+          // Sort by question_order to ensure proper ordering
+          const sortedQuestions = [...reportData.questions].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
+          const sortedAnswers = [...reportData.answers].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
+          
+          sortedQuestions.forEach((question: any) => {
+            const answer = sortedAnswers.find((ans: any) => 
+              (ans.question_order || 0) === (question.question_order || 0)
+            );
+            
+            if (answer) {
+              // Format feedback with bullet points
+              const formatFeedback = (feedback: string) => {
+                if (!feedback) return 'No feedback available';
+                
+                // Split by periods and create bullet points
+                const sentences = feedback.split('.').filter(sentence => sentence.trim().length > 0);
+                return sentences.map(sentence => `• ${sentence.trim()}`).join('\n');
+              };
               
               tableData.push([
-                paramData.name || paramKey,
-                question.question_text || 'N/A',
+                question.parameter_name || question.parameter_key || 'General',
+                question.question_text || `Question ${(question.question_order || 0) + 1}`,
                 answer.transcript || 'No answer provided',
-                answer.feedback || 'No feedback available',
-                answer.score || answer.parameter_score || 'N/A'
+                formatFeedback(answer.feedback || 'Assessment pending'),
+                answer.score || 'N/A'
               ]);
-            });
-          } else {
-            const parameterAnswer = answers[0] || {};
-            tableData.push([
-              paramData.name || paramKey,
-              'Parameter-based assessment',
-              parameterAnswer.transcript || 'No answer provided',
-              parameterAnswer.feedback || paramData.feedback || 'No feedback available',
-              parameterAnswer.score || parameterAnswer.parameter_score || paramData.score || 'N/A'
-            ]);
-          }
-        });
+            }
+          });
+        } else {
+          // Fallback to old data structure if parameter_scores doesn't exist
+          Object.entries(parameters).forEach(([paramKey, paramData]: [string, any]) => {
+            const questions = paramData.questions || [];
+            const answers = paramData.answers || [];
+            
+            if (questions.length > 0) {
+              questions.forEach((question: any, questionIndex: number) => {
+                const answer = answers.find((ans: any) => 
+                  ans.question_order === question.question_order || 
+                  answers.indexOf(ans) === questionIndex
+                ) || answers[questionIndex] || {};
+                
+                tableData.push([
+                  paramData.name || paramKey,
+                  question.question_text || 'N/A',
+                  answer.transcript || 'No answer provided',
+                  answer.feedback || 'No feedback available',
+                  answer.score || answer.parameter_score || 'N/A'
+                ]);
+              });
+            } else {
+              const parameterAnswer = answers[0] || {};
+              tableData.push([
+                paramData.name || paramKey,
+                'Parameter-based assessment',
+                parameterAnswer.transcript || 'No answer provided',
+                parameterAnswer.feedback || paramData.feedback || 'No feedback available',
+                parameterAnswer.score || parameterAnswer.parameter_score || paramData.score || 'N/A'
+              ]);
+            }
+          });
+        }
       }
       
       // Add table with proper column widths

@@ -6,6 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Users, Clock, CheckCircle, Shield, Mail, FileText, BarChart, UserPlus, LogIn } from "lucide-react";
+import { SessionManager } from '@/utils/sessionManager';
+
+const PYTHON_API_BASE = import.meta.env.VITE_PYTHON_URL || 'http://localhost:5003';
 
 // Test credentials
 const TEST_EMAIL = 'test@example.com';
@@ -71,29 +74,14 @@ const Login = () => {
         return;
       } else {
         // Sign in with Supabase Auth
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
-        localStorage.setItem('recruitai_auth', 'true');
-        // Clear any stale selections for a clean session on login
-        localStorage.removeItem('cv-screening-session');
-        try {
-          sessionStorage.removeItem('selectedJDId');
-          sessionStorage.removeItem('selectedCriteriaGridId');
-          sessionStorage.removeItem('uploadedFiles');
-          sessionStorage.removeItem('selectedCandidatesForInterview');
-          // Broadcast session cleared so sections re-sync immediately
-          window.dispatchEvent(new Event('session:cleared'));
-        } catch (e) {
-          // no-op
-        }
-        toast({
-          title: "Welcome back!",
-          description: "You've been logged in successfully.",
-        });
-        navigate('/dashboard?section=main-dashboard');
+        if (!data.user) throw new Error('Login failed: No user data returned');
+
+        await completeLogin(data.user.id);
       }
     } catch (error: any) {
       toast({
@@ -139,6 +127,124 @@ const Login = () => {
     setResetLoading(false);
   };
 
+  /**
+   * Set a cookie with specified name, value, and expiration
+   * @param name - Cookie name
+   * @param value - Cookie value
+   * @param days - Number of days until expiration (default: 30)
+   */
+  const setCookie = (name: string, value: string, days: number = 30) => {
+    if (!value) return;
+
+    const expires = new Date();
+    expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+
+    const parts = [
+      `${name}=${encodeURIComponent(value)}`,
+      `expires=${expires.toUTCString()}`,
+      'path=/'
+    ];
+
+    if (isLocalhost) {
+      parts.push('SameSite=Lax');
+    } else {
+      parts.push('SameSite=None', 'Secure', `domain=${hostname}`);
+    }
+
+    const cookieString = parts.join('; ');
+    document.cookie = cookieString;
+    console.log(`🍪 Cookie set: ${name}`);
+  };
+
+  /**
+   * Complete the login process by creating a session and navigating to dashboard
+   * @param userId - The authenticated user ID
+   */
+  const completeLogin = async (userId: string) => {
+    try {
+      // Fetch user profile to get company_id
+      const { data: userProfile, error: profileError } = await supabase
+        .from('users')
+        .select('user_id, company_id')
+        .eq('user_id', userId)
+        .single();
+
+      if (profileError || !userProfile) {
+        console.error('Error fetching user profile:', profileError);
+        throw new Error('Failed to fetch user profile');
+      }
+
+      const companyId = userProfile.company_id;
+      if (!companyId) {
+        throw new Error('Company ID not found for user');
+      }
+
+      // Set cookies for Chrome extension access
+      const origin = window.location.origin;
+
+      setCookie('provaluate_user_id', userId, 30);
+      setCookie('provaluate_company_id', companyId, 30);
+      setCookie('provaluate_api_base', PYTHON_API_BASE, 30);
+      setCookie('provaluate_website_url', origin, 30);
+      console.log(`✅ Cookies set for extension: user_id=${userId}, company_id=${companyId}`);
+
+      localStorage.setItem('provaluate_user_id', userId);
+      localStorage.setItem('provaluate_company_id', companyId);
+      localStorage.setItem('provaluate_api_base', PYTHON_API_BASE);
+      localStorage.setItem('provaluate_website_url', origin);
+
+      // Create a new session first
+      const sessionData = await SessionManager.createSession(userId);
+      if (!sessionData) {
+        throw new Error('Failed to create session');
+      }
+
+      // Wait a moment to ensure session is fully created, then end other sessions
+      try {
+        console.log(`🔄 About to end other sessions, keeping: ${sessionData.session_id}`);
+        // Small delay to ensure session is fully committed to database
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await SessionManager.endAllOtherSessions(userId, sessionData.session_id);
+      } catch (error) {
+        console.error('Error ending other sessions after login:', error);
+      }
+
+      // Set auth flag
+      localStorage.setItem('recruitai_auth', 'true');
+      
+      // Clear any stale selections for a clean session on login
+      localStorage.removeItem('cv-screening-session');
+        try {
+          sessionStorage.removeItem('selectedJDId');
+          sessionStorage.removeItem('selectedCriteriaGridId');
+          sessionStorage.removeItem('uploadedFiles');
+          sessionStorage.removeItem('selectedCandidatesForInterview');
+          // Broadcast session cleared so sections re-sync immediately
+          window.dispatchEvent(new Event('session:cleared'));
+        } catch (e) {
+          // no-op
+        }
+
+      toast({
+        title: "Welcome!",
+        description: "You've been logged in successfully.",
+      });
+
+      navigate('/dashboard?section=main-dashboard');
+    } catch (error: any) {
+      console.error('Error completing login:', error);
+      toast({
+        title: 'Login Error',
+        description: error.message || 'Failed to complete login process.',
+        variant: 'destructive',
+      });
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header Section */}
@@ -147,11 +253,14 @@ const Login = () => {
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-3">
               <div>
-                <img src="/logo.png" alt="ProValuate" className="h-8 w-8" />
+              <img src="/Logo_Transparent_BG.png" alt="ProValuate" className="h-20" />
               </div>
-              <h1 className="text-2xl font-bold text-gray-900">ProValuate</h1>
+              <h1 className="text-2xl font-bold text-gray-900"></h1>
             </div>
-            <div className="text-right">
+            <div className="flex items-center space-x-6">
+              <a href="/pricing" className="text-gray-600 hover:text-gray-900 transition-colors">
+                Pricing
+              </a>
               <a href="mailto:rj@aitamate.com?&subject=Provaluate&body=Hi,%0D%0A%0D%0AI'm facing an issue with ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors">
                 <Mail className="h-8 w-8" />
               </a>
@@ -188,7 +297,7 @@ const Login = () => {
               <div className="w-16 h-16 mx-auto mb-4 rounded-full border-2 border-blue-200 flex items-center justify-center">
                 <CheckCircle className="h-8 w-8 text-blue-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">98% Accuracy</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">95% Accuracy</h3>
               <p className="text-gray-600">AI-powered assessment ensures consistent and objective candidate evaluation</p>
             </CardContent>
           </Card>
@@ -203,21 +312,6 @@ const Login = () => {
             </CardContent>
           </Card>
         </div>
-        
-        {/* Call to Action Section */}
-        <div className="bg-gradient-to-r from-purple-600 to-pink-500 py-6 rounded-lg">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h3 className="text-3xl font-bold text-white mb-1">
-              ⚡ 30-Day Free Trial
-            </h3>
-            <p className="text-xl text-white mb-4">
-              Start assessing candidates today - no credit card required!
-            </p>
-            <div className="flex items-center justify-center text-white">
-              <span className="text-lg">⭐ Join 50+ companies already using ProValuate</span>
-            </div>
-          </div>
-        </div><br></br>    
 
         {/* Login Section */}
         <div className="flex justify-center">
@@ -326,8 +420,8 @@ const Login = () => {
                     disabled={isLoading}
                   >
                     {isSignup 
-                      ? 'Already have an account? Sign in' 
-                      : "Don't have an account? Sign up"
+                      ? 'Already registered? Sign in' 
+                      : "Don't have an account? Register Now"
                     }
                   </button>
                 </div>
@@ -337,7 +431,38 @@ const Login = () => {
             </Card>
             
             <div className="mt-8 text-center text-sm text-gray-600">
-              <p>Powered by AI | Automated JD parsing and resume ranking engine based on customized selection criteria</p>
+              <p>Automated JD parsing and resume ranking engine based on customized selection criteria</p>
+              <div className="mt-4 flex items-center justify-center space-x-2">
+                <span className="text-gray-500">Powered by</span>
+                <a 
+                  href="https://aitamate.com/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-1 hover:opacity-80 transition-opacity"
+                >
+                  <img 
+                    src="https://aitamate.com/Logo-transparent_bg.png" 
+                    alt="aitamate" 
+                    className="h-4 w-auto"
+                  />
+                  <span className="text-gray-600 font-medium">aitamate</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div><br></br>
+        
+        {/* Call to Action Section */}
+        <div className="bg-gradient-to-r from-purple-600 to-pink-500 py-6 rounded-lg">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h3 className="text-3xl font-bold text-white mb-1">
+              ⚡ 7-Day Free Trial
+            </h3>
+            <p className="text-xl text-white mb-4">
+              Start assessing candidates today - no credit card required!
+            </p>
+            <div className="flex items-center justify-center text-white">
+              <span className="text-lg">⭐ Join 50+ companies already using ProValuate</span>
             </div>
           </div>
         </div>

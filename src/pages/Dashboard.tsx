@@ -73,7 +73,7 @@ const Dashboard = () => {
             {renderMainContent()}
           </main>
           <footer className="bg-white border-t px-6 py-4 text-center text-sm text-muted-foreground">
-            © Provaluate 2025 | Privacy Policy | Terms | Contact | Powered by <a href="http://aitamate.com" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-700">aitamate</a>
+            © ProValuate 2025 | Privacy Policy | Terms | <a href="mailto:rj@aitamate.com?&subject=ProValuate&body=Hi,%0D%0A%0D%0AI'd like to know more about ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors">Contact</a> | Powered by <a href="http://aitamate.com" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-700">aitamate</a>
           </footer>
         </div>
       </div>
