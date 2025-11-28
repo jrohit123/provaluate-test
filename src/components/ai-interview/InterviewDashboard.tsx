@@ -219,7 +219,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
     setSaveStates(prev => ({...prev, [interviewId]: 'saving'}));
     
     try {
-      const response = await fetch('https://devprovaluate_py.aitamate.com//api/update-interview-decision', {
+      const response = await fetch('http://localhost:5003/api/update-interview-decision', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

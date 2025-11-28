@@ -17,7 +17,6 @@ import ServicesSelection from "./pages/ServicesSelection";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/Onboarding";
-import Pricing from "./pages/Pricing";
 
 // Import AI Interview components (now TypeScript)
 import InterviewDashboard from "./components/ai-interview/InterviewDashboard";
@@ -102,7 +101,6 @@ const App = () => {
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/onboarding" element={<Onboarding />} />
-            <Route path="/pricing" element={<Pricing />} />
             
             {/* Services Selection Page - Protected */}
             <Route path="/services" element={
