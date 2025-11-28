@@ -18,6 +18,8 @@ export interface Database {
           subscription_status: string | null
           subscription_start: string | null
           subscription_end: string | null
+          cv_processed_count: number | null
+          cv_processing_reset_date: string | null
           created_at: string
           updated_at: string
         }
@@ -29,6 +31,8 @@ export interface Database {
           subscription_status?: string | null
           subscription_start?: string | null
           subscription_end?: string | null
+          cv_processed_count?: number | null
+          cv_processing_reset_date?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -40,6 +44,8 @@ export interface Database {
           subscription_status?: string | null
           subscription_start?: string | null
           subscription_end?: string | null
+          cv_processed_count?: number | null
+          cv_processing_reset_date?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -184,6 +190,8 @@ export interface Database {
           active_jobs: number | null
           max_cvs: number | null
           max_users: number | null
+          currency: string | null
+          status: string | null
         }
         Insert: {
           plan_id?: string
@@ -193,6 +201,8 @@ export interface Database {
           active_jobs?: number | null
           max_cvs?: number | null
           max_users?: number | null
+          currency?: string | null
+          status?: string | null
         }
         Update: {
           plan_id?: string
@@ -202,6 +212,8 @@ export interface Database {
           active_jobs?: number | null
           max_cvs?: number | null
           max_users?: number | null
+          currency?: string | null
+          status?: string | null
         }
       }
       clients: {
@@ -213,6 +225,126 @@ export interface Database {
         Row: Contract;
         Insert: Omit<Contract, 'id' | 'created_at'>;
         Update: Partial<Omit<Contract, 'id' | 'created_at'>>;
+      }
+      company_usage_tracking: {
+        Row: {
+          id: string
+          company_id: string
+          usage_type: string
+          usage_count: number | null
+          usage_date: string | null
+          metadata: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          usage_type: string
+          usage_count?: number | null
+          usage_date?: string | null
+          metadata?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          usage_type?: string
+          usage_count?: number | null
+          usage_date?: string | null
+          metadata?: Json | null
+          created_at?: string
+        }
+      }
+      subscription_payments: {
+        Row: {
+          id: string
+          company_id: string
+          plan_id: string
+          payment_amount: number
+          currency: string | null
+          payment_status: string
+          razorpay_order_id: string | null
+          razorpay_payment_id: string | null
+          razorpay_signature: string | null
+          payment_date: string | null
+          subscription_start_date: string | null
+          subscription_end_date: string | null
+          billing_cycle: string | null
+          metadata: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          plan_id: string
+          payment_amount: number
+          currency?: string | null
+          payment_status: string
+          razorpay_order_id?: string | null
+          razorpay_payment_id?: string | null
+          razorpay_signature?: string | null
+          payment_date?: string | null
+          subscription_start_date?: string | null
+          subscription_end_date?: string | null
+          billing_cycle?: string | null
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          plan_id?: string
+          payment_amount?: number
+          currency?: string | null
+          payment_status?: string
+          razorpay_order_id?: string | null
+          razorpay_payment_id?: string | null
+          razorpay_signature?: string | null
+          payment_date?: string | null
+          subscription_start_date?: string | null
+          subscription_end_date?: string | null
+          billing_cycle?: string | null
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      subscription_history: {
+        Row: {
+          id: string
+          company_id: string
+          plan_id: string
+          action_type: string
+          previous_plan_id: string | null
+          effective_date: string
+          end_date: string | null
+          reason: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          plan_id: string
+          action_type: string
+          previous_plan_id?: string | null
+          effective_date: string
+          end_date?: string | null
+          reason?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          plan_id?: string
+          action_type?: string
+          previous_plan_id?: string | null
+          effective_date?: string
+          end_date?: string | null
+          reason?: string | null
+          created_at?: string
+        }
       }
     }
     Views: {

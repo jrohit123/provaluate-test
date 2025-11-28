@@ -82,7 +82,7 @@ const FinalResults = () => {
   const loadFinalResults = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:5003/api/get-final-results/${interviewId}`);
+      const response = await fetch(`https://devprovaluate_py.aitamate.com/api/get-final-results/${interviewId}`);
       
       if (response.ok) {
         const data = await response.json();
