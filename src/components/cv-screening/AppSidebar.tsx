@@ -1,4 +1,4 @@
-import { Upload, FileText, BarChart3, User, Lightbulb, Settings, Users, Monitor, Wrench, Cog, ChevronDown, ChevronRight, Search, Video } from 'lucide-react';
+import { Upload, FileText, BarChart3, User, Lightbulb, Settings, Users, Monitor, Wrench, Cog, ChevronDown, ChevronRight, Search, Video, CheckCircle } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -136,7 +136,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
               <SidebarMenuButton className="cursor-pointer hover:bg-gray-50 flex items-center justify-between w-full">
                 <div className="flex items-center gap-2">
                   <Search className="w-4 h-4" />
-                  <span className="font-medium">CV Screening</span>
+                  <span className="font-bold text-[#1A56DB]">CV Screening</span>
                 </div>
                 {isCvScreeningOpen ? (
                   <ChevronDown className="w-4 h-4" />
@@ -174,7 +174,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
               <SidebarMenuButton className="cursor-pointer hover:bg-gray-50 flex items-center justify-between w-full">
                 <div className="flex items-center gap-2">
                   <Video className="w-4 h-4" />
-                  <span className="font-medium">Interview Management</span>
+                  <span className="font-bold text-[#1A56DB]">Interview Management</span>
                 </div>
                 {isInterviewManagementOpen ? (
                   <ChevronDown className="w-4 h-4" />
@@ -218,7 +218,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                     tooltip={settingsItem.title}
                   >
                     <settingsItem.icon className="w-4 h-4" />
-                    <span className="font-medium">{settingsItem.title}</span>
+                    <span className="font-bold text-[#1A56DB]">{settingsItem.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -240,7 +240,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
               ) : (
                 <div className="flex items-center gap-1">
                   <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
-                  <span className="text-xs text-orange-600 font-medium">In Progress</span>
+                  <span className="text-xs text-orange-600 font-medium">Select</span>
                 </div>
               )}
             </div>
@@ -251,8 +251,18 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                   <FileText className="w-3 h-3 text-blue-600" />
                   <span className="text-xs font-medium text-blue-800">Job Description</span>
                 </div>
-                <div className="text-xs text-gray-700 truncate pl-5">
-                  {currentJobDescription ? currentJobDescription.title || 'Selected' : 'Not selected'}
+                <div className="text-xs text-gray-700 truncate pl-5 flex items-center gap-2">
+                  {currentJobDescription ? (
+                    <>
+                      <span className="truncate">
+                        {currentJobDescription.title || 'Selected'}
+                      </span>
+                      <CheckCircle className="w-3 h-3 text-green-500 flex-shrink-0" />
+                      
+                    </>
+                  ) : (
+                    'Not selected'
+                  )}
                 </div>
               </div>
               
@@ -261,8 +271,17 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                   <Wrench className="w-3 h-3 text-blue-600" />
                   <span className="text-xs font-medium text-blue-800">Evaluation Criteria</span>
                 </div>
-                <div className="text-xs text-gray-700 truncate pl-5">
-                  {currentEvaluationCriteria ? currentEvaluationCriteria.name || 'Selected' : 'Not selected'}
+                <div className="text-xs text-gray-700 truncate pl-5 flex items-center gap-2">
+                  {currentEvaluationCriteria ? (
+                    <>
+                      <span className="truncate">
+                        {currentEvaluationCriteria.name || 'Selected'}
+                      </span>
+                      <CheckCircle className="w-3 h-3 text-green-500 flex-shrink-0" />
+                    </>
+                  ) : (
+                    'Not selected'
+                  )}
                 </div>
               </div>
             </div>

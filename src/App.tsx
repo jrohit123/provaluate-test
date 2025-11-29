@@ -6,6 +6,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster as HotToaster } from 'react-hot-toast';
 import './App.css';
+import { useSessionTimeout } from '@/hooks/use-session-timeout';
+import { SessionTimeoutDialog } from '@/components/session/SessionTimeoutDialog';
+import { SessionManager } from '@/utils/sessionManager';
 
 // Import existing pages
 import Login from "./pages/Login";
@@ -14,6 +17,7 @@ import ServicesSelection from "./pages/ServicesSelection";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/Onboarding";
+import Pricing from "./pages/Pricing";
 
 // Import AI Interview components (now TypeScript)
 import InterviewDashboard from "./components/ai-interview/InterviewDashboard";
@@ -36,23 +40,54 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const location = useLocation();
+  const {
+    isTimeoutWarningVisible,
+    remainingMinutes,
+    continueSession,
+    logout,
+  } = useSessionTimeout();
 
   useEffect(() => {
     const checkAuth = async () => {
       setLoading(true);
-      
-      // Check if user is authenticated using localStorage (simplified for current setup)
+
       const isAuth = localStorage.getItem('recruitai_auth') === 'true';
-      setIsAuthenticated(isAuth);
+      if (!isAuth) {
+        setIsAuthenticated(false);
+        setLoading(false);
+        return;
+      }
+
+      const isActive = await SessionManager.isCurrentSessionActive();
+      if (!isActive) {
+        SessionManager.clearSession();
+        localStorage.removeItem('recruitai_auth');
+        setIsAuthenticated(false);
+        setLoading(false);
+        return;
+      }
+
+      setIsAuthenticated(true);
       setLoading(false);
     };
-    
+
     checkAuth();
   }, [location.pathname]);
 
   if (loading) return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  return children;
+
+  return (
+    <>
+      {children}
+      <SessionTimeoutDialog
+        isOpen={isTimeoutWarningVisible}
+        remainingMinutes={remainingMinutes}
+        onContinue={continueSession}
+        onLogout={logout}
+      />
+    </>
+  );
 };
 
 const App = () => {
@@ -67,6 +102,7 @@ const App = () => {
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/pricing" element={<Pricing />} />
             
             {/* Services Selection Page - Protected */}
             <Route path="/services" element={

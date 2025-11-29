@@ -6,10 +6,12 @@ import { Upload, FileText, User, CheckCircle, Play, Briefcase, Grid, Loader2, Do
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { UsageTrackingService, CompanyUsageInfo } from '@/services/usageTrackingService';
 import { MatchScorecardSection } from './MatchScorecardSection';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as XLSX from 'xlsx';
+import { useSession } from '@/contexts/SessionContext';
 
 interface ResumeData {
   id: string;
@@ -131,6 +133,7 @@ export const ResumeUploadSection = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { setCurrentJobDescription, setCurrentEvaluationCriteria } = useSession();
   const [processingState, setProcessingState] = useState<ProcessingState>({
     status: 'idle',
     message: ''
@@ -141,6 +144,8 @@ export const ResumeUploadSection = () => {
   const [lastProgressCount, setLastProgressCount] = useState<number>(0);
   const [initialReportCount, setInitialReportCount] = useState<number>(0);
   const [processingCompleted, setProcessingCompleted] = useState<boolean>(false);
+  const [companyUsageInfo, setCompanyUsageInfo] = useState<CompanyUsageInfo | null>(null);
+  const [showRechargeDialog, setShowRechargeDialog] = useState(false);
 
 
 
@@ -159,6 +164,24 @@ export const ResumeUploadSection = () => {
       console.warn('Unable to read selections from sessionStorage', e);
     }
   }, []);
+
+  useEffect(() => {
+    if (!selectedJobDescriptionId) {
+      setCurrentJobDescription(null);
+      return;
+    }
+    const activeJobDescription = jobDescriptions.find(jd => jd.jd_id === selectedJobDescriptionId);
+    setCurrentJobDescription(activeJobDescription || null);
+  }, [jobDescriptions, selectedJobDescriptionId, setCurrentJobDescription]);
+
+  useEffect(() => {
+    if (!selectedCriteriaGridId) {
+      setCurrentEvaluationCriteria(null);
+      return;
+    }
+    const activeCriteriaGrid = criteriaGrids.find(grid => grid.id === selectedCriteriaGridId);
+    setCurrentEvaluationCriteria(activeCriteriaGrid || null);
+  }, [criteriaGrids, selectedCriteriaGridId, setCurrentEvaluationCriteria]);
 
   // Auto-refresh functions for assessment reports
   const startAutoRefreshAssessments = () => {
@@ -420,6 +443,7 @@ export const ResumeUploadSection = () => {
       loadResumes();
       loadJobDescriptions();
       loadCriteriaGrids();
+      checkCompanyUsageLimits();
       // Clear any stale session data on component mount
       clearSessionUploadedFiles();
       setSelectedFiles([]);
@@ -430,6 +454,23 @@ export const ResumeUploadSection = () => {
       setInitialReportCount(0);
     }
   }, [user?.profile?.company_id, loadResumes, loadJobDescriptions, loadCriteriaGrids]);
+
+  // Check company's CV processing limits
+  const checkCompanyUsageLimits = async () => {
+    if (!user?.profile?.company_id) return;
+    
+    try {
+      const usageInfo = await UsageTrackingService.checkCVProcessingLimit(user.profile.company_id);
+      setCompanyUsageInfo(usageInfo);
+    } catch (error) {
+      console.error('Error checking company usage limits:', error);
+      toast({
+        title: "Usage Check Failed",
+        description: "Could not verify your plan limits. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Set default selections from session storage and show success messages
   useEffect(() => {
@@ -740,6 +781,17 @@ export const ResumeUploadSection = () => {
       return;
     }
 
+    // Check CV processing limits before proceeding
+    if (companyUsageInfo && !companyUsageInfo.canProcessCV) {
+      setShowRechargeDialog(true);
+      toast({
+        title: "CV Processing Limit Reached",
+        description: `You have reached your plan limit of ${companyUsageInfo.maxCVs} CVs. Please recharge to continue processing.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setIsEvaluating(true);
       setProcessingState({
@@ -875,6 +927,24 @@ export const ResumeUploadSection = () => {
 
         // Mark processing as completed
         setProcessingCompleted(true);
+        
+        // Increment CV processing count for the company
+        if (hasNewUploads && user?.profile?.company_id) {
+          try {
+            await UsageTrackingService.incrementCVCount(user.profile.company_id, {
+              resume_count: resumeUrls.length,
+              job_description_id: selectedJDId,
+              criteria_id: selectedCriteriaGridId,
+              processing_date: new Date().toISOString()
+            });
+            
+            // Refresh usage info after incrementing
+            await checkCompanyUsageLimits();
+          } catch (error) {
+            console.error('Error incrementing CV count:', error);
+            // Don't fail the entire process if counting fails
+          }
+        }
         
         // Delay clearing session storage to allow user to see results and potentially re-analyze
         setTimeout(() => {
@@ -1039,6 +1109,7 @@ export const ResumeUploadSection = () => {
     setInitialReportCount(0);
     
     const selectedJD = jobDescriptions.find(jd => jd.jd_id === jdId);
+    setCurrentJobDescription(selectedJD || null);
     toast({
       title: "Job Description Selected",
       description: `Selected: ${selectedJD?.title || 'Unknown Job'}`,
@@ -1057,6 +1128,7 @@ export const ResumeUploadSection = () => {
     setInitialReportCount(0);
     
     const selectedGrid = criteriaGrids.find(grid => grid.id === gridId);
+    setCurrentEvaluationCriteria(selectedGrid || null);
     toast({
       title: "Criteria Grid Selected",
       description: `Selected: ${selectedGrid?.name || 'Unknown Grid'}`,
@@ -1544,18 +1616,18 @@ export const ResumeUploadSection = () => {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-primary-800 mb-2">Resume Uploads</h2>
-        <p className="text-muted-foreground">Upload multiple candidate resumes for evaluation</p>
-      </div>
 
       {/* Top Row: Job Description Selection, Criteria Selection, and Provaluate Button */}
       <Card className="animate-fade-in mb-6">
         <CardContent className="p-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-            
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-primary-800 mb-2">Resume Uploads</h2>
+              <p className="text-muted-foreground">Upload multiple candidate resumes for evaluation</p>
+            </div>
             {/* Job Description Selection */}
             <div className="space-y-3">
+              
               <div className="flex items-center gap-2 mb-2">
                 <Briefcase className="w-4 h-4 text-primary-600" />
                 <h3 className="font-medium text-gray-900">Job Description</h3>
@@ -1809,7 +1881,7 @@ export const ResumeUploadSection = () => {
                 
                 <Button
                   onClick={handleEvaluation}
-                  disabled={isEvaluating || !selectedJobDescriptionId || !selectedCriteriaGridId || !hasResumesToAnalyze}
+                  disabled={isEvaluating || !selectedJobDescriptionId || !selectedCriteriaGridId || !hasResumesToAnalyze || (companyUsageInfo && !companyUsageInfo.canProcessCV)}
                   className={`relative w-full ${
                     processingState.status === 'processing' 
                       ? 'bg-blue-600 hover:bg-blue-700' 
@@ -1817,6 +1889,8 @@ export const ResumeUploadSection = () => {
                       ? 'bg-red-600 hover:bg-red-700'
                       : processingState.status === 'success'
                       ? 'bg-green-600 hover:bg-green-700'
+                      : (companyUsageInfo && !companyUsageInfo.canProcessCV)
+                      ? 'bg-orange-600 hover:bg-orange-700'
                       : 'bg-accent-600 hover:bg-accent-700'
                   } text-white disabled:opacity-50`}
                 >
@@ -1835,6 +1909,10 @@ export const ResumeUploadSection = () => {
                       <CheckCircle className="w-4 h-4" />
                       <span>{processingState.message}</span>
                     </div>
+                  ) : (companyUsageInfo && !companyUsageInfo.canProcessCV) ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <span>Limit Reached - Recharge Required</span>
+                    </div>
                   ) : (
                     <div className="flex items-center justify-center gap-2">
                       <Play className="w-4 h-4" />
@@ -1850,6 +1928,35 @@ export const ResumeUploadSection = () => {
                   </div>
                 )}
                 
+                {/* Show usage info */}
+                {companyUsageInfo && (
+                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-blue-800">Plan: {companyUsageInfo.planName}</span>
+                        <span className="text-blue-600">
+                          {companyUsageInfo.maxCVs === 0 ? 'Unlimited' : `${companyUsageInfo.currentCVCount}/${companyUsageInfo.maxCVs}`} CVs
+                        </span>
+                      </div>
+                      {companyUsageInfo.maxCVs > 0 && (
+                        <div className="text-xs text-blue-600">
+                          {companyUsageInfo.remainingCVs > 0 ? `${companyUsageInfo.remainingCVs} remaining` : 'Limit reached'}
+                        </div>
+                      )}
+                    </div>
+                    {companyUsageInfo.maxCVs > 0 && (
+                      <div className="mt-2 w-full bg-blue-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{ 
+                            width: `${Math.min(100, (companyUsageInfo.currentCVCount / companyUsageInfo.maxCVs) * 100)}%` 
+                          }}
+                        ></div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Show helper text below button */}
                 {processingState.status === 'idle' && (
                   <div className="text-center mt-2">
@@ -1860,6 +1967,8 @@ export const ResumeUploadSection = () => {
                         ? "Upload resumes or select existing assessments"
                         : hasExistingAssessments && !hasNewlyUploadedResumes
                         ? "Ready to re-analyze existing resumes"
+                        : (companyUsageInfo && !companyUsageInfo.canProcessCV)
+                        ? "CV processing limit reached. Please recharge to continue."
                         : "Ready to evaluate resumes"}
                     </p>
                     {(selectedJobDescriptionId && selectedCriteriaGridId && !hasResumesToAnalyze) && (
@@ -2023,6 +2132,49 @@ export const ResumeUploadSection = () => {
       </Dialog>
 
 
+
+      {/* Recharge Dialog */}
+      <Dialog open={showRechargeDialog} onOpenChange={setShowRechargeDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>CV Processing Limit Reached</DialogTitle>
+            <DialogDescription>
+              You have reached your plan limit of {companyUsageInfo?.maxCVs} CVs processed this month. 
+              Please recharge your account to continue processing resumes.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="font-medium text-orange-800">Current Usage</span>
+              </div>
+              <div className="text-sm text-orange-700">
+                <p>Plan: {companyUsageInfo?.planName}</p>
+                <p>Processed: {companyUsageInfo?.currentCVCount} / {companyUsageInfo?.maxCVs} CVs</p>
+                <p>Reset Date: {companyUsageInfo?.resetDate ? new Date(companyUsageInfo.resetDate).toLocaleDateString() : 'N/A'}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                onClick={() => {
+                  // Navigate to admin user management for recharge
+                  window.location.href = '/dashboard?section=admin-user-management';
+                }}
+                className="flex-1 bg-[#1A56DB] hover:bg-[#1A56DB]/90"
+              >
+                Go to Recharge
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowRechargeDialog(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <input
         ref={fileInputRef}
