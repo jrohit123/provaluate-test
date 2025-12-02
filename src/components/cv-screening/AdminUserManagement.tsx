@@ -29,49 +29,58 @@ export default function AdminUserManagement() {
   // Compute admin status after all hooks
   const isAdmin = user?.profile?.role === 'admin';
 
-  useEffect(() => {
-    if (!isAdmin) return; // Only fetch if admin
-    setLoading(true);
-    const fetchData = async () => {
-      try {
-        // Fetch company info
-        const { data: companyData } = await supabase
-          .from('companies')
-          .select('*')
-          .eq('company_id', user.profile.company_id)
-          .single();
-        setCompany(companyData);
-        // Fetch available plans for plan changes (plan_cost > 0 and status = 'Active')
-        const { data: availablePlansData } = await supabase
+  // Load company data function (reusable)
+  const loadCompanyData = async () => {
+    if (!isAdmin || !user?.profile?.company_id) return;
+    
+    try {
+      setLoading(true);
+      // Fetch company info
+      const { data: companyData } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('company_id', user.profile.company_id)
+        .single();
+      setCompany(companyData);
+      
+      // Fetch available plans for plan changes (plan_cost > 0 and status = 'Active')
+      const { data: availablePlansData } = await supabase
+        .from('plans')
+        .select('*')
+        .gt('plan_cost', 0)
+        .eq('status', 'Active');
+      setAvailablePlans(availablePlansData || []);
+      console.log('Available plans:', availablePlansData);
+      
+      // Fetch plan info
+      if (companyData?.selected_plan) {
+        const { data: planData } = await supabase
           .from('plans')
           .select('*')
-          .gt('plan_cost', 0)
-          .eq('status', 'Active');
-        setAvailablePlans(availablePlansData || []);
-        console.log('Available plans:', availablePlansData);
-        // Fetch plan info
-        if (companyData?.selected_plan) {
-          const { data: planData } = await supabase
-            .from('plans')
-            .select('*')
-            .eq('plan_name', companyData.selected_plan)
-            .single();
-          console.log('Fetched plan:', planData);
-          setPlan(planData);
-        } else {
-          setPlan(null);
-        }
-        // Fetch users in company
-        const { data: usersData } = await supabase
-          .from('users')
-          .select('user_id, company_id, first_name, last_name, role, user_status, created_at')
-          .eq('company_id', user.profile.company_id);
-        setUsers(usersData || []);
-      } finally {
-        setLoading(false);
+          .eq('plan_name', companyData.selected_plan)
+          .single();
+        console.log('Fetched plan:', planData);
+        setPlan(planData);
+      } else {
+        setPlan(null);
       }
-    };
-    fetchData();
+      
+      // Fetch users in company
+      const { data: usersData } = await supabase
+        .from('users')
+        .select('user_id, company_id, first_name, last_name, role, user_status, created_at')
+        .eq('company_id', user.profile.company_id);
+      setUsers(usersData || []);
+    } catch (error) {
+      console.error('Error loading company data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAdmin) return; // Only fetch if admin
+    loadCompanyData();
   }, [user?.profile?.company_id, isAdmin]);
 
   const maxUsers = plan?.max_users ?? null;
@@ -221,77 +230,110 @@ export default function AdminUserManagement() {
     }
   };
 
-  const handleRecharge = () => {
-    // Check if Razorpay is loaded
-    if (typeof window !== 'undefined' && (window as any).Razorpay) {
+  const handleRecharge = async () => {
+    if (!user?.profile?.company_id || !plan) {
+      toast({
+        title: "Error",
+        description: "Missing company or plan information.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Step 1: Create order on backend
+      const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
+      const createOrderResponse = await fetch(`${API_BASE_URL}/payments/create-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_id: user.profile.company_id,
+          plan_id: plan.plan_id
+        })
+      });
+
+      if (!createOrderResponse.ok) {
+        const errorData = await createOrderResponse.json();
+        throw new Error(errorData.error || 'Failed to create payment order');
+      }
+
+      const orderData = await createOrderResponse.json();
+      
+      // Step 2: Check if Razorpay is loaded
+      if (typeof window === 'undefined' || !(window as any).Razorpay) {
+        throw new Error('Razorpay SDK not loaded. Please refresh the page.');
+      }
+
+      // Step 3: Open Razorpay checkout
       const options = {
-        key: "rzp_live_RW2RTMgCZSp9mL", // Enter the Key ID generated from the Dashboard
-        amount: "1000", // Amount is in currency subunits (₹10.00)
-        currency: "INR",
-        name: "aitamate", //your business name
-        description: "Account Recharge",
-        image: "https://example.com/your_logo",
-        order_id: "order_RW2wU3QWuqsHxA", //This is a sample Order ID. Pass the `id` obtained in the response of Step 1
+        key: orderData.key_id, // Use key from backend response
+        amount: orderData.amount.toString(),
+        currency: orderData.currency,
+        name: "aitamate",
+        description: `Subscription renewal for ${plan.plan_name}`,
+        order_id: orderData.order_id,
         handler: async function (response: any) {
-          // Handle successful payment
-          console.log('Payment successful:', response);
-          
           try {
-            // Record the payment in the database
-            if (user?.profile?.company_id && plan) {
-              const subscriptionStartDate = new Date();
-              const subscriptionEndDate = new Date();
-              subscriptionEndDate.setMonth(subscriptionEndDate.getMonth() + 1); // 1 month from now
-              
-              await UsageTrackingService.recordPayment({
+            setLoading(true);
+            
+            // Step 4: Verify payment on backend
+            const verifyResponse = await fetch(`${API_BASE_URL}/payments/verify`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
                 company_id: user.profile.company_id,
                 plan_id: plan.plan_id,
-                payment_amount: 10.00, // ₹10.00 (1000 paise)
-                currency: 'INR',
-                razorpay_order_id: "order_RW2wU3QWuqsHxA",
+                razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                subscription_start_date: subscriptionStartDate.toISOString(),
-                subscription_end_date: subscriptionEndDate.toISOString(),
-                billing_cycle: 'monthly',
-                metadata: {
-                  payment_purpose: 'account_recharge',
-                  user_id: user.id,
-                  company_name: company?.company_name
-                }
-              });
-              
-              toast({
-                title: "Payment Successful",
-                description: `Payment recorded successfully. Your account has been recharged.`,
-              });
-              
-              // Refresh company data to show updated subscription
-              await loadCompanyData();
-            } else {
-              throw new Error('Missing company or plan information');
+                razorpay_signature: response.razorpay_signature
+              })
+            });
+
+            if (!verifyResponse.ok) {
+              const errorData = await verifyResponse.json();
+              throw new Error(errorData.error || 'Payment verification failed');
             }
-          } catch (error) {
-            console.error('Error recording payment:', error);
+
+            const verifyData = await verifyResponse.json();
+            
             toast({
-              title: "Payment Recorded",
-              description: `Payment successful but failed to update account. Please contact support.`,
+              title: "Payment Successful",
+              description: "Your subscription has been renewed successfully.",
+            });
+            
+            // Refresh company data
+            await loadCompanyData();
+            
+          } catch (error: any) {
+            console.error('Error verifying payment:', error);
+            toast({
+              title: "Payment Verification Failed",
+              description: error.message || "Payment was successful but verification failed. Please contact support.",
               variant: "destructive",
             });
+          } finally {
+            setLoading(false);
           }
         },
         prefill: {
-          name: user?.profile?.first_name || user?.email?.split('@')[0] || "Customer",
+          name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
           email: user?.email || "",
-          contact: "" // Add phone number if available
+          contact: ""
         },
         notes: {
           company_id: company?.company_id || "",
           user_id: user?.id || "",
-          purpose: "Account Recharge"
+          plan_name: plan.plan_name
         },
         theme: {
-          color: "#1A56DB" // Using your brand color
+          color: "#1A56DB"
+        },
+        modal: {
+          ondismiss: function() {
+            setLoading(false);
+          }
         }
       };
       
@@ -301,19 +343,23 @@ export default function AdminUserManagement() {
         console.error('Payment failed:', response.error);
         toast({
           title: "Payment Failed",
-          description: `Error: ${response.error.description}`,
+          description: response.error.description || "Payment could not be completed. Please try again.",
           variant: "destructive",
         });
+        setLoading(false);
       });
       
       rzp1.open();
-    } else {
-      console.error('Razorpay not loaded');
+      setLoading(false);
+      
+    } catch (error: any) {
+      console.error('Error initiating payment:', error);
       toast({
         title: "Payment Error",
-        description: "Payment system not available. Please refresh the page and try again.",
+        description: error.message || "Failed to initiate payment. Please try again.",
         variant: "destructive",
       });
+      setLoading(false);
     }
   };
 
