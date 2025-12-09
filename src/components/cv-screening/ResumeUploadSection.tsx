@@ -109,6 +109,33 @@ const getRecommendationStyle = (status: string): string => {
   }
 };
 
+const normalizeNumericScore = (value: any): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const parseReportScores = (scores: any): any[] => {
+  if (Array.isArray(scores)) {
+    return scores;
+  }
+  if (typeof scores === 'string') {
+    try {
+      const parsed = JSON.parse(scores);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.warn('Unable to parse report scores', error);
+      return [];
+    }
+  }
+  return [];
+};
+
 // Keep the old score-based function for fallback if needed
 const getMatchStatus = (score: number) => {
   if (score >= 85) return { status: 'excellent', text: 'Excellent Match', className: 'bg-green-100 text-green-700' };
@@ -912,17 +939,27 @@ export const ResumeUploadSection = () => {
           toast({
             title: hasNewUploads ? "CV Analyzer Processing Started" : "Existing Assessments Loaded",
             description: hasNewUploads 
-              ? `Successfully sent ${resumeUrls.length} new resume${resumeUrls.length > 1 ? 's' : ''} to CV Analyzer. Wait for the results, it might take a while.`
+              ? `Successfully sent ${resumeUrls.length} new resume${resumeUrls.length > 1 ? 's' : ''} to CV Analyzer. Fetching results...`
               : `Successfully loaded ${assessmentReports.length} existing assessment${assessmentReports.length > 1 ? 's' : ''}. You can view the results below.`,
           });
 
-                  // Start auto-refresh to check for assessment reports every 15 seconds (with 30s delay) - only for new uploads
+          // Auto-fetch results after a short delay for new uploads
           if (hasNewUploads) {
+            setTimeout(async () => {
+              console.log('🔄 Auto-fetching assessment reports after processing...');
+              await fetchAssessmentReports();
+              toast({
+                title: "Results Updated",
+                description: "Assessment results are now displayed below.",
+              });
+            }, 5000); // Wait 5 seconds before first auto-fetch
+            
+            // Then start the regular auto-refresh cycle with 30s delay
             setTimeout(() => {
               if (isWaitingForAssessments) {
                 startAutoRefreshAssessments();
               }
-            }, 30000); // Wait 30 seconds before starting auto-refresh
+            }, 30000);
           }
 
         // Mark processing as completed
@@ -1039,13 +1076,11 @@ export const ResumeUploadSection = () => {
     }
   };
 
-  // Start uploading pending files without duplicating them
+  // Start uploading pending files in parallel
   const startPendingUploads = async (e: React.MouseEvent) => {
-    // Prevent event from bubbling up to the dropzone
     e.stopPropagation();
-    console.log('Starting upload for pending files...');
+    console.log('Starting parallel upload for pending files...');
     
-    // Find all pending files
     const pendingFiles = selectedFiles
       .map((fileData, index) => ({ fileData, index }))
       .filter(({ fileData }) => fileData.status === 'pending');
@@ -1055,22 +1090,25 @@ export const ResumeUploadSection = () => {
       return;
     }
     
-    console.log(`Found ${pendingFiles.length} pending files to upload`);
+    console.log(`Found ${pendingFiles.length} pending files to upload in parallel`);
     
     try {
-      // Process each pending file by its index
-      for (const { fileData, index } of pendingFiles) {
-        setCurrentlyProcessing(index);
-        console.log(`Processing pending file at index ${index}: ${fileData.file.name}`);
-        
-        await uploadSingleFile(fileData.file, index);
-        
-        // Small delay between files
-        await new Promise(resolve => setTimeout(resolve, 150));
-      }
+      // Set all files to uploading status
+      setSelectedFiles(prev => prev.map(fileData => 
+        fileData.status === 'pending' ? { ...fileData, status: 'uploading' } : fileData
+      ));
+      
+      // Upload all files in parallel using Promise.all
+      const uploadPromises = pendingFiles.map(({ fileData, index }) => {
+        console.log(`Starting parallel upload for file at index ${index}: ${fileData.file.name}`);
+        return uploadSingleFile(fileData.file, index);
+      });
+      
+      // Wait for all uploads to complete
+      await Promise.all(uploadPromises);
       
       setCurrentlyProcessing(-1);
-      console.log('✅ All pending files processed');
+      console.log('✅ All files processed in parallel');
       
       toast({
         title: "Upload Complete", 
@@ -1078,11 +1116,11 @@ export const ResumeUploadSection = () => {
       });
       
     } catch (error: any) {
-      console.error('Error uploading pending files:', error);
+      console.error('Error uploading files in parallel:', error);
       setCurrentlyProcessing(-1);
       toast({
         title: "Upload Error",
-        description: "Error uploading files. Please try again.",
+        description: error.message || "Error uploading files. Please try again.",
         variant: "destructive",
       });
     }
@@ -1896,7 +1934,7 @@ export const ResumeUploadSection = () => {
                 >
                   {processingState.status === 'processing' ? (
                     <div className="flex items-center justify-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {/* <Loader2 className="w-4 h-4 animate-spin" /> */}
                       <span>{processingState.message}</span>
                     </div>
                   ) : processingState.status === 'error' ? (
@@ -2043,7 +2081,10 @@ export const ResumeUploadSection = () => {
           assessmentReports.map((report) => {
             // Extract recommendation status for this report
             const recommendationStatus = extractRecommendationStatus(report.recommendation);
-            
+            const normalizedOverallScore = normalizeNumericScore(report.overall_score);
+            const detailedScores = parseReportScores(report.scores);
+            const isProcessingReport = normalizedOverallScore === null && detailedScores.length === 0;
+
             return (
             <Card 
               key={report.id}
@@ -2083,29 +2124,51 @@ export const ResumeUploadSection = () => {
                     <div className={`px-3 py-1 rounded-full text-xs font-medium ${getRecommendationStyle(recommendationStatus)}`}>
                       {recommendationStatus}
                     </div>
-                    <div className="text-lg font-bold text-gray-900">
-                      {report.overall_score ? `${Math.round(report.overall_score * 10)}%` : 'No Score'}
-                    </div>
+                    {isProcessingReport ? (
+                      <div className="flex items-center gap-2 text-sm text-blue-600">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Processing...</span>
+                      </div>
+                    ) : (
+                      <div className="text-lg font-bold text-gray-900">
+                        {`${Math.round((normalizedOverallScore ?? 0) * 10)}%`}
+                      </div>
+                    )}
                   </div>
                 </div>
                 {/* Optionally, show detailed scores if available */}
-                {report.scores && Array.isArray(report.scores) && report.scores.length > 0 && (
+                {!isProcessingReport && detailedScores.length > 0 && (
                   <div className="mt-4">
-                    {report.scores.map((score: any, idx: number) => (
-                      <div key={idx} className="flex items-center gap-4 mb-2">
-                        <div className="w-40 font-medium">{score.parameter}</div>
-                        <div className="flex-1">
-                          <div className="relative w-full h-3 bg-gray-200 rounded-full">
-                            <div
-                              className="absolute top-0 left-0 h-3 rounded-full bg-blue-600"
-                              style={{ width: `${Math.round(score.score * 10)}%` }}
-                            />
+                    {detailedScores.map((score: any, idx: number) => {
+                      const parameterScore = normalizeNumericScore(score?.score);
+                      const percentage = parameterScore !== null ? Math.round(parameterScore * 10) : null;
+
+                      return (
+                        <div key={idx} className="flex items-center gap-4 mb-2">
+                          <div className="w-40 font-medium">{score.parameter || 'Parameter'}</div>
+                          <div className="flex-1">
+                            <div className="relative w-full h-3 bg-gray-200 rounded-full">
+                              <div
+                                className="absolute top-0 left-0 h-3 rounded-full bg-blue-600"
+                                style={{ width: `${percentage !== null ? Math.max(0, Math.min(100, percentage)) : 0}%` }}
+                              />
+                            </div>
+                          </div>
+                          <div className="w-12 text-right font-semibold">
+                            {percentage !== null ? `${percentage}%` : '—'}
+                          </div>
+                          <div className="w-20 text-right text-xs text-muted-foreground">
+                            Weight: {score.weightage ?? 0}%
                           </div>
                         </div>
-                        <div className="w-12 text-right font-semibold">{Math.round(score.score * 10)}%</div>
-                        <div className="w-20 text-right text-xs text-muted-foreground">Weight: {score.weightage}%</div>
-                      </div>
-                    ))}
+                      );
+                    })}
+                  </div>
+                )}
+                {isProcessingReport && (
+                  <div className="mt-4 flex items-center gap-2 text-sm text-blue-600">
+                    {/* <Loader2 className="w-4 h-4 animate-spin" /> */}
+                    {/* <span>We're evaluating this resume. Scores will appear soon.</span> */}
                   </div>
                 )}
             </CardContent>
