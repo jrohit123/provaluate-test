@@ -18,6 +18,8 @@ export interface Database {
           subscription_status: string | null
           subscription_start: string | null
           subscription_end: string | null
+          cv_processed_count: number | null
+          cv_processing_reset_date: string | null
           created_at: string
           updated_at: string
         }
@@ -29,6 +31,8 @@ export interface Database {
           subscription_status?: string | null
           subscription_start?: string | null
           subscription_end?: string | null
+          cv_processed_count?: number | null
+          cv_processing_reset_date?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -40,6 +44,8 @@ export interface Database {
           subscription_status?: string | null
           subscription_start?: string | null
           subscription_end?: string | null
+          cv_processed_count?: number | null
+          cv_processing_reset_date?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -184,6 +190,8 @@ export interface Database {
           active_jobs: number | null
           max_cvs: number | null
           max_users: number | null
+          duration: number | null
+          status: string | null
         }
         Insert: {
           plan_id?: string
@@ -193,6 +201,8 @@ export interface Database {
           active_jobs?: number | null
           max_cvs?: number | null
           max_users?: number | null
+          duration?: number | null
+          status?: string | null
         }
         Update: {
           plan_id?: string
@@ -202,6 +212,8 @@ export interface Database {
           active_jobs?: number | null
           max_cvs?: number | null
           max_users?: number | null
+          duration?: number | null
+          status?: string | null
         }
       }
       clients: {
