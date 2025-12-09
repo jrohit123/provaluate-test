@@ -8,7 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Users, Clock, CheckCircle, Shield, Mail, FileText, BarChart, UserPlus, LogIn } from "lucide-react";
 import { SessionManager } from '@/utils/sessionManager';
 
-const PYTHON_API_BASE = import.meta.env.VITE_PYTHON_URL || 'http://localhost:5003';
+const PYTHON_API_BASE = import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com';
 
 // Test credentials
 const TEST_EMAIL = 'test@example.com';
