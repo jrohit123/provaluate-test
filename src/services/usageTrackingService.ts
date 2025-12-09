@@ -32,20 +32,10 @@ export class UsageTrackingService {
    */
   static async checkCVProcessingLimit(companyId: string): Promise<CompanyUsageInfo> {
     try {
-      // Get company info with plan details
+      // 1) Fetch company info
       const { data: companyData, error: companyError } = await supabase
         .from('companies')
-        .select(`
-          company_id,
-          selected_plan,
-          cv_processed_count,
-          cv_processing_reset_date,
-          plans!inner(
-            plan_id,
-            plan_name,
-            max_cvs
-          )
-        `)
+        .select('company_id, selected_plan, cv_processed_count, cv_processing_reset_date')
         .eq('company_id', companyId)
         .single();
 
@@ -58,17 +48,35 @@ export class UsageTrackingService {
         throw new Error('Company not found');
       }
 
+      // 2) Fetch plan info separately (selected_plan stores plan name, not FK)
+      let maxCVs = 0;
+      let planName = 'No Plan';
+
+      if (companyData.selected_plan) {
+        const { data: planData, error: planError } = await supabase
+          .from('plans')
+          .select('plan_name, max_cvs')
+          .eq('plan_name', companyData.selected_plan)
+          .single();
+
+        if (planError) {
+          console.warn('Could not fetch plan data:', planError);
+        } else if (planData) {
+          maxCVs = planData.max_cvs ?? 0;
+          planName = planData.plan_name ?? companyData.selected_plan;
+        }
+      }
+
       const currentCount = companyData.cv_processed_count || 0;
-      const maxCVs = companyData.plans?.max_cvs || 0;
       const canProcess = maxCVs === 0 || currentCount < maxCVs; // 0 means unlimited
       const remaining = maxCVs === 0 ? -1 : Math.max(0, maxCVs - currentCount); // -1 means unlimited
 
       return {
         canProcessCV: canProcess,
         currentCVCount: currentCount,
-        maxCVs: maxCVs,
+        maxCVs,
         remainingCVs: remaining,
-        planName: companyData.plans?.plan_name || 'No Plan',
+        planName,
         resetDate: companyData.cv_processing_reset_date || new Date().toISOString()
       };
     } catch (error) {
@@ -82,9 +90,12 @@ export class UsageTrackingService {
    */
   static async incrementCVCount(companyId: string, metadata?: any): Promise<void> {
     try {
+      const resumeCount = metadata?.resume_count ?? 1;
+
       // Use the database function to increment count and track usage
       const { error } = await supabase.rpc('increment_cv_count', {
-        company_uuid: companyId
+        company_uuid: companyId,
+        resume_count: resumeCount
       });
 
       if (error) {
@@ -98,7 +109,7 @@ export class UsageTrackingService {
         .insert({
           company_id: companyId,
           usage_type: 'cv_processing',
-          usage_count: 1,
+          usage_count: resumeCount,
           metadata: metadata || null
         });
 
