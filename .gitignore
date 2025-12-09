@@ -31,3 +31,5 @@ dist-ssr
 
 # Cursor specific files
 .cursor/mcp.json
+supabase/.temp/
+public/favicon_old.png
