@@ -34,49 +34,49 @@ export default function AdminUserManagement() {
     if (!isAdmin || !user?.profile?.company_id) return;
     
     try {
-      setLoading(true);
-      // Fetch company info
-      const { data: companyData } = await supabase
-        .from('companies')
-        .select('*')
-        .eq('company_id', user.profile.company_id)
-        .single();
-      setCompany(companyData);
+    setLoading(true);
+        // Fetch company info
+        const { data: companyData } = await supabase
+          .from('companies')
+          .select('*')
+          .eq('company_id', user.profile.company_id)
+          .single();
+        setCompany(companyData);
       
-      // Fetch available plans for plan changes (plan_cost > 0 and status = 'Active')
-      const { data: availablePlansData } = await supabase
-        .from('plans')
-        .select('*')
-        .gt('plan_cost', 0)
-        .eq('status', 'Active');
-      setAvailablePlans(availablePlansData || []);
-      console.log('Available plans:', availablePlansData);
-      
-      // Fetch plan info
-      if (companyData?.selected_plan) {
-        const { data: planData } = await supabase
+        // Fetch available plans for plan changes (plan_cost > 0 and status = 'Active')
+        const { data: availablePlansData } = await supabase
           .from('plans')
           .select('*')
-          .eq('plan_name', companyData.selected_plan)
-          .single();
-        console.log('Fetched plan:', planData);
-        setPlan(planData);
-      } else {
-        setPlan(null);
-      }
+          .gt('plan_cost', 0)
+          .eq('status', 'Active');
+        setAvailablePlans(availablePlansData || []);
+        console.log('Available plans:', availablePlansData);
       
-      // Fetch users in company
-      const { data: usersData } = await supabase
-        .from('users')
-        .select('user_id, company_id, first_name, last_name, role, user_status, created_at')
-        .eq('company_id', user.profile.company_id);
-      setUsers(usersData || []);
+        // Fetch plan info
+        if (companyData?.selected_plan) {
+          const { data: planData } = await supabase
+            .from('plans')
+            .select('*')
+            .eq('plan_name', companyData.selected_plan)
+            .single();
+          console.log('Fetched plan:', planData);
+          setPlan(planData);
+        } else {
+          setPlan(null);
+        }
+      
+        // Fetch users in company
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('user_id, company_id, first_name, last_name, role, user_status, created_at')
+          .eq('company_id', user.profile.company_id);
+        setUsers(usersData || []);
     } catch (error) {
       console.error('Error loading company data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+      } finally {
+        setLoading(false);
+      }
+    };
 
   useEffect(() => {
     if (!isAdmin) return; // Only fetch if admin
@@ -243,92 +243,73 @@ export default function AdminUserManagement() {
     try {
       setLoading(true);
       
-      // Step 1: Create order on backend
+      // Step 1: Create subscription on backend (passes internal plan_id, backend fetches razorpay_plan_id from database)
       const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
-      const createOrderResponse = await fetch(`${API_BASE_URL}/payments/create-order`, {
+      const createSubscriptionResponse = await fetch(`${API_BASE_URL}/payments/create-subscription`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           company_id: user.profile.company_id,
-          plan_id: plan.plan_id
+          plan_id: plan.plan_id  // Internal plan_id - backend will fetch razorpay_plan_id from database
         })
       });
 
-      if (!createOrderResponse.ok) {
-        const errorData = await createOrderResponse.json();
-        throw new Error(errorData.error || 'Failed to create payment order');
+      if (!createSubscriptionResponse.ok) {
+        const errorData = await createSubscriptionResponse.json();
+        throw new Error(errorData.error || 'Failed to create subscription');
       }
 
-      const orderData = await createOrderResponse.json();
+      const subscriptionData = await createSubscriptionResponse.json();
+      
+      // subscriptionData.subscription_id comes from database - NO HARDCODING
       
       // Step 2: Check if Razorpay is loaded
       if (typeof window === 'undefined' || !(window as any).Razorpay) {
         throw new Error('Razorpay SDK not loaded. Please refresh the page.');
       }
 
-      // Step 3: Open Razorpay checkout
+      // Step 3: Open Razorpay subscription checkout using subscription_id from backend
       const options = {
-        key: orderData.key_id, // Use key from backend response
-        amount: orderData.amount.toString(),
-        currency: orderData.currency,
+        key: subscriptionData.key_id,
+        subscription_id: subscriptionData.subscription_id,  // From database via backend - NO HARDCODING
         name: "aitamate",
-        description: `Subscription renewal for ${plan.plan_name}`,
-        order_id: orderData.order_id,
-        handler: async function (response: any) {
-          try {
-            setLoading(true);
-            
-            // Step 4: Verify payment on backend
-            const verifyResponse = await fetch(`${API_BASE_URL}/payments/verify`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                company_id: user.profile.company_id,
-                plan_id: plan.plan_id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature
-              })
-            });
-
-            if (!verifyResponse.ok) {
-              const errorData = await verifyResponse.json();
-              throw new Error(errorData.error || 'Payment verification failed');
-            }
-
-            const verifyData = await verifyResponse.json();
-            
-            toast({
-              title: "Payment Successful",
-              description: "Your subscription has been renewed successfully.",
-            });
-            
-            // Refresh company data
-            await loadCompanyData();
-            
-          } catch (error: any) {
-            console.error('Error verifying payment:', error);
-            toast({
-              title: "Payment Verification Failed",
-              description: error.message || "Payment was successful but verification failed. Please contact support.",
-              variant: "destructive",
-            });
-          } finally {
-            setLoading(false);
-          }
-        },
+        description: `Subscription for ${plan.plan_name}`,
         prefill: {
           name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
           email: user?.email || "",
           contact: ""
         },
         notes: {
-          company_id: company?.company_id || "",
-          user_id: user?.id || "",
+          company_id: user.profile.company_id,
           plan_name: plan.plan_name
         },
         theme: {
           color: "#1A56DB"
+        },
+        handler: async function (response: any) {
+          try {
+            setLoading(true);
+            
+            toast({
+              title: "Subscription Activated",
+              description: subscriptionData.is_existing 
+                ? "Using your existing subscription. Payments will continue automatically."
+                : "Your subscription has been activated. Payments will be charged automatically every 7 days.",
+              });
+              
+            // Refresh company data
+              await loadCompanyData();
+            
+          } catch (error: any) {
+            console.error('Error processing subscription:', error);
+            toast({
+              title: "Subscription Error",
+              description: error.message || "An error occurred. Please contact support.",
+              variant: "destructive",
+            });
+          } finally {
+            setLoading(false);
+          }
         },
         modal: {
           ondismiss: function() {
@@ -353,10 +334,10 @@ export default function AdminUserManagement() {
       setLoading(false);
       
     } catch (error: any) {
-      console.error('Error initiating payment:', error);
+      console.error('Error initiating subscription:', error);
       toast({
-        title: "Payment Error",
-        description: error.message || "Failed to initiate payment. Please try again.",
+        title: "Subscription Error",
+        description: error.message || "Failed to initiate subscription. Please try again.",
         variant: "destructive",
       });
       setLoading(false);
