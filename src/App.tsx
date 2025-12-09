@@ -80,13 +80,12 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return (
     <>
       {children}
-      {/* SESSION TIMEOUT DISABLED FOR TROUBLESHOOTING */}
-      {/* <SessionTimeoutDialog
+      <SessionTimeoutDialog
         isOpen={isTimeoutWarningVisible}
         remainingMinutes={remainingMinutes}
         onContinue={continueSession}
         onLogout={logout}
-      /> */}
+      />
     </>
   );
 };
