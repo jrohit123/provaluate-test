@@ -114,7 +114,12 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
     });
   }, [logoutAndRedirect]);
 
+  // DISABLED FOR TROUBLESHOOTING - Session timeout checking is commented out
   const checkSessionTimeout = useCallback(async () => {
+    // SESSION TIMEOUT DISABLED FOR TROUBLESHOOTING
+    return;
+    
+    /* COMMENTED OUT FOR TROUBLESHOOTING
     // Check if our custom session is still active (independent of Supabase Auth)
     const sessionId = SessionManager.getCurrentSessionId();
     if (sessionId) {
@@ -162,6 +167,7 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
       warningShownRef.current = false;
       setIsTimeoutWarningVisible(false);
     }
+    */
   }, [warningThresholdMinutes, onTimeout, onWarning, updateRemainingTime, handleTimeout, logoutAndRedirect]);
 
   // Handle user activity (reset inactivity timer)
@@ -214,7 +220,12 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
   }, [toast, updateRemainingTime]);
 
   // Set up activity listeners
+  // DISABLED FOR TROUBLESHOOTING - Activity tracking is commented out
   useEffect(() => {
+    // SESSION TIMEOUT DISABLED FOR TROUBLESHOOTING
+    return;
+    
+    /* COMMENTED OUT FOR TROUBLESHOOTING
     const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
 
     events.forEach(event => {
@@ -226,10 +237,16 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
         document.removeEventListener(event, handleActivity);
       });
     };
+    */
   }, [handleActivity]);
 
   // Set up timeout check interval
+  // DISABLED FOR TROUBLESHOOTING - Timeout checking interval is commented out
   useEffect(() => {
+    // SESSION TIMEOUT DISABLED FOR TROUBLESHOOTING
+    return;
+    
+    /* COMMENTED OUT FOR TROUBLESHOOTING
     // Initial check
     checkSessionTimeout();
 
@@ -243,6 +260,7 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
         clearInterval(checkTimeoutIntervalRef.current);
       }
     };
+    */
   }, [checkSessionTimeout]);
 
   // Cleanup on unmount
