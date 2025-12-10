@@ -25,6 +25,9 @@ export default function AdminUserManagement() {
   const [loading, setLoading] = useState(false);
   const [changingPlan, setChangingPlan] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState('');
+  const [cycleDateOpen, setCycleDateOpen] = useState(false);
+  const [newCycleDay, setNewCycleDay] = useState<number>(1);
+  const [rechargingCVs, setRechargingCVs] = useState(false);
 
   // Compute admin status after all hooks
   const isAdmin = user?.profile?.role === 'admin';
@@ -186,7 +189,7 @@ export default function AdminUserManagement() {
   };
 
   const handlePlanChange = async () => {
-    if (!selectedNewPlan || !company) {
+    if (!selectedNewPlan || !company || !plan) {
       toast({
         title: "Error",
         description: "Please select a plan to change to.",
@@ -197,36 +200,260 @@ export default function AdminUserManagement() {
 
     setChangingPlan(true);
     try {
-      const { error } = await supabase
-        .from('companies')
-        .update({ selected_plan: selectedNewPlan })
-        .eq('company_id', company.company_id);
-
-      if (error) throw error;
-
-      // Update local state
-      setCompany(prev => ({ ...prev, selected_plan: selectedNewPlan }));
-      
-      // Fetch updated plan data
+      const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
       const selectedPlanData = availablePlans.find(p => p.plan_name === selectedNewPlan);
-      setPlan(selectedPlanData);
+      
+      if (!selectedPlanData) {
+        throw new Error('Selected plan not found');
+      }
+
+      const currentPlanCost = plan.plan_cost || 0;
+      const newPlanCost = selectedPlanData.plan_cost || 0;
+      
+      // Determine if upgrade or downgrade
+      const isUpgrade = newPlanCost > currentPlanCost;
+      const isDowngrade = newPlanCost < currentPlanCost;
+      
+      let endpoint = '';
+      if (isUpgrade) {
+        endpoint = '/payments/upgrade-plan';
+      } else if (isDowngrade) {
+        endpoint = '/payments/downgrade-plan';
+      } else {
+        // Same price - just update in database
+        const { error } = await supabase
+          .from('companies')
+          .update({ selected_plan: selectedNewPlan })
+          .eq('company_id', company.company_id);
+
+        if (error) throw error;
+
+        setCompany(prev => ({ ...prev, selected_plan: selectedNewPlan }));
+        setPlan(selectedPlanData);
+        setPlanChangeOpen(false);
+        setSelectedNewPlan('');
+        
+        toast({
+          title: "Plan Updated",
+          description: `Successfully updated to ${selectedNewPlan} plan.`,
+        });
+        setChangingPlan(false);
+        return;
+      }
+
+      // Call upgrade or downgrade endpoint
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_id: company.company_id,
+          new_plan_id: selectedPlanData.plan_id
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to change plan');
+      }
+
+      const result = await response.json();
+      
+      // Refresh company data
+      await loadCompanyData();
       
       setPlanChangeOpen(false);
       setSelectedNewPlan('');
       
       toast({
-        title: "Plan Updated",
-        description: `Successfully updated to ${selectedNewPlan} plan.`,
+        title: isUpgrade ? "Plan Upgraded" : "Plan Downgraded",
+        description: result.message || `Successfully ${isUpgrade ? 'upgraded' : 'downgraded'} to ${selectedNewPlan} plan.`,
       });
     } catch (error: any) {
-      console.error('Error updating plan:', error);
+      console.error('Error changing plan:', error);
       toast({
         title: "Error",
-        description: "Failed to update plan. Please try again.",
+        description: error.message || "Failed to update plan. Please try again.",
         variant: "destructive",
       });
     } finally {
       setChangingPlan(false);
+    }
+  };
+
+  const handleCVRecharge = async () => {
+    if (!user?.profile?.company_id || !plan) {
+      toast({
+        title: "Error",
+        description: "Missing company or plan information.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setRechargingCVs(true);
+      const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
+      
+      // Create CV recharge order
+      const response = await fetch(`${API_BASE_URL}/payments/recharge-cvs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_id: user.profile.company_id
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create CV recharge order');
+      }
+
+      const orderData = await response.json();
+      
+      // Check if Razorpay is loaded
+      if (typeof window === 'undefined' || !(window as any).Razorpay) {
+        throw new Error('Razorpay SDK not loaded. Please refresh the page.');
+      }
+
+      // Open Razorpay checkout for one-time payment
+      const options = {
+        key: orderData.key_id,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "aitamate",
+        description: `CV Recharge - Add ${orderData.cvs_to_add} CVs`,
+        order_id: orderData.order_id,
+        prefill: {
+          name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
+          email: user?.email || "",
+          contact: ""
+        },
+        notes: {
+          company_id: user.profile.company_id,
+          plan_name: plan.plan_name,
+          recharge_type: 'cv_topup'
+        },
+        theme: {
+          color: "#1A56DB"
+        },
+        handler: async function (response: any) {
+          try {
+            // Verify payment
+            const verifyResponse = await fetch(`${API_BASE_URL}/payments/verify`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                company_id: user.profile.company_id,
+                plan_id: plan.plan_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+              })
+            });
+
+            if (!verifyResponse.ok) {
+              throw new Error('Payment verification failed');
+            }
+
+            toast({
+              title: "CV Recharge Successful",
+              description: `${orderData.cvs_to_add} CVs added. Cycle date unchanged.`,
+            });
+            
+            // Refresh company data
+            await loadCompanyData();
+          } catch (error: any) {
+            console.error('Error processing CV recharge:', error);
+            toast({
+              title: "CV Recharge Error",
+              description: error.message || "An error occurred. Please contact support.",
+              variant: "destructive",
+            });
+          } finally {
+            setRechargingCVs(false);
+          }
+        },
+        modal: {
+          ondismiss: function() {
+            setRechargingCVs(false);
+          }
+        }
+      };
+      
+      const rzp1 = new (window as any).Razorpay(options);
+      
+      rzp1.on('payment.failed', function (response: any) {
+        console.error('Payment failed:', response.error);
+        toast({
+          title: "Payment Failed",
+          description: response.error.description || "Payment could not be completed. Please try again.",
+          variant: "destructive",
+        });
+        setRechargingCVs(false);
+      });
+      
+      rzp1.open();
+      
+    } catch (error: any) {
+      console.error('Error initiating CV recharge:', error);
+      toast({
+        title: "CV Recharge Error",
+        description: error.message || "Failed to initiate CV recharge. Please try again.",
+        variant: "destructive",
+      });
+      setRechargingCVs(false);
+    }
+  };
+
+  const handleChangeCycleDate = async () => {
+    if (!user?.profile?.company_id || !newCycleDay) {
+      toast({
+        title: "Error",
+        description: "Please select a valid cycle day.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
+      
+      const response = await fetch(`${API_BASE_URL}/payments/change-cycle-date`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_id: user.profile.company_id,
+          new_cycle_day: newCycleDay
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to change cycle date');
+      }
+
+      const result = await response.json();
+      
+      // Refresh company data
+      await loadCompanyData();
+      
+      setCycleDateOpen(false);
+      setNewCycleDay(1);
+      
+      toast({
+        title: "Cycle Date Changed",
+        description: result.message || `Billing cycle date changed to ${newCycleDay} (weekly cycle).`,
+      });
+    } catch (error: any) {
+      console.error('Error changing cycle date:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to change cycle date. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -368,7 +595,58 @@ export default function AdminUserManagement() {
         <div className="flex justify-between items-center mb-4">
           <div className="font-semibold text-lg">Company Users</div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleRecharge}>Recharge</Button>
+            <Button variant="outline" onClick={handleRecharge} disabled={loading}>Recharge</Button>
+            <Button variant="outline" onClick={handleCVRecharge} disabled={rechargingCVs || !plan}>
+              {rechargingCVs ? 'Processing...' : 'Recharge CVs'}
+            </Button>
+            <Dialog open={cycleDateOpen} onOpenChange={setCycleDateOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">Change Cycle Date</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Change Billing Cycle Date</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Current billing date: <strong>{company?.subscription_end ? new Date(company.subscription_end).toLocaleDateString() : 'N/A'}</strong>
+                    </p>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Select a day (1-31) for your new billing cycle start date. You can only prepone the date, not postpone it. Cycles are 7 days.
+                    </p>
+                  </div>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="31"
+                    value={newCycleDay}
+                    onChange={(e) => setNewCycleDay(parseInt(e.target.value) || 1)}
+                    placeholder="Day (1-31) - weekly cycle"
+                  />
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={handleChangeCycleDate} 
+                      disabled={!newCycleDay || loading}
+                      className="flex-1"
+                    >
+                      {loading ? 'Updating...' : 'Update Date'}
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setCycleDateOpen(false);
+                        setNewCycleDay(1);
+                      }}
+                      className="flex-1"
+                      disabled={loading}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
             <Dialog open={planChangeOpen} onOpenChange={setPlanChangeOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline">Change Plan</Button>
