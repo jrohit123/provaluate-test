@@ -637,7 +637,7 @@ const HRInterviewCreator = () => {
     try {
       console.log('🔄 Saving parameters for role:', formData.position, customParameters);
       
-      const response = await fetch('http://localhost:5003/api/custom-parameters', {
+      const response = await fetch('https://devprovaluate_py.aitamate.com/api/custom-parameters', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -731,7 +731,7 @@ const HRInterviewCreator = () => {
           const interview = createdInterviews[0];
           const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
           
-          const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
+          const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -768,7 +768,7 @@ const HRInterviewCreator = () => {
             try {
               const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
               
-              const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
+              const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -841,7 +841,7 @@ const HRInterviewCreator = () => {
           try {
             const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
             
-            const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
+            const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -983,7 +983,7 @@ const HRInterviewCreator = () => {
         });
         console.log(`📤 Sending to server: total_questions=${formData.totalQuestions}, duration=${formData.duration}`);
         
-        const response = await fetch('http://localhost:5003/api/create-interview', {
+        const response = await fetch('https://devprovaluate_py.aitamate.com/api/create-interview', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1619,7 +1619,7 @@ const HRInterviewCreator = () => {
                       try {
                         const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
                         
-                        const response = await fetch('http://127.0.0.1:5003/api/send-interview-email', {
+                        const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
                           method: 'POST',
                           headers: {
                             'Content-Type': 'application/json',

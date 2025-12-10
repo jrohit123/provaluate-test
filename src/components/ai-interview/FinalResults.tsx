@@ -82,7 +82,7 @@ const FinalResults = () => {
   const loadFinalResults = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:5003/api/get-final-results/${interviewId}`);
+      const response = await fetch(`https://devprovaluate_py.aitamate.com/api/get-final-results/${interviewId}`);
       
       if (response.ok) {
         const data = await response.json();
@@ -178,7 +178,7 @@ const FinalResults = () => {
           
           // For structured interviews or when questions array is missing, fetch from questions table
           try {
-            const questionsResponse = await fetch(`http://localhost:5003/api/get-questions/${interviewId}`);
+            const questionsResponse = await fetch(`https://devprovaluate_py.aitamate.com/api/get-questions/${interviewId}`);
             if (questionsResponse.ok) {
               const questionsData = await questionsResponse.json();
               if (questionsData.questions && Array.isArray(questionsData.questions) && questionsData.questions.length > 0) {

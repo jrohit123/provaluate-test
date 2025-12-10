@@ -24,9 +24,9 @@ const CandidateInterview = () => {
     const loadInterviewData = async () => {
       try {
         console.log('🔍 CandidateInterview - Loading interview data for ID:', interviewId);
-        console.log('🔍 CandidateInterview - Full URL:', `http://localhost:5003/api/get-interview/${interviewId}`);
+        console.log('🔍 CandidateInterview - Full URL:', `https://devprovaluate_py.aitamate.com/api/get-interview/${interviewId}`);
         setIsLoading(true);
-        const response = await fetch(`http://localhost:5003/api/get-interview/${interviewId}`, {
+        const response = await fetch(`https://devprovaluate_py.aitamate.com/api/get-interview/${interviewId}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -117,7 +117,7 @@ const CandidateInterview = () => {
     
     try {
       // Call API to mark interview as started
-      const response = await fetch(`http://localhost:5003/api/start-interview/${interviewData.id}`, {
+      const response = await fetch(`https://devprovaluate_py.aitamate.com/api/start-interview/${interviewData.id}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

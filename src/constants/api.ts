@@ -1,7 +1,6 @@
 // API Configuration
-// || 'http://localhost:5003'
 export const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_PYTHON_URL,
+  BASE_URL: import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com',
   ENDPOINTS: {
     // Interview Management
     CREATE_INTERVIEW: '/api/create-interview',

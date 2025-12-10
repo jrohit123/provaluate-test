@@ -1204,8 +1204,7 @@ export const ResumeUploadSection = () => {
         resume_urls: resume_urls,
         jd_id: selectedJDId,
         criteria_id: selectedCriteriaGridId,
-        action_type: actionType,
-        company_id: user.profile.company_id  // Add company_id to the request
+        action_type: actionType
       };
 
       console.log('Sending analysis data to CV Analyzer:', analysisData);

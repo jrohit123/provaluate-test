@@ -121,7 +121,7 @@ const InterviewSetup = () => {
     
     try {
       // Save interview configuration to backend
-      const response = await fetch('http://localhost:5003/api/save-interview-config', {
+      const response = await fetch('https://devprovaluate_py.aitamate.com/api/save-interview-config', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
