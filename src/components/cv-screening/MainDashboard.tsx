@@ -144,7 +144,7 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
                 <div className="space-y-2">
                   <div className="text-2xl font-bold text-gray-900">{planData.plan_name}</div>
                   <div className="text-sm text-gray-600">
-                    {planData.plan_cost ? `₹${planData.plan_cost}/month` : 'Free Plan'}
+                    {planData.plan_cost ? `₹${planData.plan_cost}/week` : 'Free Plan'}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">

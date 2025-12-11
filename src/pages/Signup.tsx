@@ -268,7 +268,7 @@ export default function Signup() {
               <SelectContent>
                 {plans.map(plan => (
                   <SelectItem key={plan.plan_id} value={plan.plan_id}>
-                    {plan.plan_name} ({plan.duration} days) - ₹{plan.plan_cost}
+                    {plan.plan_name} - ₹{plan.plan_cost}/week
                   </SelectItem>
                 ))}
               </SelectContent>

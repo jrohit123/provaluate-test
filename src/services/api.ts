@@ -3,7 +3,7 @@
 
 // Updated to fix TypeScript import errors
 const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
-//|| 'http://localhost:5003';
+//|| 'https://devprovaluate_py.aitamate.com';
 
 // Type definitions for API responses
 interface ApiResponse<T = any> {

@@ -7,6 +7,14 @@ export interface CompanyUsageInfo {
   remainingCVs: number;
   planName: string;
   resetDate: string;
+  // ✅ NEW: Trial status fields
+  isTrial?: boolean;
+  isExpired?: boolean;
+  isExpiringSoon?: boolean;
+  daysRemaining?: number;
+  cvsExhausted?: boolean;
+  shouldForceUpgrade?: boolean;
+  warningMessage?: string;
 }
 
 export interface PaymentInfo {
@@ -29,13 +37,14 @@ export interface PaymentInfo {
 export class UsageTrackingService {
   /**
    * Check if a company can process more CVs based on their plan limits
+   * ✅ UPDATED: Now also checks trial expiration
    */
   static async checkCVProcessingLimit(companyId: string): Promise<CompanyUsageInfo> {
     try {
       // 1) Fetch company info
       const { data: companyData, error: companyError } = await supabase
         .from('companies')
-        .select('company_id, selected_plan, cv_processed_count, cv_processing_reset_date')
+        .select('company_id, selected_plan, cv_processed_count, cv_processing_reset_date, subscription_status, subscription_end')
         .eq('company_id', companyId)
         .single();
 
@@ -46,6 +55,19 @@ export class UsageTrackingService {
 
       if (!companyData) {
         throw new Error('Company not found');
+      }
+
+      // ✅ NEW: Check trial status via backend
+      const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
+      let trialStatus = null;
+      
+      try {
+        const trialResponse = await fetch(`${API_BASE_URL}/subscription/check-trial-status?company_id=${companyId}`);
+        if (trialResponse.ok) {
+          trialStatus = await trialResponse.json();
+        }
+      } catch (error) {
+        console.warn('Could not fetch trial status:', error);
       }
 
       // 2) Fetch plan info separately (selected_plan stores plan name, not FK)
@@ -68,8 +90,15 @@ export class UsageTrackingService {
       }
 
       const currentCount = companyData.cv_processed_count || 0;
-      const canProcess = maxCVs === 0 || currentCount < maxCVs; // 0 means unlimited
-      const remaining = maxCVs === 0 ? -1 : Math.max(0, maxCVs - currentCount); // -1 means unlimited
+      
+      // ✅ UPDATED: Check subscription status and trial expiration
+      const subscriptionStatus = companyData.subscription_status || '';
+      const isExpired = subscriptionStatus === 'expired' || (trialStatus?.is_expired ?? false);
+      const isTrial = trialStatus?.is_trial ?? (planName === 'FreeTrial' || planName === 'FreeTrial_Extd');
+      
+      // Block processing if expired
+      const canProcess = !isExpired && (maxCVs === 0 || currentCount < maxCVs);
+      const remaining = maxCVs === 0 ? -1 : Math.max(0, maxCVs - currentCount);
 
       return {
         canProcessCV: canProcess,
@@ -77,7 +106,15 @@ export class UsageTrackingService {
         maxCVs,
         remainingCVs: remaining,
         planName,
-        resetDate: companyData.cv_processing_reset_date || new Date().toISOString()
+        resetDate: companyData.cv_processing_reset_date || new Date().toISOString(),
+        // ✅ NEW: Trial status fields
+        isTrial: isTrial,
+        isExpired: isExpired,
+        isExpiringSoon: trialStatus?.is_expiring_soon ?? false,
+        daysRemaining: trialStatus?.days_remaining ?? undefined,
+        cvsExhausted: trialStatus?.cvs_exhausted ?? (remaining <= 0),
+        shouldForceUpgrade: trialStatus?.should_force_upgrade ?? (isExpired || (isTrial && remaining <= 0)),
+        warningMessage: trialStatus?.warning_message ?? undefined
       };
     } catch (error) {
       console.error('Error checking CV processing limit:', error);

@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as XLSX from 'xlsx';
 import { useSession } from '@/contexts/SessionContext';
+import { TrialExpirationWarning } from './TrialExpirationWarning';
 
 interface ResumeData {
   id: string;
@@ -1654,6 +1655,8 @@ export const ResumeUploadSection = () => {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Trial Expiration Warning */}
+      <TrialExpirationWarning />
 
       {/* Top Row: Job Description Selection, Criteria Selection, and Provaluate Button */}
       <Card className="animate-fade-in mb-6">

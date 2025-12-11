@@ -58,9 +58,9 @@ const Pricing = () => {
   const calculatePrice = (baseCost: number) => {
     let price = baseCost;
     
-    // Apply annual discount if selected
+    // Apply annual discount if selected (52 weeks in a year)
     if (isAnnual) {
-      price = baseCost * 12 * 0.85; // 15% discount
+      price = baseCost * 52 * 0.85; // 15% discount on annual (52 weeks)
     }
     
     // Convert currency if needed
@@ -72,8 +72,8 @@ const Pricing = () => {
     return Math.ceil(price);
   };
 
-  const calculateMonthlyRate = (annualPrice: number) => {
-    return (annualPrice / 12).toFixed(2);
+  const calculateWeeklyRate = (annualPrice: number) => {
+    return (annualPrice / 52).toFixed(2);
   };
 
   const handleSelectPlan = (plan: Plan) => {
@@ -132,7 +132,7 @@ const Pricing = () => {
           {/* Billing Toggle */}
           <div className="flex items-center justify-center space-x-4 mb-6">
             <span className={`text-sm font-medium ${!isAnnual ? 'text-gray-900' : 'text-gray-600'}`}>
-              Monthly
+              Weekly
             </span>
             <Switch
               checked={isAnnual}
@@ -176,10 +176,13 @@ const Pricing = () => {
             </div>
           ) : (
             plans.map((plan) => {
-              const monthlyPrice = calculatePrice(plan.plan_cost);
-              const annualPrice = isAnnual ? monthlyPrice : monthlyPrice * 12;
-              const displayPrice = isAnnual ? monthlyPrice : monthlyPrice;
-              const monthlyDisplay = isAnnual ? calculateMonthlyRate(monthlyPrice) : monthlyPrice;
+              // Calculate prices
+              const weeklyBasePrice = currency === 'USD' ? Math.ceil(plan.plan_cost / 90) : plan.plan_cost;
+              const annualBasePrice = plan.plan_cost * 52;
+              const annualDiscountedPrice = isAnnual ? Math.ceil(annualBasePrice * 0.85 * (currency === 'USD' ? 1/90 : 1)) : 0;
+              const weeklyPrice = weeklyBasePrice;
+              const annualPrice = currency === 'USD' ? Math.ceil(annualBasePrice / 90) : annualBasePrice;
+              const displayPrice = isAnnual ? annualDiscountedPrice : weeklyPrice;
 
               return (
                 <Card
@@ -211,16 +214,21 @@ const Pricing = () => {
                           {currency === 'USD' ? '$' : '₹'}{displayPrice}
                         </span>
                         <span className="text-gray-600 ml-2">
-                          {isAnnual ? '/month' : '/month'}
+                          {isAnnual ? '/year' : '/week'}
                         </span>
                       </div>
                       {isAnnual && (
                         <p className="text-sm text-green-600 font-medium mt-2">
-                          {currency === 'USD' ? '$' : '₹'}{annualPrice}/year (Save 15%)
+                          {currency === 'USD' ? '$' : '₹'}{displayPrice}/year (Save 15%)
+                        </p>
+                      )}
+                      {isAnnual && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Equivalent to {currency === 'USD' ? '$' : '₹'}{calculateWeeklyRate(displayPrice)}/week
                         </p>
                       )}
                       <p className="text-xs text-gray-500 mt-1">
-                        {isAnnual ? 'Billed annually' : 'Billed monthly'}
+                        {isAnnual ? 'Billed annually (52 weeks)' : 'Billed weekly (7-day cycles)'}
                       </p>
                     </div>
 
@@ -229,7 +237,7 @@ const Pricing = () => {
                       <li className="flex items-start space-x-3">
                         <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
                         <span className="text-sm text-gray-700">
-                          <strong>{plan.max_cvs === 0 ? 'Unlimited' : plan.max_cvs}</strong> CVs per month
+                          <strong>{plan.max_cvs === 0 ? 'Unlimited' : plan.max_cvs}</strong> CVs per week
                         </span>
                       </li>
                       <li className="flex items-start space-x-3">

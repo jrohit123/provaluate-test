@@ -20,6 +20,8 @@ export interface Database {
           subscription_end: string | null
           cv_processed_count: number | null
           cv_processing_reset_date: string | null
+          pending_credit: number | null
+          razorpay_subscription_id: string | null
           created_at: string
           updated_at: string
         }
@@ -33,6 +35,8 @@ export interface Database {
           subscription_end?: string | null
           cv_processed_count?: number | null
           cv_processing_reset_date?: string | null
+          pending_credit?: number | null
+          razorpay_subscription_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -46,6 +50,8 @@ export interface Database {
           subscription_end?: string | null
           cv_processed_count?: number | null
           cv_processing_reset_date?: string | null
+          pending_credit?: number | null
+          razorpay_subscription_id?: string | null
           created_at?: string
           updated_at?: string
         }

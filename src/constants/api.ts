@@ -1,6 +1,7 @@
 // API Configuration
+// || 'https://devprovaluate_py.aitamate.com'
 export const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com',
+  BASE_URL: import.meta.env.VITE_PYTHON_URL,
   ENDPOINTS: {
     // Interview Management
     CREATE_INTERVIEW: '/api/create-interview',

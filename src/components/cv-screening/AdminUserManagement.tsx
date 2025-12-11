@@ -677,7 +677,7 @@ export default function AdminUserManagement() {
                           <div className="flex flex-col">
                             <span className="font-medium">{availablePlan.plan_name}</span>
                             <span className="text-xs text-muted-foreground">
-                              INR {availablePlan.plan_cost}/month • Max {availablePlan.max_users} users
+                              ₹{availablePlan.plan_cost}/week • Max {availablePlan.max_users} users
                             </span>
                           </div>
                         </SelectItem>
