@@ -2,8 +2,8 @@
 // This service handles communication with the Python backend API
 
 // Updated to fix TypeScript import errors
-const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
-//|| 'https://devprovaluate_py.aitamate.com';
+const API_BASE_URL = import.meta.env.VITE_PYTHON_URL
+  || 'https://devprovaluate_py.aitamate.com';
 
 // Type definitions for API responses
 interface ApiResponse<T = any> {
@@ -90,6 +90,7 @@ export const apiService = {
     jd_id: string;
     criteria_id?: string;
     resume_urls: string[];
+    company_id?: string;
   }): Promise<ApiResponse<AnalysisResult>> {
     try {
       const response = await fetch(`${API_BASE_URL}/cv/analyze_resumes`, {

@@ -97,8 +97,12 @@ export class UsageTrackingService {
       const isTrial = trialStatus?.is_trial ?? (planName === 'FreeTrial' || planName === 'FreeTrial_Extd');
       
       // Block processing if expired
-      const canProcess = !isExpired && (maxCVs === 0 || currentCount < maxCVs);
-      const remaining = maxCVs === 0 ? -1 : Math.max(0, maxCVs - currentCount);
+      // Calculate available CVs: maxCVs - currentCount
+      // Negative currentCount means bonus CVs (e.g., -18 = 18 bonus CVs)
+      // Available = maxCVs - currentCount = 50 - (-18) = 68 CVs
+      const availableCVs = maxCVs === 0 ? -1 : (maxCVs - currentCount);
+      const canProcess = !isExpired && (maxCVs === 0 || availableCVs > 0);
+      const remaining = availableCVs;
 
       return {
         canProcessCV: canProcess,
