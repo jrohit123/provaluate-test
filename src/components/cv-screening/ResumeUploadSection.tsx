@@ -1205,6 +1205,7 @@ export const ResumeUploadSection = () => {
         resume_urls: resume_urls,
         jd_id: selectedJDId,
         criteria_id: selectedCriteriaGridId,
+        company_id: user?.profile?.company_id,  // Add company_id to request
         action_type: actionType
       };
 
