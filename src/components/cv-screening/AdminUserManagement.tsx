@@ -258,16 +258,86 @@ export default function AdminUserManagement() {
 
       const result = await response.json();
       
-      // Refresh company data
-      await loadCompanyData();
-      
-      setPlanChangeOpen(false);
-      setSelectedNewPlan('');
-      
-      toast({
-        title: isUpgrade ? "Plan Upgraded" : "Plan Downgraded",
-        description: result.message || `Successfully ${isUpgrade ? 'upgraded' : 'downgraded'} to ${selectedNewPlan} plan.`,
-      });
+      // ✅ Open Razorpay checkout for payment if subscription_id is returned
+      if (result.subscription_id && result.key_id) {
+        // Check if Razorpay is loaded
+        if (typeof window === 'undefined' || !(window as any).Razorpay) {
+          throw new Error('Razorpay SDK not loaded. Please refresh the page.');
+        }
+
+        const options = {
+          key: result.key_id,
+          subscription_id: result.subscription_id,
+          name: "aitamate",
+          description: `${isUpgrade ? 'Upgrade' : 'Downgrade'} to ${selectedNewPlan} plan`,
+          prefill: {
+            name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
+            email: user?.email || "",
+            contact: ""
+          },
+          notes: {
+            company_id: company.company_id,
+            plan_name: selectedNewPlan,
+            action: isUpgrade ? 'upgrade' : 'downgrade'
+          },
+          theme: {
+            color: "#1A56DB"
+          },
+          handler: async function (response: any) {
+            try {
+              // Refresh company data after successful payment
+              await loadCompanyData();
+              
+              toast({
+                title: isUpgrade ? "Plan Upgraded" : "Plan Downgraded",
+                description: result.message || `Successfully ${isUpgrade ? 'upgraded' : 'downgraded'} to ${selectedNewPlan} plan. Payment completed.`,
+              });
+              
+              setPlanChangeOpen(false);
+              setSelectedNewPlan('');
+            } catch (error: any) {
+              console.error('Error processing payment:', error);
+              toast({
+                title: "Payment Error",
+                description: error.message || "An error occurred. Please contact support.",
+                variant: "destructive",
+              });
+            } finally {
+              setChangingPlan(false);
+            }
+          },
+          modal: {
+            ondismiss: function() {
+              setChangingPlan(false);
+            }
+          }
+        };
+        
+        const rzp1 = new (window as any).Razorpay(options);
+        
+        rzp1.on('payment.failed', function (response: any) {
+          console.error('Payment failed:', response.error);
+          toast({
+            title: "Payment Failed",
+            description: response.error.description || "Payment could not be completed. Please try again.",
+            variant: "destructive",
+          });
+          setChangingPlan(false);
+        });
+        
+        rzp1.open();
+      } else {
+        // If no subscription_id returned (shouldn't happen, but handle gracefully)
+        await loadCompanyData();
+        setPlanChangeOpen(false);
+        setSelectedNewPlan('');
+        
+        toast({
+          title: isUpgrade ? "Plan Upgraded" : "Plan Downgraded",
+          description: result.message || `Successfully ${isUpgrade ? 'upgraded' : 'downgraded'} to ${selectedNewPlan} plan.`,
+        });
+        setChangingPlan(false);
+      }
     } catch (error: any) {
       console.error('Error changing plan:', error);
       toast({
@@ -275,7 +345,6 @@ export default function AdminUserManagement() {
         description: error.message || "Failed to update plan. Please try again.",
         variant: "destructive",
       });
-    } finally {
       setChangingPlan(false);
     }
   };
