@@ -354,72 +354,107 @@ export default function AdminUserManagement() {
           setSelectedNewPlan('');
           setChangingPlan(false);
         }
-      } else if (!isUpgrade && result.subscription_id && result.key_id) {
-        // Downgrade: Use subscription_id (existing flow)
-        if (typeof window === 'undefined' || !(window as any).Razorpay) {
-          throw new Error('Razorpay SDK not loaded. Please refresh the page.');
-        }
-
-        const options = {
-          key: result.key_id,
-          subscription_id: result.subscription_id,
-          name: "aitamate",
-          description: `Downgrade to ${selectedNewPlan} plan`,
-          prefill: {
-            name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
-            email: user?.email || "",
-            contact: ""
-          },
-          notes: {
-            company_id: company.company_id,
-            plan_name: selectedNewPlan,
-            action: 'downgrade'
-          },
-          theme: {
-            color: "#1A56DB"
-          },
-          handler: async function (response: any) {
-            try {
-              await loadCompanyData();
-              
-              toast({
-                title: "Plan Downgraded",
-                description: result.message || `Successfully downgraded to ${selectedNewPlan} plan. Payment completed.`,
-              });
-              
-              setPlanChangeOpen(false);
-              setSelectedNewPlan('');
-            } catch (error: any) {
-              console.error('Error processing payment:', error);
-              toast({
-                title: "Payment Error",
-                description: error.message || "An error occurred. Please contact support.",
-                variant: "destructive",
-              });
-            } finally {
-              setChangingPlan(false);
-            }
-          },
-          modal: {
-            ondismiss: function() {
-              setChangingPlan(false);
-            }
-          }
-        };
+      } else if (!isUpgrade) {
+        // Downgrade: Handle like upgrade (order_id for payment or free downgrade)
         
-        const rzp1 = new (window as any).Razorpay(options);
-        
-        rzp1.on('payment.failed', function (response: any) {
-          console.error('Payment failed:', response.error);
+        // If net_payment is 0 (credit covers full amount), subscription is already created
+        if ((result.net_payment === 0 || result.net_payment <= 0) && result.subscription_id) {
           toast({
-            title: "Payment Failed",
-            description: response.error.description || "Payment could not be completed. Please try again.",
-            variant: "destructive",
+            title: "Plan Downgraded",
+            description: result.message || `Successfully downgraded to ${selectedNewPlan} plan. Credit covers full amount - no payment required.`,
+          });
+          setPlanChangeOpen(false);
+          setSelectedNewPlan('');
+          setChangingPlan(false);
+          await loadCompanyData();
+          return;
+        }
+        
+        // If order_id exists, proceed with payment
+        if (result.order_id && result.key_id) {
+          // Check if Razorpay is loaded
+          if (typeof window === 'undefined' || !(window as any).Razorpay) {
+            throw new Error('Razorpay SDK not loaded. Please refresh the page.');
+          }
+
+          const options = {
+            key: result.key_id,
+            amount: result.net_payment * 100,  // Convert to paise
+            currency: 'INR',
+            order_id: result.order_id,
+            name: "aitamate",
+            description: `Downgrade to ${selectedNewPlan} plan${result.credit_applied > 0 ? ` (Credit ₹${result.credit_applied} applied)` : ''}`,
+            prefill: {
+              name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
+              email: user?.email || "",
+              contact: ""
+            },
+            notes: {
+              company_id: company.company_id,
+              plan_name: selectedNewPlan,
+              action: 'downgrade'
+            },
+            theme: {
+              color: "#1A56DB"
+            },
+            handler: async function (response: any) {
+              try {
+                // Wait a moment for webhook to process
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // Refresh company data after successful payment
+                await loadCompanyData();
+                
+                toast({
+                  title: "Plan Downgraded",
+                  description: result.message || `Successfully downgraded to ${selectedNewPlan} plan. Payment completed. Subscription will be created automatically.`,
+                });
+                
+                setPlanChangeOpen(false);
+                setSelectedNewPlan('');
+              } catch (error: any) {
+                console.error('Error processing payment:', error);
+                toast({
+                  title: "Payment Error",
+                  description: error.message || "An error occurred. Please contact support.",
+                  variant: "destructive",
+                });
+              } finally {
+                setChangingPlan(false);
+              }
+            },
+            modal: {
+              ondismiss: function() {
+                setChangingPlan(false);
+              }
+            }
+          };
+          
+          const rzp1 = new (window as any).Razorpay(options);
+          
+          rzp1.on('payment.failed', function (response: any) {
+            console.error('Payment failed:', response.error);
+            toast({
+              title: "Payment Failed",
+              description: response.error.description || "Payment could not be completed. Please try again.",
+              variant: "destructive",
+            });
+            setChangingPlan(false);
+          });
+          
+          rzp1.open();
+        } else {
+          // If no order_id returned for a paid downgrade (shouldn't happen, but handle gracefully)
+          await loadCompanyData();
+          setPlanChangeOpen(false);
+          setSelectedNewPlan('');
+          
+          toast({
+            title: "Plan Downgraded",
+            description: result.message || `Successfully downgraded to ${selectedNewPlan} plan.`,
           });
           setChangingPlan(false);
-        });
-        
-        rzp1.open();
+        }
       } else {
         // If no order_id/subscription_id returned (shouldn't happen, but handle gracefully)
         await loadCompanyData();
