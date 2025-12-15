@@ -355,20 +355,7 @@ export default function AdminUserManagement() {
           setChangingPlan(false);
         }
       } else if (!isUpgrade) {
-        // Downgrade: Handle like upgrade (order_id for payment or free downgrade)
-        
-        // If net_payment is 0 (credit covers full amount), subscription is already created
-        if ((result.net_payment === 0 || result.net_payment <= 0) && result.subscription_id) {
-          toast({
-            title: "Plan Downgraded",
-            description: result.message || `Successfully downgraded to ${selectedNewPlan} plan. Credit covers full amount - no payment required.`,
-          });
-          setPlanChangeOpen(false);
-          setSelectedNewPlan('');
-          setChangingPlan(false);
-          await loadCompanyData();
-          return;
-        }
+        // Downgrade: User pays full plan cost, credit stored for next cycle
         
         // If order_id exists, proceed with payment
         if (result.order_id && result.key_id) {
@@ -379,11 +366,11 @@ export default function AdminUserManagement() {
 
           const options = {
             key: result.key_id,
-            amount: result.net_payment * 100,  // Convert to paise
+            amount: result.net_payment * 100,  // Convert to paise (full plan cost)
             currency: 'INR',
             order_id: result.order_id,
             name: "aitamate",
-            description: `Downgrade to ${selectedNewPlan} plan${result.credit_applied > 0 ? ` (Credit ₹${result.credit_applied} applied)` : ''}`,
+            description: `Downgrade to ${selectedNewPlan} plan${result.credit_stored > 0 ? ` (Credit ₹${result.credit_stored} will be applied to next cycle)` : ''}`,
             prefill: {
               name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
               email: user?.email || "",
@@ -407,7 +394,7 @@ export default function AdminUserManagement() {
                 
                 toast({
                   title: "Plan Downgraded",
-                  description: result.message || `Successfully downgraded to ${selectedNewPlan} plan. Payment completed. Subscription will be created automatically.`,
+                  description: result.message || `Successfully downgraded to ${selectedNewPlan} plan. Payment completed. ${result.credit_stored > 0 ? `Credit ₹${result.credit_stored} will be applied to next billing cycle.` : ''}`,
                 });
                 
                 setPlanChangeOpen(false);
@@ -444,7 +431,7 @@ export default function AdminUserManagement() {
           
           rzp1.open();
         } else {
-          // If no order_id returned for a paid downgrade (shouldn't happen, but handle gracefully)
+          // If no order_id returned (shouldn't happen, but handle gracefully)
           await loadCompanyData();
           setPlanChangeOpen(false);
           setSelectedNewPlan('');
