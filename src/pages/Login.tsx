@@ -168,18 +168,29 @@ const Login = () => {
       // Fetch user profile to get company_id
       const { data: userProfile, error: profileError } = await supabase
         .from('users')
-        .select('user_id, company_id')
+        .select('user_id, company_id, onboarding_complete')
         .eq('user_id', userId)
         .single();
 
-      if (profileError || !userProfile) {
-        console.error('Error fetching user profile:', profileError);
-        throw new Error('Failed to fetch user profile');
+      // If profile doesn't exist or onboarding not complete, redirect to onboarding
+      if (profileError || !userProfile || !userProfile.onboarding_complete) {
+        console.log('User profile not found or onboarding incomplete, redirecting to onboarding');
+        toast({
+          title: "Complete Your Setup",
+          description: "Please complete your onboarding to continue.",
+        });
+        navigate('/onboarding');
+        setIsLoading(false);
+        return;
       }
 
       const companyId = userProfile.company_id;
       if (!companyId) {
-        throw new Error('Company ID not found for user');
+        // If no company_id, user needs onboarding
+        console.log('Company ID not found, redirecting to onboarding');
+        navigate('/onboarding');
+        setIsLoading(false);
+        return;
       }
 
       // Set cookies for Chrome extension access
