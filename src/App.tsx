@@ -39,6 +39,7 @@ const queryClient = new QueryClient();
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
   const location = useLocation();
   const {
     isTimeoutWarningVisible,
@@ -50,24 +51,45 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const checkAuth = async () => {
       setLoading(true);
-
-      const isAuth = localStorage.getItem('recruitai_auth') === 'true';
-      if (!isAuth) {
+      
+      // Check Supabase Auth session first
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
         setIsAuthenticated(false);
+        setOnboardingComplete(false);
         setLoading(false);
         return;
       }
-
-      const isActive = await SessionManager.isCurrentSessionActive();
-      if (!isActive) {
-        SessionManager.clearSession();
-        localStorage.removeItem('recruitai_auth');
-        setIsAuthenticated(false);
-        setLoading(false);
-        return;
-      }
-
+      
       setIsAuthenticated(true);
+      
+      // Check if user has completed onboarding
+      const { data: userProfile, error: profileError } = await supabase
+        .from('users')
+        .select('onboarding_complete')
+        .eq('user_id', user.id)
+        .single();
+      
+      // If profile doesn't exist or onboarding not complete, user needs onboarding
+      if (profileError || !userProfile) {
+        setOnboardingComplete(false);
+        setLoading(false);
+        return;
+      }
+      
+      setOnboardingComplete(userProfile.onboarding_complete === true);
+      
+      // Also check localStorage and session for existing users
+      const isAuth = localStorage.getItem('recruitai_auth') === 'true';
+      if (isAuth) {
+        const isActive = await SessionManager.isCurrentSessionActive();
+        if (!isActive) {
+          SessionManager.clearSession();
+          localStorage.removeItem('recruitai_auth');
+        }
+      }
+      
       setLoading(false);
     };
 
@@ -76,6 +98,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
   if (loading) return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!onboardingComplete) return <Navigate to="/onboarding" replace />;
 
   return (
     <>
