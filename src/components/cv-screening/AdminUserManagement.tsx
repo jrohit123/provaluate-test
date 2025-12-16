@@ -615,7 +615,35 @@ export default function AdminUserManagement() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to change cycle date');
+        const errorMessage = errorData.error || 'Failed to change cycle date';
+        
+        // Show specific error messages
+        if (errorMessage.includes('No unused CVs')) {
+          toast({
+            title: "Cannot Change Date",
+            description: "You need unused CVs to change the billing cycle date. Please use some CVs first or wait for renewal.",
+            variant: "destructive",
+          });
+        } else if (errorMessage.includes('cannot be after')) {
+          toast({
+            title: "Invalid Date",
+            description: "The selected date cannot be after your current billing end date.",
+            variant: "destructive",
+          });
+        } else if (errorMessage.includes('cannot be before')) {
+          toast({
+            title: "Invalid Date",
+            description: "The selected date cannot be before today.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Error",
+            description: errorMessage,
+            variant: "destructive",
+          });
+        }
+        return;
       }
 
       const result = await response.json();
@@ -628,7 +656,7 @@ export default function AdminUserManagement() {
       
       toast({
         title: "Cycle Date Changed",
-        description: result.message || `Billing cycle date changed to ${newCycleDay} (weekly cycle).`,
+        description: result.message || `Billing cycle date changed successfully.`,
       });
     } catch (error: any) {
       console.error('Error changing cycle date:', error);
@@ -797,18 +825,69 @@ export default function AdminUserManagement() {
                     <p className="text-sm text-muted-foreground mb-2">
                       Current billing date: <strong>{company?.subscription_end ? new Date(company.subscription_end).toLocaleDateString() : 'N/A'}</strong>
                     </p>
+                    {plan && company && (
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Unused CVs: <strong>{plan.max_cvs - (company.cv_processed_count || 0)}</strong> / {plan.max_cvs}
+                      </p>
+                    )}
                     <p className="text-sm text-muted-foreground mb-4">
-                      Select a day (1-31) for your new billing cycle start date. You can only prepone the date, not postpone it. Cycles are 7 days.
+                      Select a day (1-31) for your new billing cycle date. The date must be between today and your current billing end date. You can only prepone the date, not postpone it.
                     </p>
                   </div>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="31"
-                    value={newCycleDay}
-                    onChange={(e) => setNewCycleDay(parseInt(e.target.value) || 1)}
-                    placeholder="Day (1-31) - weekly cycle"
-                  />
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">
+                      Select Day (1-31)
+                    </label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={newCycleDay}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 1;
+                        setNewCycleDay(Math.max(1, Math.min(31, value)));
+                      }}
+                      placeholder="Day (1-31)"
+                    />
+                  </div>
+                  {newCycleDay && company?.subscription_end && (
+                    <div className="p-3 bg-muted rounded-md">
+                      <p className="text-xs text-muted-foreground mb-1">
+                        Calculated new date:
+                      </p>
+                      <p className="text-sm font-medium">
+                        {(() => {
+                          const today = new Date();
+                          const targetDay = Math.min(newCycleDay, 28);
+                          let calculatedDate = new Date(today.getFullYear(), today.getMonth(), targetDay);
+                          
+                          // If date is before today, move to next month
+                          const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                          if (calculatedDate < todayStart) {
+                            if (today.getMonth() === 11) {
+                              calculatedDate = new Date(today.getFullYear() + 1, 0, targetDay);
+                            } else {
+                              calculatedDate = new Date(today.getFullYear(), today.getMonth() + 1, targetDay);
+                            }
+                          }
+                          
+                          const currentBillingEnd = new Date(company.subscription_end);
+                          const isValid = calculatedDate >= todayStart && calculatedDate <= currentBillingEnd;
+                          
+                          return (
+                            <span className={isValid ? "text-green-600" : "text-red-600"}>
+                              {calculatedDate.toLocaleDateString()}
+                              {!isValid && (
+                                <span className="ml-2 text-xs">
+                                  ({calculatedDate < todayStart ? 'Before today' : 'After billing end'})
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })()}
+                      </p>
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <Button 
                       onClick={handleChangeCycleDate} 
