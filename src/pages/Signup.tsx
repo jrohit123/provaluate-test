@@ -66,12 +66,12 @@ export default function Signup() {
               setDomainBlockReason(blockedDomain.reason || 'This domain is not allowed for registration');
               // Don't check free trial eligibility for blocked domains
             } else {
-              // Check if any company with this domain has used FreeTrial-30
+              // Check if any company with this domain has used any trial plan (FreeTrial or FreeTrial_Extd)
               const { data: companiesWithTrial, error: trialError } = await supabase
                 .from('companies')
                 .select('company_id')
                 .eq('email_domain', domain)
-                .eq('selected_plan', 'FreeTrial-30');
+                .in('selected_plan', ['FreeTrial', 'FreeTrial_Extd']);
               if (trialError) throw trialError;
               trialEligible = !companiesWithTrial || companiesWithTrial.length === 0;
             }
@@ -80,15 +80,17 @@ export default function Signup() {
         
         setFreeTrialEligible(trialEligible);
         
-        // Fetch FreeTrial-30 plan if eligible and domain not blocked
+        // Fetch both FreeTrial plans if eligible and domain not blocked
         if (trialEligible && !domainBlocked) {
-          const { data: freeTrialPlan, error: freeTrialError } = await supabase
+          const { data: freeTrialPlans, error: freeTrialError } = await supabase
             .from('plans')
             .select('*')
-            .eq('plan_name', 'FreeTrial-30')
-            .single();
+            .in('plan_name', ['FreeTrial', 'FreeTrial_Extd']);
           if (freeTrialError) throw freeTrialError;
-          if (freeTrialPlan) plansList = [freeTrialPlan, ...plansList];
+          if (freeTrialPlans && freeTrialPlans.length > 0) {
+            // Add trial plans at the beginning of the list
+            plansList = [...freeTrialPlans, ...plansList];
+          }
         }
         
         setPlans(plansList);
