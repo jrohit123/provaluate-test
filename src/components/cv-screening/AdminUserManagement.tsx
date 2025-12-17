@@ -263,14 +263,69 @@ export default function AdminUserManagement() {
       if (isUpgrade) {
         // If net_payment is 0 (credit covers full amount), subscription is already created
         if ((result.net_payment === 0 || result.net_payment <= 0) && result.subscription_id) {
-          toast({
-            title: "Plan Upgraded",
-            description: result.message || `Successfully upgraded to ${selectedNewPlan} plan. Credit covers full amount - no payment required.`,
-          });
-          setPlanChangeOpen(false);
-          setSelectedNewPlan('');
-          setChangingPlan(false);
-          await loadCompanyData();
+          const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
+          
+          // Open Razorpay subscription checkout to activate subscription
+          if (typeof window !== 'undefined' && (window as any).Razorpay) {
+            const subOptions = {
+              key: result.key_id,
+              subscription_id: result.subscription_id,
+              name: "aitamate",
+              description: `Activate ${selectedNewPlan} subscription`,
+              prefill: {
+                name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
+                email: user?.email || "",
+                contact: ""
+              },
+              notes: {
+                company_id: company.company_id,
+                plan_name: selectedNewPlan
+              },
+              theme: {
+                color: "#1A56DB"
+              },
+              handler: async function (subResponse: any) {
+                // Subscription activated!
+                await loadCompanyData();
+                toast({
+                  title: "Subscription Activated",
+                  description: `Your ${selectedNewPlan} subscription is now active. Credit covers full amount - no payment required.`,
+                });
+                setPlanChangeOpen(false);
+                setSelectedNewPlan('');
+                setChangingPlan(false);
+              },
+              modal: {
+                ondismiss: function() {
+                  setChangingPlan(false);
+                }
+              }
+            };
+            
+            const rzp2 = new (window as any).Razorpay(subOptions);
+            
+            rzp2.on('payment.failed', function (subResponse: any) {
+              console.error('Subscription activation failed:', subResponse.error);
+              toast({
+                title: "Activation Failed",
+                description: subResponse.error.description || "Subscription could not be activated. Please contact support.",
+                variant: "destructive",
+              });
+              setChangingPlan(false);
+            });
+            
+            rzp2.open();
+          } else {
+            // Fallback if Razorpay not loaded
+            await loadCompanyData();
+            toast({
+              title: "Plan Upgraded",
+              description: result.message || `Successfully upgraded to ${selectedNewPlan} plan. Credit covers full amount - no payment required. Please activate subscription manually.`,
+            });
+            setPlanChangeOpen(false);
+            setSelectedNewPlan('');
+            setChangingPlan(false);
+          }
           return;
         }
         
@@ -303,19 +358,97 @@ export default function AdminUserManagement() {
             },
             handler: async function (response: any) {
               try {
-                // Wait a moment for webhook to process
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                setChangingPlan(true);
+                const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
                 
-                // Refresh company data after successful payment
-                await loadCompanyData();
+                // Wait for webhook to process (create subscription)
+                await new Promise(resolve => setTimeout(resolve, 3000));
                 
-                toast({
-                  title: "Plan Upgraded",
-                  description: result.message || `Successfully upgraded to ${selectedNewPlan} plan. Payment completed. Subscription will be created automatically.`,
-                });
-                
-                setPlanChangeOpen(false);
-                setSelectedNewPlan('');
+                // Get subscription_id created by webhook
+                try {
+                  const subResponse = await fetch(`${API_BASE_URL}/payments/get-subscription-id`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      company_id: company.company_id
+                    })
+                  });
+                  
+                  const subData = await subResponse.json();
+                  
+                  if (subData.success && subData.subscription_id) {
+                    // Open Razorpay subscription checkout to activate subscription
+                    const subOptions = {
+                      key: subData.key_id,
+                      subscription_id: subData.subscription_id,
+                      name: "aitamate",
+                      description: `Activate ${selectedNewPlan} subscription`,
+                      prefill: {
+                        name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
+                        email: user?.email || "",
+                        contact: ""
+                      },
+                      notes: {
+                        company_id: company.company_id,
+                        plan_name: selectedNewPlan
+                      },
+                      theme: {
+                        color: "#1A56DB"
+                      },
+                      handler: async function (subResponse: any) {
+                        // Subscription activated!
+                        await loadCompanyData();
+                        toast({
+                          title: "Subscription Activated",
+                          description: `Your ${selectedNewPlan} subscription is now active. Payments will be charged automatically.`,
+                        });
+                        setPlanChangeOpen(false);
+                        setSelectedNewPlan('');
+                        setChangingPlan(false);
+                      },
+                      modal: {
+                        ondismiss: function() {
+                          setChangingPlan(false);
+                        }
+                      }
+                    };
+                    
+                    const rzp2 = new (window as any).Razorpay(subOptions);
+                    
+                    rzp2.on('payment.failed', function (subResponse: any) {
+                      console.error('Subscription activation failed:', subResponse.error);
+                      toast({
+                        title: "Activation Failed",
+                        description: subResponse.error.description || "Subscription could not be activated. Please contact support.",
+                        variant: "destructive",
+                      });
+                      setChangingPlan(false);
+                    });
+                    
+                    rzp2.open();
+                  } else {
+                    // Fallback: Just refresh data if subscription not found
+                    await loadCompanyData();
+                    toast({
+                      title: "Plan Upgraded",
+                      description: result.message || `Successfully upgraded to ${selectedNewPlan} plan. Please activate subscription manually.`,
+                    });
+                    setPlanChangeOpen(false);
+                    setSelectedNewPlan('');
+                    setChangingPlan(false);
+                  }
+                } catch (subError: any) {
+                  // If subscription check fails, just refresh data
+                  console.error('Error getting subscription:', subError);
+                  await loadCompanyData();
+                  toast({
+                    title: "Plan Upgraded",
+                    description: result.message || `Successfully upgraded to ${selectedNewPlan} plan.`,
+                  });
+                  setPlanChangeOpen(false);
+                  setSelectedNewPlan('');
+                  setChangingPlan(false);
+                }
               } catch (error: any) {
                 console.error('Error processing payment:', error);
                 toast({
@@ -323,7 +456,6 @@ export default function AdminUserManagement() {
                   description: error.message || "An error occurred. Please contact support.",
                   variant: "destructive",
                 });
-              } finally {
                 setChangingPlan(false);
               }
             },
@@ -386,19 +518,97 @@ export default function AdminUserManagement() {
             },
             handler: async function (response: any) {
               try {
-                // Wait a moment for webhook to process
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                setChangingPlan(true);
+                const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
                 
-                // Refresh company data after successful payment
-                await loadCompanyData();
+                // Wait for webhook to process (create subscription)
+                await new Promise(resolve => setTimeout(resolve, 3000));
                 
-                toast({
-                  title: "Plan Downgraded",
-                  description: result.message || `Successfully downgraded to ${selectedNewPlan} plan. Payment completed. ${result.credit_stored > 0 ? `Credit ₹${result.credit_stored} will be applied to next billing cycle.` : ''}`,
-                });
-                
-                setPlanChangeOpen(false);
-                setSelectedNewPlan('');
+                // Get subscription_id created by webhook
+                try {
+                  const subResponse = await fetch(`${API_BASE_URL}/payments/get-subscription-id`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      company_id: company.company_id
+                    })
+                  });
+                  
+                  const subData = await subResponse.json();
+                  
+                  if (subData.success && subData.subscription_id) {
+                    // Open Razorpay subscription checkout to activate subscription
+                    const subOptions = {
+                      key: subData.key_id,
+                      subscription_id: subData.subscription_id,
+                      name: "aitamate",
+                      description: `Activate ${selectedNewPlan} subscription`,
+                      prefill: {
+                        name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
+                        email: user?.email || "",
+                        contact: ""
+                      },
+                      notes: {
+                        company_id: company.company_id,
+                        plan_name: selectedNewPlan
+                      },
+                      theme: {
+                        color: "#1A56DB"
+                      },
+                      handler: async function (subResponse: any) {
+                        // Subscription activated!
+                        await loadCompanyData();
+                        toast({
+                          title: "Subscription Activated",
+                          description: `Your ${selectedNewPlan} subscription is now active. ${result.credit_stored > 0 ? `Credit ₹${result.credit_stored} will be applied to next billing cycle.` : 'Payments will be charged automatically.'}`,
+                        });
+                        setPlanChangeOpen(false);
+                        setSelectedNewPlan('');
+                        setChangingPlan(false);
+                      },
+                      modal: {
+                        ondismiss: function() {
+                          setChangingPlan(false);
+                        }
+                      }
+                    };
+                    
+                    const rzp2 = new (window as any).Razorpay(subOptions);
+                    
+                    rzp2.on('payment.failed', function (subResponse: any) {
+                      console.error('Subscription activation failed:', subResponse.error);
+                      toast({
+                        title: "Activation Failed",
+                        description: subResponse.error.description || "Subscription could not be activated. Please contact support.",
+                        variant: "destructive",
+                      });
+                      setChangingPlan(false);
+                    });
+                    
+                    rzp2.open();
+                  } else {
+                    // Fallback: Just refresh data if subscription not found
+                    await loadCompanyData();
+                    toast({
+                      title: "Plan Downgraded",
+                      description: result.message || `Successfully downgraded to ${selectedNewPlan} plan. ${result.credit_stored > 0 ? `Credit ₹${result.credit_stored} will be applied to next billing cycle.` : ''} Please activate subscription manually.`,
+                    });
+                    setPlanChangeOpen(false);
+                    setSelectedNewPlan('');
+                    setChangingPlan(false);
+                  }
+                } catch (subError: any) {
+                  // If subscription check fails, just refresh data
+                  console.error('Error getting subscription:', subError);
+                  await loadCompanyData();
+                  toast({
+                    title: "Plan Downgraded",
+                    description: result.message || `Successfully downgraded to ${selectedNewPlan} plan. ${result.credit_stored > 0 ? `Credit ₹${result.credit_stored} will be applied to next billing cycle.` : ''}`,
+                  });
+                  setPlanChangeOpen(false);
+                  setSelectedNewPlan('');
+                  setChangingPlan(false);
+                }
               } catch (error: any) {
                 console.error('Error processing payment:', error);
                 toast({
@@ -406,7 +616,6 @@ export default function AdminUserManagement() {
                   description: error.message || "An error occurred. Please contact support.",
                   variant: "destructive",
                 });
-              } finally {
                 setChangingPlan(false);
               }
             },
