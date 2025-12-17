@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, FileText, Edit, RefreshCw } from 'lucide-react';
+import { Upload, FileText, Edit, RefreshCw, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -558,32 +558,36 @@ export const JobUploadSection = () => {
         // Start auto-refresh to check for resolved JD data every 15 seconds
         startAutoRefresh(result.jd_id);
 
+        setProcessingStatus('completed');
+        
         toast({
           title: "Upload & Analysis Completed",
           description: "Job description uploaded, analyzed, and saved successfully.",
         });
+
+        // Refresh the job descriptions dropdown to show the newly added JD
+        await loadJobDescriptions();
+
+        // Reset form after a short delay to show success message
+        setTimeout(() => {
+          setJobTitle('');
+          setUploadedFile(null);
+          setProcessingStatus('idle');
+        }, 2000); // Show success for 2 seconds before resetting
       } catch (backendError) {
         console.error('AI Analyzer service error:', backendError);
+        setProcessingStatus('failed');
         toast({
           title: "Processing Error",
           description: "Failed to process job description. Please try again.",
           variant: "destructive",
         });
+        
+        // Reset to idle after showing error for a bit
+        setTimeout(() => {
+          setProcessingStatus('idle');
+        }, 3000);
       }
-
-      setProcessingStatus('completed');
-      toast({
-        title: "Job Description Saved",
-        description: "Job description processed successfully.",
-      });
-
-      // Refresh the job descriptions dropdown to show the newly added JD
-      await loadJobDescriptions();
-
-      // Reset form
-      setJobTitle('');
-      setUploadedFile(null);
-      // setIsJobFieldsDisabled(false); // Removed as per edit hint
     } catch (err: any) {
       console.error('Error processing job description:', err);
       setProcessingStatus('failed');
@@ -592,6 +596,11 @@ export const JobUploadSection = () => {
         description: err.message || "An error occurred.",
         variant: "destructive",
       });
+      
+      // Reset to idle after showing error
+      setTimeout(() => {
+        setProcessingStatus('idle');
+      }, 3000);
     }
   };
 
@@ -722,7 +731,7 @@ export const JobUploadSection = () => {
             */}
 
             <div 
-              className="rounded-lg border border-primary-200 bg-primary-50/40 p-4 border-2 border-dashed border-primary-200 rounded-lg p-6 text-center hover:border-primary-400 transition-colors cursor-pointer"
+              className="rounded-lg border-2 border-dashed border-primary-200 bg-primary-50/40 p-6 text-center hover:border-primary-400 transition-colors cursor-pointer"
               onClick={handleJobDescriptionClick}
               onDrop={handleJobDrop}
               onDragOver={handleJobDragOver}
@@ -745,11 +754,20 @@ export const JobUploadSection = () => {
             />
             
             <div className="space-y-2">
-              <Button onClick={handleProcessJobDescription} className="w-full">
-                Process Job Description
+              <Button 
+                onClick={handleProcessJobDescription} 
+                className="w-full"
+                disabled={processingStatus === 'processing'}
+              >
+                {processingStatus === 'processing' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Processing Job Description...
+                  </>
+                ) : (
+                  'Process Job Description'
+                )}
               </Button>
-              
-              
               
               {/* Show refresh button and auto-refresh status */}
               {selectedJobDescriptionId && (
@@ -759,6 +777,7 @@ export const JobUploadSection = () => {
                     size="sm"
                     onClick={handleManualRefresh}
                     className="flex-1"
+                    disabled={processingStatus === 'processing'}
                   >
                     <RefreshCw className="w-4 h-4 mr-2" />
                     Show Resolved JD Data
