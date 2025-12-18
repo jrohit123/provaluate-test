@@ -1563,49 +1563,66 @@ export const ResumeUploadSection = () => {
     }
   };
 
-  const handleViewPdf = (pdfUrl: string, candidateName: string) => {
-    // Enhanced PDF viewer with better error handling
+  const handleViewPdf = (fileUrl: string, candidateName: string) => {
+    // Enhanced file viewer that handles PDF, DOC, DOCX, and TXT files
     try {
-      // First try to fetch with proper headers
-      fetch(pdfUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/pdf,application/octet-stream,*/*'
-        }
-      })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      // Determine file type from URL
+      const fileExtension = fileUrl.split('.').pop()?.toLowerCase() || '';
+      const isPdf = fileExtension === 'pdf';
+      const isWord = fileExtension === 'doc' || fileExtension === 'docx';
+      const isText = fileExtension === 'txt';
+      
+      // For PDF files, use blob approach for inline viewing
+      if (isPdf) {
+        fetch(fileUrl, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/pdf,application/octet-stream,*/*'
           }
-          return response.blob();
         })
-        .then(blob => {
-          // Create blob URL with proper type
-          const url = window.URL.createObjectURL(
-            new Blob([blob], { type: 'application/pdf' })
-          );
-          
-          // Open in new tab
-          const newWindow = window.open(url, '_blank');
-          
-          // Clean up blob URL after window loads or after timeout
-          if (newWindow) {
-            newWindow.onload = () => {
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.blob();
+          })
+          .then(blob => {
+            // Create blob URL with proper PDF type
+            const url = window.URL.createObjectURL(
+              new Blob([blob], { type: 'application/pdf' })
+            );
+            
+            // Open in new tab
+            const newWindow = window.open(url, '_blank');
+            
+            // Clean up blob URL after window loads or after timeout
+            if (newWindow) {
+              newWindow.onload = () => {
+                setTimeout(() => window.URL.revokeObjectURL(url), 5000);
+              };
+            } else {
               setTimeout(() => window.URL.revokeObjectURL(url), 5000);
-            };
-          } else {
-            setTimeout(() => window.URL.revokeObjectURL(url), 5000);
-          }
-        })
-        .catch(error => {
-          console.error('Error loading PDF:', error);
-          // Fallback: try direct URL
-          window.open(pdfUrl, '_blank');
-        });
+            }
+          })
+          .catch(error => {
+            console.error('Error loading PDF:', error);
+            // Fallback: try direct URL
+            window.open(fileUrl, '_blank');
+          });
+      } 
+      // For Word files and text files, open directly (browser will download or use default app)
+      else if (isWord || isText) {
+        // Direct open - browser will handle it (download or open with default app)
+        window.open(fileUrl, '_blank');
+      }
+      // For other file types, try direct open
+      else {
+        window.open(fileUrl, '_blank');
+      }
     } catch (error) {
-      console.error('Error in PDF viewer:', error);
-      // Final fallback
-      window.open(pdfUrl, '_blank');
+      console.error('Error in file viewer:', error);
+      // Final fallback: try direct URL
+      window.open(fileUrl, '_blank');
     }
   };
 
