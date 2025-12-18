@@ -177,21 +177,54 @@ export const ResumeUploadSection = () => {
 
 
 
-  // Hydrate selections from sessionStorage on mount
+  // Hydrate selections from sessionStorage on mount, falling back to backend last_selection
   useEffect(() => {
-    try {
-      const storedJD = sessionStorage.getItem('selectedJDId');
-      const storedCriteria = sessionStorage.getItem('selectedCriteriaGridId');
-      if (storedJD) {
-        setSelectedJobDescriptionId(storedJD);
+    const hydrateFromStorageAndBackend = async () => {
+      try {
+        const storedJD = sessionStorage.getItem('selectedJDId');
+        const storedCriteria = sessionStorage.getItem('selectedCriteriaGridId');
+        let hasSessionValues = false;
+
+        if (storedJD) {
+          setSelectedJobDescriptionId(storedJD);
+          hasSessionValues = true;
+        }
+        if (storedCriteria) {
+          setSelectedCriteriaGridId(storedCriteria);
+          hasSessionValues = true;
+        }
+
+        // If nothing in sessionStorage, try backend last_selection (used by extension)
+        if (!hasSessionValues && user?.profile?.company_id) {
+          try {
+            const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
+            const res = await fetch(
+              `${API_BASE_URL}/api/last_selection?company_id=${user.profile.company_id}`
+            );
+            if (res.ok) {
+              const data = await res.json();
+              const jdId = data?.data?.last_jd_id;
+              const criteriaId = data?.data?.last_criteria_id;
+              if (jdId) {
+                setSelectedJobDescriptionId(jdId);
+                sessionStorage.setItem('selectedJDId', jdId);
+              }
+              if (criteriaId) {
+                setSelectedCriteriaGridId(criteriaId);
+                sessionStorage.setItem('selectedCriteriaGridId', criteriaId);
+              }
+            }
+          } catch (err) {
+            console.warn('Unable to fetch last_selection from backend', err);
+          }
+        }
+      } catch (e) {
+        console.warn('Unable to hydrate selections', e);
       }
-      if (storedCriteria) {
-        setSelectedCriteriaGridId(storedCriteria);
-      }
-    } catch (e) {
-      console.warn('Unable to read selections from sessionStorage', e);
-    }
-  }, []);
+    };
+
+    hydrateFromStorageAndBackend();
+  }, [user?.profile?.company_id]);
 
   useEffect(() => {
     if (!selectedJobDescriptionId) {
