@@ -28,6 +28,8 @@ export default function AdminUserManagement() {
   const [cycleDateOpen, setCycleDateOpen] = useState(false);
   const [newCycleDay, setNewCycleDay] = useState<number>(1);
   const [rechargingCVs, setRechargingCVs] = useState(false);
+  const [rechargePlanOpen, setRechargePlanOpen] = useState(false);
+  const [selectedRechargePlan, setSelectedRechargePlan] = useState<string>('');
 
   // Compute admin status after all hooks
   const isAdmin = user?.profile?.role === 'admin';
@@ -880,15 +882,22 @@ export default function AdminUserManagement() {
   };
 
   const handleRecharge = async () => {
-    if (!user?.profile?.company_id || !plan) {
+    if (!user?.profile?.company_id) {
       toast({
         title: "Error",
-        description: "Missing company or plan information.",
+        description: "Missing company information.",
         variant: "destructive",
       });
       return;
     }
 
+    // If no plan exists, open plan selection dialog
+    if (!plan) {
+      setRechargePlanOpen(true);
+      return;
+    }
+
+    // If plan exists, proceed with subscription creation
     try {
       setLoading(true);
       
@@ -922,7 +931,7 @@ export default function AdminUserManagement() {
         key: subscriptionData.key_id,
         subscription_id: subscriptionData.subscription_id,  // From database via backend - NO HARDCODING
         name: "aitamate",
-        description: `Subscription for ${plan.plan_name}`,
+        description: `Subscription for ${plan.plan_name} - ₹${plan.plan_cost}/week`,
         prefill: {
           name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
           email: user?.email || "",
@@ -943,7 +952,7 @@ export default function AdminUserManagement() {
               title: "Subscription Activated",
               description: subscriptionData.is_existing 
                 ? "Using your existing subscription. Payments will continue automatically."
-                : "Your subscription has been activated. Payments will be charged automatically every 7 days.",
+                : `Your ${plan.plan_name} subscription has been activated. Payments of ₹${plan.plan_cost} will be charged automatically every 7 days.`,
               });
               
             // Refresh company data
@@ -980,6 +989,127 @@ export default function AdminUserManagement() {
       });
       
       rzp1.open();
+      setLoading(false);
+      
+    } catch (error: any) {
+      console.error('Error initiating subscription:', error);
+      toast({
+        title: "Subscription Error",
+        description: error.message || "Failed to initiate subscription. Please try again.",
+        variant: "destructive",
+      });
+      setLoading(false);
+    }
+  };
+
+  const handleRechargePlanSelect = async () => {
+    if (!user?.profile?.company_id || !selectedRechargePlan) {
+      toast({
+        title: "Error",
+        description: "Please select a plan.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Find selected plan data
+      const selectedPlanData = availablePlans.find(p => p.plan_name === selectedRechargePlan);
+      if (!selectedPlanData) {
+        throw new Error('Selected plan not found');
+      }
+
+      // Step 1: Create subscription on backend (backend will update selected_plan automatically)
+      const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
+      const createSubscriptionResponse = await fetch(`${API_BASE_URL}/payments/create-subscription`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_id: user.profile.company_id,
+          plan_id: selectedPlanData.plan_id
+        })
+      });
+
+      if (!createSubscriptionResponse.ok) {
+        const errorData = await createSubscriptionResponse.json();
+        throw new Error(errorData.error || 'Failed to create subscription');
+      }
+
+      const subscriptionData = await createSubscriptionResponse.json();
+      
+      // Step 2: Check if Razorpay is loaded
+      if (typeof window === 'undefined' || !(window as any).Razorpay) {
+        throw new Error('Razorpay SDK not loaded. Please refresh the page.');
+      }
+
+      // Step 3: Open Razorpay subscription checkout
+      const options = {
+        key: subscriptionData.key_id,
+        subscription_id: subscriptionData.subscription_id,
+        name: "aitamate",
+        description: `Activate ${selectedRechargePlan} subscription - ₹${selectedPlanData.plan_cost}/week`,
+        prefill: {
+          name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
+          email: user?.email || "",
+          contact: ""
+        },
+        notes: {
+          company_id: user.profile.company_id,
+          plan_name: selectedRechargePlan
+        },
+        theme: {
+          color: "#1A56DB"
+        },
+        handler: async function (response: any) {
+          try {
+            setLoading(true);
+            
+            toast({
+              title: "Subscription Activated",
+              description: `Your ${selectedRechargePlan} subscription has been activated. Payments of ₹${selectedPlanData.plan_cost} will be charged automatically every 7 days.`,
+            });
+              
+            // Refresh company data
+            await loadCompanyData();
+            
+            // Close dialog
+            setRechargePlanOpen(false);
+            setSelectedRechargePlan('');
+        
+          } catch (error: any) {
+            console.error('Error processing subscription:', error);
+            toast({
+              title: "Subscription Error",
+              description: error.message || "An error occurred. Please contact support.",
+              variant: "destructive",
+            });
+          } finally {
+            setLoading(false);
+          }
+        },
+        modal: {
+          ondismiss: function() {
+            setLoading(false);
+          }
+        }
+      };
+      
+      const rzp1 = new (window as any).Razorpay(options);
+      
+      rzp1.on('payment.failed', function (response: any) {
+        console.error('Payment failed:', response.error);
+        toast({
+          title: "Payment Failed",
+          description: response.error.description || "Payment could not be completed. Please try again.",
+          variant: "destructive",
+        });
+        setLoading(false);
+      });
+      
+      rzp1.open();
+      setRechargePlanOpen(false);
       setLoading(false);
       
     } catch (error: any) {
@@ -1173,6 +1303,73 @@ export default function AdminUserManagement() {
                       }}
                       className="flex-1"
                       disabled={changingPlan}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Dialog open={rechargePlanOpen} onOpenChange={setRechargePlanOpen}>
+              <DialogContent aria-describedby="recharge-plan-description">
+                <DialogHeader>
+                  <DialogTitle>Select Plan to Activate</DialogTitle>
+                </DialogHeader>
+                <div id="recharge-plan-description" className="sr-only">Dialog to select a subscription plan for activation</div>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Select a plan to activate your subscription. The amount will be charged automatically every 7 days.
+                    </p>
+                  </div>
+                  <Select value={selectedRechargePlan} onValueChange={setSelectedRechargePlan}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select a plan..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availablePlans
+                        .sort((a, b) => (a.plan_cost || 0) - (b.plan_cost || 0))
+                        .map(availablePlan => (
+                        <SelectItem key={availablePlan.plan_name} value={availablePlan.plan_name}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{availablePlan.plan_name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ₹{availablePlan.plan_cost}/week • Max {availablePlan.max_users} users • {availablePlan.max_cvs} CVs
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedRechargePlan && (
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-blue-900">Amount to be charged:</span>
+                        <span className="text-lg font-bold text-blue-900">
+                          ₹{availablePlans.find(p => p.plan_name === selectedRechargePlan)?.plan_cost || 0}/week
+                        </span>
+                      </div>
+                      <p className="text-xs text-blue-700 mt-2">
+                        This amount will be automatically charged every 7 days after activation.
+                      </p>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={handleRechargePlanSelect} 
+                      disabled={!selectedRechargePlan || loading}
+                      className="flex-1"
+                    >
+                      {loading ? 'Processing...' : 'Activate Subscription'}
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setRechargePlanOpen(false);
+                        setSelectedRechargePlan('');
+                      }}
+                      className="flex-1"
+                      disabled={loading}
                     >
                       Cancel
                     </Button>
