@@ -58,6 +58,37 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     window.addEventListener('session:cleared', handleSessionCleared);
     return () => window.removeEventListener('session:cleared', handleSessionCleared);
   }, []);
+
+  // ✅ ADD: Re-read from sessionStorage when component mounts or becomes visible
+  // This ensures JD and criteria selected in extension are reflected in main app
+  useEffect(() => {
+    const checkSessionStorage = () => {
+      const jd = sessionStorage.getItem('selectedJDId') || '';
+      const grid = sessionStorage.getItem('selectedCriteriaGridId') || '';
+      if (jd && jd !== selectedJobDescriptionId) {
+        console.log('🔄 Syncing JD from sessionStorage:', jd);
+        setSelectedJobDescriptionId(jd);
+      }
+      if (grid && grid !== selectedCriteriaGridId) {
+        console.log('🔄 Syncing Criteria from sessionStorage:', grid);
+        setSelectedCriteriaGridId(grid);
+      }
+    };
+    
+    // Check immediately on mount
+    checkSessionStorage();
+    
+    // Also listen for storage events (when extension updates sessionStorage in another tab)
+    window.addEventListener('storage', checkSessionStorage);
+    
+    // Also check periodically in case extension updated it in same window
+    const interval = setInterval(checkSessionStorage, 1000);
+    
+    return () => {
+      window.removeEventListener('storage', checkSessionStorage);
+      clearInterval(interval);
+    };
+  }, [selectedJobDescriptionId, selectedCriteriaGridId]);
   const { user } = useAuth();
   const { toast } = useToast();
 
