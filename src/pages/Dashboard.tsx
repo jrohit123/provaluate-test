@@ -31,6 +31,33 @@ const Dashboard = () => {
   // Get activeSection from URL parameter, default to 'main-dashboard'
   const activeSection = (searchParams.get('section') as ActiveSection) || 'main-dashboard';
 
+  // ✅ ADD: Read JD and criteria from URL parameters (from extension) and set in sessionStorage
+  useEffect(() => {
+    const jdId = searchParams.get('jdId');
+    const criteriaId = searchParams.get('criteriaId');
+    
+    if (jdId) {
+      sessionStorage.setItem('selectedJDId', jdId);
+      console.log('✅ Set JD from URL parameter:', jdId);
+      // Trigger a custom event so MatchScorecardSection can pick it up
+      window.dispatchEvent(new CustomEvent('jd-selected', { detail: { jdId } }));
+    }
+    if (criteriaId) {
+      sessionStorage.setItem('selectedCriteriaGridId', criteriaId);
+      console.log('✅ Set Criteria from URL parameter:', criteriaId);
+      // Trigger a custom event so MatchScorecardSection can pick it up
+      window.dispatchEvent(new CustomEvent('criteria-selected', { detail: { criteriaId } }));
+    }
+    
+    // Remove parameters from URL after reading them (clean URL)
+    if (jdId || criteriaId) {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('jdId');
+      newParams.delete('criteriaId');
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   // Function to update the active section and URL
   const setActiveSection = (section: ActiveSection) => {
     setSearchParams({ section });
