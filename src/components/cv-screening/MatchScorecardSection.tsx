@@ -78,6 +78,26 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     // Check immediately on mount
     checkSessionStorage();
     
+    // Listen for custom events from Dashboard when URL parameters are set
+    const handleJDSelected = (event: CustomEvent) => {
+      const jdId = event.detail?.jdId || sessionStorage.getItem('selectedJDId') || '';
+      if (jdId && jdId !== selectedJobDescriptionId) {
+        console.log('🔄 JD selected from URL parameter:', jdId);
+        setSelectedJobDescriptionId(jdId);
+      }
+    };
+    
+    const handleCriteriaSelected = (event: CustomEvent) => {
+      const criteriaId = event.detail?.criteriaId || sessionStorage.getItem('selectedCriteriaGridId') || '';
+      if (criteriaId && criteriaId !== selectedCriteriaGridId) {
+        console.log('🔄 Criteria selected from URL parameter:', criteriaId);
+        setSelectedCriteriaGridId(criteriaId);
+      }
+    };
+    
+    window.addEventListener('jd-selected', handleJDSelected as EventListener);
+    window.addEventListener('criteria-selected', handleCriteriaSelected as EventListener);
+    
     // Also listen for storage events (when extension updates sessionStorage in another tab)
     window.addEventListener('storage', checkSessionStorage);
     
@@ -85,6 +105,8 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     const interval = setInterval(checkSessionStorage, 1000);
     
     return () => {
+      window.removeEventListener('jd-selected', handleJDSelected as EventListener);
+      window.removeEventListener('criteria-selected', handleCriteriaSelected as EventListener);
       window.removeEventListener('storage', checkSessionStorage);
       clearInterval(interval);
     };
