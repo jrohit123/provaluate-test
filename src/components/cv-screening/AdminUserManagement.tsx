@@ -30,6 +30,8 @@ export default function AdminUserManagement() {
   const [rechargingCVs, setRechargingCVs] = useState(false);
   const [rechargePlanOpen, setRechargePlanOpen] = useState(false);
   const [selectedRechargePlan, setSelectedRechargePlan] = useState<string>('');
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   // Compute admin status after all hooks
   const isAdmin = user?.profile?.role === 'admin';
@@ -1123,6 +1125,61 @@ export default function AdminUserManagement() {
     }
   };
 
+  const handleCancelSubscription = async () => {
+    if (!user?.profile?.company_id) {
+      toast({
+        title: "Error",
+        description: "Missing company information.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setCancelling(true);
+      
+      const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
+      const response = await fetch(`${API_BASE_URL}/payments/cancel-subscription`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          company_id: user.profile.company_id
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to cancel subscription');
+      }
+
+      toast({
+        title: "Subscription Cancelled",
+        description: data.subscription_end_date 
+          ? `Your subscription has been cancelled. You'll have access until ${new Date(data.subscription_end_date).toLocaleDateString()}.`
+          : "Your subscription has been cancelled.",
+      });
+
+      // Close dialog
+      setCancelConfirmOpen(false);
+      
+      // Refresh company data
+      await loadCompanyData();
+      
+    } catch (error: any) {
+      console.error('Error cancelling subscription:', error);
+      toast({
+        title: "Cancellation Error",
+        description: error.message || "Failed to cancel subscription. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   // Only render UI if admin
   if (!isAdmin) return null;
 
@@ -1148,6 +1205,18 @@ export default function AdminUserManagement() {
           <div className="font-semibold text-lg">Company Users</div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleRecharge} disabled={loading}>Recharge</Button>
+            {company?.subscription_status !== 'cancelled' && 
+             company?.subscription_status !== 'expired' && 
+             company?.razorpay_subscription_id && (
+              <Button 
+                variant="outline" 
+                onClick={() => setCancelConfirmOpen(true)} 
+                disabled={loading || cancelling}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
+              </Button>
+            )}
             <Button variant="outline" onClick={handleCVRecharge} disabled={rechargingCVs || !plan}>
               {rechargingCVs ? 'Processing...' : 'Recharge CVs'}
             </Button>
@@ -1372,6 +1441,54 @@ export default function AdminUserManagement() {
                       disabled={loading}
                     >
                       Cancel
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+            {/* Cancel Subscription Confirmation Dialog */}
+            <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Cancel Subscription</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Are you sure you want to cancel your subscription?
+                    </p>
+                    {company?.subscription_end && (
+                      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-sm font-medium text-yellow-900 mb-1">
+                          ⚠️ Important Information:
+                        </p>
+                        <p className="text-xs text-yellow-800">
+                          Your subscription will be cancelled immediately, but you'll retain access until{' '}
+                          <strong>{new Date(company.subscription_end).toLocaleDateString()}</strong>.
+                          After that date, you'll lose access to premium features.
+                        </p>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-2">
+                      You can reactivate your subscription anytime by clicking "Recharge".
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={handleCancelSubscription} 
+                      disabled={cancelling}
+                      variant="destructive"
+                      className="flex-1"
+                    >
+                      {cancelling ? 'Cancelling...' : 'Yes, Cancel Subscription'}
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setCancelConfirmOpen(false)}
+                      className="flex-1"
+                      disabled={cancelling}
+                    >
+                      Keep Subscription
                     </Button>
                   </div>
                 </div>
