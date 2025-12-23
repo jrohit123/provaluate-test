@@ -193,6 +193,59 @@ export const ResumeUploadSection = () => {
     }
   }, []);
 
+  // ✅ ADD: Listen for custom events from Dashboard when URL parameters are set
+  // This ensures JD and criteria selected in extension are reflected immediately
+  useEffect(() => {
+    const checkSessionStorage = () => {
+      const jd = sessionStorage.getItem('selectedJDId') || '';
+      const grid = sessionStorage.getItem('selectedCriteriaGridId') || '';
+      if (jd && jd !== selectedJobDescriptionId) {
+        console.log('🔄 Syncing JD from sessionStorage:', jd);
+        setSelectedJobDescriptionId(jd);
+      }
+      if (grid && grid !== selectedCriteriaGridId) {
+        console.log('🔄 Syncing Criteria from sessionStorage:', grid);
+        setSelectedCriteriaGridId(grid);
+      }
+    };
+    
+    // Check immediately on mount
+    checkSessionStorage();
+    
+    // Listen for custom events from Dashboard when URL parameters are set
+    const handleJDSelected = (event: CustomEvent) => {
+      const jdId = event.detail?.jdId || sessionStorage.getItem('selectedJDId') || '';
+      if (jdId && jdId !== selectedJobDescriptionId) {
+        console.log('🔄 JD selected from URL parameter:', jdId);
+        setSelectedJobDescriptionId(jdId);
+      }
+    };
+    
+    const handleCriteriaSelected = (event: CustomEvent) => {
+      const criteriaId = event.detail?.criteriaId || sessionStorage.getItem('selectedCriteriaGridId') || '';
+      if (criteriaId && criteriaId !== selectedCriteriaGridId) {
+        console.log('🔄 Criteria selected from URL parameter:', criteriaId);
+        setSelectedCriteriaGridId(criteriaId);
+      }
+    };
+    
+    window.addEventListener('jd-selected', handleJDSelected as EventListener);
+    window.addEventListener('criteria-selected', handleCriteriaSelected as EventListener);
+    
+    // Also listen for storage events (when extension updates sessionStorage in another tab)
+    window.addEventListener('storage', checkSessionStorage);
+    
+    // Also check periodically in case extension updated it in same window
+    const interval = setInterval(checkSessionStorage, 1000);
+    
+    return () => {
+      window.removeEventListener('jd-selected', handleJDSelected as EventListener);
+      window.removeEventListener('criteria-selected', handleCriteriaSelected as EventListener);
+      window.removeEventListener('storage', checkSessionStorage);
+      clearInterval(interval);
+    };
+  }, [selectedJobDescriptionId, selectedCriteriaGridId]);
+
   useEffect(() => {
     if (!selectedJobDescriptionId) {
       setCurrentJobDescription(null);
