@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import * as XLSX from 'xlsx';
 import { useSession } from '@/contexts/SessionContext';
 import { TrialExpirationWarning } from './TrialExpirationWarning';
+import { useSearchParams } from 'react-router-dom'; // ✅ ADD: Import useSearchParams
 
 interface ResumeData {
   id: string;
@@ -153,15 +154,17 @@ export const ResumeUploadSection = () => {
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
   const [showScorecard, setShowScorecard] = useState(false);
   const [jobDescriptions, setJobDescriptions] = useState<any[]>([]);
-  const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>('');
+  // ✅ FIX: Initialize state with sessionStorage values (like MatchScorecardSection does)
+  const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => sessionStorage.getItem('selectedJDId') || '');
   const [criteriaGrids, setCriteriaGrids] = useState<SavedCriteriaGrid[]>([]);
-  const [selectedCriteriaGridId, setSelectedCriteriaGridId] = useState<string>('');
+  const [selectedCriteriaGridId, setSelectedCriteriaGridId] = useState<string>(() => sessionStorage.getItem('selectedCriteriaGridId') || '');
   const [assessmentReports, setAssessmentReports] = useState<any[]>([]);
   const [loadingReports, setLoadingReports] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { user } = useAuth();
   const { setCurrentJobDescription, setCurrentEvaluationCriteria } = useSession();
+  const [searchParams] = useSearchParams(); // ✅ ADD: Get search params
   const [processingState, setProcessingState] = useState<ProcessingState>({
     status: 'idle',
     message: ''
@@ -175,23 +178,39 @@ export const ResumeUploadSection = () => {
   const [companyUsageInfo, setCompanyUsageInfo] = useState<CompanyUsageInfo | null>(null);
   const [showRechargeDialog, setShowRechargeDialog] = useState(false);
 
+  // ✅ ADD: Read directly from URL params on mount (before Dashboard's useEffect runs)
+  // This ensures we pick up JD and criteria immediately when opening from extension
+  useEffect(() => {
+    const jdId = searchParams.get('jdId');
+    const criteriaId = searchParams.get('criteriaId');
+    
+    if (jdId) {
+      console.log('✅ ResumeUploadSection: Found JD in URL params:', jdId);
+      setSelectedJobDescriptionId(jdId);
+      sessionStorage.setItem('selectedJDId', jdId);
+    }
+    if (criteriaId) {
+      console.log('✅ ResumeUploadSection: Found Criteria in URL params:', criteriaId);
+      setSelectedCriteriaGridId(criteriaId);
+      sessionStorage.setItem('selectedCriteriaGridId', criteriaId);
+    }
+  }, [searchParams]); // Run when searchParams change
 
-
-  // Hydrate selections from sessionStorage on mount
+  // Hydrate selections from sessionStorage on mount (keep as fallback)
   useEffect(() => {
     try {
       const storedJD = sessionStorage.getItem('selectedJDId');
       const storedCriteria = sessionStorage.getItem('selectedCriteriaGridId');
-      if (storedJD) {
+      if (storedJD && storedJD !== selectedJobDescriptionId) {
         setSelectedJobDescriptionId(storedJD);
       }
-      if (storedCriteria) {
+      if (storedCriteria && storedCriteria !== selectedCriteriaGridId) {
         setSelectedCriteriaGridId(storedCriteria);
       }
     } catch (e) {
       console.warn('Unable to read selections from sessionStorage', e);
     }
-  }, []);
+  }, []); // Only run on mount
 
   // ✅ ADD: Listen for custom events from Dashboard when URL parameters are set
   // This ensures JD and criteria selected in extension are reflected immediately
