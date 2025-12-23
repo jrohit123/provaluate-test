@@ -1206,6 +1206,13 @@ const FinalResults = () => {
       doc.text(`Position: ${interview.position}`, 20, 59);
       doc.text(`Overall Score: ${interview.overall_score || 'N/A'}`, 20, 66);
       doc.text(`Interview Date: ${new Date(interview.created_at).toLocaleDateString()}`, 20, 73);
+      
+      // Add termination reason only if interview is terminated (below interview date, not in table)
+      let tableStartY = 85; // Default table start position
+      if (interview.status === 'terminated' && interview.termination_reason) {
+        doc.text(`Termination Reason: ${interview.termination_reason}`, 20, 80);
+        tableStartY = 92; // Adjust table start position when termination reason is displayed
+      }
 
       // Add name image beside candidate info
       try {
@@ -1380,7 +1387,7 @@ const FinalResults = () => {
       autoTable(doc, {
         head: [['Parameter', 'Questions', 'Answers', 'AI Feedback', 'Scores']],
         body: tableData,
-        startY: 85,
+        startY: tableStartY, // Use calculated startY (85 normally, 92 if termination reason shown)
         styles: {
           fontSize: 7,
           cellPadding: 2,
