@@ -94,6 +94,7 @@ export interface Database {
           description: string | null
           jd_file: string | null
           criteria_id: string | null
+          status: string | null
           created_at: string
           updated_at: string
         }
@@ -105,6 +106,7 @@ export interface Database {
           description?: string | null
           jd_file?: string | null
           criteria_id?: string | null
+          status?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -116,6 +118,7 @@ export interface Database {
           description?: string | null
           jd_file?: string | null
           criteria_id?: string | null
+          status?: string | null
           created_at?: string
           updated_at?: string
         }
