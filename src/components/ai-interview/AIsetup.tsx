@@ -117,8 +117,9 @@ const HRInterviewCreator = () => {
       // Load from job_descriptions table (CV screening) - SECOND
       const { data: cvData, error: cvError } = await supabase
         .from('job_descriptions')
-        .select('jd_id, title, jd_file, created_at')
+        .select('jd_id, title, jd_file, created_at, status')
         .eq('company_id', user.profile.company_id)
+        .eq('status', 'active')
         .order('created_at', { ascending: false });
       
       if (cvError) {
