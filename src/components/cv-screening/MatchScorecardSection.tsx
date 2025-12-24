@@ -474,8 +474,9 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
       console.log('Fetching job descriptions...');
       const { data, error } = await supabase
         .from('job_descriptions')
-        .select('jd_id, title, jd_file, created_at')
+        .select('jd_id, title, jd_file, created_at, status')
         .eq('company_id', user.profile.company_id)
+        .eq('status', 'active')
         .order('created_at', { ascending: false });
         
       if (error) throw error;

@@ -5,11 +5,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Upload, FileText, Edit, RefreshCw, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { DatabaseService } from '@/integrations/supabase/db';
 import { useAuth } from '@/hooks/use-auth';
 import { useSession } from '@/contexts/SessionContext';
+import { UsageTrackingService } from '@/services/usageTrackingService';
 import { Document, Page, pdfjs } from 'react-pdf';
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.js`;
 
@@ -58,6 +60,13 @@ export const JobUploadSection = () => {
   const [pageNumber, setPageNumber] = useState<number>(1);
   const [isWaitingForResolvedJD, setIsWaitingForResolvedJD] = useState(false);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<NodeJS.Timeout | null>(null);
+  const [jdLimitInfo, setJdLimitInfo] = useState<{
+    canCreateJD: boolean;
+    currentActiveJDCount: number;
+    maxActiveJDs: number;
+    remainingJDs: number;
+  } | null>(null);
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
 
 
   // Auto-refresh functions
@@ -182,6 +191,7 @@ export const JobUploadSection = () => {
     console.log('User object details:', user);
     if (user?.id) {
       loadJobDescriptions();
+      checkJDLimit();
     }
   }, [user, loading, error]);
 
@@ -233,7 +243,7 @@ export const JobUploadSection = () => {
     try {
       const { data, error } = await supabase
         .from('job_descriptions')
-        .select('jd_id, title, jd_file, created_at')
+        .select('jd_id, title, jd_file, created_at, status')
         .eq('company_id', user.profile.company_id)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -247,6 +257,64 @@ export const JobUploadSection = () => {
         description: 'Failed to load job descriptions from the database.',
         variant: 'destructive',
       });
+    }
+  };
+
+  const checkJDLimit = async () => {
+    if (!user?.profile?.company_id) return;
+    
+    try {
+      const limitInfo = await UsageTrackingService.checkJDProcessingLimit(user.profile.company_id);
+      setJdLimitInfo(limitInfo);
+    } catch (error) {
+      console.error('Error checking JD limit:', error);
+    }
+  };
+
+  const toggleJDStatus = async (jdId: string, currentStatus: string) => {
+    if (!user?.profile?.company_id) return;
+    
+    const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
+    
+    // If enabling, check if limit allows it
+    if (newStatus === 'active') {
+      const limitInfo = await UsageTrackingService.checkJDProcessingLimit(user.profile.company_id);
+      if (!limitInfo.canCreateJD && limitInfo.maxActiveJDs > 0) {
+        toast({
+          title: "Cannot Enable JD",
+          description: `You have reached your plan limit of ${limitInfo.maxActiveJDs} active job descriptions. Please disable another JD first.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
+    setUpdatingStatus(jdId);
+    
+    try {
+      const { error } = await supabase
+        .from('job_descriptions')
+        .update({ status: newStatus })
+        .eq('jd_id', jdId);
+      
+      if (error) throw error;
+      
+      toast({
+        title: `JD ${newStatus === 'active' ? 'Enabled' : 'Disabled'}`,
+        description: `Job description has been ${newStatus === 'active' ? 'enabled' : 'disabled'} successfully.`,
+      });
+      
+      // Refresh lists
+      await loadJobDescriptions();
+      await checkJDLimit();
+    } catch (error: any) {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update JD status.",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingStatus(null);
     }
   };
 
@@ -483,6 +551,16 @@ export const JobUploadSection = () => {
       return;
     }
 
+    // Check JD limit before processing
+    if (jdLimitInfo && !jdLimitInfo.canCreateJD) {
+      toast({
+        title: "JD Limit Reached",
+        description: `You have reached your plan limit of ${jdLimitInfo.maxActiveJDs} active job descriptions. Please disable an existing JD to upload a new one.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setProcessingStatus('processing');
 
@@ -567,6 +645,7 @@ export const JobUploadSection = () => {
 
         // Refresh the job descriptions dropdown to show the newly added JD
         await loadJobDescriptions();
+        await checkJDLimit();
 
         // Reset form after a short delay to show success message
         setTimeout(() => {
@@ -663,12 +742,43 @@ export const JobUploadSection = () => {
                 <SelectContent>
                   {jobDescriptions.map(jd => (
                     <SelectItem key={jd.jd_id} value={jd.jd_id}>
-                      {jd.title}
+                      <div className="flex items-center justify-between w-full">
+                        <span>{jd.title}</span>
+                        <span className={`ml-2 text-xs ${jd.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>
+                          {jd.status === 'active' ? '● Active' : '○ Disabled'}
+                        </span>
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+
+            {/* JD Management Section */}
+            {jobDescriptions.length > 0 && (
+              <div className="mb-3 rounded-lg border border-primary-200 bg-primary-50/40 p-4">
+                <label className="mb-3 block text-sm font-medium text-primary-700">
+                  Manage Job Descriptions
+                </label>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {jobDescriptions.map(jd => (
+                    <div key={jd.jd_id} className="flex items-center justify-between p-2 border rounded bg-white">
+                      <span className="text-sm flex-1 truncate mr-2">{jd.title}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={`text-xs ${jd.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>
+                          {jd.status === 'active' ? 'Active' : 'Disabled'}
+                        </span>
+                        <Switch
+                          checked={jd.status === 'active'}
+                          onCheckedChange={() => toggleJDStatus(jd.jd_id, jd.status || 'active')}
+                          disabled={updatingStatus === jd.jd_id}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             
             <div className="flex items-center gap-4 my-6 text-sm font-medium text-[#1e5da8]">
               <span className="flex-1 h-px bg-[#1e5da8]/30" />
@@ -757,7 +867,7 @@ export const JobUploadSection = () => {
               <Button 
                 onClick={handleProcessJobDescription} 
                 className="w-full"
-                disabled={processingStatus === 'processing'}
+                disabled={processingStatus === 'processing' || (jdLimitInfo && !jdLimitInfo.canCreateJD)}
               >
                 {processingStatus === 'processing' ? (
                   <>
@@ -768,6 +878,21 @@ export const JobUploadSection = () => {
                   'Process Job Description'
                 )}
               </Button>
+              
+              {/* Show limit info */}
+              {jdLimitInfo && (
+                <div className="text-sm text-gray-600 mt-2">
+                  {jdLimitInfo.maxActiveJDs === 0 ? (
+                    <span className="text-green-600">Unlimited active job descriptions</span>
+                  ) : (
+                    <span className={jdLimitInfo.remainingJDs <= 0 ? 'text-red-600 font-medium' : 'text-gray-600'}>
+                      {jdLimitInfo.currentActiveJDCount} / {jdLimitInfo.maxActiveJDs} active JDs
+                      {jdLimitInfo.remainingJDs > 0 && ` (${jdLimitInfo.remainingJDs} remaining)`}
+                      {jdLimitInfo.remainingJDs <= 0 && ' - Limit reached'}
+                    </span>
+                  )}
+                </div>
+              )}
               
               {/* Show refresh button and auto-refresh status */}
               {selectedJobDescriptionId && (

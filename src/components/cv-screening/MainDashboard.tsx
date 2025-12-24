@@ -52,11 +52,12 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
         setPlanData(planData);
       }
       
-      // Fetch job descriptions count (CV screening)
+      // Fetch active job descriptions count (CV screening)
       const { count: jobCount } = await supabase
         .from('job_descriptions')
         .select('*', { count: 'exact', head: true })
-        .eq('company_id', user.profile.company_id);
+        .eq('company_id', user.profile.company_id)
+        .eq('status', 'active');
       
       // Fetch interview job descriptions count (AI interview)
       const { count: interviewJobCount } = await supabase
@@ -158,6 +159,12 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
                     <div className="font-medium text-gray-700">Max Users</div>
                     <div className="text-gray-600">
                       {planData.max_users || 'N/A'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium text-gray-700">Active JDs</div>
+                    <div className="text-gray-600">
+                      {stats.jobDescriptions} / {planData.active_jobs === 0 ? 'Unlimited' : planData.active_jobs}
                     </div>
                   </div>
                 </div>
