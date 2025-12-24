@@ -34,6 +34,14 @@ export interface PaymentInfo {
   metadata?: any;
 }
 
+export interface JobDescriptionLimitInfo {
+  canCreateJD: boolean;
+  currentActiveJDCount: number;
+  maxActiveJDs: number;
+  remainingJDs: number;
+  planName: string;
+}
+
 export class UsageTrackingService {
   /**
    * Check if a company can process more CVs based on their plan limits
@@ -122,6 +130,78 @@ export class UsageTrackingService {
       };
     } catch (error) {
       console.error('Error checking CV processing limit:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a company can create more job descriptions based on their plan limits
+   */
+  static async checkJDProcessingLimit(companyId: string): Promise<JobDescriptionLimitInfo> {
+    try {
+      // 1) Fetch company info
+      const { data: companyData, error: companyError } = await supabase
+        .from('companies')
+        .select('company_id, selected_plan')
+        .eq('company_id', companyId)
+        .single();
+
+      if (companyError) {
+        console.error('Error fetching company data:', companyError);
+        throw new Error('Failed to fetch company information');
+      }
+
+      if (!companyData) {
+        throw new Error('Company not found');
+      }
+
+      // 2) Fetch plan info
+      let maxActiveJDs = 0;
+      let planName = 'No Plan';
+
+      if (companyData.selected_plan) {
+        const { data: planData, error: planError } = await supabase
+          .from('plans')
+          .select('plan_name, active_jobs')
+          .eq('plan_name', companyData.selected_plan)
+          .single();
+
+        if (planError) {
+          console.warn('Could not fetch plan data:', planError);
+        } else if (planData) {
+          maxActiveJDs = planData.active_jobs ?? 0;
+          planName = planData.plan_name ?? companyData.selected_plan;
+        }
+      }
+
+      // 3) Count active JDs for this company
+      const { count: activeJDCount, error: countError } = await supabase
+        .from('job_descriptions')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', companyId)
+        .eq('status', 'active');
+
+      if (countError) {
+        console.error('Error counting active JDs:', countError);
+        throw new Error('Failed to count active job descriptions');
+      }
+
+      const currentActiveJDCount = activeJDCount || 0;
+      
+      // Calculate remaining JDs
+      // If maxActiveJDs is 0, it means unlimited
+      const remainingJDs = maxActiveJDs === 0 ? -1 : (maxActiveJDs - currentActiveJDCount);
+      const canCreateJD = maxActiveJDs === 0 || remainingJDs > 0;
+
+      return {
+        canCreateJD,
+        currentActiveJDCount,
+        maxActiveJDs,
+        remainingJDs,
+        planName
+      };
+    } catch (error) {
+      console.error('Error checking JD processing limit:', error);
       throw error;
     }
   }
