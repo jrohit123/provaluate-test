@@ -136,7 +136,56 @@ const HRInterviewCreator = () => {
     console.log('Loaded job descriptions:', allJobDescriptions);
   };
 
+  // Helper function to convert resolved_jd attributes to plain text
+  const convertResolvedJDToText = (parameter: any): string => {
+    if (!parameter || !parameter.attributes) {
+      return '';
+    }
 
+    const attributes = parameter.attributes;
+    let text = '';
+
+    // Convert each attribute category to readable text
+    Object.entries(attributes).forEach(([key, value]: [string, any]) => {
+      const categoryName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      text += `${categoryName}:\n`;
+      
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        Object.entries(value).forEach(([subKey, subValue]: [string, any]) => {
+          const subCategoryName = subKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          if (Array.isArray(subValue)) {
+            text += `  ${subCategoryName}: ${subValue.join(', ')}\n`;
+          } else {
+            text += `  ${subCategoryName}: ${subValue}\n`;
+          }
+        });
+      } else if (Array.isArray(value)) {
+        text += `  ${value.join(', ')}\n`;
+      } else {
+        text += `  ${value}\n`;
+      }
+      text += '\n';
+    });
+
+    // Add attributes_summary if available
+    if (parameter.attributes_summary) {
+      text += `\nSummary:\n${parameter.attributes_summary}\n`;
+    }
+
+    return text.trim();
+  };
+
+  // Helper function to show JD loaded toast (consolidated)
+  const showJDLoadedToast = (jdTitle: string) => {
+    const normalizedTitle = jdTitle.trim().toLowerCase();
+    if (!loadedPositions.has(normalizedTitle)) {
+      toast.success('Job description loaded successfully', { 
+        id: `jd-loaded-${normalizedTitle}`,
+        duration: 2000 
+      });
+      setLoadedPositions(prev => new Set(prev).add(normalizedTitle));
+    }
+  };
 
   // Handle job description selection from both CV screening and AI interview
   const handleJobDescriptionSelect = async (jdId: string) => {
@@ -149,12 +198,7 @@ const HRInterviewCreator = () => {
       if (selectedJD.extracted_text) {
         // Use the already extracted text from jd_for_interview table
         setFormData(prev => ({ ...prev, jobDescription: selectedJD.extracted_text }));
-        // Only show toast if we haven't loaded this role before
-        const normalizedTitle = selectedJD.title.trim().toLowerCase();
-        if (!loadedPositions.has(normalizedTitle)) {
-          toast.success('Role and JD text loaded from database!');
-          setLoadedPositions(prev => new Set(prev).add(normalizedTitle));
-        }
+        showJDLoadedToast(selectedJD.title);
         
         // Load existing parameters for this role (if any)
         console.log('🔄 Role selection: Loading parameters for:', selectedJD.title);
@@ -162,68 +206,111 @@ const HRInterviewCreator = () => {
         return;
       }
       
-             // For CV screening JDs, download and extract text
-       try {
-         // Extract file path from URL if it's a full URL
-         let filePath = selectedJD.jd_file;
-         if (filePath.startsWith('http')) {
-           // Extract path from URL: /storage/v1/object/public/job-descriptions/path/to/file.pdf
-           const urlParts = filePath.split('/storage/v1/object/public/job-descriptions/');
-           if (urlParts.length > 1) {
-             filePath = urlParts[1];
-           }
-         }
-         
-         console.log('Downloading CV screening JD:', filePath);
-         const { data: fileData, error: fileError } = await supabase.storage
-           .from('job-descriptions')
-           .download(filePath);
+      // For CV screening JDs, check if it's a .doc file and use resolved_jd if available
+      const fileExtension = selectedJD.jd_file?.split('.').pop()?.toLowerCase() || '';
+      const isDocFile = fileExtension === 'doc';
 
-         if (fileError) {
-           console.error('Storage download error:', fileError);
-           throw fileError;
-         }
+      // For .doc files, try to use resolved_jd data first
+      if (isDocFile) {
+        try {
+          console.log('📄 .doc file detected, checking for resolved_jd data...');
+          
+          // Get resolved_jd data using the JD file URL
+          const { data: resolvedJDData, error: resolvedError } = await supabase
+            .from('resolved_jd')
+            .select('parameter')
+            .eq('referenced_jd', selectedJD.jd_file)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
 
-         console.log('File downloaded successfully, size:', fileData.size);
-         
-         // Extract original file extension from the file path
-         const originalExtension = filePath.split('.').pop()?.toLowerCase() || 'pdf';
-         const fileNameWithExtension = `${selectedJD.title}.${originalExtension}`;
-         
-         console.log('Original file extension detected:', originalExtension);
-         console.log('Using filename:', fileNameWithExtension);
-         
-         // Send file data directly to backend without creating File object
-         const formDataForUpload = new FormData();
-         formDataForUpload.append('file', fileData, fileNameWithExtension);
-         formDataForUpload.append('title', selectedJD.title);
+          if (!resolvedError && resolvedJDData?.parameter) {
+            console.log('✅ Found resolved_jd data, converting to text...');
+            
+            // Convert resolved_jd attributes to plain text
+            const plainText = convertResolvedJDToText(resolvedJDData.parameter);
+            
+            if (plainText && plainText.length > 50) { // Ensure we have meaningful text
+              setFormData(prev => ({ ...prev, jobDescription: plainText }));
+              showJDLoadedToast(selectedJD.title);
+              
+              // Load existing parameters for this role (if any)
+              await loadParametersForPosition(selectedJD.title);
+              return; // Skip file extraction
+            } else {
+              console.log('⚠️ Resolved JD text too short, falling back to extraction');
+            }
+          } else {
+            console.log('⚠️ No resolved_jd found, falling back to extraction');
+          }
+        } catch (error) {
+          console.log('⚠️ Error checking resolved_jd, falling back to extraction:', error);
+          // Continue to extraction fallback below
+        }
+      }
 
-         console.log(`Sending ${originalExtension.toUpperCase()} file to backend for text extraction...`);
-         const response = await apiCall(API_CONFIG.ENDPOINTS.EXTRACT_JD_TEXT, {
-           method: 'POST',
-           body: formDataForUpload,
-         });
+      // Fallback: For non-.doc files or if resolved_jd not available, use extraction
+      try {
+        // Extract file path from URL if it's a full URL
+        let filePath = selectedJD.jd_file;
+        if (filePath.startsWith('http')) {
+          // Extract path from URL: /storage/v1/object/public/job-descriptions/path/to/file.pdf
+          const urlParts = filePath.split('/storage/v1/object/public/job-descriptions/');
+          if (urlParts.length > 1) {
+            filePath = urlParts[1];
+          }
+        }
+        
+        console.log('Downloading CV screening JD:', filePath);
+        const { data: fileData, error: fileError } = await supabase.storage
+          .from('job-descriptions')
+          .download(filePath);
 
-         if (response.ok) {
-           const { extractedText } = await response.json();
-           console.log('Text extracted successfully, length:', extractedText.length);
-           setFormData(prev => ({ ...prev, jobDescription: extractedText }));
-           toast.success('Role and JD text extracted and loaded successfully!');
-           
-           // Load existing parameters for this role (if any)
-           await loadParametersForPosition(selectedJD.title);
-         } else {
-           console.error('Backend extraction failed:', response.status, response.statusText);
-           // Fallback to title if extraction fails
-           setFormData(prev => ({ ...prev, jobDescription: selectedJD.title }));
-           toast.error('Failed to extract text from PDF');
-         }
-       } catch (error) {
-         console.error('Error loading JD file:', error);
-         // Fallback to title if there's an error
-         setFormData(prev => ({ ...prev, jobDescription: selectedJD.title }));
-         toast.error('Error loading JD: ' + (error as Error).message);
-       }
+        if (fileError) {
+          console.error('Storage download error:', fileError);
+          throw fileError;
+        }
+
+        console.log('File downloaded successfully, size:', fileData.size);
+        
+        // Extract original file extension from the file path
+        const originalExtension = filePath.split('.').pop()?.toLowerCase() || 'pdf';
+        const fileNameWithExtension = `${selectedJD.title}.${originalExtension}`;
+        
+        console.log('Original file extension detected:', originalExtension);
+        console.log('Using filename:', fileNameWithExtension);
+        
+        // Send file data directly to backend without creating File object
+        const formDataForUpload = new FormData();
+        formDataForUpload.append('file', fileData, fileNameWithExtension);
+        formDataForUpload.append('title', selectedJD.title);
+
+        console.log(`Sending ${originalExtension.toUpperCase()} file to backend for text extraction...`);
+        const response = await apiCall(API_CONFIG.ENDPOINTS.EXTRACT_JD_TEXT, {
+          method: 'POST',
+          body: formDataForUpload,
+        });
+
+        if (response.ok) {
+          const { extractedText } = await response.json();
+          console.log('Text extracted successfully, length:', extractedText.length);
+          setFormData(prev => ({ ...prev, jobDescription: extractedText }));
+          showJDLoadedToast(selectedJD.title);
+          
+          // Load existing parameters for this role (if any)
+          await loadParametersForPosition(selectedJD.title);
+        } else {
+          console.error('Backend extraction failed:', response.status, response.statusText);
+          // Fallback to title if extraction fails
+          setFormData(prev => ({ ...prev, jobDescription: selectedJD.title }));
+          toast.error('Failed to extract text from file', { id: 'jd-extraction-error' });
+        }
+      } catch (error) {
+        console.error('Error loading JD file:', error);
+        // Fallback to title if there's an error
+        setFormData(prev => ({ ...prev, jobDescription: selectedJD.title }));
+        toast.error('Error loading JD: ' + (error as Error).message, { id: 'jd-load-error' });
+      }
     }
   };
 
@@ -353,12 +440,12 @@ const HRInterviewCreator = () => {
         console.log('✅ Parameters loaded for role:', formData.newRole);
       }
       
-      toast.success('JD uploaded and text extracted successfully!');
+      toast.success('JD uploaded and text extracted successfully!', { id: 'jd-upload-success' });
       console.log('🎉 Upload and extraction completed successfully!');
       
     } catch (error) {
       console.error('❌ Error uploading JD:', error);
-      toast.error('Error uploading JD: ' + (error as Error).message);
+      toast.error('Error uploading JD: ' + (error as Error).message, { id: 'jd-upload-error' });
     } finally {
       setIsExtractingText(false);
       setIsUploading(false);
@@ -556,13 +643,11 @@ const HRInterviewCreator = () => {
             calculateDuration(paramsWithDefaults);
           }
           
-          // Only show toast if we haven't loaded this position before
+          // Only show toast if we haven't loaded this position before (silent auto-load)
           const normalizedPosition = position.trim().toLowerCase();
           console.log('🔍 Toast check:', { position, normalizedPosition, loadedPositions: Array.from(loadedPositions), hasPosition: loadedPositions.has(normalizedPosition) });
-          if (!loadedPositions.has(normalizedPosition)) {
-            toast.success(`Automatically loaded existing AI parameters for ${position}`);
-            setLoadedPositions(prev => new Set(prev).add(normalizedPosition));
-          }
+          // Removed toast - parameters load silently to avoid spam
+          setLoadedPositions(prev => new Set(prev).add(normalizedPosition));
           console.log('✅ Loaded existing AI parameters for', position);
         } else if (hasValidStructuredQuestions && detectedMode === 'structured') {
           // Load structured interview questions
@@ -585,12 +670,10 @@ const HRInterviewCreator = () => {
           setStructuredQuestions(questionsArray);
           setParametersSaved(true);
           
-          // Only show toast if we haven't loaded this position before
+          // Only show toast if we haven't loaded this position before (silent auto-load)
           const normalizedPosition = position.trim().toLowerCase();
-          if (!loadedPositions.has(normalizedPosition)) {
-            toast.success(`Found existing structured interview for ${position} (${questionsArray.length} questions)`);
-            setLoadedPositions(prev => new Set(prev).add(normalizedPosition));
-          }
+          // Removed toast - parameters load silently to avoid spam
+          setLoadedPositions(prev => new Set(prev).add(normalizedPosition));
           console.log('✅ Loaded existing structured interview for', position);
         } else {
           console.log('🔄 Existing record found but no valid data, clearing state');
@@ -602,7 +685,7 @@ const HRInterviewCreator = () => {
         console.log('🔄 No existing parameters found for', position, '- clearing state');
         setCustomParameters({});
         setParametersSaved(false);
-        toast.success(`No parameters configured yet for ${position}. Choose interview mode and create them.`);
+        // Removed toast - UI state is clear enough without notification
       }
     } catch (error) {
       console.error('Error loading parameters:', error);
@@ -871,14 +954,14 @@ const HRInterviewCreator = () => {
         calculateDuration(paramsWithDefaults);
         
         const method = data.cached ? 'cached' : 'fresh';
-        toast.success(`Generated ${method} parameters for ${roleName} (Interview #${interviewCount})`);
+        toast.success(`Generated ${method} parameters for ${roleName} (Interview #${interviewCount})`, { id: 'params-generated' });
       } else {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to generate parameters');
       }
     } catch (error) {
       console.error('Error generating dynamic parameters:', error);
-      toast.error('Failed to generate dynamic parameters');
+      toast.error('Failed to generate dynamic parameters', { id: 'params-generate-error' });
     } finally {
       setIsLoadingParameters(false);
     }
@@ -941,14 +1024,14 @@ const HRInterviewCreator = () => {
 
         if (saveError) {
           console.error('Error saving parameters:', saveError);
-          toast.error('Failed to save parameters');
+          toast.error('Failed to save parameters', { id: 'params-save-error-2' });
         } else {
           setCustomParameters(generatedParameters);
           setParametersSaved(true);
           calculateDuration(generatedParameters);
           
           const method = data.cached ? 'cached' : 'AI-generated';
-          toast.success(`Auto-generated and saved ${method} parameters for ${roleName} (Interview #${interviewCount})`);
+          toast.success(`Auto-generated and saved ${method} parameters for ${roleName} (Interview #${interviewCount})`, { id: 'params-auto-saved' });
         }
       } else {
         const errorData = await response.json();
@@ -956,7 +1039,7 @@ const HRInterviewCreator = () => {
       }
     } catch (error) {
       console.error('Error auto-generating parameters:', error);
-      toast.error('Failed to auto-generate parameters');
+      toast.error('Failed to auto-generate parameters', { id: 'params-auto-error' });
     } finally {
       setIsLoadingParameters(false);
     }
@@ -1024,7 +1107,7 @@ const HRInterviewCreator = () => {
     const roleName = formData.newRole || formData.position;
     
     if (!roleName || Object.keys(customParameters).length === 0) {
-      toast.error('Please configure parameters before saving');
+      toast.error('Please configure parameters before saving', { id: 'params-configure-required' });
       return;
     }
     
@@ -1088,11 +1171,11 @@ const HRInterviewCreator = () => {
       // Don't recalculate duration after saving - keep the current duration
       // The duration should remain the same as what was calculated before saving
       
-      toast.success('Parameters saved successfully!');
+      toast.success('Parameters saved successfully!', { id: 'params-saved' });
       console.log('✅ Parameters saved/updated for role:', roleName);
     } catch (error) {
       console.error('Error saving parameters:', error);
-      toast.error('Failed to save parameters');
+      toast.error('Failed to save parameters', { id: 'params-save-error' });
     } finally {
       setIsSavingParameters(false);
     }
@@ -1280,16 +1363,16 @@ const HRInterviewCreator = () => {
         console.log('Interview configuration saved:', result);
         
         // Show success message and stay on the same page
-        toast.success('Interview configuration saved successfully!');
+        toast.success('Interview configuration saved successfully!', { id: 'config-saved' });
         console.log('Interview configuration saved with ID:', result.interview_id);
       } else {
         const errorData = await response.json();
         console.error('Failed to save interview configuration:', errorData);
-        toast.error('Failed to save interview configuration: ' + (errorData.message || 'Unknown error'));
+        toast.error('Failed to save interview configuration: ' + (errorData.message || 'Unknown error'), { id: 'config-save-error' });
       }
     } catch (error) {
       console.error('Error saving interview configuration:', error);
-      toast.error('Error saving interview configuration: ' + (error as Error).message);
+      toast.error('Error saving interview configuration: ' + (error as Error).message, { id: 'config-error' });
     }
   };
 
@@ -1745,7 +1828,7 @@ const HRInterviewCreator = () => {
                   onClick={() => {
                     setCustomParameters({});
                     setParametersSaved(false);
-                    toast.success('Parameters cleared successfully!');
+                    toast.success('Parameters cleared successfully!', { id: 'params-cleared' });
                   }}
                   variant="destructive"
                   className="flex items-center gap-2"
@@ -2232,7 +2315,7 @@ const HRInterviewCreator = () => {
             try {
               const roleName = formData.newRole || formData.position;
               if (!roleName) {
-                toast.error('Please select or enter a role name');
+                toast.error('Please select or enter a role name', { id: 'role-name-required' });
                 return;
               }
 
@@ -2251,14 +2334,14 @@ const HRInterviewCreator = () => {
 
               if (response.ok) {
                 const data = await response.json();
-                toast.success(`Structured interview saved successfully! ${data.questions_count} questions, ${data.duration} minutes`);
+                toast.success(`Structured interview saved successfully! ${data.questions_count} questions, ${data.duration} minutes`, { id: 'structured-saved' });
               } else {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to save structured interview');
               }
             } catch (error) {
               console.error('Error saving structured interview:', error);
-              toast.error('Failed to save structured interview: ' + (error as Error).message);
+              toast.error('Failed to save structured interview: ' + (error as Error).message, { id: 'structured-save-error' });
             }
           }}
         />

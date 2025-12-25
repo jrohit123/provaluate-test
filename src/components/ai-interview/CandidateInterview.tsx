@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import {
   User,
@@ -7,7 +7,9 @@ import {
   Mic,
   AlertTriangle,
   CheckCircle,
-  XCircle
+  XCircle,
+  Camera,
+  RotateCcw
 } from 'lucide-react';
 
 const CandidateInterview = () => {
@@ -18,6 +20,12 @@ const CandidateInterview = () => {
   const [interviewData, setInterviewData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [photoCaptured, setPhotoCaptured] = useState(false);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const [isCapturingPhoto, setIsCapturingPhoto] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   // Load interview data
   useEffect(() => {
@@ -112,6 +120,117 @@ const CandidateInterview = () => {
     }
   }, [interviewId]);
 
+  // Initialize camera for photo capture
+  const initializeCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { width: 1280, height: 720 },
+        audio: false 
+      });
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      streamRef.current = stream;
+      setCameraReady(true);
+      return true;
+    } catch (error) {
+      console.error('Error accessing camera:', error);
+      setCameraReady(false);
+      return false;
+    }
+  };
+
+  // Capture photo from video stream
+  const capturePhoto = async (): Promise<string | null> => {
+    try {
+      if (!videoRef.current) return null;
+      
+      const video = videoRef.current;
+      
+      // Wait for video to be ready
+      if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
+        await new Promise<void>((resolve) => {
+          const checkReady = () => {
+            if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+              resolve();
+            } else {
+              setTimeout(checkReady, 100);
+            }
+          };
+          checkReady();
+        });
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const photoDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      
+      return photoDataUrl;
+    } catch (error) {
+      console.error('Error capturing photo:', error);
+      return null;
+    }
+  };
+
+  // Handle photo capture
+  const handleCapturePhoto = React.useCallback(async () => {
+    setIsCapturingPhoto(true);
+    const photo = await capturePhoto();
+    
+    if (photo) {
+      setCapturedPhoto(photo);
+      setPhotoCaptured(true);
+      
+      // Store photo in localStorage and sessionStorage
+      if (interviewData?.id) {
+        const storageKey = `candidate_photo_${interviewData.id}`;
+        const timestamp = Date.now();
+        
+        try {
+          localStorage.setItem(storageKey, photo);
+          localStorage.setItem(`${storageKey}_timestamp`, timestamp.toString());
+          sessionStorage.setItem(storageKey, photo);
+          sessionStorage.setItem(`${storageKey}_timestamp`, timestamp.toString());
+          console.log('✅ Photo stored:', storageKey);
+        } catch (error) {
+          console.error('Error storing photo:', error);
+        }
+      }
+    }
+    
+    setIsCapturingPhoto(false);
+  }, [interviewData?.id]);
+
+  // Handle retake photo
+  const handleRetakePhoto = () => {
+    setPhotoCaptured(false);
+    setCapturedPhoto(null);
+  };
+
+  // Initialize camera when interview data loads
+  useEffect(() => {
+    if (interviewData && !photoCaptured) {
+      initializeCamera();
+    }
+    
+    return () => {
+      // Cleanup stream
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+    };
+  }, [interviewData, photoCaptured]);
+
+  // Manual capture only - no auto-capture
+
   const startInterview = async () => {
     if (!interviewData) return;
     
@@ -201,121 +320,199 @@ const CandidateInterview = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-      <div className="max-w-2xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6 text-center">
-          <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            Welcome, {interviewData.candidate_name}!
-          </h1>
-          <p className="text-gray-600 text-lg">
-            You're about to begin your {interviewData.position} interview
-          </p>
-        </div>
-
-        {/* Interview Details */}
-        <div className="bg-white rounded-lg shadow-lg p-5 mb-5">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <User className="text-blue-600 w-5 h-5" />
-            Interview Details
-          </h2>
-          
-          <div className="grid grid-cols-2 gap-4 mb-5">
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <User className="w-5 h-5 text-gray-600" />
-              <div>
-                <p className="text-sm text-gray-500">Position</p>
-                <p className="font-medium">{interviewData.position}</p>
-              </div>
-            </div>
-             
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <Clock className="w-5 h-5 text-gray-600" />
-              <div>
-                <p className="text-sm text-gray-500">Duration</p>
-                <p className="font-medium">{interviewData.duration_minutes} minutes</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <Video className="w-5 h-5 text-gray-600" />
-              <div>
-                <p className="text-sm text-gray-500">Camera</p>
-                <p className="font-medium">Required</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <Mic className="w-5 h-5 text-gray-600" />
-              <div>
-                <p className="text-sm text-gray-500">Microphone</p>
-                <p className="font-medium">Required</p>
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Unified Card Layout */}
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-6">
+          {/* Header Section */}
+          <div className="px-6 pt-6 pb-4 border-b border-gray-100">
+            <h1 className="text-3xl font-bold text-gray-800 mb-3">
+              Welcome, {interviewData.candidate_name}!
+            </h1>
+            <div className="flex items-center gap-4 text-gray-600">
+              <span className="flex items-center gap-1 text-sm">
+                <User className="w-4 h-4" />
+                {interviewData.position}
+              </span>
+              <span className="text-gray-300">•</span>
+              <span className="flex items-center gap-1 text-sm">
+                <Clock className="w-4 h-4" />
+                {interviewData.duration_minutes} minutes
+              </span>
             </div>
           </div>
 
-          {/* Instructions */}
-          <div className="mb-4">
-            <h3 className="font-medium text-gray-800 mb-2">Instructions</h3>
-            <div className="space-y-2 text-sm text-gray-600">
-              <p>• Please ensure your camera and microphone are working</p>
-              <p>• Find a quiet environment for the interview</p>
-              <p>• Speak clearly when answering questions</p>
-            </div>
-          </div>
+          <div className="md:flex">
+            {/* Left Side: Interview Details */}
+            <div className="p-6 md:w-1/2">
+              <h2 className="text-2xl font-semibold text-gray-800 mb-5 flex items-center gap-3">
+                <User className="text-blue-600 w-6 h-6" />
+                Interview Details
+              </h2>
+              
+              {/* Quick Info Grid */}
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                  <Video className="w-4 h-4 text-gray-600" />
+                  <div>
+                    <p className="text-xs text-gray-500">Camera</p>
+                    <p className="text-sm font-medium">Required</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                  <Mic className="w-4 h-4 text-gray-600" />
+                  <div>
+                    <p className="text-xs text-gray-500">Microphone</p>
+                    <p className="text-sm font-medium">Required</p>
+                  </div>
+                </div>
+              </div>
 
-          {/* Custom Instructions */}
-          {interviewData.custom_instructions && (
-            <div className="mb-4">
-              <h3 className="font-medium text-gray-800 mb-2">Special Instructions</h3>
-              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <p className="text-yellow-800">{interviewData.custom_instructions}</p>
+              {/* Instructions */}
+              <div className="mb-6">
+                <h3 className="font-semibold text-gray-800 mb-3 text-base">Instructions</h3>
+                <ul className="space-y-2 text-sm text-gray-700 list-disc list-inside">
+                  <li className="leading-relaxed">Please ensure your camera and microphone are working.</li>
+                  <li className="leading-relaxed">You will be recorded throughout the session.</li>
+                  <li className="leading-relaxed">You need to first capture your photo, as it will be used for results</li>
+                  <li className="leading-relaxed">Without image capture , you cannot start the interview</li>
+                  <li className="leading-relaxed">Find a quiet environment for the interview</li>
+                  <li className="leading-relaxed">Speak clearly when answering questions</li>
+                </ul>
+              </div>
+
+              {/* Custom Instructions */}
+              {interviewData.custom_instructions && (
+                <div className="mb-4">
+                  <h3 className="font-semibold text-gray-800 mb-2 text-sm">Special Instructions</h3>
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-yellow-800 text-xs">{interviewData.custom_instructions}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* System Requirements */}
+              <div className="mt-6">
+                <h3 className="font-semibold text-gray-800 mb-3 text-base flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-orange-500" />
+                  System Requirements
+                </h3>
+                <ul className="space-y-2 text-sm text-gray-700">
+                  <li className="flex items-start gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0 mt-1.5"></div>
+                    <span className="leading-relaxed">Modern web browser</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0 mt-1.5"></div>
+                    <span className="leading-relaxed">Working camera and microphone</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0 mt-1.5"></div>
+                    <span className="leading-relaxed">Stable internet connection</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0 mt-1.5"></div>
+                    <span className="leading-relaxed">Camera & microphone permissions</span>
+                  </li>
+                </ul>
               </div>
             </div>
-          )}
 
-          {/* System Requirements */}
-          <div>
-            <h3 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-orange-600" />
-              System Requirements
-            </h3>
-            
-            <div className="space-y-2 text-sm text-gray-600">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                <span>Modern web browser (Chrome, Firefox, Safari, Edge)</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                <span>Working camera and microphone</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                <span>Stable internet connection</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                <span>Permission to access camera and microphone</span>
-              </div>
+            {/* Right Side: Photo Capture */}
+            <div className="p-6 md:w-1/2">
+              {!photoCaptured ? (
+                <>
+                  <h2 className="text-2xl font-semibold text-gray-800 text-center mb-3">
+                    📸 Capture Your Photo
+                  </h2>
+                  <p className="text-gray-600 text-center mb-5 text-base">
+                    Position yourself in the frame
+                  </p>
+                  
+                  {/* Video Preview */}
+                  <div className="relative bg-gray-200 rounded-xl overflow-hidden mb-4" style={{ aspectRatio: '4/3' }}>
+                    {!cameraReady ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                        <div className="text-center text-gray-500">
+                          <Camera className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                          <p>Initializing camera...</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+                  
+                  {/* Capture Button */}
+                  <button
+                    onClick={handleCapturePhoto}
+                    disabled={isCapturingPhoto || !cameraReady}
+                    className="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold"
+                  >
+                    <Camera className="w-5 h-5" />
+                    {isCapturingPhoto ? 'Capturing...' : 'Capture Photo'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-2xl font-semibold text-gray-800 text-center mb-3">
+                    ✅ Photo Captured
+                  </h2>
+                  <p className="text-gray-600 text-center mb-5 text-base">
+                    Review your photo
+                  </p>
+                  
+                  {/* Photo Preview */}
+                  <div className="relative bg-gray-200 rounded-xl overflow-hidden mb-4" style={{ aspectRatio: '4/3' }}>
+                    {capturedPhoto && (
+                      <img 
+                        src={capturedPhoto} 
+                        alt="Captured photo" 
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+                  
+                  {/* Retake Button */}
+                  <button
+                    onClick={handleRetakePhoto}
+                    className="w-full bg-gray-200 text-gray-800 py-3 rounded-xl hover:bg-gray-300 transition-colors flex items-center justify-center gap-2 font-semibold"
+                  >
+                    <RotateCcw className="w-5 h-5" />
+                    Retake Photo
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Start Button */}
-        <div className="text-center">
-          <button
-            onClick={startInterview}
-            className="bg-green-600 text-white px-8 py-4 rounded-lg hover:bg-green-700 transition-colors text-lg font-semibold flex items-center gap-3 mx-auto"
-          >
-            <CheckCircle className="w-6 h-6" />
-            Start Interview
-          </button>
-          <p className="text-sm text-gray-500 mt-3">
-            Click to begin your interview. Good luck!
-          </p>
-        </div>
+        {/* Start Interview Button - Full Width Below Cards */}
+        <button
+          onClick={startInterview}
+          disabled={!photoCaptured}
+          className={`w-full py-5 rounded-xl transition-colors text-xl font-semibold flex items-center justify-center gap-3 ${
+            photoCaptured
+              ? 'bg-green-600 text-white hover:bg-green-700'
+              : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+          }`}
+        >
+          <CheckCircle className="w-6 h-6" />
+          Start Interview
+        </button>
+        
+        <p className="text-sm text-gray-500 mt-3 text-center">
+          {photoCaptured 
+            ? 'Click to begin your interview. Good luck!'
+            : 'Please capture your photo first to continue'}
+        </p>
       </div>
     </div>
   );

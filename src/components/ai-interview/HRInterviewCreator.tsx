@@ -334,19 +334,12 @@ const HRInterviewCreator = () => {
             // Log the interview type being used
             console.log(`✅ Using interview_type: ${interviewType || 'not set'}`);
             
-            toast({
-              title: "Parameters Loaded",
-              description: `Automatically loaded existing AI parameters for ${formData.position} (${interviewType || 'mixed'})`,
-            });
+            // Removed toast - parameters load silently to avoid spam
           } else if (structuredQuestions && Array.isArray(structuredQuestions) && structuredQuestions.length > 0) {
             // No AI parameters but structured questions exist - suggest switching mode
             setCustomParameters({});
             setParametersSaved(false);
-            toast({
-              title: "Structured Interview Available",
-              description: `Found structured interview for ${formData.position} (${structuredQuestions.length} questions). Switch to "Structured Interview" mode to use them.`,
-              variant: "default",
-            });
+            // Removed toast - UI state is clear enough without notification
           } else {
             setCustomParameters({});
             setParametersSaved(false);
@@ -377,19 +370,12 @@ const HRInterviewCreator = () => {
             // Calculate duration from structured questions
             calculateDurationFromStructuredQuestions(questionsArray);
             
-            toast({
-              title: "Structured Interview Loaded",
-              description: `Found existing structured interview for ${formData.position} (${questionsArray.length} questions)`,
-            });
+            // Removed toast - parameters load silently to avoid spam
           } else if (customParams && Object.keys(customParams).length > 0) {
             // No structured questions but AI parameters exist - suggest switching mode
             setCustomParameters({});
             setParametersSaved(false);
-            toast({
-              title: "AI Parameters Available",
-              description: `Found AI parameters for ${formData.position}. Switch to "AI Interview" mode to use them.`,
-              variant: "default",
-            });
+            // Removed toast - UI state is clear enough without notification
           } else {
             setCustomParameters({});
             setParametersSaved(false);

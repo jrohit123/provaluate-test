@@ -227,6 +227,7 @@ const ConversationalInterview = () => {
   const stopQuestionRecordingRef = useRef<(() => void) | null>(null);
   const lastInterviewWarningRef = useRef<number | null>(null);
   const lastQuestionWarningRef = useRef<number | null>(null);
+  const cameraWarningShownRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -238,6 +239,9 @@ const ConversationalInterview = () => {
   const speakWithAIRef = useRef<((text: string) => void) | null>(null);
 
   const terminateInterview = useCallback(async (reason) => {
+    // Use consistent toast ID to prevent duplicate messages
+    const terminationToastId = 'interview-terminated';
+    
     try {
       console.log('🚫 Terminating interview due to:', reason);
       const response = await apiCall(`${API_CONFIG.ENDPOINTS.TERMINATE_INTERVIEW}/${interviewData.interviewId}`, {
@@ -253,18 +257,25 @@ const ConversationalInterview = () => {
 
       if (response.ok) {
         console.log('✅ Interview status updated to terminated');
-        toast.error(`Interview terminated: ${reason}`);
+        toast.error(`Interview terminated: ${reason}`, { id: terminationToastId });
       } else {
         console.error('❌ Failed to update interview status');
-        toast.error(`Interview terminated: ${reason} (status update failed)`);
+        toast.error(`Interview terminated: ${reason}`, { id: terminationToastId });
       }
     } catch (error) {
       console.error('❌ Error terminating interview:', error);
-      toast.error(`Interview terminated: ${reason} (error updating status)`);
+      toast.error(`Interview terminated: ${reason}`, { id: terminationToastId });
     }
 
-    navigate('/dashboard');
-  }, [navigate, interviewData?.interviewId]);
+    // Navigate to candidate completion page (which handles terminated interviews)
+    navigate(`/candidate-completion/${interviewData.interviewId}`, {
+      state: {
+        interviewId: interviewData.interviewId,
+        candidateName: interviewData.candidateName,
+        position: interviewData.position
+      }
+    });
+  }, [navigate, interviewData?.interviewId, interviewData?.candidateName, interviewData?.position]);
 
   const tabChangeCountRef = useRef(0);
   const tabWarningTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -275,7 +286,8 @@ const ConversationalInterview = () => {
 
   const handleTabViolation = useCallback((reason: string) => {
     const now = Date.now();
-    if (now - lastTabViolationRef.current < 500) {
+    // Debounce: Only show one toast per 2 seconds to prevent spam
+    if (now - lastTabViolationRef.current < 2000) {
       return;
     }
     lastTabViolationRef.current = now;
@@ -283,27 +295,20 @@ const ConversationalInterview = () => {
     const currentCount = tabChangeCountRef.current;
     console.log(`⚠️ Tab change detected via ${reason} (${currentCount}/${MAX_TAB_CHANGES})`);
 
-    if (currentCount === 1) {
+    // Show only one warning message per tab switch
+    if (currentCount <= MAX_TAB_CHANGES) {
       toast('⚠️ Warning: Stay on this tab during the interview!', {
+        id: 'tab-switch-warning', // Use ID to prevent duplicate toasts
         icon: '⚠️',
-        duration: 4000,
+        duration: 3000,
         style: {
           background: '#fbbf24',
           color: '#92400e',
         },
       });
-    } else if (currentCount === 2) {
-      toast('🚨 Final Warning: Do not switch tabs! Interview will be terminated.', {
-        icon: '🚨',
-        duration: 4000,
-        style: {
-          background: '#ef4444',
-          color: '#fff',
-        },
-      });
     } else if (currentCount > MAX_TAB_CHANGES) {
       console.log('🚫 Too many tab changes, terminating interview');
-      toast.error('Interview terminated due to tab switching');
+      toast.error('Interview terminated due to tab switching', { id: 'tab-switch-terminated' });
       terminateInterview('Candidate switched tabs multiple times during interview');
     }
 
@@ -532,7 +537,7 @@ const ConversationalInterview = () => {
       setScreenStream(null);
     }
 
-    toast.success('⏰ Interview time completed! Finishing interview...', { duration: 1500 });
+    toast.success('⏰ Interview time completed! Finishing interview...', { id: 'interview-time-completed', duration: 1500 });
 
     // CRITICAL FIX: Immediate finalization with minimal delay
     setTimeout(() => {
@@ -543,7 +548,7 @@ const ConversationalInterview = () => {
           }
         } catch (error) {
           console.error('❌ Error auto-finishing interview:', error);
-          toast.error('Failed to finish interview');
+          toast.error('Failed to finish interview', { id: 'auto-finish-error' });
           // Force navigation even on error
           navigate('/dashboard');
         }
@@ -836,7 +841,7 @@ const ConversationalInterview = () => {
           // Wait for completion message to finish before navigating
           const completionTimer = setTimeout(() => {
             console.log('🏁 Navigating to completion page after completion message...');
-            toast.success(INTERVIEW_CONSTANTS.SUCCESS.INTERVIEW_COMPLETED);
+            toast.success(INTERVIEW_CONSTANTS.SUCCESS.INTERVIEW_COMPLETED, { id: 'interview-completed' });
             
             // Reset initialization flag for next interview
             hasInitializedRef.current = false;
@@ -855,7 +860,7 @@ const ConversationalInterview = () => {
           completionTimerRef.current = completionTimer;
                   } else {
                       // If already spoken, navigate immediately (no scores shown to candidate)
-          toast.success(INTERVIEW_CONSTANTS.SUCCESS.INTERVIEW_COMPLETED);
+          toast.success(INTERVIEW_CONSTANTS.SUCCESS.INTERVIEW_COMPLETED, { id: 'interview-completed' });
           hasInitializedRef.current = false;
           navigate('/candidate-completion', {
             state: {
@@ -868,7 +873,7 @@ const ConversationalInterview = () => {
       }
     } catch (error) {
       console.error('Error finishing interview:', error);
-      toast.error('Failed to finish interview');
+      toast.error('Failed to finish interview', { id: 'finish-interview-error' });
     }
      }, [interviewData.interviewId, navigate, interviewData.candidateName, interviewData.position, speakWithAI, isRecording]);
 
@@ -1047,13 +1052,13 @@ const ConversationalInterview = () => {
         } else {
           // Other error
           console.error('❌ Error generating question:', response.status, errorData);
-          toast.error(`Failed to generate next question: ${errorData.message || 'Server error'}`);
+          toast.error(`Failed to generate next question: ${errorData.message || 'Server error'}`, { id: 'question-generate-error' });
         }
       }
       
     } catch (error) {
       console.error('Error generating question:', error);
-      toast.error('Failed to generate next question');
+      toast.error('Failed to generate next question', { id: 'question-generate-error-2' });
     } finally {
       setIsGeneratingQuestion(false);
     }
@@ -1270,6 +1275,7 @@ const ConversationalInterview = () => {
                
                // Show brief success toast for user feedback
                toast.success('✅ Answer submitted successfully!', {
+                 id: 'answer-submitted',
                  duration: 2000,
                  style: {
                    background: '#10B981',
@@ -1299,13 +1305,13 @@ const ConversationalInterview = () => {
                if (retryCount < maxRetries && currentQuestionIndex === 0) {
                  retryCount++;
                  console.log(`🔄 Retrying submission (attempt ${retryCount + 1}/${maxRetries + 1})...`);
-                 toast.error(`Submission failed, retrying... (${retryCount}/${maxRetries})`);
+                 toast.error(`Submission failed, retrying... (${retryCount}/${maxRetries})`, { id: 'answer-retry' });
                  
                  // Wait a bit before retry
                  await new Promise(resolve => setTimeout(resolve, 1000));
                  return attemptSubmission();
                } else {
-                 toast.error('Failed to submit answer');
+                 toast.error('Failed to submit answer', { id: 'answer-submit-error' });
                  // Reset states on failure
                  dispatch(interviewActions.setSubmitting(false));
                  setSubmissionStatus('idle');
@@ -1376,6 +1382,7 @@ const ConversationalInterview = () => {
 
     if (timeRemaining <= 30 && lastInterviewWarningRef.current !== 30) {
       toast('⚠️ 30 seconds remaining! Please finish your current response.', {
+        id: 'interview-warning-30',
         icon: '⚠️',
         style: {
           background: '#fbbf24',
@@ -1385,6 +1392,7 @@ const ConversationalInterview = () => {
       lastInterviewWarningRef.current = 30;
     } else if (timeRemaining <= 60 && lastInterviewWarningRef.current !== 60) {
       toast('⚠️ 1 minute remaining in your interview!', {
+        id: 'interview-warning-60',
         icon: '⚠️',
         style: {
           background: '#fbbf24',
@@ -1412,8 +1420,10 @@ const ConversationalInterview = () => {
       return;
     }
 
+    // Prioritize 30-second warning - check this first
     if (questionTimeRemaining <= 30 && lastQuestionWarningRef.current !== 30) {
-      toast('⚠️ Time running out! Answer will auto-submit soon.', {
+      toast('⚠️ Less than 30 seconds remaining! Answer will auto-submit soon.', {
+        id: 'question-warning-30',
         icon: '⚠️',
         style: {
           background: '#fbbf24',
@@ -1421,8 +1431,10 @@ const ConversationalInterview = () => {
         }
       });
       lastQuestionWarningRef.current = 30;
-    } else if (questionTimeRemaining <= 60 && lastQuestionWarningRef.current !== 60) {
+    } else if (questionTimeRemaining > 30 && questionTimeRemaining <= 60 && lastQuestionWarningRef.current !== 60) {
+      // Only show 60-second warning if time is between 30-60 seconds
       toast('⚠️ 1 minute remaining for this question.', {
+        id: 'question-warning-60',
         icon: '⚠️',
         style: {
           background: '#fbbf24',
@@ -1433,15 +1445,22 @@ const ConversationalInterview = () => {
     }
   }, [isQuestionTimerActive, questionTimeRemaining]);
   useEffect(() => {
-    if (!isVideoOn) {
-      toast.error('Camera must remain on during the interview!');
+    if (!isVideoOn && !cameraWarningShownRef.current) {
+      cameraWarningShownRef.current = true;
+      toast.error('Camera must remain on during the interview!', {
+        id: 'camera-warning',
+        duration: 5000
+      });
       const timer = setTimeout(() => {
         if (!isVideoOn) {
           terminateInterview('Camera turned off');
         }
+        cameraWarningShownRef.current = false; // Reset after timeout
       }, 5000);
 
       return () => clearTimeout(timer);
+    } else if (isVideoOn) {
+      cameraWarningShownRef.current = false; // Reset when camera is back on
     }
   }, [isVideoOn, terminateInterview, videoRef]);
 
@@ -1540,15 +1559,8 @@ const ConversationalInterview = () => {
       }
 
       console.log('⚠️ Window lost focus - possible tab/window switch');
-      toast('⚠️ Stay focused on the interview window!', {
-        icon: '⚠️',
-        duration: 3000,
-        style: {
-          background: '#fbbf24',
-          color: '#92400e',
-        },
-      });
-
+      // Removed duplicate toast - handleTabViolation will show the warning toast
+      
       handleTabViolation('window blur');
     };
 
@@ -1770,7 +1782,7 @@ const ConversationalInterview = () => {
       setQuestionFinishedSpeaking(false);
       
       // Show recording status
-      toast.success('🖥️ Screen + Camera recording with your microphone audio started!');
+      // toast.success('🖥️ Screen + Camera recording with your microphone audio started!'); // Screen recording start message commented out
       
       // Web Speech is active for voice capture; no separate audio recorder toast
       
@@ -2174,6 +2186,96 @@ const ConversationalInterview = () => {
     }
   }, [navigate]);
 
+  // Capture candidate photo from video stream
+  const captureCandidatePhoto = useCallback(async (): Promise<string | null> => {
+    try {
+      if (!videoRef.current) {
+        console.warn('⚠️ Video element not available for photo capture');
+        return null;
+      }
+
+      const video = videoRef.current;
+      
+      // Wait for video to be ready and have valid dimensions
+      if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
+        // Wait for video to load
+        await new Promise<void>((resolve) => {
+          const checkReady = () => {
+            if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+              resolve();
+            } else {
+              setTimeout(checkReady, 100);
+            }
+          };
+          checkReady();
+        });
+      }
+
+      // Create canvas to capture frame
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        console.error('❌ Failed to get canvas context');
+        return null;
+      }
+
+      // Draw video frame to canvas
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // Convert to base64 JPEG (quality 0.85 for good balance)
+      const photoDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      
+      console.log('✅ Candidate photo captured successfully');
+      return photoDataUrl;
+    } catch (error) {
+      console.error('❌ Error capturing candidate photo:', error);
+      return null;
+    }
+  }, []);
+
+  // Photo capture is now done before interview starts in CandidateInterview component
+  // Commented out automatic capture during interview
+  // useEffect(() => {
+  //   if (isInterviewTimerActive && videoRef.current && interviewData?.interviewId) {
+  //     // Wait 2.5 seconds for video to stabilize before capturing
+  //     const captureTimer = setTimeout(async () => {
+  //       try {
+  //         const photoDataUrl = await captureCandidatePhoto();
+  //         if (photoDataUrl && interviewData.interviewId) {
+  //           const storageKey = `candidate_photo_${interviewData.interviewId}`;
+  //           const timestamp = Date.now();
+  //           
+  //           // Store in both localStorage (persistent) and sessionStorage (backup)
+  //           try {
+  //             // Primary storage: localStorage (persists across sessions)
+  //             localStorage.setItem(storageKey, photoDataUrl);
+  //             localStorage.setItem(`${storageKey}_timestamp`, timestamp.toString());
+  //             console.log('✅ Candidate photo stored in localStorage:', storageKey);
+  //           } catch (localStorageError) {
+  //             console.warn('⚠️ localStorage full or unavailable, using sessionStorage only');
+  //           }
+  //           
+  //           try {
+  //             // Backup storage: sessionStorage (same session)
+  //             sessionStorage.setItem(storageKey, photoDataUrl);
+  //             sessionStorage.setItem(`${storageKey}_timestamp`, timestamp.toString());
+  //             console.log('✅ Candidate photo stored in sessionStorage:', storageKey);
+  //           } catch (sessionStorageError) {
+  //             console.warn('⚠️ sessionStorage unavailable');
+  //           }
+  //         }
+  //       } catch (error) {
+  //         console.error('❌ Failed to capture/store candidate photo:', error);
+  //       }
+  //     }, 2500); // Wait 2.5 seconds for video to stabilize
+
+  //     return () => clearTimeout(captureTimer);
+  //   }
+  // }, [isInterviewTimerActive, captureCandidatePhoto, interviewData?.interviewId]);
+
   const requestFullscreen = useCallback(async () => {
     try {
       const elem = document.documentElement;
@@ -2215,7 +2317,7 @@ const ConversationalInterview = () => {
   // Request screen sharing permissions once at the start
   const requestScreenPermissions = useCallback(async () => {
     try {
-      console.log('🖥️ Requesting screen sharing permissions...');
+      // console.log('🖥️ Requesting screen sharing permissions...');
 
       const displayMediaOptions: any = {
         video: {
@@ -2235,7 +2337,7 @@ const ConversationalInterview = () => {
       setScreenPermissionGranted(true);
       setHasRequestedScreenPermissions(true);
 
-      toast.success('✅ Screen access granted! Starting interview...');
+      //toast.success('✅ Screen access granted! Starting interview...');
 
       // Start welcome message after screen access is granted
       setTimeout(() => {

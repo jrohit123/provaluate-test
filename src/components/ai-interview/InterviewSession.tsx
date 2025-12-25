@@ -69,6 +69,8 @@ const InterviewSession = () => {
   const analyserRef = useRef(null);
   const audioChunksRef = useRef([]);
   const streamRef = useRef(null);
+  const lastRecordingToastRef = useRef<string | null>(null);
+  const lastConnectionToastRef = useRef<string | null>(null);
 
 
 
@@ -90,7 +92,11 @@ const InterviewSession = () => {
     socket.on('connect', () => {
       console.log('✅ Connected to server with ID:', socket.id);
       setConnectionStatus('connected');
-      toast.success('Connected to transcription service');
+      const toastId = 'connection-connected';
+      if (lastConnectionToastRef.current !== toastId) {
+        toast.success('Connected to transcription service', { id: toastId });
+        lastConnectionToastRef.current = toastId;
+      }
       socket.emit('get_current_transcription');
       
       // Start transcription for this interview
@@ -124,7 +130,11 @@ const InterviewSession = () => {
     socket.on('reconnect', (attemptNumber) => {
       console.log('🔄 Reconnected after', attemptNumber, 'attempts');
       setConnectionStatus('connected');
-      toast.success('Reconnected to transcription service');
+      const toastId = 'connection-reconnected';
+      if (lastConnectionToastRef.current !== toastId) {
+        toast.success('Reconnected to transcription service', { id: toastId });
+        lastConnectionToastRef.current = toastId;
+      }
     });
 
     socket.on('transcription_update', (data) => {
@@ -141,14 +151,22 @@ const InterviewSession = () => {
     socket.on('recording_started', (data) => {
       console.log('🎤 Recording started');
       setIsRecording(true);
-      toast.success('Recording started');
+      const toastId = 'recording-started';
+      if (lastRecordingToastRef.current !== toastId) {
+        toast.success('Recording started', { id: toastId });
+        lastRecordingToastRef.current = toastId;
+      }
       startAudioVisualization();
     });
 
     socket.on('recording_stopped', (data) => {
       console.log('⏹️ Recording stopped');
       setIsRecording(false);
-      toast.success('Recording stopped');
+      const toastId = 'recording-stopped';
+      if (lastRecordingToastRef.current !== toastId) {
+        toast.success('Recording stopped', { id: toastId });
+        lastRecordingToastRef.current = toastId;
+      }
       stopAudioVisualization();
     });
 

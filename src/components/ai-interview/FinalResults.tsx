@@ -420,7 +420,7 @@ const FinalResults = () => {
       }
     } catch (error) {
       console.error('Error loading final results:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to load final results');
+      toast.error(error instanceof Error ? error.message : 'Failed to load final results', { id: 'load-results-error' });
     } finally {
       setLoading(false);
     }
@@ -538,10 +538,10 @@ const FinalResults = () => {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
       
-      toast.success('Comprehensive report downloaded successfully!');
+      toast.success('Comprehensive report downloaded successfully!', { id: 'report-download-success' });
     } catch (error) {
       console.error('Error downloading report:', error);
-      toast.error('Failed to download report');
+      toast.error('Failed to download report', { id: 'report-download-error' });
     }
   };
 
@@ -827,10 +827,10 @@ const FinalResults = () => {
       const filename = `Interview_Report_${reportData.interview?.candidate_name || 'Candidate'}_${new Date().toISOString().split('T')[0]}.pdf`;
       doc.save(filename);
       
-      toast.success('Professional PDF report downloaded successfully!');
+      toast.success('Professional PDF report downloaded successfully!', { id: 'pdf-download-success' });
     } catch (error) {
       console.error('Error downloading PDF:', error);
-      toast.error('Failed to download PDF. Please try again.');
+      toast.error('Failed to download PDF. Please try again.', { id: 'pdf-download-error' });
     }
   };
 
@@ -1067,10 +1067,10 @@ const FinalResults = () => {
       link.click();
       window.URL.revokeObjectURL(url);
       
-      toast.success('Comprehensive Excel report downloaded successfully!');
+      toast.success('Comprehensive Excel report downloaded successfully!', { id: 'excel-download-success' });
     } catch (error) {
       console.error('Error downloading Excel:', error);
-      toast.error('Failed to download Excel. Please try again.');
+      toast.error('Failed to download Excel. Please try again.', { id: 'excel-download-error' });
     }
   };
 
@@ -1084,7 +1084,7 @@ const FinalResults = () => {
       });
     } else {
       navigator.clipboard.writeText(url);
-      toast.success('Report URL copied to clipboard');
+      toast.success('Report URL copied to clipboard', { id: 'url-copied' });
     }
   };
 
@@ -1214,35 +1214,134 @@ const FinalResults = () => {
         tableStartY = 92; // Adjust table start position when termination reason is displayed
       }
 
-      // Add name image beside candidate info
+      // Add candidate photo with multiple fallback mechanisms
       try {
-        await new Promise<boolean>((resolve) => {
-          const nameImg = new Image();
-          nameImg.crossOrigin = 'anonymous';
-          nameImg.onload = () => {
-            try {
-              // Position name image beside candidate info (on the right side of the page)
-              const pageWidth = doc.internal.pageSize.getWidth();
-              const nameWidth = 35;
-              const nameHeight = 25;
-              const nameX = pageWidth - nameWidth - 40; // Right side with 40pt margin (closer to left)
-              const nameY = 38; // Align with candidate info
-              
-              doc.addImage(nameImg, 'JPEG', nameX, nameY, nameWidth, nameHeight);
-              resolve(true);
-            } catch (error) {
-              console.log('Error adding name image to PDF:', error);
-              resolve(false);
+        const storageKey = `candidate_photo_${interviewId}`;
+        let candidatePhotoDataUrl: string | null = null;
+        let photoSource = 'none';
+        
+        // Strategy 1: Try localStorage first (most persistent)
+        try {
+          const localPhoto = localStorage.getItem(storageKey);
+          const localTimestamp = localStorage.getItem(`${storageKey}_timestamp`);
+          
+          if (localPhoto) {
+            // Check if photo is not too old (optional: 7 days max)
+            const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+            const photoAge = localTimestamp ? Date.now() - parseInt(localTimestamp) : 0;
+            
+            if (photoAge < maxAge) {
+              candidatePhotoDataUrl = localPhoto;
+              photoSource = 'localStorage';
+              console.log('✅ Found candidate photo in localStorage');
+            } else {
+              console.log('⚠️ Photo in localStorage is too old, trying other sources');
             }
-          };
-          nameImg.onerror = () => {
-            console.log('Name image failed to load');
-            resolve(false);
-          };
-          nameImg.src = '/assets/NAME.jpg';
-        });
+          }
+        } catch (localStorageError) {
+          console.log('⚠️ localStorage access failed, trying sessionStorage');
+        }
+        
+        // Strategy 2: Try sessionStorage as backup
+        if (!candidatePhotoDataUrl) {
+          try {
+            const sessionPhoto = sessionStorage.getItem(storageKey);
+            if (sessionPhoto) {
+              candidatePhotoDataUrl = sessionPhoto;
+              photoSource = 'sessionStorage';
+              console.log('✅ Found candidate photo in sessionStorage');
+            }
+          } catch (sessionStorageError) {
+            console.log('⚠️ sessionStorage access failed');
+          }
+        }
+        
+        // Strategy 3: Validate photo data before using
+        const isValidPhoto = (photoData: string | null): boolean => {
+          if (!photoData) return false;
+          // Check if it's a valid data URL
+          if (!photoData.startsWith('data:image/')) return false;
+          // Check minimum length (base64 encoded image should be at least 100 chars)
+          if (photoData.length < 100) return false;
+          return true;
+        };
+        
+        if (candidatePhotoDataUrl && isValidPhoto(candidatePhotoDataUrl)) {
+          // Use captured candidate photo
+          await new Promise<boolean>((resolve) => {
+            const candidateImg = new Image();
+            candidateImg.crossOrigin = 'anonymous';
+            
+            // Set timeout for image loading (5 seconds max)
+            const loadTimeout = setTimeout(() => {
+              console.log('⚠️ Photo loading timeout, using fallback');
+              resolve(false);
+            }, 5000);
+            
+            candidateImg.onload = () => {
+              clearTimeout(loadTimeout);
+              try {
+                // Position candidate photo beside candidate info
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const photoWidth = 35;
+                const photoHeight = 35;
+                const photoX = pageWidth - photoWidth - 40;
+                const photoY = 38;
+                
+                doc.addImage(candidateImg, 'JPEG', photoX, photoY, photoWidth, photoHeight);
+                console.log(`✅ Candidate photo added to PDF (from ${photoSource})`);
+                resolve(true);
+              } catch (error) {
+                console.error('❌ Error adding candidate photo to PDF:', error);
+                resolve(false);
+              }
+            };
+            
+            candidateImg.onerror = (error) => {
+              clearTimeout(loadTimeout);
+              console.error('❌ Candidate photo failed to load:', error);
+              console.log('⚠️ Falling back to hardcoded image');
+              resolve(false);
+            };
+            
+            candidateImg.src = candidatePhotoDataUrl;
+          });
+        } else {
+          // Fallback to hardcoded image if no valid photo available
+          console.log('⚠️ No valid candidate photo found, using fallback image');
+          console.log(`🔍 Checked: localStorage=${!!localStorage.getItem(storageKey)}, sessionStorage=${!!sessionStorage.getItem(storageKey)}`);
+          
+          await new Promise<boolean>((resolve) => {
+            const nameImg = new Image();
+            nameImg.crossOrigin = 'anonymous';
+            
+            nameImg.onload = () => {
+              try {
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const nameWidth = 35;
+                const nameHeight = 25;
+                const nameX = pageWidth - nameWidth - 40;
+                const nameY = 38;
+                
+                doc.addImage(nameImg, 'JPEG', nameX, nameY, nameWidth, nameHeight);
+                resolve(true);
+              } catch (error) {
+                console.log('Error adding fallback image to PDF:', error);
+                resolve(false);
+              }
+            };
+            
+            nameImg.onerror = () => {
+              console.log('Fallback image failed to load');
+              resolve(false);
+            };
+            
+            nameImg.src = '/assets/NAME.jpg';
+          });
+        }
       } catch (error) {
-        console.log('Name image not found, continuing without name image');
+        console.error('❌ Error processing candidate photo:', error);
+        console.log('⚠️ Continuing without photo');
       }
       
       // Prepare table data
@@ -1429,12 +1528,12 @@ const FinalResults = () => {
       
       // Show success message after a small delay to ensure download started
       setTimeout(() => {
-        toast.success('PDF report downloaded successfully!');
+        toast.success('PDF report downloaded successfully!', { id: 'pdf-generate-success' });
       }, 500);
       
     } catch (error) {
       console.error('Error generating PDF:', error);
-      toast.error('Failed to generate PDF report');
+      toast.error('Failed to generate PDF report', { id: 'pdf-generate-error' });
     } finally {
       setIsGeneratingPDF(false);
     }
