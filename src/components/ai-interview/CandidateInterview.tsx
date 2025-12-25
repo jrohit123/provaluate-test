@@ -128,11 +128,9 @@ const CandidateInterview = () => {
         audio: false 
       });
       
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
+      // Store stream but DON'T attach yet - video element doesn't exist yet
       streamRef.current = stream;
-      setCameraReady(true);
+      setCameraReady(true); // This will trigger React to render the video element
       return true;
     } catch (error) {
       console.error('Error accessing camera:', error);
@@ -140,6 +138,16 @@ const CandidateInterview = () => {
       return false;
     }
   };
+
+  // Attach stream once video element is rendered
+  useEffect(() => {
+    if (cameraReady && streamRef.current && videoRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(err => {
+        console.error('Video play error:', err);
+      });
+    }
+  }, [cameraReady]);
 
   // Capture photo from video stream
   const capturePhoto = async (): Promise<string | null> => {
