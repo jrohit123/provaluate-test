@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -67,6 +68,72 @@ export const JobUploadSection = () => {
     remainingJDs: number;
   } | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [isManageSectionExpanded, setIsManageSectionExpanded] = useState(false);
+
+  // Get JD status configuration based on usage
+  const getJDStatusConfig = (jdLimitInfo: any) => {
+    if (!jdLimitInfo) return 'healthy';
+    
+    const { remainingJDs, maxActiveJDs, currentActiveJDCount } = jdLimitInfo;
+    const usagePercentage = (currentActiveJDCount / maxActiveJDs) * 100;
+    
+    if (remainingJDs === 0) return 'critical';
+    if (remainingJDs <= 2 || usagePercentage >= 90) return 'warning';
+    if (remainingJDs <= 5 || usagePercentage >= 70) return 'caution';
+    return 'healthy';
+  };
+  
+  const statusConfig = jdLimitInfo ? getJDStatusConfig(jdLimitInfo) : 'healthy';
+  
+  // Status configuration mapping
+  const statusMap = {
+    healthy: {
+      border: 'border-emerald-200',
+      bg: 'bg-emerald-50/40',
+      text: 'text-emerald-800',
+      icon: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+      iconColor: 'text-emerald-500',
+      badgeBg: 'bg-emerald-100',
+      badgeText: 'text-emerald-800',
+      progressColor: 'bg-emerald-500',
+      message: `${jdLimitInfo?.remainingJDs} slots available`
+    },
+    caution: {
+      border: 'border-yellow-200',
+      bg: 'bg-yellow-50/40',
+      text: 'text-yellow-800',
+      icon: 'M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 13.5h.008v.008H12v-.008z',
+      iconColor: 'text-yellow-500',
+      badgeBg: 'bg-yellow-100',
+      badgeText: 'text-yellow-800',
+      progressColor: 'bg-yellow-500',
+      message: `${jdLimitInfo?.remainingJDs} slots remaining`
+    },
+    warning: {
+      border: 'border-amber-200',
+      bg: 'bg-amber-50/40',
+      text: 'text-amber-800',
+      icon: 'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z',
+      iconColor: 'text-amber-500',
+      badgeBg: 'bg-amber-100',
+      badgeText: 'text-amber-800',
+      progressColor: 'bg-amber-500',
+      message: `Only ${jdLimitInfo?.remainingJDs} slot${jdLimitInfo?.remainingJDs !== 1 ? 's' : ''} remaining`
+    },
+    critical: {
+      border: 'border-red-200',
+      bg: 'bg-red-50/40',
+      text: 'text-red-800',
+      icon: 'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z',
+      iconColor: 'text-red-500',
+      badgeBg: 'bg-red-100',
+      badgeText: 'text-red-800',
+      progressColor: 'bg-red-500',
+      message: 'You must disable a JD to create new ones'
+    }
+  };
+  
+  const currentStatus = statusMap[statusConfig as keyof typeof statusMap] || statusMap.healthy;
 
 
   // Auto-refresh functions
@@ -730,53 +797,155 @@ export const JobUploadSection = () => {
           </CardHeader>
           <CardContent className="space-y-4">
 
-            {/* Dropdown to select existing Job Description */}
-            <div className="mb-3 rounded-lg border border-primary-200 bg-primary-50/40 p-4">
-              <label className="mb-2 block text-sm font-medium text-primary-700">
-                Select an existing job description
-              </label>
-              <Select value={selectedJobDescriptionId} onValueChange={handleJDSelect}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Choose job description" />
-                </SelectTrigger>
-                <SelectContent>
-                  {jobDescriptions.map(jd => (
-                    <SelectItem key={jd.jd_id} value={jd.jd_id}>
-                      <div className="flex items-center justify-between w-full">
-                        <span>{jd.title}</span>
-                        <span className={`ml-2 text-xs ${jd.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>
-                          {jd.status === 'active' ? '● Active' : '○ Disabled'}
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Select Job Description */}
+            <div className="mb-3">
+              <div className="rounded-lg border border-primary-200 bg-primary-50/40 p-4">
+                <label className="mb-2 block text-sm font-medium text-primary-700">
+                  Select an existing job description
+                </label>
+                <Select value={selectedJobDescriptionId} onValueChange={handleJDSelect}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Choose job description" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {jobDescriptions.map(jd => (
+                      <SelectItem key={jd.jd_id} value={jd.jd_id}>
+                        <div className="flex items-center justify-between w-full">
+                          <span>{jd.title}</span>
+                          <span className={`ml-2 text-xs ${jd.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>
+                            {jd.status === 'active' ? '● Active' : '○ Disabled'}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            {/* JD Management Section */}
+            {/* Manage Job Descriptions */}
             {jobDescriptions.length > 0 && (
-              <div className="mb-3 rounded-lg border border-primary-200 bg-primary-50/40 p-4">
-                <label className="mb-3 block text-sm font-medium text-primary-700">
-                  Manage Job Descriptions
-                </label>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {jobDescriptions.map(jd => (
-                    <div key={jd.jd_id} className="flex items-center justify-between p-2 border rounded bg-white">
-                      <span className="text-sm flex-1 truncate mr-2">{jd.title}</span>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className={`text-xs ${jd.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>
-                          {jd.status === 'active' ? 'Active' : 'Disabled'}
-                        </span>
-                        <Switch
-                          checked={jd.status === 'active'}
-                          onCheckedChange={() => toggleJDStatus(jd.jd_id, jd.status || 'active')}
-                          disabled={updatingStatus === jd.jd_id}
-                        />
+              <div className={`mb-3 rounded-lg border-2 ${currentStatus.border} ${currentStatus.bg} transition-all duration-200 shadow-sm hover:shadow-md`}>
+                <button
+                  onClick={() => setIsManageSectionExpanded(!isManageSectionExpanded)}
+                  className={`w-full px-4 py-3 flex items-center justify-between hover:bg-white/50 transition-colors rounded-t-md ${isManageSectionExpanded ? 'border-b border-gray-200' : ''}`}
+                >
+                  <div className="text-left flex-1">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-1.5 rounded-full ${currentStatus.bg.replace('/40', '')} border ${currentStatus.border} shadow-inner`}>
+                        <svg className={`h-5 w-5 ${currentStatus.iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={currentStatus.icon} />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-semibold text-gray-900">
+                            Manage Job Descriptions
+                          </h3>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${currentStatus.badgeBg} ${currentStatus.badgeText}`}>
+                            {statusConfig === 'healthy' ? 'Available' : 
+                             statusConfig === 'caution' ? 'Getting Full' :
+                             statusConfig === 'warning' ? 'Almost Full' : 'Limit Reached'}
+                          </span>
+                        </div>
+                        
+                        {/* Progress Bar */}
+                        {jdLimitInfo && (
+                          <div className="mt-2 w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full ${currentStatus.progressColor} transition-all duration-500`}
+                              style={{
+                                width: `${Math.min(100, (jdLimitInfo.currentActiveJDCount / jdLimitInfo.maxActiveJDs) * 100)}%`
+                              }}
+                            ></div>
+                          </div>
+                        )}
+                        
+                        <div className="flex items-center justify-between mt-1.5">
+                          <p className="text-xs text-gray-600">
+                            {jdLimitInfo ? (
+                              <>{jdLimitInfo.currentActiveJDCount} of {jdLimitInfo.maxActiveJDs} active</>
+                            ) : null}
+                          </p>
+                          <p className={`text-xs font-medium ${currentStatus.text}`}>
+                            {currentStatus.message}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                  <svg 
+                    className={`h-5 w-5 text-gray-400 transform transition-transform ${
+                      isManageSectionExpanded ? 'rotate-180' : ''
+                    }`} 
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                {isManageSectionExpanded && (
+                  <div className="px-4 py-3 bg-white/50">
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {jobDescriptions.map(jd => {
+                        const isActive = jd.status === 'active';
+                        const isDisabled = updatingStatus === jd.jd_id || 
+                          (!isActive && jdLimitInfo?.remainingJDs === 0);
+                          
+                        return (
+                        <div 
+                          key={jd.jd_id} 
+                          className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
+                            isActive ? 'bg-green-50 border border-green-100' : 'bg-white border border-gray-100'
+                          } ${isDisabled ? 'opacity-70' : 'hover:shadow-sm'}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {jd.title}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Last updated: {new Date(jd.updated_at || jd.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3 ml-2">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {isActive ? 'Active' : 'Inactive'}
+                            </span>
+                            <Switch
+                              checked={isActive}
+                              onCheckedChange={() => !isDisabled && toggleJDStatus(jd.jd_id, jd.status || 'active')}
+                              disabled={isDisabled}
+                              className={`${isDisabled ? 'opacity-50' : ''} ${
+                                isActive ? 'data-[state=checked]:bg-green-500' : ''
+                              }`}
+                            />
+                          </div>
+                        </div>
+                      )})}
+                    </div>
+                    
+                    {jdLimitInfo?.remainingJDs === 0 && (
+                      <div className="mt-3 p-3 rounded-lg bg-red-50 border border-red-100">
+                        <div className="flex">
+                          <svg className="h-5 w-5 text-red-400 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <div>
+                            <h4 className="text-sm font-medium text-red-800">Active Job Description Limit Reached</h4>
+                            <p className="text-xs text-red-700 mt-0.5">
+                              You've reached your limit of {jdLimitInfo.maxActiveJDs} active job descriptions. 
+                              Please deactivate another JD to activate a new one.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             
