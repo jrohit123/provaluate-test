@@ -115,13 +115,22 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
   }, [logoutAndRedirect]);
 
   const checkSessionTimeout = useCallback(async () => {
-    // Skip session check for newly onboarded users
-    const justCompletedOnboarding = localStorage.getItem('onboarding_just_completed') === 'true';
-    if (justCompletedOnboarding) {
-      // Clear the flag and skip check - session will be validated on next check
-      localStorage.removeItem('onboarding_just_completed');
-      console.log('⏭️ Skipping session check for newly onboarded user');
-      return;
+    // Skip session check for newly onboarded users (within 10 seconds of onboarding)
+    const onboardingTimestamp = localStorage.getItem('onboarding_just_completed');
+    if (onboardingTimestamp) {
+      const timestamp = parseInt(onboardingTimestamp);
+      const timeSinceOnboarding = Date.now() - timestamp;
+      const GRACE_PERIOD_MS = 10000; // 10 seconds grace period
+      
+      if (timeSinceOnboarding < GRACE_PERIOD_MS) {
+        // Still within grace period - skip session check
+        console.log(`⏭️ Skipping session check for newly onboarded user (${Math.round(timeSinceOnboarding/1000)}s ago)`);
+        return;
+      } else {
+        // Grace period expired - clear flag and proceed with normal checks
+        localStorage.removeItem('onboarding_just_completed');
+        console.log('✅ Onboarding grace period expired, proceeding with normal session checks');
+      }
     }
 
     // Check if our custom session is still active (independent of Supabase Auth)
