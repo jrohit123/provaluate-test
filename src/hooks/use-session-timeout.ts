@@ -115,6 +115,15 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
   }, [logoutAndRedirect]);
 
   const checkSessionTimeout = useCallback(async () => {
+    // Skip session check for newly onboarded users
+    const justCompletedOnboarding = localStorage.getItem('onboarding_just_completed') === 'true';
+    if (justCompletedOnboarding) {
+      // Clear the flag and skip check - session will be validated on next check
+      localStorage.removeItem('onboarding_just_completed');
+      console.log('⏭️ Skipping session check for newly onboarded user');
+      return;
+    }
+
     // Check if our custom session is still active (independent of Supabase Auth)
     const sessionId = SessionManager.getCurrentSessionId();
     if (sessionId) {
