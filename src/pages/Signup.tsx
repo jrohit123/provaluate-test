@@ -200,6 +200,7 @@ export default function Signup() {
           company_id: newCompany.company_id,
           first_name: firstName,
           last_name: lastName,
+          email: email,
           role: 'admin',
           user_status: 'active',
           created_at: now.toISOString(),
