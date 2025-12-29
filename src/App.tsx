@@ -51,7 +51,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const checkAuth = async () => {
       setLoading(true);
-      
+
       // Check Supabase Auth session first
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
@@ -61,7 +61,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
         setLoading(false);
         return;
       }
-      
+
       setIsAuthenticated(true);
       
       // Check if user has completed onboarding
@@ -77,17 +77,23 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
         setLoading(false);
         return;
       }
-      
+
       setOnboardingComplete(userProfile.onboarding_complete === true);
       
       // Also check localStorage and session for existing users
       const isAuth = localStorage.getItem('recruitai_auth') === 'true';
-      if (isAuth) {
+      const justCompletedOnboarding = localStorage.getItem('onboarding_just_completed') === 'true';
+      
+      if (isAuth && !justCompletedOnboarding) {
+        // Only check session for established users, not newly onboarded ones
         const isActive = await SessionManager.isCurrentSessionActive();
         if (!isActive) {
           SessionManager.clearSession();
           localStorage.removeItem('recruitai_auth');
         }
+      } else if (justCompletedOnboarding) {
+        // Clear the flag after first check - session will be validated on next page load
+        localStorage.removeItem('onboarding_just_completed');
       }
       
       setLoading(false);
