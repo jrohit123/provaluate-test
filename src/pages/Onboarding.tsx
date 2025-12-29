@@ -115,7 +115,6 @@ export default function Onboarding() {
           company_id: newCompany.company_id,
           first_name: firstName,
           last_name: lastName,
-          email: email,
           role: 'admin',
           user_status: 'active',
           onboarding_complete: true,
