@@ -92,6 +92,9 @@ export default function AdminUserManagement() {
 
   const maxUsers = plan?.max_users ?? null;
   const slotsLeft = maxUsers !== null ? maxUsers - users.length : null;
+  
+  // Check if user is on trial plan
+  const isTrialPlan = company?.selected_plan === 'FreeTrial' || company?.selected_plan === 'FreeTrial_Extd';
 
   const handleInviteChange = (e: any) => {
     setInviteForm({ ...inviteForm, [e.target.name]: e.target.value });
@@ -1204,22 +1207,26 @@ export default function AdminUserManagement() {
         <div className="flex justify-between items-center mb-4">
           <div className="font-semibold text-lg">Company Users</div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleRecharge} disabled={loading}>Recharge</Button>
-            {company?.subscription_status !== 'cancelled' && 
-             company?.subscription_status !== 'expired' && 
-             company?.razorpay_subscription_id && (
-              <Button 
-                variant="outline" 
-                onClick={() => setCancelConfirmOpen(true)} 
-                disabled={loading || cancelling}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-              >
-                {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
-              </Button>
+            {!isTrialPlan && (
+              <>
+                <Button variant="outline" onClick={handleRecharge} disabled={loading}>Recharge</Button>
+                {company?.subscription_status !== 'cancelled' && 
+                 company?.subscription_status !== 'expired' && 
+                 company?.razorpay_subscription_id && (
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setCancelConfirmOpen(true)} 
+                    disabled={loading || cancelling}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
+                  </Button>
+                )}
+                <Button variant="outline" onClick={handleCVRecharge} disabled={rechargingCVs || !plan}>
+                  {rechargingCVs ? 'Processing...' : 'Recharge CVs'}
+                </Button>
+              </>
             )}
-            <Button variant="outline" onClick={handleCVRecharge} disabled={rechargingCVs || !plan}>
-              {rechargingCVs ? 'Processing...' : 'Recharge CVs'}
-            </Button>
             <Dialog open={cycleDateOpen} onOpenChange={setCycleDateOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline">Change Cycle Date</Button>
