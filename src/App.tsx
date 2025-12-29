@@ -82,20 +82,12 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
       
       // Also check localStorage and session for existing users
       const isAuth = localStorage.getItem('recruitai_auth') === 'true';
-      const onboardingTimestamp = localStorage.getItem('onboarding_just_completed');
-      const justCompletedOnboarding = onboardingTimestamp && (Date.now() - parseInt(onboardingTimestamp)) < 10000; // 10 second grace period
-      
-      if (isAuth && !justCompletedOnboarding) {
-        // Only check session for established users, not newly onboarded ones
+      if (isAuth) {
         const isActive = await SessionManager.isCurrentSessionActive();
         if (!isActive) {
           SessionManager.clearSession();
           localStorage.removeItem('recruitai_auth');
         }
-      } else if (justCompletedOnboarding) {
-        // For newly onboarded users, skip session check during grace period
-        console.log('⏭️ Newly onboarded user - skipping session check during grace period');
-        // Flag will auto-expire after 10 seconds (handled by useSessionTimeout hook)
       }
       
       setLoading(false);
