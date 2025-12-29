@@ -139,7 +139,8 @@ export default function Onboarding() {
             // Set auth flag
             localStorage.setItem('recruitai_auth', 'true');
             // Set flag to skip session check on first dashboard load (gives time for DB commit)
-            localStorage.setItem('onboarding_just_completed', 'true');
+            // Store timestamp so we can auto-expire it after 10 seconds
+            localStorage.setItem('onboarding_just_completed', Date.now().toString());
             console.log('✅ Session created and auth flag set');
           } else {
             console.warn('⚠️ Failed to create session, but continuing with onboarding');
@@ -202,13 +203,13 @@ export default function Onboarding() {
                 // Create session before redirecting
                 await createUserSession();
                 toast.success('Onboarding complete! Subscription activated. Redirecting to dashboard...');
-                setTimeout(() => window.location.replace('/dashboard'), 1000);
+                setTimeout(() => window.location.replace('/dashboard'), 2000);
               } catch (error: any) {
                 console.error('Error processing subscription:', error);
                 // Still create session even if there's an error
                 await createUserSession();
                 toast.success('Onboarding complete! Redirecting to dashboard...');
-                setTimeout(() => window.location.replace('/dashboard'), 1000);
+                setTimeout(() => window.location.replace('/dashboard'), 2000);
               }
             },
             modal: {
@@ -218,7 +219,7 @@ export default function Onboarding() {
                 // Create session before redirecting
                 await createUserSession();
                 toast.info('Payment cancelled. You can complete payment later from your dashboard.');
-                setTimeout(() => window.location.replace('/dashboard'), 1000);
+                setTimeout(() => window.location.replace('/dashboard'), 2000);
               }
             }
           };
@@ -230,7 +231,7 @@ export default function Onboarding() {
             // Create session before redirecting
             await createUserSession();
             toast.warning('Payment failed. You can try again from your dashboard.');
-            setTimeout(() => window.location.replace('/dashboard'), 1000);
+            setTimeout(() => window.location.replace('/dashboard'), 2000);
           });
           
           rzp1.open();
@@ -242,7 +243,7 @@ export default function Onboarding() {
           // Create session before redirecting
           await createUserSession();
           toast.warning('Onboarding complete but subscription setup failed. Please use "Recharge" button to complete payment.');
-          setTimeout(() => window.location.replace('/dashboard'), 1000);
+          setTimeout(() => window.location.replace('/dashboard'), 2000);
           return;
         }
       } else {
@@ -251,7 +252,8 @@ export default function Onboarding() {
         await createUserSession();
         toast.success('Onboarding complete! Redirecting to your dashboard.');
         console.log('User profile created!');
-        setTimeout(() => window.location.replace('/dashboard'), 500);
+        // Increased delay to give time for session to be committed to database
+        setTimeout(() => window.location.replace('/dashboard'), 2000);
       }
     } catch (err) {
       setError(err.message || 'Onboarding failed.');
