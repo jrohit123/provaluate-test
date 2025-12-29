@@ -115,24 +115,6 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
   }, [logoutAndRedirect]);
 
   const checkSessionTimeout = useCallback(async () => {
-    // Skip session check for newly onboarded users (within 10 seconds of onboarding)
-    const onboardingTimestamp = localStorage.getItem('onboarding_just_completed');
-    if (onboardingTimestamp) {
-      const timestamp = parseInt(onboardingTimestamp);
-      const timeSinceOnboarding = Date.now() - timestamp;
-      const GRACE_PERIOD_MS = 10000; // 10 seconds grace period
-      
-      if (timeSinceOnboarding < GRACE_PERIOD_MS) {
-        // Still within grace period - skip session check
-        console.log(`⏭️ Skipping session check for newly onboarded user (${Math.round(timeSinceOnboarding/1000)}s ago)`);
-        return;
-      } else {
-        // Grace period expired - clear flag and proceed with normal checks
-        localStorage.removeItem('onboarding_just_completed');
-        console.log('✅ Onboarding grace period expired, proceeding with normal session checks');
-      }
-    }
-
     // Check if our custom session is still active (independent of Supabase Auth)
     const sessionId = SessionManager.getCurrentSessionId();
     if (sessionId) {
@@ -147,42 +129,39 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
         });
         return;
       }
-
-      // Only check timeout if we have a valid session
-      const hasTimedOut = SessionManager.hasSessionTimedOut();
-
-      if (hasTimedOut) {
-        // Session has timed out
-        setIsTimeoutWarningVisible(false);
-        warningShownRef.current = false;
-
-        // Call timeout callback if provided
-        if (onTimeout) {
-          onTimeout();
-        }
-
-        // Logout user
-        handleTimeout();
-        return;
-      }
-
-      // Check if warning threshold has been reached
-      const remaining = updateRemainingTime();
-      if (remaining <= warningThresholdMinutes && !warningShownRef.current) {
-        warningShownRef.current = true;
-        setIsTimeoutWarningVisible(true);
-
-        if (onWarning) {
-          onWarning(remaining);
-        }
-      } else if (remaining > warningThresholdMinutes && warningShownRef.current) {
-        // Reset warning flag if user continues session
-        warningShownRef.current = false;
-        setIsTimeoutWarningVisible(false);
-      }
     }
-    // If no sessionId exists, don't check timeout - just return silently
-    // This prevents false "session expired" errors for newly onboarded users
+
+    const hasTimedOut = SessionManager.hasSessionTimedOut();
+
+    if (hasTimedOut) {
+      // Session has timed out
+      setIsTimeoutWarningVisible(false);
+      warningShownRef.current = false;
+
+      // Call timeout callback if provided
+      if (onTimeout) {
+        onTimeout();
+      }
+
+      // Logout user
+      handleTimeout();
+      return;
+    }
+
+    // Check if warning threshold has been reached
+    const remaining = updateRemainingTime();
+    if (remaining <= warningThresholdMinutes && !warningShownRef.current) {
+      warningShownRef.current = true;
+      setIsTimeoutWarningVisible(true);
+
+      if (onWarning) {
+        onWarning(remaining);
+      }
+    } else if (remaining > warningThresholdMinutes && warningShownRef.current) {
+      // Reset warning flag if user continues session
+      warningShownRef.current = false;
+      setIsTimeoutWarningVisible(false);
+    }
   }, [warningThresholdMinutes, onTimeout, onWarning, updateRemainingTime, handleTimeout, logoutAndRedirect]);
 
   // Handle user activity (reset inactivity timer)
