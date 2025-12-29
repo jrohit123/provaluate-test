@@ -138,6 +138,8 @@ export default function Onboarding() {
             }
             // Set auth flag
             localStorage.setItem('recruitai_auth', 'true');
+            // Set flag to skip session check on first dashboard load (gives time for DB commit)
+            localStorage.setItem('onboarding_just_completed', 'true');
             console.log('✅ Session created and auth flag set');
           } else {
             console.warn('⚠️ Failed to create session, but continuing with onboarding');
