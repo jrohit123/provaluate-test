@@ -72,10 +72,10 @@ export default function AdminUserManagement() {
           setPlan(null);
         }
       
-        // Fetch users in company
+        // Fetch users in company (including email)
         const { data: usersData } = await supabase
           .from('users')
-          .select('user_id, company_id, first_name, last_name, role, user_status, created_at')
+          .select('user_id, company_id, first_name, last_name, email, role, user_status, created_at')
           .eq('company_id', user.profile.company_id);
         setUsers(usersData || []);
     } catch (error) {
@@ -172,7 +172,7 @@ export default function AdminUserManagement() {
         // Refresh users list
         const { data: usersData } = await supabase
           .from('users')
-          .select('user_id, company_id, first_name, last_name, role, user_status, created_at')
+          .select('user_id, company_id, first_name, last_name, email, role, user_status, created_at')
           .eq('company_id', user.profile.company_id);
         setUsers(usersData || []);
         
@@ -1543,9 +1543,10 @@ export default function AdminUserManagement() {
             <tbody>
               {users.map(u => (
                 <tr key={u.user_id} className="border-t">
-                  <td className="p-2">{u.first_name} {u.last_name}</td>
-                  <td className="p-2 capitalize">{u.role}</td>
-                  <td className="p-2 capitalize">{u.user_status}</td>
+                  <td className="p-2">{u.first_name || ''} {u.last_name || ''}</td>
+                  <td className="p-2">{u.email || 'N/A'}</td>
+                  <td className="p-2 capitalize">{u.role || 'N/A'}</td>
+                  <td className="p-2 capitalize">{u.user_status || 'N/A'}</td>
                 </tr>
               ))}
             </tbody>

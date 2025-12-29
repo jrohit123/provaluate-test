@@ -68,7 +68,7 @@ export function TrialExpirationWarning() {
   if (!trialStatus || dismissed) return null;
 
   const handleUpgrade = () => {
-    navigate('/admin/user-management');
+    navigate('/dashboard?section=settings');
   };
 
   const handleDismiss = () => {
