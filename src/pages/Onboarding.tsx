@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { SessionManager } from '@/utils/sessionManager';
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -122,6 +123,31 @@ export default function Onboarding() {
         });
       if (userDbError) throw userDbError;
 
+      // Create session for the user (similar to login flow)
+      const createUserSession = async () => {
+        try {
+          const sessionData = await SessionManager.createSession(user.id);
+          if (sessionData) {
+            // Wait a moment to ensure session is fully created, then end other sessions
+            try {
+              console.log(`🔄 About to end other sessions, keeping: ${sessionData.session_id}`);
+              await new Promise(resolve => setTimeout(resolve, 100));
+              await SessionManager.endAllOtherSessions(user.id, sessionData.session_id);
+            } catch (error) {
+              console.error('Error ending other sessions after onboarding:', error);
+            }
+            // Set auth flag
+            localStorage.setItem('recruitai_auth', 'true');
+            console.log('✅ Session created and auth flag set');
+          } else {
+            console.warn('⚠️ Failed to create session, but continuing with onboarding');
+          }
+        } catch (error) {
+          console.error('Error creating session during onboarding:', error);
+          // Don't throw - allow onboarding to complete even if session creation fails
+        }
+      };
+
       // If paid plan selected, create subscription and open payment
       const isPaidPlan = plan.plan_cost && plan.plan_cost > 0;
       if (isPaidPlan) {
@@ -171,18 +197,24 @@ export default function Onboarding() {
             },
             handler: async function (response: any) {
               try {
+                // Create session before redirecting
+                await createUserSession();
                 toast.success('Onboarding complete! Subscription activated. Redirecting to dashboard...');
                 setTimeout(() => window.location.replace('/dashboard'), 1000);
               } catch (error: any) {
                 console.error('Error processing subscription:', error);
+                // Still create session even if there's an error
+                await createUserSession();
                 toast.success('Onboarding complete! Redirecting to dashboard...');
                 setTimeout(() => window.location.replace('/dashboard'), 1000);
               }
             },
             modal: {
-              ondismiss: function() {
+              ondismiss: async function() {
                 // User closed payment modal - still allow them to proceed
                 // They can use "Recharge" button later to complete payment
+                // Create session before redirecting
+                await createUserSession();
                 toast.info('Payment cancelled. You can complete payment later from your dashboard.');
                 setTimeout(() => window.location.replace('/dashboard'), 1000);
               }
@@ -191,8 +223,10 @@ export default function Onboarding() {
           
           const rzp1 = new (window as any).Razorpay(options);
           
-          rzp1.on('payment.failed', function (response: any) {
+          rzp1.on('payment.failed', async function (response: any) {
             console.error('Payment failed:', response.error);
+            // Create session before redirecting
+            await createUserSession();
             toast.warning('Payment failed. You can try again from your dashboard.');
             setTimeout(() => window.location.replace('/dashboard'), 1000);
           });
@@ -203,12 +237,16 @@ export default function Onboarding() {
         } catch (subscriptionError: any) {
           console.error('Error creating subscription:', subscriptionError);
           // If subscription creation fails, still allow onboarding but show warning
+          // Create session before redirecting
+          await createUserSession();
           toast.warning('Onboarding complete but subscription setup failed. Please use "Recharge" button to complete payment.');
           setTimeout(() => window.location.replace('/dashboard'), 1000);
           return;
         }
       } else {
         // FreeTrial - no payment needed, just navigate
+        // Create session before redirecting
+        await createUserSession();
         toast.success('Onboarding complete! Redirecting to your dashboard.');
         console.log('User profile created!');
         setTimeout(() => window.location.replace('/dashboard'), 500);
