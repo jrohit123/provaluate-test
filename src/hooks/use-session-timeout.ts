@@ -129,39 +129,42 @@ export function useSessionTimeout(options: UseSessionTimeoutOptions = {}) {
         });
         return;
       }
-    }
 
-    const hasTimedOut = SessionManager.hasSessionTimedOut();
+      // Only check timeout if we have a valid session
+      const hasTimedOut = SessionManager.hasSessionTimedOut();
 
-    if (hasTimedOut) {
-      // Session has timed out
-      setIsTimeoutWarningVisible(false);
-      warningShownRef.current = false;
+      if (hasTimedOut) {
+        // Session has timed out
+        setIsTimeoutWarningVisible(false);
+        warningShownRef.current = false;
 
-      // Call timeout callback if provided
-      if (onTimeout) {
-        onTimeout();
+        // Call timeout callback if provided
+        if (onTimeout) {
+          onTimeout();
+        }
+
+        // Logout user
+        handleTimeout();
+        return;
       }
 
-      // Logout user
-      handleTimeout();
-      return;
-    }
+      // Check if warning threshold has been reached
+      const remaining = updateRemainingTime();
+      if (remaining <= warningThresholdMinutes && !warningShownRef.current) {
+        warningShownRef.current = true;
+        setIsTimeoutWarningVisible(true);
 
-    // Check if warning threshold has been reached
-    const remaining = updateRemainingTime();
-    if (remaining <= warningThresholdMinutes && !warningShownRef.current) {
-      warningShownRef.current = true;
-      setIsTimeoutWarningVisible(true);
-
-      if (onWarning) {
-        onWarning(remaining);
+        if (onWarning) {
+          onWarning(remaining);
+        }
+      } else if (remaining > warningThresholdMinutes && warningShownRef.current) {
+        // Reset warning flag if user continues session
+        warningShownRef.current = false;
+        setIsTimeoutWarningVisible(false);
       }
-    } else if (remaining > warningThresholdMinutes && warningShownRef.current) {
-      // Reset warning flag if user continues session
-      warningShownRef.current = false;
-      setIsTimeoutWarningVisible(false);
     }
+    // If no sessionId exists, don't check timeout - just return silently
+    // This prevents false "session expired" errors for newly onboarded users
   }, [warningThresholdMinutes, onTimeout, onWarning, updateRemainingTime, handleTimeout, logoutAndRedirect]);
 
   // Handle user activity (reset inactivity timer)
