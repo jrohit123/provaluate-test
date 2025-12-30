@@ -4,7 +4,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { BarChart3, User, Eye, Download, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Filter, Check, Briefcase, Grid, CheckCircle, Info } from 'lucide-react';
+import { BarChart3, User, Eye, Download, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Filter, Check, Briefcase, Grid, CheckCircle } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -46,9 +46,6 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
   const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => sessionStorage.getItem('selectedJDId') || '');
   const [criteriaGrids, setCriteriaGrids] = useState<any[]>([]);
   const [selectedCriteriaGridId, setSelectedCriteriaGridId] = useState<string>(() => sessionStorage.getItem('selectedCriteriaGridId') || '');
-  const [isFilteringCriteria, setIsFilteringCriteria] = useState(false);
-  const [filteredCriteriaIds, setFilteredCriteriaIds] = useState<Set<string> | null>(null);
-  const [showFilterInfo, setShowFilterInfo] = useState(false);
 
   // Keep local state in sync with sessionStorage resets (e.g., on login/logout)
   useEffect(() => {
@@ -492,11 +489,12 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     }
   }, [user?.profile?.company_id]);
 
-  // Load criteria grids from database
+  // Load criteria grids from database, filtered by selected JD
   const loadCriteriaGrids = useCallback(async () => {
     console.log('loadCriteriaGrids called, user:', user);
     console.log('User ID:', user?.id);
     console.log('Company ID:', user?.profile?.company_id);
+    console.log('Selected JD ID:', selectedJobDescriptionId);
     
     if (!user?.id) {
       console.log('No user ID, returning early');
@@ -505,11 +503,26 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
 
     try {
       console.log('Fetching criteria grids...');
-      const { data: grids, error } = await supabase
+      
+      // Build query to filter criteria by selected JD
+      let query = supabase
         .from('criteria')
-        .select('criteria_id, criteria_name, grid, created_at')
+        .select('criteria_id, criteria_name, grid, created_at, jd_id')
         .eq('created_by', user.id)
-        .eq('company_id', user.profile?.company_id)
+        .eq('company_id', user.profile?.company_id);
+      
+      // Filter criteria based on selected JD
+      if (selectedJobDescriptionId) {
+        // Show criteria for this JD OR default criteria (jd_id is NULL)
+        query = query.or(`jd_id.eq.${selectedJobDescriptionId},jd_id.is.null`);
+        console.log('Filtering criteria for JD:', selectedJobDescriptionId);
+      } else {
+        // If no JD selected, show only default criteria
+        query = query.is('jd_id', null);
+        console.log('No JD selected, showing only default criteria');
+      }
+      
+      const { data: grids, error } = await query
         .order('created_at', { ascending: false });
       
       if (error) throw error;
@@ -540,14 +553,25 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
         };
       });
 
-      console.log('Formatted criteria grids:', formattedGrids);
-      console.log('Criteria grids array length:', formattedGrids.length);
-      console.log('First criteria grid:', formattedGrids[0]);
-      setCriteriaGrids(formattedGrids);
+      // Sort: Default criteria first (jd_id is null), then JD-specific
+      const sortedGrids = formattedGrids.sort((a, b) => {
+        const gridA = Object.values(uniqueGrids).find((g: any) => g.criteria_id === a.id) as any;
+        const gridB = Object.values(uniqueGrids).find((g: any) => g.criteria_id === b.id) as any;
+        const aIsDefault = !gridA?.jd_id;
+        const bIsDefault = !gridB?.jd_id;
+        if (aIsDefault && !bIsDefault) return -1; // Default first
+        if (!aIsDefault && bIsDefault) return 1;
+        return 0; // Keep original order for same type
+      });
+
+      console.log('Formatted criteria grids:', sortedGrids);
+      console.log('Criteria grids array length:', sortedGrids.length);
+      console.log('First criteria grid:', sortedGrids[0]);
+      setCriteriaGrids(sortedGrids);
     } catch (error) {
       console.error('Error loading criteria grids:', error);
     }
-  }, [user?.id, user?.profile?.company_id]);
+  }, [user?.id, user?.profile?.company_id, selectedJobDescriptionId]);
 
   // Handle job description selection
   const handleJobDescriptionSelect = async (jdId: string) => {
@@ -556,167 +580,14 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     
     const selectedJD = jobDescriptions.find(jd => jd.jd_id === jdId);
     
-    // Reset filtering when JD changes
-    setFilteredCriteriaIds(null);
-    
-    // Load all criteria (no filtering)
-    loadCriteriaGrids();
+    // Reload criteria grids filtered by selected JD
+    await loadCriteriaGrids();
     
     toast({
       title: "Job Description Selected",
-      description: `Selected: ${selectedJD?.title || 'Unknown Job'}. Click "Filter Criteria" to see recommended matches.`,
+      description: `Selected: ${selectedJD?.title || 'Unknown Job'}. Showing relevant criteria.`,
     });
-  };
-  
-  // Handle filter criteria button click
-  const handleFilterCriteria = async () => {
-    if (!selectedJobDescriptionId) {
-      toast({
-        title: "No Job Description Selected",
-        description: "Please select a job description first.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsFilteringCriteria(true);
     
-    try {
-      const API_BASE_URL = import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com';
-      const response = await fetch(`${API_BASE_URL}/api/recommend-criteria/${selectedJobDescriptionId}`);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API Error Response:', errorText);
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('Non-JSON response:', text.substring(0, 200));
-        throw new Error('Server returned non-JSON response');
-      }
-      
-      const data = await response.json();
-      
-      if (data.status === 'success' && data.recommendations.length > 0) {
-        // Get all criteria
-        const allCriteria = await loadAllCriteriaGrids();
-        
-        // Filter to only recommended ones
-        const recommendedIds = data.recommendations.map((r: any) => r.criteria_id);
-        const filteredCriteria = allCriteria.filter(grid => 
-          recommendedIds.includes(grid.id)
-        );
-        
-        // Sort: Default first, then by match score
-        const sortedCriteria = filteredCriteria.sort((a, b) => {
-          const recA = data.recommendations.find((r: any) => r.criteria_id === a.id);
-          const recB = data.recommendations.find((r: any) => r.criteria_id === b.id);
-          
-          if (recA?.is_default) return -1;
-          if (recB?.is_default) return 1;
-          
-          return (recB?.match_score || 0) - (recA?.match_score || 0);
-        });
-        
-        // Update criteria list
-        setCriteriaGrids(sortedCriteria);
-        setFilteredCriteriaIds(new Set(recommendedIds));
-        
-        const defaultCount = data.recommendations.filter((r: any) => r.is_default).length;
-        const matchedCount = data.recommendations.filter((r: any) => !r.is_default).length;
-        
-        toast({
-          title: "Criteria Filtered Successfully",
-          description: `Showing ${defaultCount} default and ${matchedCount} matched criteria sets.`,
-        });
-      } else if (data.status === 'error') {
-        toast({
-          title: "Filtering Unavailable",
-          description: data.message || 'Job description not yet analyzed. Showing all criteria.',
-          variant: "default",
-        });
-      } else {
-        // No recommendations - show only default
-        const allCriteria = await loadAllCriteriaGrids();
-        const defaultOnly = allCriteria.filter(grid => 
-          grid.name.toLowerCase().includes('default')
-        );
-        setCriteriaGrids(defaultOnly);
-        setFilteredCriteriaIds(new Set(defaultOnly.map(g => g.id)));
-        
-        toast({
-          title: "Filtering Complete",
-          description: "No matching criteria found. Showing default criteria only.",
-          variant: "default",
-        });
-      }
-    } catch (error) {
-      console.error('Error filtering criteria:', error);
-      toast({
-        title: "Filtering Failed",
-        description: "Could not filter criteria. Showing all criteria sets.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsFilteringCriteria(false);
-    }
-  };
-  
-  // Handle reset filter button
-  const handleResetFilter = () => {
-    loadCriteriaGrids();
-    setFilteredCriteriaIds(null);
-    toast({
-      title: "Filter Reset",
-      description: "Showing all criteria sets.",
-    });
-  };
-  
-  // Helper function to load all criteria grids (for filtering)
-  const loadAllCriteriaGrids = async (): Promise<any[]> => {
-    if (!user?.id) return [];
-
-    try {
-      const { data: grids, error } = await supabase
-        .from('criteria')
-        .select('criteria_id, criteria_name, grid, created_at')
-        .eq('created_by', user.id)
-        .eq('company_id', user.profile?.company_id)
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      
-      if (!grids || grids.length === 0) {
-        return [];
-      }
-
-      // Get unique grids by criteria_name (latest entry for each name)
-      const uniqueGrids = grids.reduce((acc: { [key: string]: any }, curr) => {
-        if (!acc[curr.criteria_name] || new Date(curr.created_at) > new Date(acc[curr.criteria_name].created_at)) {
-          acc[curr.criteria_name] = curr;
-        }
-        return acc;
-      }, {});
-
-      // Convert to format with criteria count
-      return Object.values(uniqueGrids).map((grid: any) => {
-        let criteriaCount = 0;
-        if (grid.grid && Array.isArray(grid.grid)) {
-          criteriaCount = grid.grid.length;
-        }
-        return {
-          id: grid.criteria_id,
-          name: grid.criteria_name,
-          criteriaCount
-        };
-      });
-    } catch (error) {
-      console.error('Error loading all criteria grids:', error);
-      return [];
-    }
   };
 
   // Handle criteria grid selection
@@ -1128,7 +999,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
           </div>
 
           {/* Evaluation Criteria Selection */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
             <Grid className="w-4 h-4 text-primary-600" />
             <span className="text-sm text-gray-600 font-medium">Criteria:</span>
             <Select value={selectedCriteriaGridId} onValueChange={handleCriteriaGridSelect}>
@@ -1147,88 +1018,11 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                   </SelectItem>
                 ))}
               </SelectContent>
-            </Select>
-            {selectedCriteriaGridId && (
-              <CheckCircle className="w-4 h-4 text-green-600" />
-            )}
-            
-            {/* Filter Button with Info */}
-            <div className="flex items-center gap-1 relative">
-              {filteredCriteriaIds && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleResetFilter}
-                  className="text-xs h-7"
-                >
-                  Show All
-                </Button>
-              )}
-              
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleFilterCriteria}
-                disabled={isFilteringCriteria || !selectedJobDescriptionId}
-                className="flex items-center gap-1 h-7 text-xs"
-              >
-                {isFilteringCriteria ? (
-                  <>
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    Filtering...
-                  </>
-                ) : (
-                  <>
-                    <Filter className="w-3 h-3" />
-                    Filter
-                  </>
+                </Select>
+                {selectedCriteriaGridId && (
+                  <CheckCircle className="w-4 h-4 text-green-600" />
                 )}
-              </Button>
-              
-              {/* Info Button */}
-              <button
-                onClick={() => setShowFilterInfo(!showFilterInfo)}
-                onBlur={() => setTimeout(() => setShowFilterInfo(false), 200)}
-                className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-                title="What does filtering do?"
-                type="button"
-              >
-                <Info className="w-4 h-4 text-gray-500 hover:text-gray-700" />
-              </button>
-              
-              {/* Info Tooltip */}
-              {showFilterInfo && (
-                <div className="absolute right-0 top-full mt-2 w-64 p-3 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-                  <div className="flex items-start gap-2">
-                    <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                    <div className="text-xs text-gray-700">
-                      <p className="font-semibold mb-1">Filter Criteria</p>
-                      <p className="mb-2">
-                        Uses AI to analyze the selected job description and shows only relevant criteria sets that match the job requirements.
-                      </p>
-                      <ul className="list-disc list-inside space-y-1 text-gray-600 mb-2">
-                        <li>Default criteria are always shown</li>
-                        <li>Other criteria are matched based on job requirements</li>
-                        <li>Results are sorted by relevance</li>
-                      </ul>
-                      <button
-                        onClick={() => setShowFilterInfo(false)}
-                        className="mt-1 text-blue-600 hover:text-blue-800 text-xs font-medium"
-                      >
-                        Got it
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            {filteredCriteriaIds && (
-              <span className="text-xs text-blue-600">
-                ({criteriaGrids.length} filtered)
-              </span>
-            )}
-          </div>
+              </div>
 
           {/* Recommendation Filter */}
           <div className="flex items-center gap-2">

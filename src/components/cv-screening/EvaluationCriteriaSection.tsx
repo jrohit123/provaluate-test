@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, Plus, Trash2, Download, Save, Grid } from 'lucide-react';
+import { Upload, Plus, Trash2, Download, Save, Grid, Briefcase, AlertCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -43,17 +43,53 @@ export const EvaluationCriteriaSection = () => {
   const [gridName, setGridName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [criteriaUploading, setCriteriaUploading] = useState(false);
+  const [jobDescriptions, setJobDescriptions] = useState<any[]>([]);
+  const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => sessionStorage.getItem('selectedJDId') || '');
   const criteriaFileInputRef = useRef<HTMLInputElement>(null);
 
   const totalPercentage = criteriaData.reduce((sum, item) => sum + item.weightage, 0);
   const isValidTotal = totalPercentage === 0 || totalPercentage === 100;
 
-  // Load saved grids on component mount
+  // Load job descriptions and saved grids on component mount
   useEffect(() => {
     if (user?.id) {
+      loadJobDescriptions();
       loadSavedGrids();
     }
   }, [user?.id]);
+
+  // Sync selected JD from sessionStorage
+  useEffect(() => {
+    const checkSessionStorage = () => {
+      const jd = sessionStorage.getItem('selectedJDId') || '';
+      if (jd && jd !== selectedJobDescriptionId) {
+        setSelectedJobDescriptionId(jd);
+      }
+    };
+    
+    checkSessionStorage();
+    const interval = setInterval(checkSessionStorage, 1000);
+    return () => clearInterval(interval);
+  }, [selectedJobDescriptionId]);
+
+  // Load job descriptions
+  const loadJobDescriptions = async () => {
+    if (!user?.profile?.company_id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('job_descriptions')
+        .select('jd_id, title, jd_file, created_at, status')
+        .eq('company_id', user.profile.company_id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
+        
+      if (error) throw error;
+      setJobDescriptions(data || []);
+    } catch (error) {
+      console.error('Error loading job descriptions:', error);
+    }
+  };
 
   const loadSavedGrids = async () => {
     try {
@@ -256,6 +292,13 @@ export const EvaluationCriteriaSection = () => {
         calc_note: item.notes
       }));
 
+      // Get selected JD ID from sessionStorage
+      const selectedJDId = sessionStorage.getItem('selectedJDId') || null;
+      
+      // If criteria name contains "default" (case-insensitive), set jd_id to null
+      const isDefaultCriteria = gridName.toLowerCase().includes('default');
+      const jdIdToSave = isDefaultCriteria ? null : (selectedJDId || null);
+
       const { data, error } = await supabase
         .from('criteria')
         .insert({
@@ -263,6 +306,7 @@ export const EvaluationCriteriaSection = () => {
           grid,
           created_by: user.id,
           company_id: user.profile.company_id,
+          jd_id: jdIdToSave, // Associate with selected JD (or null for default)
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
@@ -332,9 +376,41 @@ export const EvaluationCriteriaSection = () => {
     }
   };
 
+  const selectedJD = jobDescriptions.find(jd => jd.jd_id === selectedJobDescriptionId);
+
   return (
     <div className="p-6 space-y-6">
-      {/* ... */}
+      {/* Show selected JD banner */}
+      {selectedJD ? (
+        <Card className="bg-blue-50 border-blue-200 animate-fade-in">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <Briefcase className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-medium text-blue-800">
+                Creating criteria for: <strong>{selectedJD.title}</strong>
+              </span>
+            </div>
+            <p className="text-xs text-blue-600 mt-1">
+              This criteria will be associated with the selected job description. To create a default criteria that works for all JDs, include "Default" in the name.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="bg-yellow-50 border-yellow-200 animate-fade-in">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-yellow-600" />
+              <span className="text-sm font-medium text-yellow-800">
+                No job description selected
+              </span>
+            </div>
+            <p className="text-xs text-yellow-700 mt-1">
+              Please select a job description in the Job Upload section first. Criteria saved without a JD selection will be treated as default (works for all JDs).
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid lg:grid-cols-1 gap-6">
         {/* Evaluation Criteria - Now editable and with Select for Session button */}
         <Card className="animate-fade-in">
