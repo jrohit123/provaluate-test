@@ -58,7 +58,7 @@ export const EvaluationCriteriaSection = () => {
     }
   }, [user?.id]);
 
-  // Sync selected JD from sessionStorage
+  // Sync selected JD from sessionStorage and reload grids when JD changes
   useEffect(() => {
     const checkSessionStorage = () => {
       const jd = sessionStorage.getItem('selectedJDId') || '';
@@ -71,6 +71,13 @@ export const EvaluationCriteriaSection = () => {
     const interval = setInterval(checkSessionStorage, 1000);
     return () => clearInterval(interval);
   }, [selectedJobDescriptionId]);
+
+  // Reload saved grids when JD selection changes
+  useEffect(() => {
+    if (user?.id) {
+      loadSavedGrids();
+    }
+  }, [selectedJobDescriptionId, user?.id]);
 
   // Load job descriptions
   const loadJobDescriptions = async () => {
@@ -96,16 +103,28 @@ export const EvaluationCriteriaSection = () => {
       console.log('Loading saved grids for user:', user?.id);
       console.log('User profile:', user?.profile);
       console.log('Company ID:', user?.profile?.company_id);
+      console.log('Selected JD ID:', selectedJobDescriptionId);
       
       let query = supabase
         .from('criteria')
-        .select('criteria_id, criteria_name, grid, created_at')
+        .select('criteria_id, criteria_name, grid, created_at, jd_id')
         .eq('created_by', user?.id)
         .order('created_at', { ascending: false });
 
       // Only filter by company_id if it exists
       if (user?.profile?.company_id) {
         query = query.eq('company_id', user.profile.company_id);
+      }
+
+      // Filter criteria based on selected JD
+      if (selectedJobDescriptionId) {
+        // Show criteria for this JD OR default criteria (jd_id is NULL)
+        query = query.or(`jd_id.eq.${selectedJobDescriptionId},jd_id.is.null`);
+        console.log('Filtering criteria for JD:', selectedJobDescriptionId);
+      } else {
+        // If no JD selected, show only default criteria
+        query = query.is('jd_id', null);
+        console.log('No JD selected, showing only default criteria');
       }
 
       const { data, error } = await query;
@@ -116,7 +135,17 @@ export const EvaluationCriteriaSection = () => {
       }
 
       console.log('Fetched grids:', data);
-      setSavedGrids(data || []);
+      
+      // Sort: Default criteria first (jd_id is null), then JD-specific
+      const sortedGrids = (data || []).sort((a, b) => {
+        const aIsDefault = !a.jd_id;
+        const bIsDefault = !b.jd_id;
+        if (aIsDefault && !bIsDefault) return -1; // Default first
+        if (!aIsDefault && bIsDefault) return 1;
+        return 0; // Keep original order for same type
+      });
+      
+      setSavedGrids(sortedGrids);
     } catch (error) {
       console.error('Error loading saved grids:', error);
     }
