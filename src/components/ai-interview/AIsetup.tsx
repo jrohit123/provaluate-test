@@ -250,67 +250,67 @@ const HRInterviewCreator = () => {
       }
 
       // Fallback: For non-.doc files or if resolved_jd not available, use extraction
-      try {
-        // Extract file path from URL if it's a full URL
-        let filePath = selectedJD.jd_file;
-        if (filePath.startsWith('http')) {
-          // Extract path from URL: /storage/v1/object/public/job-descriptions/path/to/file.pdf
-          const urlParts = filePath.split('/storage/v1/object/public/job-descriptions/');
-          if (urlParts.length > 1) {
-            filePath = urlParts[1];
-          }
-        }
-        
-        console.log('Downloading CV screening JD:', filePath);
-        const { data: fileData, error: fileError } = await supabase.storage
-          .from('job-descriptions')
-          .download(filePath);
+       try {
+         // Extract file path from URL if it's a full URL
+         let filePath = selectedJD.jd_file;
+         if (filePath.startsWith('http')) {
+           // Extract path from URL: /storage/v1/object/public/job-descriptions/path/to/file.pdf
+           const urlParts = filePath.split('/storage/v1/object/public/job-descriptions/');
+           if (urlParts.length > 1) {
+             filePath = urlParts[1];
+           }
+         }
+         
+         console.log('Downloading CV screening JD:', filePath);
+         const { data: fileData, error: fileError } = await supabase.storage
+           .from('job-descriptions')
+           .download(filePath);
 
-        if (fileError) {
-          console.error('Storage download error:', fileError);
-          throw fileError;
-        }
+         if (fileError) {
+           console.error('Storage download error:', fileError);
+           throw fileError;
+         }
 
-        console.log('File downloaded successfully, size:', fileData.size);
-        
-        // Extract original file extension from the file path
-        const originalExtension = filePath.split('.').pop()?.toLowerCase() || 'pdf';
-        const fileNameWithExtension = `${selectedJD.title}.${originalExtension}`;
-        
-        console.log('Original file extension detected:', originalExtension);
-        console.log('Using filename:', fileNameWithExtension);
-        
-        // Send file data directly to backend without creating File object
-        const formDataForUpload = new FormData();
-        formDataForUpload.append('file', fileData, fileNameWithExtension);
-        formDataForUpload.append('title', selectedJD.title);
+         console.log('File downloaded successfully, size:', fileData.size);
+         
+         // Extract original file extension from the file path
+         const originalExtension = filePath.split('.').pop()?.toLowerCase() || 'pdf';
+         const fileNameWithExtension = `${selectedJD.title}.${originalExtension}`;
+         
+         console.log('Original file extension detected:', originalExtension);
+         console.log('Using filename:', fileNameWithExtension);
+         
+         // Send file data directly to backend without creating File object
+         const formDataForUpload = new FormData();
+         formDataForUpload.append('file', fileData, fileNameWithExtension);
+         formDataForUpload.append('title', selectedJD.title);
 
-        console.log(`Sending ${originalExtension.toUpperCase()} file to backend for text extraction...`);
-        const response = await apiCall(API_CONFIG.ENDPOINTS.EXTRACT_JD_TEXT, {
-          method: 'POST',
-          body: formDataForUpload,
-        });
+         console.log(`Sending ${originalExtension.toUpperCase()} file to backend for text extraction...`);
+         const response = await apiCall(API_CONFIG.ENDPOINTS.EXTRACT_JD_TEXT, {
+           method: 'POST',
+           body: formDataForUpload,
+         });
 
-        if (response.ok) {
-          const { extractedText } = await response.json();
-          console.log('Text extracted successfully, length:', extractedText.length);
-          setFormData(prev => ({ ...prev, jobDescription: extractedText }));
+         if (response.ok) {
+           const { extractedText } = await response.json();
+           console.log('Text extracted successfully, length:', extractedText.length);
+           setFormData(prev => ({ ...prev, jobDescription: extractedText }));
           showJDLoadedToast(selectedJD.title);
-          
-          // Load existing parameters for this role (if any)
-          await loadParametersForPosition(selectedJD.title);
-        } else {
-          console.error('Backend extraction failed:', response.status, response.statusText);
-          // Fallback to title if extraction fails
-          setFormData(prev => ({ ...prev, jobDescription: selectedJD.title }));
+           
+           // Load existing parameters for this role (if any)
+           await loadParametersForPosition(selectedJD.title);
+         } else {
+           console.error('Backend extraction failed:', response.status, response.statusText);
+           // Fallback to title if extraction fails
+           setFormData(prev => ({ ...prev, jobDescription: selectedJD.title }));
           toast.error('Failed to extract text from file', { id: 'jd-extraction-error' });
-        }
-      } catch (error) {
-        console.error('Error loading JD file:', error);
-        // Fallback to title if there's an error
-        setFormData(prev => ({ ...prev, jobDescription: selectedJD.title }));
+         }
+       } catch (error) {
+         console.error('Error loading JD file:', error);
+         // Fallback to title if there's an error
+         setFormData(prev => ({ ...prev, jobDescription: selectedJD.title }));
         toast.error('Error loading JD: ' + (error as Error).message, { id: 'jd-load-error' });
-      }
+       }
     }
   };
 
@@ -647,7 +647,7 @@ const HRInterviewCreator = () => {
           const normalizedPosition = position.trim().toLowerCase();
           console.log('🔍 Toast check:', { position, normalizedPosition, loadedPositions: Array.from(loadedPositions), hasPosition: loadedPositions.has(normalizedPosition) });
           // Removed toast - parameters load silently to avoid spam
-          setLoadedPositions(prev => new Set(prev).add(normalizedPosition));
+            setLoadedPositions(prev => new Set(prev).add(normalizedPosition));
           console.log('✅ Loaded existing AI parameters for', position);
         } else if (hasValidStructuredQuestions && detectedMode === 'structured') {
           // Load structured interview questions
@@ -673,7 +673,7 @@ const HRInterviewCreator = () => {
           // Only show toast if we haven't loaded this position before (silent auto-load)
           const normalizedPosition = position.trim().toLowerCase();
           // Removed toast - parameters load silently to avoid spam
-          setLoadedPositions(prev => new Set(prev).add(normalizedPosition));
+            setLoadedPositions(prev => new Set(prev).add(normalizedPosition));
           console.log('✅ Loaded existing structured interview for', position);
         } else {
           console.log('🔄 Existing record found but no valid data, clearing state');
@@ -1334,7 +1334,7 @@ const HRInterviewCreator = () => {
     }
     
     try {
-      const response = await fetch('https://devprovaluate_py.aitamate.com/api/save-interview-config', {
+      const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.SAVE_INTERVIEW_CONFIG), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

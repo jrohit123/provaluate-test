@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { CheckCircle, Clock, XCircle } from 'lucide-react';
+import { buildApiUrl, API_CONFIG } from '@/constants/api';
 
 const CandidateCompletion = () => {
   const location = useLocation();
@@ -17,7 +18,7 @@ const CandidateCompletion = () => {
       if (!interviewId) return;
       
       try {
-        await fetch(`https://devprovaluate_py.aitamate.com/api/track-completion-view/${interviewId}`, {
+        await fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.TRACK_COMPLETION_VIEW}/${interviewId}`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         });
@@ -27,11 +28,11 @@ const CandidateCompletion = () => {
       }
 
       // Fetch interview details to check status and get candidate info
-      try {
-        const resp = await fetch(`https://devprovaluate_py.aitamate.com/api/get-interview/${interviewId}`);
-        if (resp.ok) {
-          const data = await resp.json();
-          const interview = data.interview || data; // support both formats
+        try {
+          const resp = await fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.GET_INTERVIEW}/${interviewId}`));
+          if (resp.ok) {
+            const data = await resp.json();
+            const interview = data.interview || data; // support both formats
           
           // Set candidate info
           if (!candidateName) setCandidateName(interview.candidate_name);
@@ -45,9 +46,9 @@ const CandidateCompletion = () => {
           } else {
             setInterviewStatus('completed');
           }
-        }
-      } catch (e) {
-        console.warn('⚠️ Could not fetch interview details for completion page');
+          }
+        } catch (e) {
+          console.warn('⚠️ Could not fetch interview details for completion page');
         // Default to completed if we can't fetch (for backward compatibility)
         setInterviewStatus('completed');
       }
@@ -78,7 +79,7 @@ const CandidateCompletion = () => {
             {isTerminated ? (
               <XCircle className="w-12 h-12 text-white" />
             ) : (
-              <CheckCircle className="w-12 h-12 text-white" />
+            <CheckCircle className="w-12 h-12 text-white" />
             )}
           </div>
         </div>
@@ -96,7 +97,7 @@ const CandidateCompletion = () => {
               </>
             ) : (
               <>
-                Thank you, <span className="font-semibold text-blue-600">{candidateName}</span>!
+            Thank you, <span className="font-semibold text-blue-600">{candidateName}</span>!
               </>
             )}
           </p>
@@ -115,9 +116,9 @@ const CandidateCompletion = () => {
                 )}
               </div>
             ) : (
-              <p className="text-blue-800 text-lg">
-                You have successfully completed your <span className="font-semibold">{position}</span> interview.
-              </p>
+            <p className="text-blue-800 text-lg">
+              You have successfully completed your <span className="font-semibold">{position}</span> interview.
+            </p>
             )}
           </div>
           
@@ -138,47 +139,47 @@ const CandidateCompletion = () => {
               </p>
             </div>
           ) : (
-            <p className="text-gray-600 leading-relaxed">
-              We appreciate your time and thoughtful responses today. Our team will carefully review your interview 
-              and get back to you with next steps in the hiring process.
-            </p>
+          <p className="text-gray-600 leading-relaxed">
+            We appreciate your time and thoughtful responses today. Our team will carefully review your interview 
+            and get back to you with next steps in the hiring process.
+          </p>
           )}
         </div>
 
         {/* Next Steps - Only show for completed interviews */}
         {!isTerminated && (
-          <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-6 flex items-center justify-center gap-2">
-              <Clock className="w-6 h-6 text-blue-600" />
-              What Happens Next?
-            </h2>
-            
-            <div className="grid md:grid-cols-2 gap-6 text-left">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                  <span className="text-blue-600 font-semibold">1</span>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-800 mb-1">Review Process</h3>
-                  <p className="text-gray-600 text-sm">
-                    Our team will review your interview responses and evaluate your qualifications.
-                  </p>
-                </div>
+        <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
+          <h2 className="text-2xl font-semibold text-gray-800 mb-6 flex items-center justify-center gap-2">
+            <Clock className="w-6 h-6 text-blue-600" />
+            What Happens Next?
+          </h2>
+          
+          <div className="grid md:grid-cols-2 gap-6 text-left">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                <span className="text-blue-600 font-semibold">1</span>
               </div>
-              
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                  <span className="text-blue-600 font-semibold">2</span>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-800 mb-1">Follow-up</h3>
-                  <p className="text-gray-600 text-sm">
-                    If you are selected for the next round, you will receive an email within 3-5 business days with further steps.
-                  </p>
-                </div>
+              <div>
+                <h3 className="font-semibold text-gray-800 mb-1">Review Process</h3>
+                <p className="text-gray-600 text-sm">
+                  Our team will review your interview responses and evaluate your qualifications.
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                <span className="text-blue-600 font-semibold">2</span>
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-800 mb-1">Follow-up</h3>
+                <p className="text-gray-600 text-sm">
+                  If you are selected for the next round, you will receive an email within 3-5 business days with further steps.
+                </p>
               </div>
             </div>
           </div>
+        </div>
         )}
 
         {/* Footer */}

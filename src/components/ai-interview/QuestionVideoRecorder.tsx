@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Camera, Video, VideoOff, Loader2, CheckCircle, AlertCircle, Play, Pause, Square } from 'lucide-react';
 import RecordRTC from 'recordrtc';
 import toast from 'react-hot-toast';
+import { buildApiUrl, API_CONFIG } from '@/constants/api';
 
 const QuestionVideoRecorder = ({ 
   interviewId, 
@@ -210,7 +211,7 @@ const QuestionVideoRecorder = ({
       }, 200);
 
       // Upload to server
-      const response = await fetch('https://devprovaluate_py.aitamate.com/api/upload-question-video', {
+      const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.UPLOAD_QUESTION_VIDEO), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { buildApiUrl, API_CONFIG } from '@/constants/api';
 import { 
   Search, 
   Users, 
@@ -70,7 +71,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
   const fetchInterviews = async () => {
     try {
       setLoading(true);
-      const response = await fetch('https://devprovaluate_py.aitamate.com/api/get-all-interviews');
+      const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.GET_ALL_INTERVIEWS));
       if (response.ok) {
         const data = await response.json();
         const interviewsData = data.interviews || [];
@@ -219,7 +220,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
     setSaveStates(prev => ({...prev, [interviewId]: 'saving'}));
     
     try {
-      const response = await fetch('https://devprovaluate_py.aitamate.com/api/update-interview-decision', {
+      const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.UPDATE_INTERVIEW_DECISION), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -278,7 +279,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
     try {
       const interviewLink = `${window.location.origin}/interview/${interviewId}`;
       
-      const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
+      const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.SEND_INTERVIEW_EMAIL), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

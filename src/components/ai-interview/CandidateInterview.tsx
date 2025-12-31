@@ -11,6 +11,7 @@ import {
   Camera,
   RotateCcw
 } from 'lucide-react';
+import { buildApiUrl, API_CONFIG } from '@/constants/api';
 
 const CandidateInterview = () => {
   const { interviewId } = useParams();
@@ -32,9 +33,10 @@ const CandidateInterview = () => {
     const loadInterviewData = async () => {
       try {
         console.log('🔍 CandidateInterview - Loading interview data for ID:', interviewId);
-        console.log('🔍 CandidateInterview - Full URL:', `https://devprovaluate_py.aitamate.com/api/get-interview/${interviewId}`);
+        const interviewUrl = buildApiUrl(`${API_CONFIG.ENDPOINTS.GET_INTERVIEW}/${interviewId}`);
+        console.log('🔍 CandidateInterview - Full URL:', interviewUrl);
         setIsLoading(true);
-        const response = await fetch(`https://devprovaluate_py.aitamate.com/api/get-interview/${interviewId}`, {
+        const response = await fetch(interviewUrl, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -244,7 +246,7 @@ const CandidateInterview = () => {
     
     try {
       // Call API to mark interview as started
-      const response = await fetch(`https://devprovaluate_py.aitamate.com/api/start-interview/${interviewData.id}`, {
+      const response = await fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.START_INTERVIEW}/${interviewData.id}`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

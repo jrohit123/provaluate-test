@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { buildApiUrl, API_CONFIG } from '@/constants/api';
 import {
   UserPlus,
   Settings,
@@ -624,7 +625,7 @@ const HRInterviewCreator = () => {
     try {
       console.log('🔄 Saving parameters for role:', formData.position, customParameters);
       
-      const response = await fetch('https://devprovaluate_py.aitamate.com/api/custom-parameters', {
+      const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CUSTOM_PARAMETERS), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -718,7 +719,7 @@ const HRInterviewCreator = () => {
           const interview = createdInterviews[0];
           const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
           
-          const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
+          const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.SEND_INTERVIEW_EMAIL), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -755,7 +756,7 @@ const HRInterviewCreator = () => {
             try {
               const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
               
-              const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
+              const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.SEND_INTERVIEW_EMAIL), {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -828,7 +829,7 @@ const HRInterviewCreator = () => {
           try {
             const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
             
-            const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
+            const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.SEND_INTERVIEW_EMAIL), {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -970,7 +971,7 @@ const HRInterviewCreator = () => {
         });
         console.log(`📤 Sending to server: total_questions=${formData.totalQuestions}, duration=${formData.duration}`);
         
-        const response = await fetch('https://devprovaluate_py.aitamate.com/api/create-interview', {
+        const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CREATE_INTERVIEW), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1606,7 +1607,7 @@ const HRInterviewCreator = () => {
                       try {
                         const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
                         
-                        const response = await fetch('https://devprovaluate_py.aitamate.com/api/send-interview-email', {
+                        const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.SEND_INTERVIEW_EMAIL), {
                           method: 'POST',
                           headers: {
                             'Content-Type': 'application/json',

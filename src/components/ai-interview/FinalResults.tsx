@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button';
 import toast from 'react-hot-toast';
 import ExcelJS from 'exceljs';
+import { buildApiUrl, API_CONFIG } from '@/constants/api';
 
 const FinalResults = () => {
   const { interviewId } = useParams();
@@ -82,7 +83,7 @@ const FinalResults = () => {
   const loadFinalResults = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(`https://devprovaluate_py.aitamate.com/api/get-final-results/${interviewId}`);
+      const response = await fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.GET_FINAL_RESULTS}/${interviewId}`));
       
       if (response.ok) {
         const data = await response.json();
@@ -178,7 +179,7 @@ const FinalResults = () => {
           
           // For structured interviews or when questions array is missing, fetch from questions table
           try {
-            const questionsResponse = await fetch(`https://devprovaluate_py.aitamate.com/api/get-questions/${interviewId}`);
+            const questionsResponse = await fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.GET_QUESTIONS}/${interviewId}`));
             if (questionsResponse.ok) {
               const questionsData = await questionsResponse.json();
               if (questionsData.questions && Array.isArray(questionsData.questions) && questionsData.questions.length > 0) {
@@ -1311,33 +1312,33 @@ const FinalResults = () => {
           console.log('⚠️ No valid candidate photo found, using fallback image');
           console.log(`🔍 Checked: localStorage=${!!localStorage.getItem(storageKey)}, sessionStorage=${!!sessionStorage.getItem(storageKey)}`);
           
-          await new Promise<boolean>((resolve) => {
-            const nameImg = new Image();
-            nameImg.crossOrigin = 'anonymous';
+        await new Promise<boolean>((resolve) => {
+          const nameImg = new Image();
+          nameImg.crossOrigin = 'anonymous';
             
-            nameImg.onload = () => {
-              try {
-                const pageWidth = doc.internal.pageSize.getWidth();
-                const nameWidth = 35;
-                const nameHeight = 25;
+          nameImg.onload = () => {
+            try {
+              const pageWidth = doc.internal.pageSize.getWidth();
+              const nameWidth = 35;
+              const nameHeight = 25;
                 const nameX = pageWidth - nameWidth - 40;
                 const nameY = 38;
-                
-                doc.addImage(nameImg, 'JPEG', nameX, nameY, nameWidth, nameHeight);
-                resolve(true);
-              } catch (error) {
+              
+              doc.addImage(nameImg, 'JPEG', nameX, nameY, nameWidth, nameHeight);
+              resolve(true);
+            } catch (error) {
                 console.log('Error adding fallback image to PDF:', error);
-                resolve(false);
-              }
-            };
-            
-            nameImg.onerror = () => {
-              console.log('Fallback image failed to load');
               resolve(false);
-            };
+            }
+          };
             
-            nameImg.src = '/assets/NAME.jpg';
-          });
+          nameImg.onerror = () => {
+              console.log('Fallback image failed to load');
+            resolve(false);
+          };
+            
+          nameImg.src = '/assets/NAME.jpg';
+        });
         }
       } catch (error) {
         console.error('❌ Error processing candidate photo:', error);
