@@ -1134,6 +1134,15 @@ export const ResumeUploadSection = () => {
   };
 
   const handleFileSelect = () => {
+    // Block file upload if trial expired or CVs exhausted
+    if (companyUsageInfo && !companyUsageInfo.canProcessCV) {
+      toast({
+        title: "Cannot Upload Files",
+        description: companyUsageInfo.warningMessage || "Your trial has expired or CV quota is exhausted. Please upgrade to continue.",
+        variant: "destructive",
+      });
+      return;
+    }
     fileInputRef.current?.click();
   };
 
@@ -1975,7 +1984,8 @@ export const ResumeUploadSection = () => {
                 <div className="flex gap-2 justify-center">
                   <Button 
                     onClick={handleFileSelect}
-                    className="bg-primary-600 hover:bg-primary-700"
+                    disabled={companyUsageInfo && !companyUsageInfo.canProcessCV}
+                    className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Add More Files
                   </Button>
@@ -2368,6 +2378,7 @@ export const ResumeUploadSection = () => {
         accept=".pdf,.doc,.docx,.txt"
         multiple
         onChange={handleFileChange}
+        disabled={companyUsageInfo && !companyUsageInfo.canProcessCV}
         className="hidden"
       />
     </div>

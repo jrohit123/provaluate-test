@@ -31,12 +31,12 @@ interface ResolvedJD {
 
 const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
 const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx', '.txt'];
-// Backend service URLs for integration - Updated to use correct ports
+// Backend service URLs for integration - Uses environment variables
 const BACKEND_URLS = {
-  UNIFIED_SERVICE: 'https://devprovaluate_py.aitamate.com',      // app.py - unified backend service
-  AI_ANALYZER_SERVICE: 'http://localhost:5001',  // jd_analyzer.py - handles AI analysis
-  CV_ANALYZER_SERVICE: 'http://localhost:5002',  // cv_analyzer.py - handles CV analysis
-  RESUME_SERVICE: 'https://devprovaluate_py.aitamate.com',       // app.py - handles uploads
+  UNIFIED_SERVICE: import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com',      // app.py - unified backend service
+  AI_ANALYZER_SERVICE: import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com',  // jd_analyzer.py - handles AI analysis (using same URL)
+  CV_ANALYZER_SERVICE: import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com',  // cv_analyzer.py - handles CV analysis (using same URL)
+  RESUME_SERVICE: import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com',       // app.py - handles uploads
 };
 
 // Legacy webhook URL (kept for compatibility)
