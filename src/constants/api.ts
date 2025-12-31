@@ -1,7 +1,6 @@
 // API Configuration
-// || 'https://devprovaluate_py.aitamate.com'
 export const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_PYTHON_URL,
+  BASE_URL: import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com',
   ENDPOINTS: {
     // Interview Management
     CREATE_INTERVIEW: '/api/create-interview',
@@ -30,7 +29,14 @@ export const API_CONFIG = {
     
     // Results
     GET_FINAL_RESULTS: '/api/get-final-results',
+    GET_QUESTIONS: '/api/get-questions',
     TRACK_COMPLETION_VIEW: '/api/track-completion-view',
+    
+    // Interview Configuration
+    SAVE_INTERVIEW_CONFIG: '/api/save-interview-config',
+    
+    // Email
+    SEND_INTERVIEW_EMAIL: '/api/send-interview-email',
   },
   TIMEOUTS: {
     DEFAULT: 300000, // 30 seconds
