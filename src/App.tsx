@@ -50,21 +50,25 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const checkAuth = async () => {
+      console.log('🔍 ProtectedRoute: Starting auth check...');
       setLoading(true);
 
       // Check Supabase Auth session first
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
       if (authError || !user) {
+        console.log('❌ ProtectedRoute: No Supabase user found');
         setIsAuthenticated(false);
         setOnboardingComplete(false);
         setLoading(false);
         return;
       }
 
+      console.log('✅ ProtectedRoute: Supabase user found:', user.id);
       setIsAuthenticated(true);
       
       // Check if user has completed onboarding
+      console.log('🔍 ProtectedRoute: Checking onboarding status...');
       const { data: userProfile, error: profileError } = await supabase
         .from('users')
         .select('onboarding_complete')
@@ -73,30 +77,38 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
       
       // If profile doesn't exist or onboarding not complete, user needs onboarding
       if (profileError || !userProfile) {
+        console.log('⚠️ ProtectedRoute: No profile found or error:', profileError);
         setOnboardingComplete(false);
         setLoading(false);
         return;
       }
 
+      console.log('✅ ProtectedRoute: Profile found, onboarding_complete =', userProfile.onboarding_complete);
       setOnboardingComplete(userProfile.onboarding_complete === true);
       
       // Also check localStorage and session for existing users
       const isAuth = localStorage.getItem('recruitai_auth') === 'true';
+      console.log('🔍 ProtectedRoute: recruitai_auth in localStorage =', isAuth);
+      
       if (isAuth) {
+        const sessionId = SessionManager.getCurrentSessionId();
+        console.log('🔍 ProtectedRoute: Current session ID =', sessionId);
+        
         const isActive = await SessionManager.isCurrentSessionActive();
+        console.log('🔍 ProtectedRoute: Session active =', isActive);
+        
         if (!isActive) {
-          console.log('⚠️ Session not active during route check');
-          // Don't immediately clear if we just completed onboarding
-          const justCompletedOnboarding = userProfile?.onboarding_complete === true;
-          if (!justCompletedOnboarding) {
-            SessionManager.clearSession();
-            localStorage.removeItem('recruitai_auth');
-            setIsAuthenticated(false);
-          }
+          console.log('⚠️ ProtectedRoute: Session NOT active, clearing...');
+          SessionManager.clearSession();
+          localStorage.removeItem('recruitai_auth');
+          setIsAuthenticated(false);
+        } else {
+          console.log('✅ ProtectedRoute: Session is active!');
         }
       }
       
       setLoading(false);
+      console.log('✅ ProtectedRoute: Auth check complete');
     };
 
     checkAuth();
