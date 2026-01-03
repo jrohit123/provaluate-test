@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { SessionManager } from '@/utils/sessionManager';
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -122,6 +123,18 @@ export default function Onboarding() {
         });
       if (userDbError) throw userDbError;
 
+      // 🔥 Create session after onboarding
+      const sessionData = await SessionManager.createSession(user.id);
+      if (!sessionData) {
+        throw new Error('Failed to create session');
+      }
+
+      // End other sessions
+      await SessionManager.endAllOtherSessions(user.id, sessionData.session_id);
+
+      // Set auth flag
+      localStorage.setItem('recruitai_auth', 'true');
+
       // If paid plan selected, create subscription and open payment
       const isPaidPlan = plan.plan_cost && plan.plan_cost > 0;
       if (isPaidPlan) {
@@ -172,11 +185,12 @@ export default function Onboarding() {
             handler: async function (response: any) {
               try {
                 toast.success('Onboarding complete! Subscription activated. Redirecting to dashboard...');
-                setTimeout(() => window.location.replace('/dashboard'), 1000);
+                // Changed from window.location.replace to navigate
+                setTimeout(() => navigate('/dashboard?section=main-dashboard'), 1000);
               } catch (error: any) {
                 console.error('Error processing subscription:', error);
                 toast.success('Onboarding complete! Redirecting to dashboard...');
-                setTimeout(() => window.location.replace('/dashboard'), 1000);
+                setTimeout(() => navigate('/dashboard?section=main-dashboard'), 1000);
               }
             },
             modal: {
@@ -184,7 +198,8 @@ export default function Onboarding() {
                 // User closed payment modal - still allow them to proceed
                 // They can use "Recharge" button later to complete payment
                 toast.info('Payment cancelled. You can complete payment later from your dashboard.');
-                setTimeout(() => window.location.replace('/dashboard'), 1000);
+                // Changed from window.location.replace to navigate
+                setTimeout(() => navigate('/dashboard?section=main-dashboard'), 1000);
               }
             }
           };
@@ -194,7 +209,8 @@ export default function Onboarding() {
           rzp1.on('payment.failed', function (response: any) {
             console.error('Payment failed:', response.error);
             toast.warning('Payment failed. You can try again from your dashboard.');
-            setTimeout(() => window.location.replace('/dashboard'), 1000);
+            // Changed from window.location.replace to navigate
+            setTimeout(() => navigate('/dashboard?section=main-dashboard'), 1000);
           });
           
           rzp1.open();
@@ -204,14 +220,15 @@ export default function Onboarding() {
           console.error('Error creating subscription:', subscriptionError);
           // If subscription creation fails, still allow onboarding but show warning
           toast.warning('Onboarding complete but subscription setup failed. Please use "Recharge" button to complete payment.');
-          setTimeout(() => window.location.replace('/dashboard'), 1000);
+          setTimeout(() => navigate('/dashboard?section=main-dashboard'), 1000);
           return;
         }
       } else {
         // FreeTrial - no payment needed, just navigate
         toast.success('Onboarding complete! Redirecting to your dashboard.');
         console.log('User profile created!');
-        setTimeout(() => window.location.replace('/dashboard'), 500);
+        // Changed from window.location.replace to navigate
+        setTimeout(() => navigate('/dashboard?section=main-dashboard'), 500);
       }
     } catch (err) {
       setError(err.message || 'Onboarding failed.');
