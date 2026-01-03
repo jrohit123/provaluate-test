@@ -85,8 +85,14 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
       if (isAuth) {
         const isActive = await SessionManager.isCurrentSessionActive();
         if (!isActive) {
-          SessionManager.clearSession();
-          localStorage.removeItem('recruitai_auth');
+          console.log('⚠️ Session not active during route check');
+          // Don't immediately clear if we just completed onboarding
+          const justCompletedOnboarding = userProfile?.onboarding_complete === true;
+          if (!justCompletedOnboarding) {
+            SessionManager.clearSession();
+            localStorage.removeItem('recruitai_auth');
+            setIsAuthenticated(false);
+          }
         }
       }
       
