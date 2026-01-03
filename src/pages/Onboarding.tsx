@@ -123,17 +123,25 @@ export default function Onboarding() {
         });
       if (userDbError) throw userDbError;
 
-      // 🔥 Create session after onboarding
+      console.log('✅ Step 1: User profile created with onboarding_complete = true');
+
+      // 🔥 ADD SESSION CREATION HERE
+      console.log('🔄 Step 2: Creating session...');
       const sessionData = await SessionManager.createSession(user.id);
       if (!sessionData) {
+        console.error('❌ Failed to create session');
         throw new Error('Failed to create session');
       }
+      console.log('✅ Step 2: Session created:', sessionData.session_id);
 
       // End other sessions
+      console.log('🔄 Step 3: Ending other sessions...');
       await SessionManager.endAllOtherSessions(user.id, sessionData.session_id);
+      console.log('✅ Step 3: Other sessions ended');
 
       // Set auth flag
       localStorage.setItem('recruitai_auth', 'true');
+      console.log('✅ Step 4: Auth flag set in localStorage');
 
       // If paid plan selected, create subscription and open payment
       const isPaidPlan = plan.plan_cost && plan.plan_cost > 0;
