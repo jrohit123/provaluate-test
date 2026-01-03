@@ -350,32 +350,37 @@ export class SessionManager {
   }
 
   /**
-   * Check whether the current session is active on the server
-   */
-  static async isCurrentSessionActive(): Promise<boolean> {
-    try {
-      const session = await this.getCurrentSession();
-      if (!session) {
-        console.log('🔍 No session found in database');
-        return false;
-      }
-      console.log(`🔍 Session data:`, {
-        session_id: session.session_id,
-        is_active: session.is_active,
-        user_id: session.user_id
-      });
-      return session.is_active === true;
-    } catch (error) {
-      console.error('❌ Error checking session activity:', error);
-      return false;
-    }
-  }
-
-  /**
    * Get the current session ID stored locally
    */
   static getCurrentSessionId(): string | null {
     return localStorage.getItem(SESSION_STORAGE_KEY);
+  }
+
+  /**
+   * Check whether the current session is active on the server
+   */
+  static async isCurrentSessionActive(): Promise<boolean> {
+    try {
+      console.log('🔍 SessionManager: Checking if current session is active...');
+      const session = await this.getCurrentSession();
+      if (!session) {
+        console.log('❌ SessionManager: No session found in database');
+        return false;
+      }
+      console.log('📊 SessionManager: Session data:', {
+        session_id: session.session_id,
+        is_active: session.is_active,
+        user_id: session.user_id,
+        last_activity: session.last_activity
+      });
+      
+      const isActive = session.is_active === true;
+      console.log(isActive ? '✅ SessionManager: Session IS active' : '❌ SessionManager: Session is NOT active');
+      return isActive;
+    } catch (error) {
+      console.error('❌ SessionManager: Error checking session activity:', error);
+      return false;
+    }
   }
 }
 
