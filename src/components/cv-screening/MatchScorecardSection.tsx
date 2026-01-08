@@ -243,9 +243,9 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
       
       const { scores, overallScore } = parseScoringText(scoringText);
       
-      // Use overall_score from database if available (0-10 scale), convert to percentage
-      const finalScore = selectedCandidateData.overall_score 
-        ? Math.round(selectedCandidateData.overall_score * 10) // Convert 0-10 scale to percentage (7.5 -> 75%)
+      // Use final_match from database if available (0-10 scale), convert to percentage
+      const finalScore = selectedCandidateData.final_match !== null && selectedCandidateData.final_match !== undefined
+        ? Math.round(selectedCandidateData.final_match * 10) // Convert 0-10 scale to percentage (7.5 -> 75%)
         : overallScore;
       
       // Extract recommendation status
@@ -425,8 +425,10 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
         const { scores, overallScore } = parseScoringText(scoringText);
         console.log('Parsed scores:', scores);
         
-        // Use overall_score from database (0-10 scale), convert to percentage
-        const finalScore = report.overall_score ? Math.round(report.overall_score * 10) : overallScore;
+        // Use final_match from database (0-10 scale), convert to percentage
+        const finalScore = report.final_match !== null && report.final_match !== undefined 
+          ? Math.round(report.final_match * 10) 
+          : overallScore;
         
         console.log('Final score used:', finalScore);
         

@@ -1317,6 +1317,7 @@ export const ResumeUploadSection = () => {
         jd_id: selectedJDId,
         criteria_id: selectedCriteriaGridId,
         company_id: user?.profile?.company_id,  // Add company_id to request
+        user_id: user?.id,  // Add user_id to request for created_by field
         action_type: actionType
       };
 
@@ -2214,7 +2215,7 @@ export const ResumeUploadSection = () => {
           assessmentReports.map((report) => {
             // Extract recommendation status for this report
             const recommendationStatus = extractRecommendationStatus(report.recommendation);
-            const normalizedOverallScore = normalizeNumericScore(report.overall_score);
+            const normalizedOverallScore = normalizeNumericScore(report.final_match !== null && report.final_match !== undefined ? report.final_match : 0);
             const detailedScores = parseReportScores(report.scores);
             const isProcessingReport = normalizedOverallScore === null && detailedScores.length === 0;
 
