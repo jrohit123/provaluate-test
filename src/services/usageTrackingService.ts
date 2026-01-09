@@ -102,7 +102,7 @@ export class UsageTrackingService {
       // ✅ UPDATED: Check subscription status and trial expiration
       const subscriptionStatus = companyData.subscription_status || '';
       const isExpired = subscriptionStatus === 'expired' || (trialStatus?.is_expired ?? false);
-      const isTrial = trialStatus?.is_trial ?? (planName === 'FreeTrial' || planName === 'FreeTrial_Extd');
+      const isTrial = trialStatus?.is_trial ?? (planName === 'FreeTrial-30' || planName === 'Multi_User_Free');
       
       // Block processing if expired
       // Calculate available CVs: maxCVs - currentCount
