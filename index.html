@@ -40,6 +40,50 @@
 
   <body>
     <div id="root"></div>
+    <!-- Capture tokens from URL before Supabase processes them -->
+    <script>
+      (function() {
+        // Only process if we're on reset-password route
+        if (window.location.pathname === '/reset-password') {
+          const hash = window.location.hash;
+          const search = window.location.search;
+          
+          // Extract and store tokens from hash
+          if (hash) {
+            const params = new URLSearchParams(hash.slice(1));
+            const accessToken = params.get('access_token');
+            const refreshToken = params.get('refresh_token');
+            const type = params.get('type');
+            
+            if (accessToken) {
+              sessionStorage.setItem('reset_access_token', accessToken);
+              if (refreshToken) sessionStorage.setItem('reset_refresh_token', refreshToken);
+              if (type) sessionStorage.setItem('reset_type', type);
+              
+              // Clean URL immediately to prevent Supabase from processing
+              window.history.replaceState({}, '', window.location.pathname);
+            }
+          }
+          
+          // Extract and store tokens from search params
+          if (search) {
+            const params = new URLSearchParams(search);
+            const accessToken = params.get('access_token');
+            const refreshToken = params.get('refresh_token');
+            const type = params.get('type');
+            
+            if (accessToken) {
+              sessionStorage.setItem('reset_access_token', accessToken);
+              if (refreshToken) sessionStorage.setItem('reset_refresh_token', refreshToken);
+              if (type) sessionStorage.setItem('reset_type', type);
+              
+              // Clean URL immediately to prevent Supabase from processing
+              window.history.replaceState({}, '', window.location.pathname);
+            }
+          }
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
