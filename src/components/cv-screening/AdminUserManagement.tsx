@@ -94,7 +94,7 @@ export default function AdminUserManagement() {
   const slotsLeft = maxUsers !== null ? maxUsers - users.length : null;
   
   // Check if user is on trial plan
-  const isTrialPlan = company?.selected_plan === 'FreeTrial' || company?.selected_plan === 'FreeTrial_Extd';
+  const isTrialPlan = company?.selected_plan === 'FreeTrial-30' || company?.selected_plan === 'Multi_User_Free';
 
   const handleInviteChange = (e: any) => {
     setInviteForm({ ...inviteForm, [e.target.name]: e.target.value });
@@ -129,42 +129,44 @@ export default function AdminUserManagement() {
       }
     }
     
+    if (!inviteForm.firstName || !inviteForm.lastName) {
+      setInviteError('First name and last name are required.');
+      setLoading(false);
+      return;
+    }
+    
     if (slotsLeft <= 0) {
       setInviteError('User limit reached for your plan.');
       setLoading(false);
       return;
     }
-    // TEMPORARY SIMULATION - COMPLETELY BYPASS EDGE FUNCTION
-    console.log(`🔄 SIMULATION: Inviting ${inviteForm.email} with role: ${inviteForm.role}`);
     
-    // Simulate processing time
-    setTimeout(() => {
-      setInviteSuccess('✅ Invitation sent successfully! (Simulated)');
-      setInviteForm({ firstName: '', lastName: '', email: '', role: 'user' });
-      setInviteOpen(false);
-      setLoading(false);
-      
-      toast({
-        title: "Invitation Sent (Simulated)",
-        description: `Simulated invitation for ${inviteForm.email}. Edge Function needs deployment for real functionality.`,
-      });
-    }, 1000);
-    
-    return; // Exit early to avoid any Edge Function calls
-    
-    /*
-    // REAL EDGE FUNCTION CODE - UNCOMMENT AFTER DEPLOYMENT:
+    // REAL EDGE FUNCTION CODE:
     try {
+      console.log('Inviting user:', { email: inviteForm.email, firstName: inviteForm.firstName, lastName: inviteForm.lastName, role: inviteForm.role });
+      
       const { data, error } = await supabase.functions.invoke('invite-user', {
         body: { 
-          email: inviteForm.email, 
+          email: inviteForm.email,
+          first_name: inviteForm.firstName,
+          last_name: inviteForm.lastName,
           role: inviteForm.role 
         }
       });
 
+      console.log('Edge function response:', { data, error });
+
       if (error) {
         console.error('Edge function error:', error);
-        throw error;
+        const errorMessage = error.message || 'Failed to send invitation. Please check if the edge function is deployed.';
+        setInviteError(errorMessage);
+        toast({
+          title: "Invitation Failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
       }
 
       if (data?.success) {
@@ -175,8 +177,11 @@ export default function AdminUserManagement() {
         // Refresh users list
         const { data: usersData } = await supabase
           .from('users')
-          .select('user_id, company_id, first_name, last_name, role, user_status, created_at')
-          .eq('company_id', user.profile.company_id);
+          .select('user_id, company_id, first_name, last_name, role, user_status, onboarding_complete, created_at')
+          .eq('company_id', user.profile.company_id)
+          .order('role', { ascending: true })
+          .order('first_name', { ascending: true })
+          .order('last_name', { ascending: true });
         setUsers(usersData || []);
         
         toast({
@@ -184,15 +189,26 @@ export default function AdminUserManagement() {
           description: `Successfully invited ${inviteForm.email}`,
         });
       } else {
-        setInviteError(data?.error || 'Failed to send invitation.');
+        const errorMsg = data?.error || 'Failed to send invitation.';
+        setInviteError(errorMsg);
+        toast({
+          title: "Invitation Failed",
+          description: errorMsg,
+          variant: "destructive",
+        });
       }
-          } catch (err: any) {
-        console.error('Invitation error:', err);
-        setInviteError(err.message || 'An error occurred. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    */
+    } catch (err: any) {
+      console.error('Invitation error:', err);
+      const errorMessage = err.message || 'An error occurred. Please try again.';
+      setInviteError(errorMessage);
+      toast({
+        title: "Invitation Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePlanChange = async () => {
@@ -936,7 +952,7 @@ export default function AdminUserManagement() {
         key: subscriptionData.key_id,
         subscription_id: subscriptionData.subscription_id,  // From database via backend - NO HARDCODING
         name: "aitamate",
-        description: `Subscription for ${plan.plan_name} - ₹${plan.plan_cost}/week`,
+        description: `Subscription for ${plan.plan_name} - ₹${plan.plan_cost}/month`,
         prefill: {
           name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
           email: user?.email || "",
@@ -957,7 +973,7 @@ export default function AdminUserManagement() {
               title: "Subscription Activated",
               description: subscriptionData.is_existing 
                 ? "Using your existing subscription. Payments will continue automatically."
-                : `Your ${plan.plan_name} subscription has been activated. Payments of ₹${plan.plan_cost} will be charged automatically every 7 days.`,
+                : `Your ${plan.plan_name} subscription has been activated. Payments of ₹${plan.plan_cost} will be charged automatically monthly.`,
               });
               
             // Refresh company data
@@ -1054,7 +1070,7 @@ export default function AdminUserManagement() {
         key: subscriptionData.key_id,
         subscription_id: subscriptionData.subscription_id,
         name: "aitamate",
-        description: `Activate ${selectedRechargePlan} subscription - ₹${selectedPlanData.plan_cost}/week`,
+        description: `Activate ${selectedRechargePlan} subscription - ₹${selectedPlanData.plan_cost}/month`,
         prefill: {
           name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
           email: user?.email || "",
@@ -1073,7 +1089,7 @@ export default function AdminUserManagement() {
             
             toast({
               title: "Subscription Activated",
-              description: `Your ${selectedRechargePlan} subscription has been activated. Payments of ₹${selectedPlanData.plan_cost} will be charged automatically every 7 days.`,
+              description: `Your ${selectedRechargePlan} subscription has been activated. Payments of ₹${selectedPlanData.plan_cost} will be charged automatically monthly.`,
             });
               
             // Refresh company data
@@ -1356,7 +1372,7 @@ export default function AdminUserManagement() {
                           <div className="flex flex-col">
                             <span className="font-medium">{availablePlan.plan_name}</span>
                             <span className="text-xs text-muted-foreground">
-                              ₹{availablePlan.plan_cost}/week • Max {availablePlan.max_users} users
+                              ₹{availablePlan.plan_cost}/month • Max {availablePlan.max_users} users
                             </span>
                           </div>
                         </SelectItem>
@@ -1395,7 +1411,7 @@ export default function AdminUserManagement() {
                 <div className="space-y-4">
                   <div>
                     <p className="text-sm text-muted-foreground mb-4">
-                      Select a plan to activate your subscription. The amount will be charged automatically every 7 days.
+                      Select a plan to activate your subscription. The amount will be charged automatically monthly.
                     </p>
                   </div>
                   <Select value={selectedRechargePlan} onValueChange={setSelectedRechargePlan}>
@@ -1410,7 +1426,7 @@ export default function AdminUserManagement() {
                           <div className="flex flex-col">
                             <span className="font-medium">{availablePlan.plan_name}</span>
                             <span className="text-xs text-muted-foreground">
-                              ₹{availablePlan.plan_cost}/week • Max {availablePlan.max_users} users • {availablePlan.max_cvs} CVs
+                              ₹{availablePlan.plan_cost}/month • Max {availablePlan.max_users} users • {availablePlan.max_cvs} CVs
                             </span>
                           </div>
                         </SelectItem>
@@ -1422,11 +1438,11 @@ export default function AdminUserManagement() {
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-blue-900">Amount to be charged:</span>
                         <span className="text-lg font-bold text-blue-900">
-                          ₹{availablePlans.find(p => p.plan_name === selectedRechargePlan)?.plan_cost || 0}/week
+                          ₹{availablePlans.find(p => p.plan_name === selectedRechargePlan)?.plan_cost || 0}/month
                         </span>
                       </div>
                       <p className="text-xs text-blue-700 mt-2">
-                        This amount will be automatically charged every 7 days after activation.
+                        This amount will be automatically charged monthly after activation.
                       </p>
                     </div>
                   )}
@@ -1511,6 +1527,26 @@ export default function AdminUserManagement() {
               </DialogHeader>
               <div id="invite-user-description" className="sr-only">Dialog to invite a new user to the company</div>
               <form className="space-y-3" onSubmit={handleInvite}>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    name="firstName"
+                    type="text"
+                    placeholder="First Name"
+                    value={inviteForm.firstName}
+                    onChange={handleInviteChange}
+                    required
+                    disabled={loading}
+                  />
+                  <Input
+                    name="lastName"
+                    type="text"
+                    placeholder="Last Name"
+                    value={inviteForm.lastName}
+                    onChange={handleInviteChange}
+                    required
+                    disabled={loading}
+                  />
+                </div>
                 <Input
                   name="email"
                   type="email"
