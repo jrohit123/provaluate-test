@@ -66,12 +66,12 @@ export default function Signup() {
               setDomainBlockReason(blockedDomain.reason || 'This domain is not allowed for registration');
               // Don't check free trial eligibility for blocked domains
             } else {
-              // Check if any company with this domain has used any trial plan (FreeTrial or FreeTrial_Extd)
+              // Check if any company with this domain has used any trial plan (FreeTrial-30 or Multi_User_Free)
               const { data: companiesWithTrial, error: trialError } = await supabase
                 .from('companies')
                 .select('company_id')
                 .eq('email_domain', domain)
-                .in('selected_plan', ['FreeTrial', 'FreeTrial_Extd']);
+                .in('selected_plan', ['FreeTrial-30', 'Multi_User_Free']);
               if (trialError) throw trialError;
               trialEligible = !companiesWithTrial || companiesWithTrial.length === 0;
             }
@@ -85,7 +85,7 @@ export default function Signup() {
           const { data: freeTrialPlans, error: freeTrialError } = await supabase
             .from('plans')
             .select('*')
-            .in('plan_name', ['FreeTrial', 'FreeTrial_Extd']);
+            .in('plan_name', ['FreeTrial-30', 'Multi_User_Free']);
           if (freeTrialError) throw freeTrialError;
           if (freeTrialPlans && freeTrialPlans.length > 0) {
             // Add trial plans at the beginning of the list
@@ -240,7 +240,7 @@ export default function Signup() {
             key: subscriptionData.key_id,
             subscription_id: subscriptionData.subscription_id,
             name: "aitamate",
-            description: `Subscription for ${plan.plan_name} - ₹${plan.plan_cost}/week`,
+            description: `Subscription for ${plan.plan_name} - ₹${plan.plan_cost}/month`,
             prefill: {
               name: `${firstName} ${lastName}`.trim() || email.split('@')[0] || "Customer",
               email: email,
@@ -359,7 +359,7 @@ export default function Signup() {
               <SelectContent>
                 {plans.map(plan => (
                   <SelectItem key={plan.plan_id} value={plan.plan_id}>
-                    {plan.plan_name} - ₹{plan.plan_cost}/week
+                    {plan.plan_name} - ₹{plan.plan_cost}/month
                   </SelectItem>
                 ))}
               </SelectContent>

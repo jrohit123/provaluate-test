@@ -177,7 +177,7 @@ export default function Onboarding() {
             key: subscriptionData.key_id,
             subscription_id: subscriptionData.subscription_id,
             name: "aitamate",
-            description: `Subscription for ${plan.plan_name} - ₹${plan.plan_cost}/week`,
+            description: `Subscription for ${plan.plan_name} - ₹${plan.plan_cost}/month`,
             prefill: {
               name: `${firstName} ${lastName}`.trim() || user.email.split('@')[0] || "Customer",
               email: user.email,

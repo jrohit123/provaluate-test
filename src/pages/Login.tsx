@@ -74,13 +74,39 @@ const Login = () => {
         return;
       } else {
         // Sign in with Supabase Auth
+        console.log('🔐 Attempting login for:', email);
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-        if (error) throw error;
-        if (!data.user) throw new Error('Login failed: No user data returned');
+        
+        if (error) {
+          console.error('❌ Login error details:', {
+            message: error.message,
+            status: error.status,
+            name: error.name,
+            email: email,
+          });
+          
+          // More specific error messages
+          if (error.message?.includes('Invalid login credentials') || error.status === 400) {
+            console.error('❌ This usually means:');
+            console.error('   1. Email address is incorrect');
+            console.error('   2. Password is incorrect');
+            console.error('   3. Account does not exist');
+            console.error('   4. Password was not set correctly');
+            console.error('   5. Email not confirmed');
+          }
+          
+          throw error;
+        }
+        
+        if (!data.user) {
+          console.error('❌ Login failed: No user data returned');
+          throw new Error('Login failed: No user data returned');
+        }
 
+        console.log('✅ Login successful for user:', data.user.id, data.user.email);
         await completeLogin(data.user.id);
       }
     } catch (error: any) {
@@ -467,7 +493,7 @@ const Login = () => {
         <div className="bg-gradient-to-r from-purple-600 to-pink-500 py-6 rounded-lg">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
             <h3 className="text-3xl font-bold text-white mb-1">
-              ⚡ 7-Day Free Trial
+              ⚡ 30-Day Free Trial
             </h3>
             <p className="text-xl text-white mb-4">
               Start assessing candidates today - no credit card required!

@@ -58,9 +58,9 @@ const Pricing = () => {
   const calculatePrice = (baseCost: number) => {
     let price = baseCost;
     
-    // Apply annual discount if selected (52 weeks in a year)
+    // Apply annual discount if selected (12 months in a year)
     if (isAnnual) {
-      price = baseCost * 52 * 0.85; // 15% discount on annual (52 weeks)
+      price = baseCost * 12 * 0.85; // 15% discount on annual (12 months)
     }
     
     // Convert currency if needed
@@ -72,8 +72,8 @@ const Pricing = () => {
     return Math.ceil(price);
   };
 
-  const calculateWeeklyRate = (annualPrice: number) => {
-    return (annualPrice / 52).toFixed(2);
+  const calculateMonthlyRate = (annualPrice: number) => {
+    return (annualPrice / 12).toFixed(2);
   };
 
   const handleSelectPlan = (plan: Plan) => {
@@ -132,7 +132,7 @@ const Pricing = () => {
           {/* Billing Toggle */}
           <div className="flex items-center justify-center space-x-4 mb-6">
             <span className={`text-sm font-medium ${!isAnnual ? 'text-gray-900' : 'text-gray-600'}`}>
-              Weekly
+              Monthly
             </span>
             <Switch
               checked={isAnnual}
@@ -177,12 +177,12 @@ const Pricing = () => {
           ) : (
             plans.map((plan) => {
               // Calculate prices
-              const weeklyBasePrice = currency === 'USD' ? Math.ceil(plan.plan_cost / 90) : plan.plan_cost;
-              const annualBasePrice = plan.plan_cost * 52;
+              const monthlyBasePrice = currency === 'USD' ? Math.ceil(plan.plan_cost / 90) : plan.plan_cost;
+              const annualBasePrice = plan.plan_cost * 12;
               const annualDiscountedPrice = isAnnual ? Math.ceil(annualBasePrice * 0.85 * (currency === 'USD' ? 1/90 : 1)) : 0;
-              const weeklyPrice = weeklyBasePrice;
+              const monthlyPrice = monthlyBasePrice;
               const annualPrice = currency === 'USD' ? Math.ceil(annualBasePrice / 90) : annualBasePrice;
-              const displayPrice = isAnnual ? annualDiscountedPrice : weeklyPrice;
+              const displayPrice = isAnnual ? annualDiscountedPrice : monthlyPrice;
 
               return (
                 <Card
@@ -214,7 +214,7 @@ const Pricing = () => {
                           {currency === 'USD' ? '$' : '₹'}{displayPrice}
                         </span>
                         <span className="text-gray-600 ml-2">
-                          {isAnnual ? '/year' : '/week'}
+                          {isAnnual ? '/year' : '/month'}
                         </span>
                       </div>
                       {isAnnual && (
@@ -224,11 +224,11 @@ const Pricing = () => {
                       )}
                       {isAnnual && (
                         <p className="text-xs text-gray-500 mt-1">
-                          Equivalent to {currency === 'USD' ? '$' : '₹'}{calculateWeeklyRate(displayPrice)}/week
+                          Equivalent to {currency === 'USD' ? '$' : '₹'}{calculateMonthlyRate(displayPrice)}/month
                         </p>
                       )}
                       <p className="text-xs text-gray-500 mt-1">
-                        {isAnnual ? 'Billed annually (52 weeks)' : 'Billed weekly (7-day cycles)'}
+                        {isAnnual ? 'Billed annually (12 months)' : 'Billed monthly (30-day cycles)'}
                       </p>
                     </div>
 
