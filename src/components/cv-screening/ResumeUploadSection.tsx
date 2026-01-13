@@ -478,7 +478,6 @@ export const ResumeUploadSection = () => {
       let query = supabase
         .from('criteria')
         .select('criteria_id, criteria_name, grid, created_at, jd_id')
-        .eq('created_by', user.id)
         .eq('company_id', user.profile?.company_id);
       
       // Filter criteria based on selected JD
@@ -2273,7 +2272,9 @@ export const ResumeUploadSection = () => {
                 {/* Optionally, show detailed scores if available */}
                 {!isProcessingReport && detailedScores.length > 0 && (
                   <div className="mt-4">
-                    {detailedScores.map((score: any, idx: number) => {
+                    {detailedScores
+                      .filter((score: any) => score.parameter !== 'Overall Assessment')
+                      .map((score: any, idx: number) => {
                       const parameterScore = normalizeNumericScore(score?.score);
                       const percentage = parameterScore !== null ? Math.round(parameterScore * 10) : null;
 

@@ -510,7 +510,6 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
       let query = supabase
         .from('criteria')
         .select('criteria_id, criteria_name, grid, created_at, jd_id')
-        .eq('created_by', user.id)
         .eq('company_id', user.profile?.company_id);
       
       // Filter criteria based on selected JD
@@ -1169,7 +1168,9 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
 
             {/* Scoring Section */}
             <div className="space-y-4">
-              {candidate.scores.map((score, idx) => (
+              {candidate.scores
+                .filter(score => score.parameter !== 'Overall Assessment')
+                .map((score, idx) => (
                 <div key={idx} className="space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="font-medium text-gray-900">{score.parameter}</span>

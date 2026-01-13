@@ -107,9 +107,7 @@ export const EvaluationCriteriaSection = () => {
       
       let query = supabase
         .from('criteria')
-        .select('criteria_id, criteria_name, grid, created_at, jd_id')
-        .eq('created_by', user?.id)
-        .order('created_at', { ascending: false });
+        .select('criteria_id, criteria_name, grid, created_at, jd_id');
 
       // Only filter by company_id if it exists
       if (user?.profile?.company_id) {

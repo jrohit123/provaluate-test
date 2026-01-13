@@ -68,11 +68,10 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
       // Combined count for interview job descriptions (both tables)
       const combinedInterviewJobCount = (jobCount || 0) + (interviewJobCount || 0);
       
-      // Fetch criteria sets count (only criteria created by current user, unique names, latest version only)
+      // Fetch criteria sets count (all criteria for the company, unique names, latest version only)
       const { data: criteriaData } = await supabase
         .from('criteria')
         .select('criteria_name, created_at')
-        .eq('created_by', user.id)
         .eq('company_id', user.profile.company_id)
         .order('created_at', { ascending: false });
       
@@ -91,13 +90,26 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
       console.log('MainDashboard - User criteria count:', criteriaCount);
       console.log('MainDashboard - Criteria names:', Object.keys(uniqueCriteria));
       
-      // Fetch assessments count (assessment_reports doesn't have company_id field)
-      const { count: assessmentCount, data: assessmentData } = await supabase
-        .from('assessment_reports')
-        .select('*', { count: 'exact' });
+      // Fetch assessments count filtered by company (through criteria_id)
+      // First get all criteria_ids for this company
+      const { data: companyCriteria } = await supabase
+        .from('criteria')
+        .select('criteria_id')
+        .eq('company_id', user.profile.company_id);
+      
+      const criteriaIds = companyCriteria?.map(c => c.criteria_id) || [];
+      
+      // Filter assessment_reports by criteria_id (assessments linked to company criteria)
+      let assessmentCount = 0;
+      if (criteriaIds.length > 0) {
+        const { count } = await supabase
+          .from('assessment_reports')
+          .select('*', { count: 'exact', head: true })
+          .in('criteria_id', criteriaIds);
+        assessmentCount = count || 0;
+      }
       
       console.log('MainDashboard - Assessment count:', assessmentCount);
-      console.log('MainDashboard - Assessment data:', assessmentData);
       
       setStats({
         jobDescriptions: jobCount || 0,
