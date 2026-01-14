@@ -24,6 +24,8 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [planData, setPlanData] = useState<any>(null);
   const [companyData, setCompanyData] = useState<any>(null);
+  const [consumedCVs, setConsumedCVs] = useState(0);
+  const [consumedUsers, setConsumedUsers] = useState(0);
 
   // Fetch real data from database
   const fetchStats = async () => {
@@ -40,6 +42,18 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
         .single();
       
       setCompanyData(companyData);
+      
+      // Set consumed CVs from company data
+      setConsumedCVs(companyData?.cv_processed_count || 0);
+      
+      // Fetch active users count for the company
+      const { count: userCount } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', user.profile.company_id)
+        .eq('user_status', 'active');
+      
+      setConsumedUsers(userCount || 0);
       
       // Fetch plan data if company has a selected plan
       if (companyData?.selected_plan) {
@@ -164,13 +178,13 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
                   <div>
                     <div className="font-medium text-gray-700">Max CVs</div>
                     <div className="text-gray-600">
-                      {planData.max_cvs === 0 ? 'Unlimited' : planData.max_cvs}
+                      {loading ? '...' : `${consumedCVs} / ${planData.max_cvs === 0 ? 'Unlimited' : planData.max_cvs}`}
                     </div>
                   </div>
                   <div>
                     <div className="font-medium text-gray-700">Max Users</div>
                     <div className="text-gray-600">
-                      {planData.max_users || 'N/A'}
+                      {loading ? '...' : `${consumedUsers} / ${planData.max_users || 'N/A'}`}
                     </div>
                   </div>
                   <div>
@@ -256,7 +270,7 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
               className="h-auto p-3 flex flex-col items-center space-y-1"
             >
               <FileText className="w-5 h-5" />
-              <div className="font-semibold text-sm">1. Manage Job Descriptions</div>
+              <div className="font-semibold text-sm">1. Create Job Descriptions</div>
             </Button>
 
             {/* 2. Manage Evaluation Criteria */}
@@ -265,7 +279,7 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
               className="h-auto p-3 flex flex-col items-center space-y-1"
             >
               <Wrench className="w-5 h-5" />
-              <div className="font-semibold text-sm">2. Manage Evaluation Criteria</div>
+              <div className="font-semibold text-sm">2. Set Up Evaluation Criteria</div>
             </Button>
 
             {/* 3. Upload Resumes */}
