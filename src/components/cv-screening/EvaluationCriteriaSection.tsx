@@ -29,13 +29,7 @@ export const EvaluationCriteriaSection = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { currentJobDescription, currentEvaluationCriteria, setCurrentEvaluationCriteria } = useSession();
-  const [criteriaData, setCriteriaData] = useState<CriteriaItem[]>([
-    { id: '1', parameter: 'Technical Skills', weightage: 30, notes: 'Check the relevant experience in the given programming languages, frameworks, tools' },
-    { id: '2', parameter: 'Experience Level', weightage: 25, notes: 'Years of relevant experience' },
-    { id: '3', parameter: 'Education', weightage: 15, notes: 'Degree relevance and institution' },
-    { id: '4', parameter: 'Soft Skills', weightage: 20, notes: 'Communication, leadership, teamwork' },
-    { id: '5', parameter: 'Stability', weightage: 10, notes: 'Calculate the Stability Score based on the average years spent in each of the previous companies.' }
-  ]);
+  const [criteriaData, setCriteriaData] = useState<CriteriaItem[]>([]);  // Start empty - will be populated when grid is selected
   
   const [savedGrids, setSavedGrids] = useState<SavedCriteriaGrid[]>([]);
   const [selectedGridId, setSelectedGridId] = useState<string>(() => sessionStorage.getItem('selectedCriteriaGridId') || '');
@@ -201,37 +195,40 @@ export const EvaluationCriteriaSection = () => {
       setSavedGrids(sortedGrids);
       
       // ✅ FIX: Re-apply selection from sessionStorage after grids load
+      // Always update criteria data to match selected grid (removed conditional check)
       const storedGridId = sessionStorage.getItem('selectedCriteriaGridId');
       if (storedGridId) {
         const matchingGrid = sortedGrids.find(g => g.criteria_id === storedGridId);
         if (matchingGrid) {
-          // Grid exists, ensure it's selected
-          if (selectedGridId !== storedGridId) {
-            console.log('🔄 Re-applying stored grid selection:', storedGridId);
-            setSelectedGridId(storedGridId);
-            
-            // Also update the criteria data to match
-            const criteriaItems = matchingGrid.grid.map((item: any, index: number) => ({
-              id: (index + 1).toString(),
-              parameter: item.parameter || '',
-              weightage: item.weightage || 0,
-              notes: item.calc_note || ''
-            }));
-            setCriteriaData(criteriaItems);
-            setSelectedGrid(matchingGrid);
-            
-            // Set in session context
-            setCurrentEvaluationCriteria({
-              name: matchingGrid.criteria_name,
-              criteria: criteriaItems
-            });
-          }
+          // Grid exists, always update criteria data to match (ensures "Blank" shows [] and others show their data)
+          console.log('🔄 Re-applying stored grid selection:', storedGridId, matchingGrid.criteria_name);
+          setSelectedGridId(storedGridId);
+          
+          // Always update the criteria data to match selected grid
+          const criteriaItems = (matchingGrid.grid || []).map((item: any, index: number) => ({
+            id: (index + 1).toString(),
+            parameter: item.parameter || '',
+            weightage: item.weightage || 0,
+            notes: item.calc_note || ''
+          }));
+          setCriteriaData(criteriaItems);  // This will be [] for "Blank", or actual items for other grids
+          setSelectedGrid(matchingGrid);
+          
+          // Set in session context
+          setCurrentEvaluationCriteria({
+            name: matchingGrid.criteria_name,
+            criteria: criteriaItems
+          });
         } else {
           // Grid no longer exists, clear selection
           console.log('⚠️ Stored grid ID not found in loaded grids, clearing selection');
           setSelectedGridId('');
+          setCriteriaData([]);  // Clear criteria data when grid not found
           sessionStorage.removeItem('selectedCriteriaGridId');
         }
+      } else {
+        // No stored selection, ensure criteria data is empty
+        setCriteriaData([]);
       }
     } catch (error) {
       console.error('Error loading saved grids:', error);
