@@ -28,7 +28,7 @@ interface SavedCriteriaGrid {
 export const EvaluationCriteriaSection = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { setCurrentEvaluationCriteria } = useSession();
+  const { currentJobDescription, currentEvaluationCriteria, setCurrentEvaluationCriteria } = useSession();
   const [criteriaData, setCriteriaData] = useState<CriteriaItem[]>([
     { id: '1', parameter: 'Technical Skills', weightage: 30, notes: 'Check the relevant experience in the given programming languages, frameworks, tools' },
     { id: '2', parameter: 'Experience Level', weightage: 25, notes: 'Years of relevant experience' },
@@ -38,13 +38,18 @@ export const EvaluationCriteriaSection = () => {
   ]);
   
   const [savedGrids, setSavedGrids] = useState<SavedCriteriaGrid[]>([]);
-  const [selectedGridId, setSelectedGridId] = useState<string>('');
+  const [selectedGridId, setSelectedGridId] = useState<string>(() => sessionStorage.getItem('selectedCriteriaGridId') || '');
   const [selectedGrid, setSelectedGrid] = useState<SavedCriteriaGrid | null>(null);
   const [gridName, setGridName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [criteriaUploading, setCriteriaUploading] = useState(false);
   const [jobDescriptions, setJobDescriptions] = useState<any[]>([]);
-  const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => sessionStorage.getItem('selectedJDId') || '');
+  const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => {
+    // Initialize from sessionStorage first
+    const stored = sessionStorage.getItem('selectedJDId');
+    if (stored) return stored;
+    return '';
+  });
   const criteriaFileInputRef = useRef<HTMLInputElement>(null);
 
   const totalPercentage = criteriaData.reduce((sum, item) => sum + item.weightage, 0);
@@ -58,11 +63,48 @@ export const EvaluationCriteriaSection = () => {
     }
   }, [user?.id]);
 
-  // Sync selected JD from sessionStorage and reload grids when JD changes
+  // Sync selectedJobDescriptionId from SessionContext when it changes
+  useEffect(() => {
+    if (currentJobDescription) {
+      // currentJobDescription can have either 'id' or 'jd_id' property
+      const jdId = currentJobDescription.id || currentJobDescription.jd_id;
+      if (jdId && jdId !== selectedJobDescriptionId) {
+        console.log('🔄 EvaluationCriteriaSection: Syncing JD from SessionContext:', jdId);
+        setSelectedJobDescriptionId(jdId);
+        sessionStorage.setItem('selectedJDId', jdId);
+      }
+    }
+  }, [currentJobDescription]);
+
+  // Sync selectedGridId from SessionContext when it changes
+  useEffect(() => {
+    if (currentEvaluationCriteria && savedGrids.length > 0) {
+      // Try to find matching grid by name
+      const matchingGrid = savedGrids.find(grid => 
+        grid.criteria_name === currentEvaluationCriteria.name
+      );
+      if (matchingGrid && matchingGrid.criteria_id !== selectedGridId) {
+        console.log('🔄 EvaluationCriteriaSection: Syncing Criteria from SessionContext:', matchingGrid.criteria_id);
+        setSelectedGridId(matchingGrid.criteria_id);
+        sessionStorage.setItem('selectedCriteriaGridId', matchingGrid.criteria_id);
+        // Also update the criteria data to match
+        const criteriaItems = matchingGrid.grid.map((item: any, index: number) => ({
+          id: (index + 1).toString(),
+          parameter: item.parameter || '',
+          weightage: item.weightage || 0,
+          notes: item.calc_note || ''
+        }));
+        setCriteriaData(criteriaItems);
+        setSelectedGrid(matchingGrid);
+      }
+    }
+  }, [currentEvaluationCriteria, savedGrids, selectedGridId]);
+
+  // Sync selected JD from sessionStorage and reload grids when JD changes (fallback)
   useEffect(() => {
     const checkSessionStorage = () => {
       const jd = sessionStorage.getItem('selectedJDId') || '';
-      if (jd && jd !== selectedJobDescriptionId) {
+      if (jd && jd !== selectedJobDescriptionId && !currentJobDescription) {
         setSelectedJobDescriptionId(jd);
       }
     };
@@ -70,7 +112,7 @@ export const EvaluationCriteriaSection = () => {
     checkSessionStorage();
     const interval = setInterval(checkSessionStorage, 1000);
     return () => clearInterval(interval);
-  }, [selectedJobDescriptionId]);
+  }, [selectedJobDescriptionId, currentJobDescription]);
 
   // Reload saved grids when JD selection changes
   useEffect(() => {
@@ -78,6 +120,7 @@ export const EvaluationCriteriaSection = () => {
       loadSavedGrids();
     }
   }, [selectedJobDescriptionId, user?.id]);
+
 
   // Load job descriptions
   const loadJobDescriptions = async () => {
@@ -107,11 +150,14 @@ export const EvaluationCriteriaSection = () => {
       
       let query = supabase
         .from('criteria')
-        .select('criteria_id, criteria_name, grid, created_at, jd_id');
+        .select('criteria_id, criteria_name, grid, created_at, jd_id, company_id');
 
-      // Only filter by company_id if it exists
+      // ✅ MODIFIED: Include company-specific OR global (company_id IS NULL)
       if (user?.profile?.company_id) {
-        query = query.eq('company_id', user.profile.company_id);
+        query = query.or(`company_id.eq.${user.profile.company_id},company_id.is.null`);
+      } else {
+        // If no company_id, show only global criteria
+        query = query.is('company_id', null);
       }
 
       // Filter criteria based on selected JD
@@ -134,16 +180,59 @@ export const EvaluationCriteriaSection = () => {
 
       console.log('Fetched grids:', data);
       
-      // Sort: Default criteria first (jd_id is null), then JD-specific
+      // Sort: Global criteria first, then company-specific, then by jd_id (default first)
       const sortedGrids = (data || []).sort((a, b) => {
+        const aIsGlobal = !a.company_id;
+        const bIsGlobal = !b.company_id;
         const aIsDefault = !a.jd_id;
         const bIsDefault = !b.jd_id;
-        if (aIsDefault && !bIsDefault) return -1; // Default first
+        
+        // Global criteria first
+        if (aIsGlobal && !bIsGlobal) return -1;
+        if (!aIsGlobal && bIsGlobal) return 1;
+        
+        // Then default criteria (jd_id is null)
+        if (aIsDefault && !bIsDefault) return -1;
         if (!aIsDefault && bIsDefault) return 1;
-        return 0; // Keep original order for same type
+        
+        return 0;
       });
       
       setSavedGrids(sortedGrids);
+      
+      // ✅ FIX: Re-apply selection from sessionStorage after grids load
+      const storedGridId = sessionStorage.getItem('selectedCriteriaGridId');
+      if (storedGridId) {
+        const matchingGrid = sortedGrids.find(g => g.criteria_id === storedGridId);
+        if (matchingGrid) {
+          // Grid exists, ensure it's selected
+          if (selectedGridId !== storedGridId) {
+            console.log('🔄 Re-applying stored grid selection:', storedGridId);
+            setSelectedGridId(storedGridId);
+            
+            // Also update the criteria data to match
+            const criteriaItems = matchingGrid.grid.map((item: any, index: number) => ({
+              id: (index + 1).toString(),
+              parameter: item.parameter || '',
+              weightage: item.weightage || 0,
+              notes: item.calc_note || ''
+            }));
+            setCriteriaData(criteriaItems);
+            setSelectedGrid(matchingGrid);
+            
+            // Set in session context
+            setCurrentEvaluationCriteria({
+              name: matchingGrid.criteria_name,
+              criteria: criteriaItems
+            });
+          }
+        } else {
+          // Grid no longer exists, clear selection
+          console.log('⚠️ Stored grid ID not found in loaded grids, clearing selection');
+          setSelectedGridId('');
+          sessionStorage.removeItem('selectedCriteriaGridId');
+        }
+      }
     } catch (error) {
       console.error('Error loading saved grids:', error);
     }

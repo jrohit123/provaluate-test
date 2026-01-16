@@ -509,8 +509,9 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
       // Build query to filter criteria by selected JD
       let query = supabase
         .from('criteria')
-        .select('criteria_id, criteria_name, grid, created_at, jd_id')
-        .eq('company_id', user.profile?.company_id);
+        .select('criteria_id, criteria_name, grid, created_at, jd_id, company_id')
+        // ✅ MODIFIED: Include company-specific OR global (company_id IS NULL)
+        .or(`company_id.eq.${user.profile?.company_id},company_id.is.null`);
       
       // Filter criteria based on selected JD
       if (selectedJobDescriptionId) {

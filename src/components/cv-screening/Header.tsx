@@ -76,7 +76,7 @@ export const Header = () => {
         <div className="text-sm text-white">
           {greeting}
         </div>
-        <Button variant="outline" onClick={handleLogout}>
+        <Button variant="outline" onClick={handleLogout} className="mr-2">
           Logout
         </Button>
       </div>

@@ -107,6 +107,38 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
     navigate(`/dashboard?section=${section}`);
   };
 
+  // Get completion status and tooltip for CV Screening items
+  const getCVScreeningItemStatus = (section: ActiveSection) => {
+    switch (section) {
+      case 'job-upload':
+        return {
+          completed: !!currentJobDescription,
+          enabled: true,
+          tooltip: 'Upload and select a job description for evaluation'
+        };
+      case 'evaluation-criteria':
+        return {
+          completed: !!currentEvaluationCriteria,
+          enabled: true,
+          tooltip: 'Set up evaluation criteria for assessing candidates'
+        };
+      case 'resume-upload':
+        return {
+          completed: false, // No tick for resume upload
+          enabled: true,
+          tooltip: 'Upload candidate resumes for evaluation'
+        };
+      case 'match-scorecard':
+        return {
+          completed: false, // No tick for view results
+          enabled: true,
+          tooltip: 'View candidate scoring and rankings'
+        };
+      default:
+        return { completed: false, enabled: true, tooltip: '' };
+    }
+  };
+
   return (
     <Sidebar className="border-r bg-white">
       <SidebarContent className="space-y-0">
@@ -148,19 +180,28 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
             <CollapsibleContent>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {cvScreeningItems.map((item) => (
-                    <SidebarMenuItem key={item.section}>
-                      <SidebarMenuButton
-                        onClick={() => handleSectionChange(item.section)}
-                        isActive={activeSection === item.section}
-                        className="group relative ml-4"
-                        tooltip={item.title}
-                      >
-                        <item.icon className="w-4 h-4" />
-                        <span className="font-medium">{item.title}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
+                  {cvScreeningItems.map((item) => {
+                    const status = getCVScreeningItemStatus(item.section);
+                    
+                    return (
+                      <SidebarMenuItem key={item.section}>
+                        <SidebarMenuButton
+                          onClick={() => handleSectionChange(item.section)}
+                          isActive={activeSection === item.section}
+                          className="group relative ml-4 w-full flex items-center"
+                          tooltip={item.title}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <item.icon className="w-4 h-4 flex-shrink-0" />
+                            <span className="font-medium truncate">{item.title}</span>
+                          </div>
+                          {status.completed && (
+                            <CheckCircle className="w-3 h-3 text-green-500 flex-shrink-0 ml-1.5" />
+                          )}
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
                 </SidebarMenu>
               </SidebarGroupContent>
             </CollapsibleContent>

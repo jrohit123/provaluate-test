@@ -43,10 +43,16 @@ const BACKEND_URLS = {
 //const JD_WEBHOOK_URL = "https://automations.aitamate.com/webhook/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
 export const JobUploadSection = () => {
   const { user, loading, error } = useAuth();
-  const { setCurrentJobDescription } = useSession();
+  const { currentJobDescription, setCurrentJobDescription } = useSession();
   const [jobTitle, setJobTitle] = useState('');
   const [jobDescriptions, setJobDescriptions] = useState<any[]>([]);
-  const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>('');
+  const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => {
+    // Initialize from sessionStorage first
+    const stored = sessionStorage.getItem('selectedJDId');
+    if (stored) return stored;
+    // Then try to get from SessionContext
+    return '';
+  });
   const [selectedJDContent, setSelectedJDContent] = useState<string>('');
   const [selectedJDFileType, setSelectedJDFileType] = useState<string>('');
   const { toast } = useToast();
@@ -261,6 +267,27 @@ export const JobUploadSection = () => {
       checkJDLimit();
     }
   }, [user, loading, error]);
+
+  // Sync selectedJobDescriptionId from SessionContext when it changes
+  useEffect(() => {
+    if (currentJobDescription) {
+      // currentJobDescription can have either 'id' or 'jd_id' property
+      const jdId = currentJobDescription.id || currentJobDescription.jd_id;
+      if (jdId && jdId !== selectedJobDescriptionId) {
+        console.log('🔄 Syncing JD from SessionContext:', jdId);
+        setSelectedJobDescriptionId(jdId);
+        sessionStorage.setItem('selectedJDId', jdId);
+      }
+    }
+  }, [currentJobDescription]);
+
+  // Also sync from sessionStorage on mount (fallback)
+  useEffect(() => {
+    const stored = sessionStorage.getItem('selectedJDId');
+    if (stored && stored !== selectedJobDescriptionId && !currentJobDescription) {
+      setSelectedJobDescriptionId(stored);
+    }
+  }, []); // Only on mount
 
   // Load resolved JD when a JD is selected
   useEffect(() => {

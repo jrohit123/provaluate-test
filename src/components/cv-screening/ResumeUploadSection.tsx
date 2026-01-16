@@ -14,6 +14,9 @@ import * as XLSX from 'xlsx';
 import { useSession } from '@/contexts/SessionContext';
 import { TrialExpirationWarning } from './TrialExpirationWarning';
 import { useSearchParams } from 'react-router-dom'; // ✅ ADD: Import useSearchParams
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertCircle, Info } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface ResumeData {
   id: string;
@@ -163,7 +166,7 @@ export const ResumeUploadSection = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { user } = useAuth();
-  const { setCurrentJobDescription, setCurrentEvaluationCriteria } = useSession();
+  const { setCurrentJobDescription, setCurrentEvaluationCriteria, isSessionComplete } = useSession();
   const [searchParams] = useSearchParams(); // ✅ ADD: Get search params
   const [processingState, setProcessingState] = useState<ProcessingState>({
     status: 'idle',
@@ -477,8 +480,9 @@ export const ResumeUploadSection = () => {
       // Build query to filter criteria by selected JD
       let query = supabase
         .from('criteria')
-        .select('criteria_id, criteria_name, grid, created_at, jd_id')
-        .eq('company_id', user.profile?.company_id);
+        .select('criteria_id, criteria_name, grid, created_at, jd_id, company_id')
+        // ✅ MODIFIED: Include company-specific OR global (company_id IS NULL)
+        .or(`company_id.eq.${user.profile?.company_id},company_id.is.null`);
       
       // Filter criteria based on selected JD
       if (selectedJobDescriptionId) {
@@ -1907,7 +1911,9 @@ export const ResumeUploadSection = () => {
                 handleFileUpload(files, append);
               }
             }}
-            onDragOver={(e) => e.preventDefault()}
+            onDragOver={(e) => {
+              e.preventDefault();
+            }}
           >
             {selectedFiles.length > 0 ? (
               <>
@@ -2035,7 +2041,8 @@ export const ResumeUploadSection = () => {
                     e.stopPropagation(); // Prevent event from bubbling to dropzone
                     handleFileSelect();
                   }}
-                  className="bg-primary-600 hover:bg-primary-700"
+                  disabled={companyUsageInfo && !companyUsageInfo.canProcessCV}
+                  className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Select Files
                 </Button>

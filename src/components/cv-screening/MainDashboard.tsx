@@ -1,10 +1,12 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, Upload, BarChart3, Wrench, Cog, Users, Monitor } from 'lucide-react';
+import { FileText, Upload, BarChart3, Wrench, Cog, Users, Monitor, HelpCircle } from 'lucide-react';
 import { useSession } from '@/contexts/SessionContext';
 import { useAuth } from '@/hooks/use-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { useState, useEffect } from 'react';
+import { CVScreeningGuidedTour } from './CVScreeningGuidedTour';
+import { ActiveSection } from '@/pages/Dashboard';
 
 interface MainDashboardProps {
   onSectionChange: (section: string) => void;
@@ -13,6 +15,9 @@ interface MainDashboardProps {
 export function MainDashboard({ onSectionChange }: MainDashboardProps) {
   const { isSessionComplete, currentJobDescription, currentEvaluationCriteria } = useSession();
   const { user } = useAuth();
+  
+  // State for guided tour modal
+  const [isGuidedTourOpen, setIsGuidedTourOpen] = useState(false);
   
   // State for real data
   const [stats, setStats] = useState({
@@ -82,11 +87,11 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
       // Combined count for interview job descriptions (both tables)
       const combinedInterviewJobCount = (jobCount || 0) + (interviewJobCount || 0);
       
-      // Fetch criteria sets count (all criteria for the company, unique names, latest version only)
+      // Fetch criteria sets count (all criteria for the company + global templates, unique names, latest version only)
       const { data: criteriaData } = await supabase
         .from('criteria')
-        .select('criteria_name, created_at')
-        .eq('company_id', user.profile.company_id)
+        .select('criteria_name, created_at, company_id')
+        .or(`company_id.eq.${user.profile.company_id},company_id.is.null`)
         .order('created_at', { ascending: false });
       
       // Get unique criteria names (latest entry for each name)
@@ -105,11 +110,11 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
       console.log('MainDashboard - Criteria names:', Object.keys(uniqueCriteria));
       
       // Fetch assessments count filtered by company (through criteria_id)
-      // First get all criteria_ids for this company
+      // ✅ FIX: Include company-specific AND global criteria (company_id IS NULL)
       const { data: companyCriteria } = await supabase
         .from('criteria')
         .select('criteria_id')
-        .eq('company_id', user.profile.company_id);
+        .or(`company_id.eq.${user.profile.company_id},company_id.is.null`);
       
       const criteriaIds = companyCriteria?.map(c => c.criteria_id) || [];
       
@@ -148,10 +153,27 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="mb-6">
-        <p className="text-sm text-gray-600 mb-2">Welcome to your faster hiring workspace!</p>
-        <h1 className="text-2xl font-bold text-primary-800">Dashboard</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-600 mb-2">Welcome to your faster hiring workspace!</p>
+          <h1 className="text-2xl font-bold text-primary-800">Dashboard</h1>
+        </div>
+        <Button 
+          size="sm"
+          onClick={() => setIsGuidedTourOpen(true)}
+          className="flex items-center gap-2 mr-2"
+        >
+          <HelpCircle className="w-4 h-4" />
+          Guided Tour
+        </Button>
       </div>
+
+      {/* Guided Tour Modal */}
+      <CVScreeningGuidedTour
+        open={isGuidedTourOpen}
+        onOpenChange={setIsGuidedTourOpen}
+        onNavigate={(section) => onSectionChange(section)}
+      />
 
       {/* Top Cards Row */}
       <div className="grid lg:grid-cols-2 gap-6">
