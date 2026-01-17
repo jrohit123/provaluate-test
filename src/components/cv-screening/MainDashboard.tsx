@@ -1,11 +1,12 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, Upload, BarChart3, Wrench, Cog, Users, Monitor, HelpCircle } from 'lucide-react';
+import { FileText, Upload, BarChart3, Wrench, Cog, Users, Monitor, HelpCircle, Puzzle } from 'lucide-react';
 import { useSession } from '@/contexts/SessionContext';
 import { useAuth } from '@/hooks/use-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { useState, useEffect } from 'react';
 import { CVScreeningGuidedTour } from './CVScreeningGuidedTour';
+import { BrowserExtensionInfo } from './BrowserExtensionInfo';
 import { ActiveSection } from '@/pages/Dashboard';
 
 interface MainDashboardProps {
@@ -18,6 +19,8 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
   
   // State for guided tour modal
   const [isGuidedTourOpen, setIsGuidedTourOpen] = useState(false);
+  // State for browser extension info modal
+  const [isExtensionInfoOpen, setIsExtensionInfoOpen] = useState(false);
   
   // State for real data
   const [stats, setStats] = useState({
@@ -158,15 +161,31 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
           <p className="text-sm text-gray-600 mb-2">Welcome to your faster hiring workspace!</p>
           <h1 className="text-2xl font-bold text-primary-800">Dashboard</h1>
         </div>
-        <Button 
-          size="sm"
-          onClick={() => setIsGuidedTourOpen(true)}
-          className="flex items-center gap-2 mr-2"
-        >
-          <HelpCircle className="w-4 h-4" />
-          Guided Tour
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            size="sm"
+            onClick={() => setIsExtensionInfoOpen(true)}
+            className="flex items-center gap-2"
+          >
+            <Puzzle className="w-4 h-4" />
+            Browser Extension
+          </Button>
+          <Button 
+            size="sm"
+            onClick={() => setIsGuidedTourOpen(true)}
+            className="flex items-center gap-2"
+          >
+            <HelpCircle className="w-4 h-4" />
+            Guided Tour
+          </Button>
+        </div>
       </div>
+
+      {/* Browser Extension Info Modal */}
+      <BrowserExtensionInfo 
+        open={isExtensionInfoOpen} 
+        onOpenChange={setIsExtensionInfoOpen} 
+      />
 
       {/* Guided Tour Modal */}
       <CVScreeningGuidedTour
