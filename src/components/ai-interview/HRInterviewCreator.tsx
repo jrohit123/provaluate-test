@@ -986,7 +986,9 @@ const HRInterviewCreator = () => {
             interview_type: formData.interviewType,
             interview_mode: formData.interviewMode,
             personalized_questions_enabled: formData.personalizedQuestionsEnabled,
-            personalized_questions: formData.personalizedQuestions
+            personalized_questions: formData.personalizedQuestions,
+            company_id: user?.profile?.company_id,
+            user_id: user?.id
           }),
         });
 

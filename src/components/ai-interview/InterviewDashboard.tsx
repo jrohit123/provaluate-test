@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
+import { useAuth } from '@/hooks/use-auth';
 import { 
   Search, 
   Users, 
@@ -50,6 +51,7 @@ interface InterviewDashboardProps {
 }
 
 const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange }) => {
+  const { user } = useAuth();
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,12 +68,18 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
 
   useEffect(() => {
     fetchInterviews();
-  }, []);
+  }, [user?.profile?.company_id]);
 
   const fetchInterviews = async () => {
+    if (!user?.profile?.company_id) {
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
-      const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.GET_ALL_INTERVIEWS));
+      const apiUrl = `${buildApiUrl(API_CONFIG.ENDPOINTS.GET_ALL_INTERVIEWS)}?company_id=${user.profile.company_id}`;
+      const response = await fetch(apiUrl);
       if (response.ok) {
         const data = await response.json();
         const interviewsData = data.interviews || [];
