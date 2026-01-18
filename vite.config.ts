@@ -18,5 +18,9 @@ export default defineConfig(({ mode }) => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
-  },  
+  },
+  esbuild: {
+    // Drop console and debugger in production builds
+    drop: mode === 'production' ? ['console', 'debugger'] : [],
+  },
 }));
