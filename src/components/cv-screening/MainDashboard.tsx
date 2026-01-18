@@ -112,26 +112,98 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
       console.log('MainDashboard - User criteria count:', criteriaCount);
       console.log('MainDashboard - Criteria names:', Object.keys(uniqueCriteria));
       
-      // Fetch assessments count filtered by company (through criteria_id)
-      // ✅ FIX: Include company-specific AND global criteria (company_id IS NULL)
-      const { data: companyCriteria } = await supabase
-        .from('criteria')
-        .select('criteria_id')
-        .or(`company_id.eq.${user.profile.company_id},company_id.is.null`);
-      
-      const criteriaIds = companyCriteria?.map(c => c.criteria_id) || [];
-      
-      // Filter assessment_reports by criteria_id (assessments linked to company criteria)
+      // Fetch assessments count filtered by company (through criteria_id AND resolved_jd_id)
+      // ✅ FIX: Filter by resolved_jd_id to ensure company isolation
+      // Since assessment_reports has no company_id, we filter through: 
+      // assessment_reports.resolved_jd_id → resolved_jd.referenced_jd → job_descriptions.jd_file → job_descriptions.company_id
       let assessmentCount = 0;
-      if (criteriaIds.length > 0) {
-        const { count } = await supabase
-          .from('assessment_reports')
-          .select('*', { count: 'exact', head: true })
-          .in('criteria_id', criteriaIds);
-        assessmentCount = count || 0;
+
+      try {
+        // First, get all active job descriptions for this company
+        const { data: companyJobDescriptions, error: jdError } = await supabase
+          .from('job_descriptions')
+          .select('jd_file, jd_id')
+          .eq('company_id', user.profile.company_id)
+          .eq('status', 'active');
+
+        if (jdError) {
+          console.error('❌ Error fetching job descriptions for assessment count:', jdError);
+        }
+
+        console.log(`📊 Company has ${companyJobDescriptions?.length || 0} active job descriptions`);
+
+        if (companyJobDescriptions && companyJobDescriptions.length > 0) {
+          // Get all jd_file URLs for this company
+          const jdFileUrls = companyJobDescriptions
+            .map(jd => jd.jd_file)
+            .filter(Boolean)
+            .filter((url): url is string => typeof url === 'string');
+          
+          if (jdFileUrls.length > 0) {
+            // Get all resolved_jd_ids that belong to this company's job descriptions
+            const { data: resolvedJds, error: resolvedError } = await supabase
+              .from('resolved_jd')
+              .select('resolved_jd_id')
+              .in('referenced_jd', jdFileUrls);
+
+            if (resolvedError) {
+              console.error('❌ Error fetching resolved JDs for assessment count:', resolvedError);
+            }
+
+            const resolvedJdIds = resolvedJds?.map(r => r.resolved_jd_id) || [];
+            console.log(`🔗 Found ${resolvedJdIds.length} resolved JD IDs for company's job descriptions`);
+
+            if (resolvedJdIds.length > 0) {
+              // Get company criteria IDs (including global criteria with company_id = NULL)
+              const { data: companyCriteria, error: criteriaError } = await supabase
+                .from('criteria')
+                .select('criteria_id, criteria_name, company_id')
+                .or(`company_id.eq.${user.profile.company_id},company_id.is.null`);
+
+              if (criteriaError) {
+                console.error('❌ Error fetching criteria for assessment count:', criteriaError);
+              }
+
+              const criteriaIds = companyCriteria?.map(c => c.criteria_id) || [];
+              console.log(`📋 Found ${criteriaIds.length} criteria IDs (company + global)`);
+
+              // ✅ KEY FIX: Count assessments that match BOTH criteria_id AND resolved_jd_id
+              // This ensures we only count assessments for THIS company's job descriptions,
+              // preventing cross-company data leakage when using shared global criteria
+              if (criteriaIds.length > 0) {
+                const { count, error: assessmentError } = await supabase
+                  .from('assessment_reports')
+                  .select('*', { count: 'exact', head: true })
+                  .in('criteria_id', criteriaIds)
+                  .in('resolved_jd_id', resolvedJdIds);
+
+                if (assessmentError) {
+                  console.error('❌ Error counting assessments:', assessmentError);
+                  console.error('Assessment error details:', JSON.stringify(assessmentError, null, 2));
+                } else {
+                  assessmentCount = count || 0;
+                  console.log(`✅ Assessment count for company: ${assessmentCount}`);
+                  console.log(`   - Using ${criteriaIds.length} criteria IDs`);
+                  console.log(`   - Filtering by ${resolvedJdIds.length} resolved JD IDs`);
+                }
+              } else {
+                console.log('⚠️ No criteria IDs found, assessment count = 0');
+              }
+            } else {
+              console.log('ℹ️ No resolved JDs found for company job descriptions, assessment count = 0');
+            }
+          } else {
+            console.log('ℹ️ No valid JD file URLs found, assessment count = 0');
+          }
+        } else {
+          console.log('ℹ️ No job descriptions found for company, assessment count = 0');
+        }
+      } catch (error) {
+        console.error('❌ Unexpected error calculating assessment count:', error);
+        assessmentCount = 0; // Fail safely to 0
       }
-      
-      console.log('MainDashboard - Assessment count:', assessmentCount);
+
+      console.log('MainDashboard - Final assessment count:', assessmentCount);
       
       setStats({
         jobDescriptions: jobCount || 0,
