@@ -158,7 +158,7 @@ serve(async (req) => {
     }
 
     // 7. Send invitation email via Supabase Auth
-    const siteUrl = Deno.env.get("SITE_URL") || "http://localhost:8080";
+    const siteUrl = Deno.env.get("SITE_URL");
     
     const { data: inviteData, error: inviteError } = await client.auth.admin.inviteUserByEmail(email, {
       data: {
@@ -193,6 +193,7 @@ serve(async (req) => {
       .insert({
         user_id: inviteData.user.id,
         company_id: userRecord.company_id,
+        email: email,
         first_name: first_name,
         last_name: last_name,
         role: role || 'user',
