@@ -158,8 +158,8 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-600 mb-2">Welcome to your faster hiring workspace!</p>
-          <h1 className="text-2xl font-bold text-primary-800">Dashboard</h1>
+        <p className="text-sm text-gray-600 mb-2">Welcome to your faster hiring workspace!</p>
+        <h1 className="text-2xl font-bold text-primary-800">Dashboard</h1>
         </div>
         <div className="flex items-center gap-2">
           <Button 

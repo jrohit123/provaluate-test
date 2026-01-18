@@ -75,7 +75,7 @@ export default function AdminUserManagement() {
         // Fetch users in company
         const { data: usersData } = await supabase
           .from('users')
-          .select('user_id, company_id, first_name, last_name, role, user_status, created_at')
+          .select('user_id, company_id, first_name, last_name, email, role, user_status, created_at')
           .eq('company_id', user.profile.company_id);
         setUsers(usersData || []);
     } catch (error) {
@@ -177,7 +177,7 @@ export default function AdminUserManagement() {
         // Refresh users list
         const { data: usersData } = await supabase
           .from('users')
-          .select('user_id, company_id, first_name, last_name, role, user_status, onboarding_complete, created_at')
+          .select('user_id, company_id, first_name, last_name, email, role, user_status, onboarding_complete, created_at')
           .eq('company_id', user.profile.company_id)
           .order('role', { ascending: true })
           .order('first_name', { ascending: true })
@@ -1578,18 +1578,28 @@ export default function AdminUserManagement() {
             <thead>
               <tr className="bg-gray-100">
                 <th className="p-2 text-left">Name</th>
+                <th className="p-2 text-left">Email</th>
                 <th className="p-2 text-left">Role</th>
                 <th className="p-2 text-left">Status</th>
               </tr>
             </thead>
             <tbody>
-              {users.map(u => (
-                <tr key={u.user_id} className="border-t">
-                  <td className="p-2">{u.first_name || ''} {u.last_name || ''}</td>
-                  <td className="p-2 capitalize">{u.role || 'N/A'}</td>
-                  <td className="p-2 capitalize">{u.user_status || 'N/A'}</td>
+              {users.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="p-4 text-center text-muted-foreground">
+                    No users found in your company.
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                users.map(u => (
+                  <tr key={u.user_id} className="border-t">
+                    <td className="p-2">{u.first_name || ''} {u.last_name || ''}</td>
+                    <td className="p-2">{u.email || 'N/A'}</td>
+                    <td className="p-2 capitalize">{u.role || 'N/A'}</td>
+                    <td className="p-2 capitalize">{u.user_status || 'N/A'}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

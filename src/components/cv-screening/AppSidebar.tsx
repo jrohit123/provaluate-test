@@ -184,13 +184,13 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                     const status = getCVScreeningItemStatus(item.section);
                     
                     return (
-                      <SidebarMenuItem key={item.section}>
-                        <SidebarMenuButton
-                          onClick={() => handleSectionChange(item.section)}
-                          isActive={activeSection === item.section}
+                    <SidebarMenuItem key={item.section}>
+                      <SidebarMenuButton
+                        onClick={() => handleSectionChange(item.section)}
+                        isActive={activeSection === item.section}
                           className="group relative ml-4 w-full flex items-center"
-                          tooltip={item.title}
-                        >
+                        tooltip={item.title}
+                      >
                           <div className="flex items-center gap-2 min-w-0">
                             <item.icon className="w-4 h-4 flex-shrink-0" />
                             <span className="font-medium truncate">{item.title}</span>
@@ -198,8 +198,8 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                           {status.completed && (
                             <CheckCircle className="w-3 h-3 text-green-500 flex-shrink-0 ml-1.5" />
                           )}
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
                     );
                   })}
                 </SidebarMenu>

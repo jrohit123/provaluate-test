@@ -91,7 +91,7 @@ export const BrowserExtensionInfo = ({
                   <li>Open Chrome and navigate to <code className="bg-gray-100 px-1 rounded">chrome://extensions/</code></li>
                   <li>Enable <strong>Developer mode</strong> (toggle in top-right corner)</li>
                   <li>Click <strong>Load unpacked</strong></li>
-                  <li>Select the extracted <code className="bg-gray-100 px-1 rounded">browser-extension</code> folder</li>
+                  <li>Select the extracted <code className="bg-gray-100 px-1 rounded">ProValuate-Extension</code> folder</li>
                 </ol>
               </div>
 
@@ -110,7 +110,7 @@ export const BrowserExtensionInfo = ({
                   <li>Open Edge and navigate to <code className="bg-gray-100 px-1 rounded">edge://extensions/</code></li>
                   <li>Enable <strong>Developer mode</strong> (toggle in bottom-left corner)</li>
                   <li>Click <strong>Load unpacked</strong></li>
-                  <li>Select the extracted <code className="bg-gray-100 px-1 rounded">browser-extension</code> folder</li>
+                  <li>Select the extracted <code className="bg-gray-100 px-1 rounded">ProValuate-Extension</code> folder</li>
                 </ol>
               </div>
             </div>
