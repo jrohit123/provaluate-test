@@ -226,29 +226,31 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
   }, [user?.profile?.company_id]);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
         <div>
-        <p className="text-sm text-gray-600 mb-2">Welcome to your faster hiring workspace!</p>
-        <h1 className="text-2xl font-bold text-primary-800">Dashboard</h1>
+        <p className="text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Welcome to your faster hiring workspace!</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-primary-800">Dashboard</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
           <Button 
             size="sm"
             onClick={() => setIsExtensionInfoOpen(true)}
-            className="flex items-center gap-2"
+            className="flex items-center justify-center gap-2 w-full sm:w-auto"
           >
             <Puzzle className="w-4 h-4" />
-            Browser Extension
+            <span className="hidden sm:inline">Browser Extension</span>
+            <span className="sm:hidden">Extension</span>
           </Button>
           <Button 
             size="sm"
             onClick={() => setIsGuidedTourOpen(true)}
-            className="flex items-center gap-2"
+            className="flex items-center justify-center gap-2 w-full sm:w-auto"
           >
             <HelpCircle className="w-4 h-4" />
-            Guided Tour
+            <span className="hidden sm:inline">Guided Tour</span>
+            <span className="sm:hidden">Tour</span>
           </Button>
         </div>
       </div>
@@ -267,7 +269,7 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
       />
 
       {/* Top Cards Row */}
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Company Plan Card */}
         <Card className="animate-fade-in">
           <CardHeader>
@@ -287,7 +289,7 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
                     {planData.plan_cost ? `₹${planData.plan_cost}/month` : 'Free Plan'}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
                   <div>
                     <div className="font-medium text-gray-700">Max CVs</div>
                     <div className="text-gray-600">
@@ -334,30 +336,30 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
             <CardTitle>Quick Stats</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
               <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900">
+                <div className="text-lg sm:text-2xl font-bold text-gray-900">
                   {loading ? '...' : stats.jobDescriptions}
                 </div>
-                <div className="text-sm text-gray-600">JOB DESCRIPTIONS</div>
+                <div className="text-xs sm:text-sm text-gray-600">JOB DESCRIPTIONS</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900">
+                <div className="text-lg sm:text-2xl font-bold text-gray-900">
                   {loading ? '...' : stats.criteriaSets}
                 </div>
-                <div className="text-sm text-gray-600">CRITERIA SETS</div>
+                <div className="text-xs sm:text-sm text-gray-600">CRITERIA SETS</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900">
+                <div className="text-lg sm:text-2xl font-bold text-gray-900">
                   {loading ? '...' : stats.assessments}
                 </div>
-                <div className="text-sm text-gray-600">ASSESSMENTS</div>
+                <div className="text-xs sm:text-sm text-gray-600">ASSESSMENTS</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900">
+                <div className="text-lg sm:text-2xl font-bold text-gray-900">
                   {loading ? '...' : stats.interviewJobDescriptions}
                 </div>
-                <div className="text-sm text-gray-600">INTERVIEW JOB DESCRIPTIONS</div>
+                <div className="text-xs sm:text-sm text-gray-600 break-words">INTERVIEW JOB DESCRIPTIONS</div>
               </div>
             </div>
           </CardContent>
@@ -375,75 +377,75 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
         <CardContent className="space-y-4">
           {/* CV Screening Section */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">CV Screening</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">CV Screening</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {/* 1. Manage Job Descriptions */}
             <Button
               onClick={() => onSectionChange('job-upload')}
-              className="h-auto p-3 flex flex-col items-center space-y-1"
+              className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
             >
               <FileText className="w-5 h-5" />
-              <div className="font-semibold text-sm">1. Create Job Descriptions</div>
+              <div className="font-semibold text-xs sm:text-sm text-center">1. Create Job Descriptions</div>
             </Button>
 
             {/* 2. Manage Evaluation Criteria */}
             <Button
               onClick={() => onSectionChange('evaluation-criteria')}
-              className="h-auto p-3 flex flex-col items-center space-y-1"
+              className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
             >
               <Wrench className="w-5 h-5" />
-              <div className="font-semibold text-sm">2. Set Up Evaluation Criteria</div>
+              <div className="font-semibold text-xs sm:text-sm text-center">2. Set Up Evaluation Criteria</div>
             </Button>
 
             {/* 3. Upload Resumes */}
             <Button
               onClick={() => onSectionChange('resume-upload')}
-              className="h-auto p-3 flex flex-col items-center space-y-1"
+              className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
             >
               <Upload className="w-5 h-5" />
-              <div className="font-semibold text-sm">3. Upload Resumes</div>
+              <div className="font-semibold text-xs sm:text-sm text-center">3. Upload Resumes</div>
             </Button>
 
             {/* 4. View Reports */}
             <Button
               onClick={() => onSectionChange('match-scorecard')}
-              className="h-auto p-3 flex flex-col items-center space-y-1"
+              className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
             >
               <BarChart3 className="w-5 h-5" />
-              <div className="font-semibold text-sm">4. View Reports</div>
+              <div className="font-semibold text-xs sm:text-sm text-center">4. View Reports</div>
             </Button>
             </div>
           </div>
 
           {/* Interview Management Section */}
-          <div className="mt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Interview Management</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="mt-4 sm:mt-6">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Interview Management</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {/* Interview Configuration */}
               <Button
                 onClick={() => onSectionChange('setup')}
-                className="h-auto p-3 flex flex-col items-center space-y-1"
+                className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
               >
                 <Cog className="w-5 h-5" />
-                <div className="font-semibold text-sm">Interview Configuration</div>
+                <div className="font-semibold text-xs sm:text-sm text-center">Interview Configuration</div>
               </Button>
 
               {/* Assessment Manager */}
               <Button
                 onClick={() => onSectionChange('ai-interview')}
-                className="h-auto p-3 flex flex-col items-center space-y-1"
+                className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
               >
                 <Users className="w-5 h-5" />
-                <div className="font-semibold text-sm">Assessment Manager</div>
+                <div className="font-semibold text-xs sm:text-sm text-center">Assessment Manager</div>
               </Button>
 
               {/* Interview Dashboard */}
               <Button
                 onClick={() => onSectionChange('interview-dashboard')}
-                className="h-auto p-3 flex flex-col items-center space-y-1"
+                className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
               >
                 <Monitor className="w-5 h-5" />
-                <div className="font-semibold text-sm">Interview Dashboard</div>
+                <div className="font-semibold text-xs sm:text-sm text-center">Interview Dashboard</div>
               </Button>
             </div>
           </div>

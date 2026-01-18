@@ -970,16 +970,18 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
   const displayCandidates = filteredCandidates;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Job Description and Criteria Grid Selection - Only Visible in Multi-Candidate Mode */}
       {!selectedCandidateData && (
-        <div className="flex gap-4 items-center flex-wrap mb-6">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-center flex-wrap mb-4 sm:mb-6">
           {/* Job Description Selection */}
-          <div className="flex items-center gap-2">
-            <Briefcase className="w-4 h-4 text-primary-600" />
-            <span className="text-sm text-gray-600 font-medium">Job:</span>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Briefcase className="w-4 h-4 text-primary-600 flex-shrink-0" />
+              <span className="text-xs sm:text-sm text-gray-600 font-medium">Job:</span>
+            </div>
             <Select value={selectedJobDescriptionId} onValueChange={handleJobDescriptionSelect}>
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-full sm:w-48">
                 <SelectValue placeholder="Select job description..." />
               </SelectTrigger>
               <SelectContent>
@@ -1001,11 +1003,13 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
           </div>
 
           {/* Evaluation Criteria Selection */}
-          <div className="flex items-center gap-2">
-            <Grid className="w-4 h-4 text-primary-600" />
-            <span className="text-sm text-gray-600 font-medium">Criteria:</span>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Grid className="w-4 h-4 text-primary-600 flex-shrink-0" />
+              <span className="text-xs sm:text-sm text-gray-600 font-medium">Criteria:</span>
+            </div>
             <Select value={selectedCriteriaGridId} onValueChange={handleCriteriaGridSelect}>
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-full sm:w-48">
                 <SelectValue placeholder="Select criteria..." />
               </SelectTrigger>
               <SelectContent>
@@ -1027,11 +1031,13 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
               </div>
 
           {/* Recommendation Filter */}
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm text-gray-600 font-medium">Filter by:</span>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              <span className="text-xs sm:text-sm text-gray-600 font-medium">Filter:</span>
+            </div>
             <Select value={recommendationFilter} onValueChange={handleRecommendationFilter}>
-              <SelectTrigger className="w-44">
+              <SelectTrigger className="w-full sm:w-44">
                 <SelectValue placeholder="Filter by recommendation" />
               </SelectTrigger>
               <SelectContent>
@@ -1046,27 +1052,29 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
           </div>
           
           {/* Sort Button */}
-          <Button variant="outline" size="sm" onClick={handleSortToggle}>
+          <Button variant="outline" size="sm" onClick={handleSortToggle} className="w-full sm:w-auto">
             {sortOrder === 'desc' ? (
               <ArrowDown className="w-4 h-4 mr-2" />
             ) : (
               <ArrowUp className="w-4 h-4 mr-2" />
             )}
-            Sort {sortOrder === 'desc' ? 'High→Low' : 'Low→High'}
+            <span className="hidden sm:inline">Sort {sortOrder === 'desc' ? 'High→Low' : 'Low→High'}</span>
+            <span className="sm:hidden">Sort</span>
           </Button>
           
           {/* Export Button */}
-          <Button variant="outline" size="sm" onClick={handleExportReport}>
+          <Button variant="outline" size="sm" onClick={handleExportReport} className="w-full sm:w-auto">
             <Download className="w-4 h-4 mr-2" />
-            Export Report
+            <span className="hidden sm:inline">Export Report</span>
+            <span className="sm:hidden">Export</span>
           </Button>
         </div>
       )}
 
       {/* Header Section */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-primary-800 mb-2">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3">
+        <div className="flex-1 min-w-0">
+          <h2 className="text-xl sm:text-2xl font-bold text-primary-800 mb-1 sm:mb-2">
             {selectedCandidateData ? 'Candidate Assessment Details' : 'All Results'}
           </h2>
           <p className="text-muted-foreground">
@@ -1117,16 +1125,16 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
       {!loading && candidates.length > 0 && (
         <div className="grid gap-6">
           {displayCandidates.map((candidate) => (
-          <Card key={candidate.id} className="p-6 mb-6 shadow-md rounded-xl bg-white">
+            <Card key={candidate.id} className="p-4 sm:p-6 mb-4 sm:mb-6 shadow-md rounded-xl bg-white">
             {/* Header Section */}
-            <div className="flex justify-between items-start mb-6">
-              <div className="flex items-start gap-3">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <User className="w-6 h-6 text-blue-600" />
+            <div className="flex flex-col sm:flex-row justify-between items-start mb-4 sm:mb-6 gap-4">
+              <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <User className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-4 mb-2">
-                    <h3 className="text-xl font-bold text-gray-900">{candidate.name}</h3>
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-2">
+                    <h3 className="text-lg sm:text-xl font-bold text-gray-900 truncate">{candidate.name}</h3>
                     <div className="flex items-center gap-2">
                       <Checkbox
                         id={`create-interview-${candidate.id}`}
@@ -1139,7 +1147,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                       />
                       <label 
                         htmlFor={`create-interview-${candidate.id}`}
-                        className="text-sm font-medium text-gray-700 cursor-pointer select-none"
+                        className="text-xs sm:text-sm font-medium text-gray-700 cursor-pointer select-none"
                         onClick={() => {
                           const checkbox = document.getElementById(`create-interview-${candidate.id}`) as HTMLInputElement;
                           if (checkbox) {
@@ -1154,16 +1162,16 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                   <p className="text-sm text-gray-500">Overall Match Assessment</p>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getRecommendationStyle(candidate.status)}`}>
+              <div className="text-left sm:text-right w-full sm:w-auto">
+                <div className="flex items-center gap-2 mb-1 justify-start sm:justify-end">
+                  <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium ${getRecommendationStyle(candidate.status)}`}>
                     {candidate.status}
                   </span>
-                  <span className="text-3xl font-bold text-gray-900">
+                  <span className="text-2xl sm:text-3xl font-bold text-gray-900">
                     {`${candidate.overallScore}%`}
                   </span>
                 </div>
-                <p className="text-sm text-gray-500">Overall Score</p>
+                <p className="text-xs sm:text-sm text-gray-500">Overall Score</p>
               </div>
             </div>
 
@@ -1173,11 +1181,11 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                 .filter(score => score.parameter !== 'Overall Assessment')
                 .map((score, idx) => (
                 <div key={idx} className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium text-gray-900">{score.parameter}</span>
-                    <div className="text-right">
-                      <span className="text-lg font-bold text-gray-900">{Math.round(score.score * 10)}%</span>
-                      <span className="text-sm text-gray-500 ml-4">Weight: {score.weightage}%</span>
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 sm:gap-0">
+                    <span className="font-medium text-sm sm:text-base text-gray-900 break-words">{score.parameter}</span>
+                    <div className="text-left sm:text-right">
+                      <span className="text-base sm:text-lg font-bold text-gray-900">{Math.round(score.score * 10)}%</span>
+                      <span className="text-xs sm:text-sm text-gray-500 sm:ml-4 block sm:inline">Weight: {score.weightage}%</span>
                     </div>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
@@ -1192,8 +1200,8 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
 
             {/* Summary Section */}
             {candidate.detailedAssessment && (
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                <h4 className="font-semibold text-gray-900 mb-2 text-left">Summary</h4>
+              <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-blue-50 rounded-lg">
+                <h4 className="font-semibold text-sm sm:text-base text-gray-900 mb-2 text-left">Summary</h4>
                 <div className="text-left">
                   {renderSummaryText(candidate.detailedAssessment)}
                 </div>
@@ -1202,8 +1210,8 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
 
             {/* Recommendation Section */}
             {candidate.recommendation && (
-              <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
+              <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Recommendation</h4>
                 <div>
                   {renderSummaryText(candidate.recommendation)}
                 </div>

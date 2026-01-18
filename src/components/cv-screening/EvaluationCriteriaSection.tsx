@@ -492,14 +492,14 @@ export const EvaluationCriteriaSection = () => {
   const selectedJD = jobDescriptions.find(jd => jd.jd_id === selectedJobDescriptionId);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Show selected JD banner */}
       {selectedJD ? (
         <Card className="bg-blue-50 border-blue-200 animate-fade-in">
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <div className="flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-blue-600" />
-              <span className="text-sm font-medium text-blue-800">
+              <Briefcase className="w-4 h-4 text-blue-600 flex-shrink-0" />
+              <span className="text-xs sm:text-sm font-medium text-blue-800 break-words">
                 Creating criteria for: <strong>{selectedJD.title}</strong>
               </span>
             </div>
@@ -528,9 +528,9 @@ export const EvaluationCriteriaSection = () => {
         {/* Evaluation Criteria - Now editable and with Select for Session button */}
         <Card className="animate-fade-in">
           <CardHeader>
-            <CardTitle className="flex items-center justify-between gap-2">
+            <CardTitle className="flex items-center justify-between gap-2 text-lg sm:text-xl">
               <div className="flex items-center gap-2">
-                <Grid className="w-5 h-5 text-primary-600" />
+                <Grid className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
                 Evaluation Criteria
               </div>
               
@@ -542,10 +542,10 @@ export const EvaluationCriteriaSection = () => {
           </CardHeader>
           
           <CardContent className="space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-primary-700">Select a saved grid:</span>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <span className="text-xs sm:text-sm font-medium text-primary-700">Select a saved grid:</span>
             <Select value={selectedGridId} onValueChange={handleGridSelect}>
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-full sm:w-[200px]">
                 <SelectValue placeholder="Load saved grid..." />
               </SelectTrigger>
               <SelectContent>
@@ -557,37 +557,37 @@ export const EvaluationCriteriaSection = () => {
               </SelectContent>
             </Select>
           </div>
-            <div className="flex items-center gap-4 my-6 text-sm font-medium text-[#1e5da8]">
+            <div className="flex items-center gap-2 sm:gap-4 my-4 sm:my-6 text-xs sm:text-sm font-medium text-[#1e5da8]">
               <span className="flex-1 h-px bg-[#1e5da8]/30" />
-              <span>OR Create a new criteria grid</span>
+              <span className="whitespace-nowrap">OR Create new</span>
               <span className="flex-1 h-px bg-[#1e5da8]/30" />
             </div>
-            <div className="overflow-x-auto border border-primary-100 rounded-lg">
-              <table className="w-full table-auto">
+            <div className="overflow-x-auto border border-primary-100 rounded-lg -mx-2 sm:mx-0">
+              <table className="w-full table-auto min-w-[600px]">
                 <thead className="bg-primary-50 text-left">
                   <tr className="text-xs font-semibold text-primary-800 uppercase tracking-wide">
-                    <th className="px-4 py-3 w-[25%]">Parameters To Assess</th>
-                    <th className="px-4 py-3 w-[20%]">Weightage</th>
-                    <th className="px-4 py-3">How To Assess? (Prompt to AI)</th>
+                    <th className="px-2 sm:px-4 py-2 sm:py-3 w-[25%]">Parameters To Assess</th>
+                    <th className="px-2 sm:px-4 py-2 sm:py-3 w-[20%]">Weightage</th>
+                    <th className="px-2 sm:px-4 py-2 sm:py-3">How To Assess? (Prompt to AI)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-primary-100 bg-white">
                   {criteriaData.map((criteria) => (
                     <tr key={criteria.id} className="align-top">
-                      <td className="px-4 py-3">
+                      <td className="px-2 sm:px-4 py-2 sm:py-3">
                         <Input
                           value={criteria.parameter}
                           onChange={(e) => updateCriteria(criteria.id, 'parameter', e.target.value)}
                           className="font-medium text-sm bg-transparent border border-primary-100 focus:bg-white focus:border-primary-300"
                         />
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
+                      <td className="px-2 sm:px-4 py-2 sm:py-3">
+                        <div className="flex items-center gap-1 sm:gap-2">
                           <Input
                             type="number"
                             value={criteria.weightage}
                             onChange={(e) => updateCriteria(criteria.id, 'weightage', parseInt(e.target.value) || 0)}
-                            className="w-20 h-9 text-sm text-center bg-primary-50 border border-primary-200"
+                            className="w-16 sm:w-20 h-8 sm:h-9 text-xs sm:text-sm text-center bg-primary-50 border border-primary-200"
                             min="0"
                             max="100"
                           />
@@ -596,13 +596,13 @@ export const EvaluationCriteriaSection = () => {
                             variant="ghost"
                             size="sm"
                             onClick={() => deleteCriteria(criteria.id)}
-                            className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
+                            className="h-7 w-7 sm:h-8 sm:w-8 p-0 hover:bg-red-100 hover:text-red-600"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                           </Button>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 sm:px-4 py-2 sm:py-3">
                         <Input
                           value={criteria.notes}
                           onChange={(e) => updateCriteria(criteria.id, 'notes', e.target.value)}
@@ -634,9 +634,9 @@ export const EvaluationCriteriaSection = () => {
               </span>
             </div>
 
-            <div className="flex items-center gap-4 my-6 text-sm font-medium text-[#1e5da8]">
+            <div className="flex items-center gap-2 sm:gap-4 my-4 sm:my-6 text-xs sm:text-sm font-medium text-[#1e5da8]">
               <span className="flex-1 h-px bg-[#1e5da8]/30" />
-              <span>OR Upload a new criteria grid in Excel format</span>
+              <span className="whitespace-nowrap">OR Upload Excel</span>
               <span className="flex-1 h-px bg-[#1e5da8]/30" />
             </div>
 
@@ -651,13 +651,13 @@ export const EvaluationCriteriaSection = () => {
               </Button>
             
             <div 
-              className="border-2 border-dashed border-accent-200 rounded-lg p-4 text-center hover:border-accent-400 transition-colors cursor-pointer"
+              className="border-2 border-dashed border-accent-200 rounded-lg p-3 sm:p-4 text-center hover:border-accent-400 transition-colors cursor-pointer"
               onClick={handleCriteriaClick}
               onDrop={handleCriteriaDrop}
               onDragOver={handleCriteriaDragOver}
             >
-              <Upload className="w-6 h-6 text-accent-500 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">
+              <Upload className="w-5 h-5 sm:w-6 sm:h-6 text-accent-500 mx-auto mb-2" />
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 Upload Excel/CSV criteria file
               </p>
               
@@ -672,7 +672,7 @@ export const EvaluationCriteriaSection = () => {
             />
             
             
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <Input
                 placeholder="Grid Name"
                 value={gridName}
@@ -681,7 +681,7 @@ export const EvaluationCriteriaSection = () => {
               />
               <Button 
                 onClick={handleSaveCriteria} 
-                className="whitespace-nowrap"
+                className="whitespace-nowrap w-full sm:w-auto"
                 disabled={!gridName || !isValidTotal || isLoading}
               >
                 <Save className="w-4 h-4 mr-2" />

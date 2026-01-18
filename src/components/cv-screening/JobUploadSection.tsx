@@ -808,14 +808,14 @@ export const JobUploadSection = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       
 
       {/* Job Description Upload */}
       <Card className="animate-fade-in">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary-600" />
+            <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+              <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
               Job Description
             </CardTitle>
             <CardDescription>
@@ -826,7 +826,7 @@ export const JobUploadSection = () => {
 
             {/* Select Job Description */}
             <div className="mb-3">
-              <div className="rounded-lg border border-primary-200 bg-primary-50/40 p-4">
+              <div className="rounded-lg border border-primary-200 bg-primary-50/40 p-3 sm:p-4">
                 <label className="mb-2 block text-sm font-medium text-primary-700">
                   Select an existing job description
                 </label>
@@ -857,16 +857,16 @@ export const JobUploadSection = () => {
                   onClick={() => setIsManageSectionExpanded(!isManageSectionExpanded)}
                   className={`w-full px-4 py-3 flex items-center justify-between hover:bg-white/50 transition-colors rounded-t-md ${isManageSectionExpanded ? 'border-b border-gray-200' : ''}`}
                 >
-                  <div className="text-left flex-1">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-1.5 rounded-full ${currentStatus.bg.replace('/40', '')} border ${currentStatus.border} shadow-inner`}>
-                        <svg className={`h-5 w-5 ${currentStatus.iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="text-left flex-1 min-w-0">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div className={`p-1 sm:p-1.5 rounded-full ${currentStatus.bg.replace('/40', '')} border ${currentStatus.border} shadow-inner flex-shrink-0`}>
+                        <svg className={`h-4 w-4 sm:h-5 sm:w-5 ${currentStatus.iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={currentStatus.icon} />
                         </svg>
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-semibold text-gray-900">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-xs sm:text-sm font-semibold text-gray-900">
                             Manage Job Descriptions
                           </h3>
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${currentStatus.badgeBg} ${currentStatus.badgeText}`}>
@@ -924,19 +924,19 @@ export const JobUploadSection = () => {
                         return (
                         <div 
                           key={jd.jd_id} 
-                          className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
+                          className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-lg transition-colors gap-3 ${
                             isActive ? 'bg-green-50 border border-green-100' : 'bg-white border border-gray-100'
                           } ${isDisabled ? 'opacity-70' : 'hover:shadow-sm'}`}
                         >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">
+                          <div className="flex-1 min-w-0 w-full sm:w-auto">
+                            <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">
                               {jd.title}
                             </p>
                             <p className="text-xs text-gray-500 mt-0.5">
                               Last updated: {new Date(jd.updated_at || jd.created_at).toLocaleDateString()}
                             </p>
                           </div>
-                          <div className="flex items-center gap-3 ml-2">
+                          <div className="flex items-center gap-2 sm:gap-3 ml-0 sm:ml-2 w-full sm:w-auto justify-between sm:justify-start">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                               isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                             }`}>
@@ -976,13 +976,13 @@ export const JobUploadSection = () => {
               </div>
             )}
             
-            <div className="flex items-center gap-4 my-6 text-sm font-medium text-[#1e5da8]">
+            <div className="flex items-center gap-2 sm:gap-4 my-4 sm:my-6 text-xs sm:text-sm font-medium text-[#1e5da8]">
               <span className="flex-1 h-px bg-[#1e5da8]/30" />
               <span>OR</span>
               <span className="flex-1 h-px bg-[#1e5da8]/30" />
             </div>
 
-            <div className="rounded-lg border border-primary-200 bg-primary-50/40 p-4">
+            <div className="rounded-lg border border-primary-200 bg-primary-50/40 p-3 sm:p-4">
               <label className="mb-2 block text-sm font-medium text-primary-700">
                 Create a new job description
               </label>
@@ -1037,13 +1037,13 @@ export const JobUploadSection = () => {
             */}
 
             <div 
-              className="rounded-lg border-2 border-dashed border-primary-200 bg-primary-50/40 p-6 text-center hover:border-primary-400 transition-colors cursor-pointer"
+              className="rounded-lg border-2 border-dashed border-primary-200 bg-primary-50/40 p-4 sm:p-6 text-center hover:border-primary-400 transition-colors cursor-pointer"
               onClick={handleJobDescriptionClick}
               onDrop={handleJobDrop}
               onDragOver={handleJobDragOver}
             >
-              <Upload className="w-8 h-8 text-primary-400 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">
+              <Upload className="w-6 h-6 sm:w-8 sm:h-8 text-primary-400 mx-auto mb-2" />
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 Drop files here or click to browse (PDF, DOC, DOCX, TXT)
               </p>
               {uploadedFile && (
@@ -1092,16 +1092,17 @@ export const JobUploadSection = () => {
               
               {/* Show refresh button and auto-refresh status */}
               {selectedJobDescriptionId && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleManualRefresh}
-                    className="flex-1"
+                    className="w-full sm:flex-1"
                     disabled={processingStatus === 'processing'}
                   >
                     <RefreshCw className="w-4 h-4 mr-2" />
-                    Show Resolved JD Data
+                    <span className="hidden sm:inline">Show Resolved JD Data</span>
+                    <span className="sm:hidden">Show Resolved JD</span>
                   </Button>
                   
                   {isWaitingForResolvedJD && (
@@ -1115,9 +1116,9 @@ export const JobUploadSection = () => {
             </div>
 
             {resolvedJD && !isEditingResolvedJD && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                <div className="flex justify-between items-center mb-3">
-                  <h4 className="font-semibold text-left">Resolved Job Description</h4>
+              <div className="mt-4 p-3 sm:p-4 bg-gray-50 rounded-lg">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-2">
+                  <h4 className="font-semibold text-left text-sm sm:text-base">Resolved Job Description</h4>
                   <Button
                     variant="ghost"
                     size="sm"

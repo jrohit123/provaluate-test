@@ -1787,17 +1787,17 @@ export const ResumeUploadSection = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Trial Expiration Warning */}
       <TrialExpirationWarning />
 
       {/* Top Row: Job Description Selection, Criteria Selection, and Provaluate Button */}
       <Card className="animate-fade-in mb-6">
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-primary-800 mb-2">Resume Uploads</h2>
-              <p className="text-muted-foreground">Upload multiple candidate resumes for evaluation</p>
+        <CardContent className="p-4 sm:p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 items-start">
+            <div className="mb-4 sm:mb-6">
+              <h2 className="text-xl sm:text-2xl font-bold text-primary-800 mb-2">Resume Uploads</h2>
+              <p className="text-xs sm:text-sm text-muted-foreground">Upload multiple candidate resumes for evaluation</p>
             </div>
             {/* Job Description Selection */}
             <div className="space-y-3">
@@ -2165,12 +2165,12 @@ export const ResumeUploadSection = () => {
       <div className="border-t border-gray-200"></div>
 
       {/* Resume List (now Assessment Reports) */}
-      <div className="grid gap-4">
-        <div className="flex justify-between items-center">
-          <h3 className="text-lg font-semibold text-primary-800">
+      <div className="grid gap-3 sm:gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <h3 className="text-base sm:text-lg font-semibold text-primary-800">
             Candidate Pool ({assessmentReports.length})
           </h3>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <Button
               variant="outline"
               size="sm"
@@ -2231,17 +2231,17 @@ export const ResumeUploadSection = () => {
               className="animate-fade-in hover:shadow-md transition-shadow cursor-pointer"
               onClick={() => handleCandidateClick(report.id)}
             >
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-4 flex-1">
-                    <div className="bg-primary-100 p-2 rounded-lg">
-                      <User className="w-5 h-5 text-primary-600" />
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+                    <div className="bg-primary-100 p-1.5 sm:p-2 rounded-lg flex-shrink-0">
+                      <User className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-semibold text-primary-800">{report.candidate_name || 'Unknown'}</h4>
+                        <h4 className="font-semibold text-sm sm:text-base text-primary-800 truncate">{report.candidate_name || 'Unknown'}</h4>
                       </div>
-                      <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+                      <p className="text-xs sm:text-sm text-muted-foreground mb-2 flex items-center gap-2">
                         <FileText className="w-4 h-4" />
                         {report.resume_url ? (
                           <button 
@@ -2260,17 +2260,17 @@ export const ResumeUploadSection = () => {
                       <p className="text-sm text-gray-700">{formatPreviewText(report.summary || report.recommendation || '')}</p>
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${getRecommendationStyle(recommendationStatus)}`}>
+                  <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-start w-full sm:w-auto gap-2">
+                    <div className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium ${getRecommendationStyle(recommendationStatus)}`}>
                       {recommendationStatus}
                     </div>
                     {isProcessingReport ? (
-                      <div className="flex items-center gap-2 text-sm text-blue-600">
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                      <div className="flex items-center gap-2 text-xs sm:text-sm text-blue-600">
+                        <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                         <span>Processing...</span>
                       </div>
                     ) : (
-                      <div className="text-lg font-bold text-gray-900">
+                      <div className="text-base sm:text-lg font-bold text-gray-900">
                         {`${Math.round((normalizedOverallScore ?? 0) * 10)}%`}
                       </div>
                     )}
@@ -2286,21 +2286,23 @@ export const ResumeUploadSection = () => {
                       const percentage = parameterScore !== null ? Math.round(parameterScore * 10) : null;
 
                       return (
-                        <div key={idx} className="flex items-center gap-4 mb-2">
-                          <div className="w-40 font-medium">{score.parameter || 'Parameter'}</div>
+                        <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-2">
+                          <div className="w-full sm:w-40 font-medium text-xs sm:text-sm">{score.parameter || 'Parameter'}</div>
                           <div className="flex-1">
-                            <div className="relative w-full h-3 bg-gray-200 rounded-full">
+                            <div className="relative w-full h-2 sm:h-3 bg-gray-200 rounded-full">
                               <div
-                                className="absolute top-0 left-0 h-3 rounded-full bg-blue-600"
+                                className="absolute top-0 left-0 h-2 sm:h-3 rounded-full bg-blue-600"
                                 style={{ width: `${percentage !== null ? Math.max(0, Math.min(100, percentage)) : 0}%` }}
                               />
                             </div>
                           </div>
-                          <div className="w-12 text-right font-semibold">
-                            {percentage !== null ? `${percentage}%` : '—'}
-                          </div>
-                          <div className="w-20 text-right text-xs text-muted-foreground">
-                            Weight: {score.weightage ?? 0}%
+                          <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-0 sm:w-12">
+                            <div className="text-left sm:text-right font-semibold text-xs sm:text-sm">
+                              {percentage !== null ? `${percentage}%` : '—'}
+                            </div>
+                            <div className="text-right text-xs text-muted-foreground sm:w-20">
+                              W: {score.weightage ?? 0}%
+                            </div>
                           </div>
                         </div>
                       );
@@ -2322,7 +2324,7 @@ export const ResumeUploadSection = () => {
 
       {/* Scorecard Dialog */}
       <Dialog open={showScorecard} onOpenChange={setShowScorecard}>
-        <DialogContent className="max-w-4xl h-[80vh] overflow-y-auto" aria-describedby="dialog-description">
+        <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[95vh] sm:h-[80vh] overflow-y-auto p-3 sm:p-6" aria-describedby="dialog-description">
           <DialogTitle className="sr-only">Candidate Assessment Details</DialogTitle>
           <div id="dialog-description" className="sr-only">Detailed assessment report for the selected candidate</div>
           {selectedCandidate && (

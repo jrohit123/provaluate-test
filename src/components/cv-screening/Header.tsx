@@ -64,20 +64,21 @@ export const Header = () => {
     : 'Welcome back, Recruiter';
 
   return (
-    <header className="bg-[#1e5da8] border-b px-6 py-4 flex items-center justify-between">
-      <div className="flex items-center gap-4">
-        <SidebarTrigger className="text-white" />
-        <div>
-          <h1 className="text-xl font-semibold text-white">ProValuate</h1>
-          <p className="text-sm text-white">Smart Candidate Evaluation Platform</p>
+    <header className="bg-[#1e5da8] border-b px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 sm:gap-4">
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+        <SidebarTrigger className="text-white flex-shrink-0" />
+        <div className="min-w-0">
+          <h1 className="text-base sm:text-xl font-semibold text-white truncate">ProValuate</h1>
+          <p className="text-xs sm:text-sm text-white hidden sm:block">Smart Candidate Evaluation Platform</p>
         </div>
       </div>
-      <div className="flex items-center gap-4">
-        <div className="text-sm text-white">
+      <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+        <div className="text-xs sm:text-sm text-white hidden sm:block">
           {greeting}
         </div>
-        <Button variant="outline" onClick={handleLogout} className="mr-2">
-          Logout
+        <Button variant="outline" onClick={handleLogout} className="text-xs sm:text-sm px-2 sm:px-4 h-8 sm:h-10">
+          <span className="hidden sm:inline">Logout</span>
+          <span className="sm:hidden">Out</span>
         </Button>
       </div>
     </header>
