@@ -114,6 +114,7 @@ export default function Onboarding() {
         .insert({
           user_id: user.id,
           company_id: newCompany.company_id,
+          email: user.email || '',
           first_name: firstName,
           last_name: lastName,
           role: 'admin',

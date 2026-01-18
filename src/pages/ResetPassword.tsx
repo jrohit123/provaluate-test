@@ -106,8 +106,8 @@ const ResetPassword = () => {
               console.log('   Existing session user:', existingSession.user.email);
               await supabase.auth.signOut();
               console.log('✅ Signed out existing session');
-            }
-            
+      }
+
             // Store the invite token IMMEDIATELY
             setInviteToken(tokenAccess);
             console.log('✅ Stored invite/reset token for password update');
@@ -126,15 +126,15 @@ const ResetPassword = () => {
         
         // Optionally set session for UI purposes, but we'll use stored token for API calls
         try {
-          const { error: sessionError } = await supabase.auth.setSession({
+        const { error: sessionError } = await supabase.auth.setSession({
             access_token: tokenAccess,
             refresh_token: tokenRefresh || ''
-          });
-          if (sessionError) {
+        });
+        if (sessionError) {
             console.warn('⚠️ Could not set session (non-critical):', sessionError);
             // Don't fail - we have the token and will use it directly
-          }
-        } catch (err: any) {
+        }
+      } catch (err: any) {
           console.warn('⚠️ Session setup error (non-critical):', err);
           // Don't fail - we have the token stored
         }

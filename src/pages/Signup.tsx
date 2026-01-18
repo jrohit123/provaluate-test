@@ -198,6 +198,7 @@ export default function Signup() {
         .insert({
           user_id: authData.user?.id,
           company_id: newCompany.company_id,
+          email: email,
           first_name: firstName,
           last_name: lastName,
           role: 'admin',
