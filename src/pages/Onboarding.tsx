@@ -119,20 +119,40 @@ export default function Onboarding() {
         .single();
       if (createCompanyError) throw createCompanyError;
       // Create user in users table
-      const { error: userDbError } = await supabase
+      console.log('🔍 EMAIL DEBUG - Email variable:', email);
+      console.log('🔍 EMAIL DEBUG - Email type:', typeof email);
+      console.log('🔍 EMAIL DEBUG - Email length:', email?.length);
+      console.log('🔍 EMAIL DEBUG - User.email:', user?.email);
+      
+      const insertData = {
+        user_id: user.id,
+        company_id: newCompany.company_id,
+        email: email,
+        first_name: firstName,
+        last_name: lastName,
+        role: 'admin',
+        user_status: 'active',
+        onboarding_complete: true,
+        created_at: now.toISOString(),
+      };
+      
+      console.log('🔍 EMAIL DEBUG - Insert data email field:', insertData.email);
+      console.log('🔍 EMAIL DEBUG - Full insert data:', JSON.stringify(insertData, null, 2));
+      
+      const { data: insertedUser, error: userDbError } = await supabase
         .from('users')
-        .insert({
-          user_id: user.id,
-          company_id: newCompany.company_id,
-          email: email,
-          first_name: firstName,
-          last_name: lastName,
-          role: 'admin',
-          user_status: 'active',
-          onboarding_complete: true,
-          created_at: now.toISOString(),
-        });
-      if (userDbError) throw userDbError;
+        .insert(insertData)
+        .select()
+        .single();
+      
+      if (userDbError) {
+        console.error('❌ User insert error:', userDbError);
+        console.error('❌ Error details:', JSON.stringify(userDbError, null, 2));
+        throw userDbError;
+      }
+      
+      console.log('✅ EMAIL DEBUG - Inserted user email:', insertedUser?.email);
+      console.log('✅ EMAIL DEBUG - Full inserted user:', JSON.stringify(insertedUser, null, 2));
 
       console.log('✅ Step 1: User profile created with onboarding_complete = true');
 
