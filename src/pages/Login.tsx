@@ -286,20 +286,21 @@ const Login = () => {
     <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header Section */}
       <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
           <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 sm:space-x-3">
               <div>
-              <img src="/Logo_Transparent_BG.png" alt="ProValuate" className="h-20" />
+              <img src="/Logo_Transparent_BG.png" alt="ProValuate" className="h-12 sm:h-16 lg:h-20" />
               </div>
-              <h1 className="text-2xl font-bold text-gray-900"></h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 hidden sm:block"></h1>
             </div>
-            <div className="flex items-center space-x-6">
-              <a href="/pricing" className="text-gray-600 hover:text-gray-900 transition-colors">
-                Pricing
+            <div className="flex items-center space-x-3 sm:space-x-6">
+              <a href="/pricing" className="text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
+                <span className="hidden sm:inline">Pricing</span>
+                <span className="sm:hidden">Price</span>
               </a>
               <a href="mailto:rj@aitamate.com?&subject=Provaluate&body=Hi,%0D%0A%0D%0AI'm facing an issue with ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors">
-                <Mail className="h-8 w-8" />
+                <Mail className="h-6 w-6 sm:h-8 sm:w-8" />
               </a>
             </div>
           </div>
@@ -307,45 +308,45 @@ const Login = () => {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="text-center mb-12">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="text-center mb-8 sm:mb-12">
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-3 sm:mb-4 px-4">
             AI-Powered Resume Assessment & Ranking
           </h2>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+          <p className="text-base sm:text-lg lg:text-xl text-gray-600 max-w-3xl mx-auto px-4">
             Upload job descriptions and resumes to get intelligent candidate rankings based on your custom criteria. Save time, improve accuracy, and make better hiring decisions.
           </p>
         </div>
 
         {/* Feature Cards Section */}
-        <div className="grid md:grid-cols-3 gap-6 mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12">
           <Card className="text-center border-0 shadow-lg">
-            <CardContent className="pt-6">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full border-2 border-green-200 flex items-center justify-center">
-                <Clock className="h-8 w-8 text-green-600" />
+            <CardContent className="pt-4 sm:pt-6">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-green-200 flex items-center justify-center">
+                <Clock className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">70% Time Saved</h3>
-              <p className="text-gray-600">Automated resume screening and ranking eliminates hours of manual review</p>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">70% Time Saved</h3>
+              <p className="text-sm sm:text-base text-gray-600">Automated resume screening and ranking eliminates hours of manual review</p>
             </CardContent>
           </Card>
 
           <Card className="text-center border-0 shadow-lg">
-            <CardContent className="pt-6">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full border-2 border-blue-200 flex items-center justify-center">
-                <CheckCircle className="h-8 w-8 text-blue-600" />
+            <CardContent className="pt-4 sm:pt-6">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-blue-200 flex items-center justify-center">
+                <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">95% Accuracy</h3>
-              <p className="text-gray-600">AI-powered assessment ensures consistent and objective candidate evaluation</p>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">95% Accuracy</h3>
+              <p className="text-sm sm:text-base text-gray-600">AI-powered assessment ensures consistent and objective candidate evaluation</p>
             </CardContent>
           </Card>
 
-          <Card className="text-center border-0 shadow-lg">
-            <CardContent className="pt-6">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full border-2 border-purple-200 flex items-center justify-center">
-                <Shield className="h-8 w-8 text-purple-600" />
+          <Card className="text-center border-0 shadow-lg sm:col-span-2 lg:col-span-1">
+            <CardContent className="pt-4 sm:pt-6">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-purple-200 flex items-center justify-center">
+                <Shield className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Enterprise Ready</h3>
-              <p className="text-gray-600">Secure, scalable, and compliant with enterprise-grade security standards</p>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">Enterprise Ready</h3>
+              <p className="text-sm sm:text-base text-gray-600">Secure, scalable, and compliant with enterprise-grade security standards</p>
             </CardContent>
           </Card>
         </div>
@@ -354,8 +355,8 @@ const Login = () => {
         <div className="flex justify-center">
           <div className="w-full max-w-md">
             <Card className="shadow-lg border-0">
-              <CardHeader className="space-y-1">
-                <div className="flex items-center justify-center space-x-2 mb-4">
+              <CardHeader className="space-y-1 px-4 sm:px-6 pt-4 sm:pt-6">
+                <div className="flex items-center justify-center space-x-2 mb-3 sm:mb-4">
                   <div className="bg-indigo-600 p-2 rounded-lg">
                     {isSignup ? (
                       <UserPlus className="h-5 w-5 text-white" />
@@ -363,21 +364,21 @@ const Login = () => {
                       <LogIn className="h-5 w-5 text-white" />
                     )}
                   </div>
-                  <CardTitle className="text-2xl text-center">
+                  <CardTitle className="text-xl sm:text-2xl text-center">
                     {isSignup ? 'Create a new Account' : 'Welcome Back'}
                   </CardTitle>
                 </div>
-                <CardDescription className="text-center">
+                <CardDescription className="text-center text-sm sm:text-base">
                   {isSignup 
                     ? 'Welcome to ProValuate! Create your account' 
                     : 'Enter your credentials to access your dashboard'
                   }
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                 {!showReset ? (
                   <>
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                    <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
                       <div className="space-y-2">
                         <Input
                           type="email"
@@ -385,7 +386,7 @@ const Login = () => {
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           required
-                          className="h-11"
+                          className="h-10 sm:h-11 text-sm sm:text-base"
                           disabled={isLoading}
                         />
                       </div>
@@ -396,13 +397,13 @@ const Login = () => {
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           required
-                          className="h-11"
+                          className="h-10 sm:h-11 text-sm sm:text-base"
                           disabled={isLoading}
                         />
                       </div>
                       <Button 
                         type="submit" 
-                        className="w-full h-11 bg-indigo-600 hover:bg-indigo-700"
+                        className="w-full h-10 sm:h-11 bg-indigo-600 hover:bg-indigo-700 text-sm sm:text-base"
                         disabled={isLoading}
                       >
                         {isLoading 
@@ -413,10 +414,10 @@ const Login = () => {
                         }
                       </Button>
                     </form>
-                    <div className="mt-2 text-center">
+                    <div className="mt-3 sm:mt-4 text-center">
                       <button
                         type="button"
-                        className="text-indigo-600 underline text-sm"
+                        className="text-indigo-600 underline text-xs sm:text-sm"
                         onClick={() => setShowReset(true)}
                         disabled={isLoading}
                       >
@@ -425,35 +426,35 @@ const Login = () => {
                     </div>
                   </>
                 ) : (
-                  <form onSubmit={handlePasswordReset} className="flex flex-col gap-2 mt-4">
+                  <form onSubmit={handlePasswordReset} className="flex flex-col gap-2 sm:gap-3 mt-4">
                     <Input
                       type="email"
                       placeholder="Enter your email"
                       value={resetEmail}
                       onChange={(e) => setResetEmail(e.target.value)}
                       required
-                      className="h-11"
+                      className="h-10 sm:h-11 text-sm sm:text-base"
                       disabled={resetLoading}
                     />
-                    <Button type="submit" className="w-full h-11 bg-indigo-600 hover:bg-indigo-700" disabled={resetLoading}>
+                    <Button type="submit" className="w-full h-10 sm:h-11 bg-indigo-600 hover:bg-indigo-700 text-sm sm:text-base" disabled={resetLoading}>
                       {resetLoading ? 'Sending...' : 'Send Password Reset Email'}
                     </Button>
                     <button
                       type="button"
-                      className="text-gray-600 underline text-sm"
+                      className="text-gray-600 underline text-xs sm:text-sm"
                       onClick={() => setShowReset(false)}
                       disabled={resetLoading}
                     >
                       Back to login
                     </button>
-                    {resetMessage && <div className="text-green-600 text-sm">{resetMessage}</div>}
-                    {resetError && <div className="text-red-600 text-sm">{resetError}</div>}
+                    {resetMessage && <div className="text-green-600 text-xs sm:text-sm">{resetMessage}</div>}
+                    {resetError && <div className="text-red-600 text-xs sm:text-sm">{resetError}</div>}
                   </form>
                 )}
-                <div className="mt-6 text-center">
+                <div className="mt-4 sm:mt-6 text-center">
                   <button
                     onClick={() => setIsSignup(!isSignup)}
-                    className="text-indigo-600 hover:text-indigo-800 transition-colors"
+                    className="text-indigo-600 hover:text-indigo-800 transition-colors text-xs sm:text-sm"
                     disabled={isLoading}
                   >
                     {isSignup 
@@ -467,9 +468,9 @@ const Login = () => {
               </CardContent>
             </Card>
             
-            <div className="mt-8 text-center text-sm text-gray-600">
+            <div className="mt-6 sm:mt-8 text-center text-xs sm:text-sm text-gray-600 px-4">
               <p>Automated JD parsing and resume ranking engine based on customized selection criteria</p>
-              <div className="mt-4 flex items-center justify-center space-x-2">
+              <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-2">
                 <span className="text-gray-500">Powered by</span>
                 <a 
                   href="https://aitamate.com/" 
@@ -487,55 +488,55 @@ const Login = () => {
               </div>
             </div>
           </div>
-        </div><br></br>
+        </div>
         
         {/* Call to Action Section */}
-        <div className="bg-gradient-to-r from-purple-600 to-pink-500 py-6 rounded-lg">
+        <div className="bg-gradient-to-r from-purple-600 to-pink-500 py-4 sm:py-6 rounded-lg mx-4 sm:mx-0">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h3 className="text-3xl font-bold text-white mb-1">
+            <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white mb-1">
               ⚡ 30-Day Free Trial
             </h3>
-            <p className="text-xl text-white mb-4">
+            <p className="text-base sm:text-lg lg:text-xl text-white mb-3 sm:mb-4">
               Start assessing candidates today - no credit card required!
             </p>
             <div className="flex items-center justify-center text-white">
-              <span className="text-lg">⭐ Join 50+ companies already using ProValuate</span>
+              <span className="text-sm sm:text-base lg:text-lg">⭐ Join 50+ companies already using ProValuate</span>
             </div>
           </div>
         </div>
       </main>
 
       {/* Statistics Cards Section */}
-      <div className="bg-white py-16">
+      <div className="bg-white py-8 sm:py-12 lg:py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <Card className="text-center border-0 shadow-lg">
-              <CardContent className="pt-6">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full border-2 border-green-200 flex items-center justify-center">
-                  <Users className="h-8 w-8 text-green-600" />
+              <CardContent className="pt-4 sm:pt-6">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-green-200 flex items-center justify-center">
+                  <Users className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">2,500+</h3>
-                <p className="text-gray-600">Resumes Processed</p>
+                <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">2,500+</h3>
+                <p className="text-sm sm:text-base text-gray-600">Resumes Processed</p>
               </CardContent>
             </Card>
 
             <Card className="text-center border-0 shadow-lg">
-              <CardContent className="pt-6">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full border-2 border-blue-200 flex items-center justify-center">
-                  <FileText className="h-8 w-8 text-blue-600" />
+              <CardContent className="pt-4 sm:pt-6">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-blue-200 flex items-center justify-center">
+                  <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">180+</h3>
-                <p className="text-gray-600">Job Descriptions</p>
+                <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">180+</h3>
+                <p className="text-sm sm:text-base text-gray-600">Job Descriptions</p>
               </CardContent>
             </Card>
 
-            <Card className="text-center border-0 shadow-lg">
-              <CardContent className="pt-6">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full border-2 border-purple-200 flex items-center justify-center">
-                  <BarChart className="h-8 w-8 text-purple-600" />
+            <Card className="text-center border-0 shadow-lg sm:col-span-2 lg:col-span-1">
+              <CardContent className="pt-4 sm:pt-6">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-purple-200 flex items-center justify-center">
+                  <BarChart className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">50+</h3>
-                <p className="text-gray-600">Companies Trust Us</p>
+                <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">50+</h3>
+                <p className="text-sm sm:text-base text-gray-600">Companies Trust Us</p>
               </CardContent>
             </Card>
           </div>
