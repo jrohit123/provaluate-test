@@ -66,9 +66,19 @@ export default function Onboarding() {
     }
     setLoading(true);
     try {
-      // Get user email and domain
-      const email = user.email;
+      // Get user email and validate it exists
+      const email = user?.email;
+      if (!email) {
+        setError('Email not found in your account. Please log out and log back in.');
+        setLoading(false);
+        return;
+      }
       const domain = email.split('@')[1]?.toLowerCase();
+      if (!domain) {
+        setError('Invalid email address format.');
+        setLoading(false);
+        return;
+      }
       // Double check company does not exist
       const { data: existingCompanies } = await supabase
         .from('companies')
@@ -114,7 +124,7 @@ export default function Onboarding() {
         .insert({
           user_id: user.id,
           company_id: newCompany.company_id,
-          email: user.email || '',
+          email: email,
           first_name: firstName,
           last_name: lastName,
           role: 'admin',
