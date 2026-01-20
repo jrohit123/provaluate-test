@@ -1205,8 +1205,8 @@ export default function AdminUserManagement() {
   return (
     <Card className="mb-8">
       <CardHeader>
-        <CardTitle>User Management</CardTitle>
-        <div className="text-sm text-muted-foreground mt-1">
+        <CardTitle className="text-lg sm:text-xl">User Management</CardTitle>
+        <div className="text-xs sm:text-sm text-muted-foreground mt-1">
           {plan ? (
             <>
               Plan: <b>{plan.plan_name}</b> | Max Users: <b>{maxUsers}</b> | Slots Left: <b>{slotsLeft}</b>
@@ -1220,9 +1220,9 @@ export default function AdminUserManagement() {
         )}
       </CardHeader>
       <CardContent>
-        <div className="flex justify-between items-center mb-4">
-          <div className="font-semibold text-lg">Company Users</div>
-          <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+          <div className="font-semibold text-base sm:text-lg">Company Users</div>
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             {!isTrialPlan && (
               <>
                 <Button variant="outline" onClick={handleRecharge} disabled={loading}>Recharge</Button>
@@ -1527,7 +1527,7 @@ export default function AdminUserManagement() {
               </DialogHeader>
               <div id="invite-user-description" className="sr-only">Dialog to invite a new user to the company</div>
               <form className="space-y-3" onSubmit={handleInvite}>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <Input
                     name="firstName"
                     type="text"
@@ -1574,29 +1574,29 @@ export default function AdminUserManagement() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm border">
+          <table className="min-w-full text-xs sm:text-sm border">
             <thead>
               <tr className="bg-gray-100">
-                <th className="p-2 text-left">Name</th>
-                <th className="p-2 text-left">Email</th>
-                <th className="p-2 text-left">Role</th>
-                <th className="p-2 text-left">Status</th>
+                <th className="p-2 sm:p-3 text-left text-xs sm:text-sm">Name</th>
+                <th className="p-2 sm:p-3 text-left text-xs sm:text-sm">Email</th>
+                <th className="p-2 sm:p-3 text-left text-xs sm:text-sm">Role</th>
+                <th className="p-2 sm:p-3 text-left text-xs sm:text-sm">Status</th>
               </tr>
             </thead>
             <tbody>
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-4 text-center text-muted-foreground">
+                  <td colSpan={4} className="p-4 text-center text-muted-foreground text-xs sm:text-sm">
                     No users found in your company.
                   </td>
                 </tr>
               ) : (
                 users.map(u => (
                   <tr key={u.user_id} className="border-t">
-                    <td className="p-2">{u.first_name || ''} {u.last_name || ''}</td>
-                    <td className="p-2">{u.email || 'N/A'}</td>
-                    <td className="p-2 capitalize">{u.role || 'N/A'}</td>
-                    <td className="p-2 capitalize">{u.user_status || 'N/A'}</td>
+                    <td className="p-2 sm:p-3 text-xs sm:text-sm">{u.first_name || ''} {u.last_name || ''}</td>
+                    <td className="p-2 sm:p-3 text-xs sm:text-sm break-words">{u.email || 'N/A'}</td>
+                    <td className="p-2 sm:p-3 text-xs sm:text-sm capitalize">{u.role || 'N/A'}</td>
+                    <td className="p-2 sm:p-3 text-xs sm:text-sm capitalize">{u.user_status || 'N/A'}</td>
                   </tr>
                 ))
               )}
