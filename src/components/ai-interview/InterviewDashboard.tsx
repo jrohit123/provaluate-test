@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
 import { useAuth } from '@/hooks/use-auth';
 import { 
@@ -336,33 +337,33 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
 
   try {
     return (
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-primary-800 mb-2">Interview Sessions</h2>
-        <p className="text-muted-foreground">Monitor and manage all interview sessions</p>
+      <div className="mb-4 sm:mb-6">
+        <h2 className="text-xl sm:text-2xl font-bold text-primary-800 mb-2">Interview Sessions</h2>
+        <p className="text-sm sm:text-base text-muted-foreground">Monitor and manage all interview sessions</p>
       </div>
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between mb-4 sm:mb-6 gap-3">
         <div></div>
         <Button 
           onClick={() => onSectionChange?.('ai-interview')}
-          className="bg-primary-600 hover:bg-primary-700 text-white"
+          className="bg-primary-600 hover:bg-primary-700 text-white w-full sm:w-auto"
         >
           Start New Interview
         </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         <Card className="animate-fade-in">
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total</p>
-                <p className="text-2xl font-bold text-primary-800">{interviews.length}</p>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Total</p>
+                <p className="text-xl sm:text-2xl font-bold text-primary-800">{interviews.length}</p>
               </div>
-              <Users className="w-8 h-8 text-primary-600" />
+              <Users className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600" />
             </div>
           </CardContent>
         </Card>
@@ -411,7 +412,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
           <Input
@@ -421,7 +422,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
               console.log('Search term changed:', e.target.value);
               setSearchTerm(e.target.value);
             }}
-            className="pl-10"
+            className="pl-10 text-sm sm:text-base"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -467,111 +468,110 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
               </Button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border border-gray-200">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Candidate</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Position</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Status</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Duration</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Created</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">View Details</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Score</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Decision</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200">Comments</th>
-                    <th className="text-center py-3 px-4 font-medium text-gray-900">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredInterviews.map((interview) => (
-                    <tr key={interview.id} className="border-b border-gray-200 hover:bg-gray-50">
-                      <td className="py-3 px-4 border-r border-gray-200">
-                        <div>
-                          <div className="font-medium text-gray-900">{interview.candidate_name}</div>
-                          <div className="text-sm text-gray-500">{interview.candidate_email}</div>
+            <>
+              {/* Mobile Card View - shown on screens smaller than md */}
+              <div className="md:hidden space-y-4 p-4">
+                {filteredInterviews.map((interview) => (
+                  <Card key={interview.id} className="border border-gray-200">
+                    <CardContent className="p-4 space-y-4">
+                      {/* Header Section */}
+                      <div className="flex items-start justify-between border-b pb-3">
+                        <div className="flex-1">
+                          <div className="font-semibold text-base text-gray-900 mb-1">
+                            {interview.candidate_name}
+                          </div>
+                          <div className="text-xs text-gray-500 break-words mb-2">
+                            {interview.candidate_email}
+                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            {interview.position}
+                          </Badge>
                         </div>
-                      </td>
-                      <td className="py-3 px-4 border-r border-gray-200">
-                        <Badge variant="outline" className="text-xs">
-                          {interview.position}
-                        </Badge>
-                      </td>
-                      <td className="py-3 px-4 border-r border-gray-200">
                         <Badge className={`${getStatusColor(interview.status)} text-xs`}>
                           {getStatusIcon(interview.status)}
                           <span className="ml-1 capitalize">
                             {interview.status}
-                            {interview.status === 'terminated' && interview.termination_reason && (
-                              <span className="ml-1">({interview.termination_reason})</span>
-                            )}
                           </span>
                         </Badge>
-                      </td>
-                      <td className="py-3 px-4 text-sm border-r border-gray-200">
-                        <div className="flex items-center">
-                          <Clock className="w-4 h-4 text-gray-400 mr-2" />
-                          <span>
-                            {interview.actual_duration_minutes 
-                              ? formatDuration(interview.actual_duration_minutes)
-                              : (() => {
-                                  // Fallback: calculate from timestamps if available
-                                  const calculated = calculateDurationFromTimestamps(interview);
-                                  return calculated !== null 
-                                    ? formatDuration(calculated)
-                                    : formatDuration(interview.duration_minutes);
-                                })()
-                            }
-                          </span>
+                      </div>
+
+                      {/* Info Grid */}
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                          <div>
+                            <div className="text-xs text-gray-500">Duration</div>
+                            <div className="font-medium text-gray-900">
+                              {interview.actual_duration_minutes 
+                                ? formatDuration(interview.actual_duration_minutes)
+                                : (() => {
+                                    const calculated = calculateDurationFromTimestamps(interview);
+                                    return calculated !== null 
+                                      ? formatDuration(calculated)
+                                      : formatDuration(interview.duration_minutes);
+                                  })()
+                              }
+                            </div>
+                          </div>
                         </div>
-                      </td>
-                      <td className="py-3 px-4 text-sm border-r border-gray-200 text-center">
-                        <div className="flex items-center justify-center">
-                          <Calendar className="w-4 h-4 text-gray-400 mr-2" />
-                          <span>{formatDate(interview.created_at)}</span>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                          <div>
+                            <div className="text-xs text-gray-500">Created</div>
+                            <div className="font-medium text-gray-900">{formatDate(interview.created_at)}</div>
+                          </div>
                         </div>
-                      </td>
-                      <td className="py-3 px-4 text-center border-r border-gray-200">
-                        {(interview.status === 'completed' || interview.status === 'terminated') && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => window.open(`/final-results/${interview.id}`, '_blank')}
-                            title={interview.status === 'terminated' ? 'View Interview Details (Terminated)' : 'View Final Results'}
-                          >
-                            <BarChart3 className="w-4 h-4" />
-                          </Button>
+                        {interview.overall_score !== null && interview.overall_score !== undefined && (
+                          <div className="flex items-center gap-2">
+                            <BarChart3 className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                            <div>
+                              <div className="text-xs text-gray-500">Score</div>
+                              <div className="font-medium text-gray-900">{interview.overall_score}</div>
+                            </div>
+                          </div>
                         )}
-                      </td>
-                      <td className="py-3 px-4 border-r border-gray-200">
-                        <div className="flex items-center justify-center">
-                          <span>{interview.overall_score}</span>
-                        </div> 
-                      </td>
-                      {/* Decision Column */}
-                      <td className="py-3 px-4 border-r border-gray-200">
+                        {(interview.status === 'completed' || interview.status === 'terminated') && (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(`/final-results/${interview.id}`, '_blank')}
+                              className="w-full"
+                            >
+                              <BarChart3 className="w-4 h-4 mr-2" />
+                              View Details
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Decision Section */}
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium text-gray-700">Decision</Label>
                         <Select
                           value={localDecisions[interview.id] || interview.decision || ''}
                           onValueChange={(value) => handleDecisionChange(interview.id, value)}
                         >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select" />
+                          <SelectTrigger className="w-full text-xs">
+                            <SelectValue placeholder="Select decision" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="accept">Accept</SelectItem>
                             <SelectItem value="reject">Reject</SelectItem>
                           </SelectContent>
                         </Select>
-                      </td>
-                      {/* Comments Column */}
-                      <td className="py-3 px-4 border-r border-gray-200">
+                      </div>
+
+                      {/* Comments Section */}
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium text-gray-700">Comments</Label>
                         <div className="relative">
                           <textarea
                             value={localComments[interview.id] || interview.hr_comments || ''}
                             onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
                             placeholder="Enter your comments..."
-                            className="w-full p-2 pr-8 border border-gray-300 rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            rows={expandedComments[interview.id] ? 6 : 2}
+                            className="w-full p-2 pr-8 border border-gray-300 rounded-md text-xs resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            rows={expandedComments[interview.id] ? 4 : 2}
                           />
                           {(localComments[interview.id] || interview.hr_comments || '') && (
                             <button
@@ -591,67 +591,251 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                             </button>
                           )}
                         </div>
-                      </td>
-                      {/* Action Column */}
-                      <td className="py-3 px-4">
-                        <div className="flex flex-col gap-2">
-                          {/* Save Button */}
-                          <Button
-                            size="sm"
-                            onClick={() => handleSave(interview.id)}
-                            disabled={saveStates[interview.id] === 'saving' || !hasUnsavedChanges(interview.id)}
-                            className={`
-                              text-xs px-3 py-1 h-auto transition-all duration-200
-                              ${saveStates[interview.id] === 'saved' 
-                                ? 'bg-green-500 text-white hover:bg-green-600' 
-                                : saveStates[interview.id] === 'saving'
-                                ? 'bg-yellow-500 text-white cursor-not-allowed'
-                                : saveStates[interview.id] === 'error'
-                                ? 'bg-red-500 text-white hover:bg-red-600'
-                                : hasUnsavedChanges(interview.id)
-                                ? 'bg-blue-500 text-white hover:bg-blue-600'
-                                : 'bg-gray-400 text-white cursor-not-allowed'
-                              }
-                            `}
-                          >
-                            {saveStates[interview.id] === 'saved' ? '✓ Saved' : 
-                             saveStates[interview.id] === 'saving' ? 'Saving...' :
-                             saveStates[interview.id] === 'error' ? '✗ Error' :
-                             hasUnsavedChanges(interview.id) ? 'Save' : '✓ Saved'}
-                          </Button>
-                          
-                          {/* Remind Button */}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleRemind(interview.id)}
-                            disabled={reminderStates[interview.id] === 'sending' || interview.status !== 'active'}
-                            className={`
-                              text-xs px-3 py-1 h-auto transition-all duration-200
-                              ${reminderStates[interview.id] === 'sent' 
-                                ? 'bg-green-100 text-green-700 border-green-300' 
-                                : reminderStates[interview.id] === 'sending'
-                                ? 'bg-yellow-100 text-yellow-700 border-yellow-300 cursor-not-allowed'
-                                : reminderStates[interview.id] === 'error'
-                                ? 'bg-red-100 text-red-700 border-red-300'
-                                : interview.status !== 'active'
-                                ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                                : 'hover:bg-gray-50'
-                              }
-                            `}
-                          >
-                            {reminderStates[interview.id] === 'sent' ? '✓ Sent' : 
-                             reminderStates[interview.id] === 'sending' ? 'Sending...' :
-                             reminderStates[interview.id] === 'error' ? '✗ Error' :
-                             'Remind'}
-                          </Button>
-                        </div>
-                      </td>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex flex-col gap-2 pt-2 border-t">
+                        <Button
+                          size="sm"
+                          onClick={() => handleSave(interview.id)}
+                          disabled={saveStates[interview.id] === 'saving' || !hasUnsavedChanges(interview.id)}
+                          className={`
+                            text-xs px-3 py-2 h-auto transition-all duration-200 w-full
+                            ${saveStates[interview.id] === 'saved' 
+                              ? 'bg-green-500 text-white hover:bg-green-600' 
+                              : saveStates[interview.id] === 'saving'
+                              ? 'bg-yellow-500 text-white cursor-not-allowed' 
+                              : saveStates[interview.id] === 'error'
+                              ? 'bg-red-500 text-white hover:bg-red-600'
+                              : hasUnsavedChanges(interview.id)
+                              ? 'bg-blue-500 text-white hover:bg-blue-600'
+                              : 'bg-gray-400 text-white cursor-not-allowed'
+                            }
+                          `}
+                        >
+                          {saveStates[interview.id] === 'saved' ? '✓ Saved' : 
+                           saveStates[interview.id] === 'saving' ? 'Saving...' :
+                           saveStates[interview.id] === 'error' ? '✗ Error' :
+                           hasUnsavedChanges(interview.id) ? 'Save' : '✓ Saved'}
+                        </Button>
+                        
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleRemind(interview.id)}
+                          disabled={reminderStates[interview.id] === 'sending' || interview.status !== 'active'}
+                          className={`
+                            text-xs px-3 py-2 h-auto transition-all duration-200 w-full
+                            ${reminderStates[interview.id] === 'sent' 
+                              ? 'bg-green-100 text-green-700 border-green-300' 
+                              : reminderStates[interview.id] === 'sending'
+                              ? 'bg-yellow-100 text-yellow-700 border-yellow-300 cursor-not-allowed'
+                              : reminderStates[interview.id] === 'error'
+                              ? 'bg-red-100 text-red-700 border-red-300'
+                              : interview.status !== 'active'
+                              ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                              : 'hover:bg-gray-50'
+                            }
+                          `}
+                        >
+                          {reminderStates[interview.id] === 'sent' ? '✓ Sent' : 
+                           reminderStates[interview.id] === 'sending' ? 'Sending...' :
+                           reminderStates[interview.id] === 'error' ? '✗ Error' :
+                           'Remind'}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* Desktop Table View - shown on md and larger screens */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full border border-gray-200">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200 text-sm">Candidate</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200 text-sm">Position</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200 text-sm">Status</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200 text-sm">Duration</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200 text-sm">Created</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200 text-sm">View Details</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200 text-sm">Score</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200 text-sm">Decision</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-900 border-r border-gray-200 text-sm">Comments</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-900 text-sm">Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filteredInterviews.map((interview) => (
+                      <tr key={interview.id} className="border-b border-gray-200 hover:bg-gray-50">
+                        <td className="py-3 px-4 border-r border-gray-200">
+                          <div>
+                            <div className="font-medium text-gray-900 text-sm">{interview.candidate_name}</div>
+                            <div className="text-xs text-gray-500 break-words">{interview.candidate_email}</div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 border-r border-gray-200">
+                          <Badge variant="outline" className="text-xs">
+                            {interview.position}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4 border-r border-gray-200">
+                          <Badge className={`${getStatusColor(interview.status)} text-xs`}>
+                            {getStatusIcon(interview.status)}
+                            <span className="ml-1 capitalize">
+                              {interview.status}
+                              {interview.status === 'terminated' && interview.termination_reason && (
+                                <span className="ml-1">({interview.termination_reason})</span>
+                              )}
+                            </span>
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4 text-sm border-r border-gray-200">
+                          <div className="flex items-center">
+                            <Clock className="w-4 h-4 text-gray-400 mr-2" />
+                            <span>
+                              {interview.actual_duration_minutes 
+                                ? formatDuration(interview.actual_duration_minutes)
+                                : (() => {
+                                    const calculated = calculateDurationFromTimestamps(interview);
+                                    return calculated !== null 
+                                      ? formatDuration(calculated)
+                                      : formatDuration(interview.duration_minutes);
+                                  })()
+                              }
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-sm border-r border-gray-200 text-center">
+                          <div className="flex items-center justify-center">
+                            <Calendar className="w-4 h-4 text-gray-400 mr-2" />
+                            <span>{formatDate(interview.created_at)}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center border-r border-gray-200">
+                          {(interview.status === 'completed' || interview.status === 'terminated') && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => window.open(`/final-results/${interview.id}`, '_blank')}
+                              title={interview.status === 'terminated' ? 'View Interview Details (Terminated)' : 'View Final Results'}
+                              className="h-8 w-8 p-0"
+                            >
+                              <BarChart3 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 border-r border-gray-200">
+                          <div className="flex items-center justify-center">
+                            <span className="text-sm">{interview.overall_score}</span>
+                          </div> 
+                        </td>
+                        {/* Decision Column */}
+                        <td className="py-3 px-4 border-r border-gray-200">
+                          <Select
+                            value={localDecisions[interview.id] || interview.decision || ''}
+                            onValueChange={(value) => handleDecisionChange(interview.id, value)}
+                          >
+                            <SelectTrigger className="w-full text-sm">
+                              <SelectValue placeholder="Select" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="accept">Accept</SelectItem>
+                              <SelectItem value="reject">Reject</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        {/* Comments Column */}
+                        <td className="py-3 px-4 border-r border-gray-200">
+                          <div className="relative">
+                            <textarea
+                              value={localComments[interview.id] || interview.hr_comments || ''}
+                              onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
+                              placeholder="Enter your comments..."
+                              className="w-full p-2 pr-8 border border-gray-300 rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              rows={expandedComments[interview.id] ? 6 : 2}
+                            />
+                            {(localComments[interview.id] || interview.hr_comments || '') && (
+                              <button
+                                onClick={() => toggleCommentsExpanded(interview.id)}
+                                className={`absolute top-2 right-2 p-1 transition-colors rounded ${
+                                  isLongText(localComments[interview.id] || interview.hr_comments || '') 
+                                    ? 'text-blue-500 hover:text-blue-700 hover:bg-blue-50' 
+                                    : 'text-gray-400 hover:text-gray-600'
+                                }`}
+                                title={expandedComments[interview.id] ? "Collapse editor" : "Expand editor"}
+                              >
+                                {expandedComments[interview.id] ? (
+                                  <Minimize2 className="w-4 h-4" />
+                                ) : (
+                                  <Maximize2 className="w-4 h-4" />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                        {/* Action Column */}
+                        <td className="py-3 px-4">
+                          <div className="flex flex-col gap-2">
+                            {/* Save Button */}
+                            <Button
+                              size="sm"
+                              onClick={() => handleSave(interview.id)}
+                              disabled={saveStates[interview.id] === 'saving' || !hasUnsavedChanges(interview.id)}
+                              className={`
+                                text-xs px-3 py-1 h-auto transition-all duration-200 w-full
+                                ${saveStates[interview.id] === 'saved' 
+                                  ? 'bg-green-500 text-white hover:bg-green-600' 
+                                  : saveStates[interview.id] === 'saving'
+                                  ? 'bg-yellow-500 text-white cursor-not-allowed'
+                                  : saveStates[interview.id] === 'error'
+                                  ? 'bg-red-500 text-white hover:bg-red-600'
+                                  : hasUnsavedChanges(interview.id)
+                                  ? 'bg-blue-500 text-white hover:bg-blue-600'
+                                  : 'bg-gray-400 text-white cursor-not-allowed'
+                                }
+                              `}
+                            >
+                              {saveStates[interview.id] === 'saved' ? '✓ Saved' : 
+                               saveStates[interview.id] === 'saving' ? 'Saving...' :
+                               saveStates[interview.id] === 'error' ? '✗ Error' :
+                               hasUnsavedChanges(interview.id) ? 'Save' : '✓ Saved'}
+                            </Button>
+                            
+                            {/* Remind Button */}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleRemind(interview.id)}
+                              disabled={reminderStates[interview.id] === 'sending' || interview.status !== 'active'}
+                              className={`
+                                text-xs px-3 py-1 h-auto transition-all duration-200 w-full
+                                ${reminderStates[interview.id] === 'sent' 
+                                  ? 'bg-green-100 text-green-700 border-green-300' 
+                                  : reminderStates[interview.id] === 'sending'
+                                  ? 'bg-yellow-100 text-yellow-700 border-yellow-300 cursor-not-allowed'
+                                  : reminderStates[interview.id] === 'error'
+                                  ? 'bg-red-100 text-red-700 border-red-300'
+                                  : interview.status !== 'active'
+                                  ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                                  : 'hover:bg-gray-50'
+                                }
+                              `}
+                            >
+                              {reminderStates[interview.id] === 'sent' ? '✓ Sent' : 
+                               reminderStates[interview.id] === 'sending' ? 'Sending...' :
+                               reminderStates[interview.id] === 'error' ? '✗ Error' :
+                               'Remind'}
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

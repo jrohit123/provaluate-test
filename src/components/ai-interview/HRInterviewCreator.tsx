@@ -1100,10 +1100,10 @@ const HRInterviewCreator = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-primary-800 mb-2">Final Overview</h2>
-        <p className="text-muted-foreground">Set up an interview and generate a link for your candidate</p>
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+      <div className="mb-4 sm:mb-6">
+        <h2 className="text-xl sm:text-2xl font-bold text-primary-800 mb-2">Final Overview</h2>
+        <p className="text-sm sm:text-base text-muted-foreground">Set up an interview and generate a link for your candidate</p>
       </div>
 
       {/* Interview Configuration Section */}
@@ -1118,14 +1118,14 @@ const HRInterviewCreator = () => {
           <div className="space-y-6">
             {/* Candidates Section */}
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">Candidates *</Label>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <Label className="text-sm sm:text-base font-semibold">Candidates *</Label>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={addCandidate}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 w-full sm:w-auto"
                 >
                   <Plus className="h-4 w-4" />
                   Add Candidate
@@ -1133,9 +1133,9 @@ const HRInterviewCreator = () => {
               </div>
               
               {formData.candidates.map((candidate, index) => (
-                <div key={index} className="border rounded-lg p-4 space-y-3">
+                <div key={index} className="border rounded-lg p-3 sm:p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700">
+                    <span className="text-xs sm:text-sm font-medium text-gray-700">
                       Candidate {index + 1}
                     </span>
                     {formData.candidates.length > 1 && (
@@ -1179,9 +1179,9 @@ const HRInterviewCreator = () => {
 
             {/* Select Role Section */}
             <div className="space-y-2">
-              <Label>Select Role *</Label>
+              <Label className="text-sm sm:text-base">Select Role *</Label>
               <Select onValueChange={handleJobDescriptionSelect}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a role from existing job descriptions..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -1196,7 +1196,7 @@ const HRInterviewCreator = () => {
 
             {/* Custom Instructions Section */}
             <div className="space-y-2">
-              <Label htmlFor="customInstructions">Custom Instructions (Optional)</Label>
+              <Label htmlFor="customInstructions" className="text-sm sm:text-base">Custom Instructions (Optional)</Label>
               <Textarea
                 id="customInstructions"
                 name="customInstructions"
@@ -1204,18 +1204,19 @@ const HRInterviewCreator = () => {
                 onChange={handleInputChange}
                 placeholder="Any specific instructions or focus areas for this interview..."
                 rows={3}
+                className="text-sm sm:text-base"
               />
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="interviewMode">Interview Mode *</Label>
+              <Label htmlFor="interviewMode" className="text-sm sm:text-base">Interview Mode *</Label>
               <Select
                 value={formData.interviewMode}
                 onValueChange={(value: 'ai' | 'structured') => 
                   setFormData(prev => ({ ...prev, interviewMode: value }))
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select interview mode..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -1224,7 +1225,7 @@ const HRInterviewCreator = () => {
                 </SelectContent>
               </Select>
               <p className="text-xs text-gray-500">
-                AI Interview: Questions generated dynamically based on candidate responses<br/>
+                AI Interview: Questions generated dynamically based on candidate responses<br className="hidden sm:block"/>
                 Structured Interview: Pre-defined questions set by HR
               </p>
             </div>
@@ -1244,25 +1245,25 @@ const HRInterviewCreator = () => {
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Stats Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 text-center">
-                <div className="text-2xl font-bold text-blue-800">{formData.totalQuestions || 'Calculating...'}</div>
-                <div className="text-sm text-blue-600 font-medium">Total Questions</div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+              <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200 text-center">
+                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.totalQuestions || 'Calculating...'}</div>
+                <div className="text-xs sm:text-sm text-blue-600 font-medium">Total Questions</div>
                 <div className="text-xs text-blue-500">Based on parameters</div>
               </div>
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 text-center">
-                <div className="text-2xl font-bold text-blue-800">{formData.duration || 'Calculating...'} min</div>
-                <div className="text-sm text-blue-600 font-medium">Duration</div>
+              <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200 text-center">
+                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.duration || 'Calculating...'} min</div>
+                <div className="text-xs sm:text-sm text-blue-600 font-medium">Duration</div>
                 <div className="text-xs text-blue-500">Auto-calculated</div>
               </div>
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 text-center">
-                <div className="text-2xl font-bold text-blue-800">{Object.keys(customParameters).length}</div>
-                <div className="text-sm text-blue-600 font-medium">Parameters</div>
+              <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200 text-center">
+                <div className="text-xl sm:text-2xl font-bold text-blue-800">{Object.keys(customParameters).length}</div>
+                <div className="text-xs sm:text-sm text-blue-600 font-medium">Parameters</div>
                 <div className="text-xs text-blue-500">Assessment areas</div>
               </div>
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 text-center">
-                <div className="text-2xl font-bold text-blue-800">{calculateTotalWeightage()}%</div>
-                <div className="text-sm text-blue-600 font-medium">Weightage</div>
+              <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200 text-center">
+                <div className="text-xl sm:text-2xl font-bold text-blue-800">{calculateTotalWeightage()}%</div>
+                <div className="text-xs sm:text-sm text-blue-600 font-medium">Weightage</div>
                 <div className="text-xs text-blue-500">Total weightage</div>
               </div>
             </div>
@@ -1347,7 +1348,7 @@ const HRInterviewCreator = () => {
                             {/* Parameter Details */}
                             <div>
                               <h4 className="text-sm font-semibold text-gray-900 mb-2">Parameter Details:</h4>
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                                 <div className="text-center">
                                   <div className="text-sm text-gray-500 mb-1">Weight</div>
                                   <div className="text-base font-semibold text-gray-900">{param.weight}%</div>
@@ -1565,7 +1566,7 @@ const HRInterviewCreator = () => {
         <Button
           onClick={createInterview}
           disabled={isCreating}
-          className="px-8 py-2"
+          className="px-6 sm:px-8 py-2 w-full sm:w-auto"
           size="default"
         >
           {isCreating ? (
@@ -1685,34 +1686,35 @@ const HRInterviewCreator = () => {
           <CardContent className="space-y-4">
             {/* Individual Interview Links */}
             {createdInterviews.map((interview, index) => (
-              <div key={interview.interview_id} className="bg-gray-50 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-medium text-gray-800">
+              <div key={interview.interview_id} className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 gap-2">
+                  <p className="text-xs sm:text-sm font-medium text-gray-800 break-words">
                     {interview.candidate_name} ({interview.candidate_email})
                   </p>
                   <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
                     Interview {index + 1}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-3">
                   <Input
                     value={`${window.location.origin}/interview/${interview.interview_id}`}
                     readOnly
-                    className="font-mono text-sm"
+                    className="font-mono text-xs sm:text-sm"
                   />
                   <Button
                     onClick={() => copyInterviewLink(interview.interview_id)}
                     size="sm"
+                    className="w-full sm:w-auto"
                   >
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copy
+                    <Copy className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Copy</span>
                   </Button>
                 </div>
               </div>
             ))}
             
             {/* Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
               <div className="bg-blue-50 rounded-lg p-3">
                 <p className="font-medium text-blue-800">Total Interviews</p>
                 <p className="text-blue-600 font-mono">{createdInterviews.length}</p>

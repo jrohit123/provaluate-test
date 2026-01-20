@@ -1419,10 +1419,10 @@ const HRInterviewCreator = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-primary-800 mb-2">Interview Parameters Setup</h2>
-        <p className="text-muted-foreground">Select the role and configure the interview settings</p>
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+      <div className="mb-4 sm:mb-6">
+        <h2 className="text-xl sm:text-2xl font-bold text-primary-800 mb-2">Interview Parameters Setup</h2>
+        <p className="text-sm sm:text-base text-muted-foreground">Select the role and configure the interview settings</p>
       </div>
 
       {/* Interview Configuration Section */}
@@ -1434,11 +1434,11 @@ const HRInterviewCreator = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Left Column */}
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Select Role *</Label>
+                <Label className="text-sm sm:text-base">Select Role *</Label>
                 <Select onValueChange={handleJobDescriptionSelect}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a role from existing job descriptions..." />
@@ -1454,18 +1454,19 @@ const HRInterviewCreator = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="newRole">New Role (Optional)</Label>
+                <Label htmlFor="newRole" className="text-sm sm:text-base">New Role (Optional)</Label>
                 <Input
                   id="newRole"
                   name="newRole"
                   value={formData.newRole}
                   onChange={handleInputChange}
                   placeholder="Enter new role name if creating a new position"
+                  className="text-sm sm:text-base"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="interviewMode">Interview Mode *</Label>
+                <Label htmlFor="interviewMode" className="text-sm sm:text-base">Interview Mode *</Label>
                 <Select 
                   value={formData.interviewMode} 
                   onValueChange={(value: 'ai' | 'structured') => 
@@ -1480,8 +1481,8 @@ const HRInterviewCreator = () => {
                       <div className="flex items-center gap-3">
                         <span>🤖</span>
                         <div>
-                          <div className="font-medium">AI Interview (Dynamic)</div>
-                          <div className="text-sm text-gray-500">Questions generated based on candidate answers</div>
+                          <div className="font-medium text-sm sm:text-base">AI Interview (Dynamic)</div>
+                          <div className="text-xs sm:text-sm text-gray-500">Questions generated based on candidate answers</div>
                         </div>
                       </div>
                     </SelectItem>
@@ -1489,22 +1490,22 @@ const HRInterviewCreator = () => {
                       <div className="flex items-center gap-3">
                         <span>📝</span>
                         <div>
-                          <div className="font-medium">Structured Interview (Pre-defined)</div>
-                          <div className="text-sm text-gray-500">HR writes custom questions and parameters</div>
+                          <div className="font-medium text-sm sm:text-base">Structured Interview (Pre-defined)</div>
+                          <div className="text-xs sm:text-sm text-gray-500">HR writes custom questions and parameters</div>
                         </div>
                       </div>
                     </SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-gray-500">
-                  AI Interview: Dynamic questions generated based on candidate responses<br/>
+                  AI Interview: Dynamic questions generated based on candidate responses<br className="hidden sm:block"/>
                   Structured Interview: Pre-defined questions and parameters set by HR
                 </p>
               </div>
 
               {formData.interviewMode === 'ai' && (
                 <div className="space-y-2">
-                  <Label htmlFor="interviewType">Interview Type *</Label>
+                  <Label htmlFor="interviewType" className="text-sm sm:text-base">Interview Type *</Label>
                   <Select 
                     value={formData.interviewType} 
                     onValueChange={async (value: 'technical' | 'behavioral' | 'mixed') => {
@@ -1542,9 +1543,9 @@ const HRInterviewCreator = () => {
 
               {/* Drag and Drop Upload Area */}
               <div className="space-y-2">
-                <Label>Upload New Job Description</Label>
+                <Label className="text-sm sm:text-base">Upload New Job Description</Label>
                 <div
-                  className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                  className={`border-2 border-dashed rounded-lg p-4 sm:p-6 text-center transition-colors ${
                     isDragOver 
                       ? 'border-primary-500 bg-primary-50' 
                       : 'border-gray-300 hover:border-gray-400'
@@ -1553,8 +1554,8 @@ const HRInterviewCreator = () => {
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                 >
-                  <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-                  <p className="text-sm font-medium text-gray-900 mb-1">
+                  <Upload className="mx-auto h-6 w-6 sm:h-8 sm:w-8 text-gray-400 mb-2" />
+                  <p className="text-xs sm:text-sm font-medium text-gray-900 mb-1">
                     Drop files here or click to browse (PDF, DOCX, TXT)
                   </p>
                   <p className="text-xs text-gray-500 mb-3">
@@ -1573,6 +1574,7 @@ const HRInterviewCreator = () => {
                     size="sm"
                     onClick={() => document.getElementById('file-upload')?.click()}
                     disabled={isUploading || isExtractingText}
+                    className="w-full sm:w-auto"
                   >
                     {isExtractingText ? 'Extracting Text...' : isUploading ? 'Uploading...' : 'Choose File'}
                   </Button>
@@ -1605,29 +1607,29 @@ const HRInterviewCreator = () => {
 
               {/* Job Description Field */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="jobDescription">Job Description *</Label>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <Label htmlFor="jobDescription" className="text-sm sm:text-base">Job Description *</Label>
                   {formData.jobDescription && (
                     <Dialog open={isExpandDialogOpen} onOpenChange={setIsExpandDialogOpen}>
                       <DialogTrigger asChild>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                          className="text-blue-600 hover:text-blue-700 flex items-center gap-1 w-full sm:w-auto"
                         >
                           <Maximize2 className="h-4 w-4" />
                           Expand
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
+                      <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[80vh] overflow-hidden">
                         <DialogHeader>
-                          <DialogTitle>Job Description - Full Text</DialogTitle>
-                          <DialogDescription>
+                          <DialogTitle className="text-lg sm:text-xl">Job Description - Full Text</DialogTitle>
+                          <DialogDescription className="text-sm sm:text-base">
                             View the complete job description text that was extracted from the uploaded PDF file.
                           </DialogDescription>
                         </DialogHeader>
                         <div className="overflow-y-auto max-h-[60vh]">
-                          <div className="whitespace-pre-wrap text-sm leading-relaxed p-4 bg-gray-50 rounded-lg border">
+                          <div className="whitespace-pre-wrap text-xs sm:text-sm leading-relaxed p-3 sm:p-4 bg-gray-50 rounded-lg border">
                             {formData.jobDescription}
                           </div>
                         </div>
@@ -1642,7 +1644,7 @@ const HRInterviewCreator = () => {
                   onChange={handleInputChange}
                   placeholder="Job description will be auto-filled when you select a role above..."
                   rows={4}
-                  className="resize-none"
+                  className="resize-none text-sm sm:text-base"
                   readOnly
                 />
               </div>
@@ -1661,25 +1663,25 @@ const HRInterviewCreator = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-sm mb-4">
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                <div className="text-blue-600 font-medium">Total Questions</div>
-                <div className="text-2xl font-bold text-blue-800">{formData.totalQuestions || 'Calculating...'}</div>
+                <div className="text-blue-600 font-medium text-xs sm:text-sm">Total Questions</div>
+                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.totalQuestions || 'Calculating...'}</div>
                 <div className="text-xs text-blue-600">Based on parameters</div>
               </div>
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                <div className="text-blue-600 font-medium">Duration</div>
-                <div className="text-2xl font-bold text-blue-800">{formData.duration || 'Calculating...'} min</div>
+                <div className="text-blue-600 font-medium text-xs sm:text-sm">Duration</div>
+                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.duration || 'Calculating...'} min</div>
                 <div className="text-xs text-blue-600">Auto-calculated</div>
               </div>
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                <div className="text-blue-600 font-medium">Parameters</div>
-                <div className="text-2xl font-bold text-blue-800">{Object.keys(customParameters).length}</div>
+                <div className="text-blue-600 font-medium text-xs sm:text-sm">Parameters</div>
+                <div className="text-xl sm:text-2xl font-bold text-blue-800">{Object.keys(customParameters).length}</div>
                 <div className="text-xs text-blue-600">Assessment areas</div>
               </div>
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                <div className="text-blue-600 font-medium">Weightage</div>
-                <div className="text-2xl font-bold text-blue-800">
+                <div className="text-blue-600 font-medium text-xs sm:text-sm">Weightage</div>
+                <div className="text-xl sm:text-2xl font-bold text-blue-800">
                   {Object.values(customParameters).reduce((total, param) => total + (param.weight || 0), 0)}%
                 </div>
                 <div className="text-xs text-blue-600">Total weightage</div>
@@ -1688,10 +1690,10 @@ const HRInterviewCreator = () => {
             
             {/* Editable Duration and Questions Fields - Only for AI Interviews */}
             {formData.interviewMode === 'ai' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="duration">Duration (minutes)</Label>
-                <div className="flex items-center gap-3">
+                <Label htmlFor="duration" className="text-sm sm:text-base">Duration (minutes)</Label>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                   <Input
                     id="duration"
                     type="number"
@@ -1701,8 +1703,9 @@ const HRInterviewCreator = () => {
                     min="5"
                     max="120"
                     placeholder="Auto-calculated"
+                    className="text-sm sm:text-base"
                   />
-                  <div className="text-sm text-gray-500 min-w-fit">
+                  <div className="text-xs sm:text-sm text-gray-500 min-w-fit">
                     {formData.duration ? `${formData.duration} min` : 'Calculating...'}
                   </div>
                 </div>
@@ -1715,8 +1718,8 @@ const HRInterviewCreator = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="totalQuestions">Total Questions</Label>
-                <div className="flex items-center gap-3">
+                <Label htmlFor="totalQuestions" className="text-sm sm:text-base">Total Questions</Label>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                   <Input
                     id="totalQuestions"
                     type="number"
@@ -1727,8 +1730,9 @@ const HRInterviewCreator = () => {
                     max="30"
                     step="1"
                     placeholder="Auto-calculated"
+                    className="text-sm sm:text-base"
                   />
-                  <div className="text-sm text-gray-500 min-w-fit">
+                  <div className="text-xs sm:text-sm text-gray-500 min-w-fit">
                     {formData.totalQuestions ? `${formData.totalQuestions} questions` : 'Calculating...'}
                   </div>
                 </div>
@@ -1757,25 +1761,25 @@ const HRInterviewCreator = () => {
           </CardHeader>
           <CardContent className="space-y-6">
           {/* Always show Save Configuration button, show other buttons conditionally */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between mb-4 sm:mb-6 gap-3">
+            <div className="flex flex-wrap gap-2 sm:gap-3">
               {/* Show Generate button only when creating new parameters */}
               {(!parametersSaved || Object.keys(customParameters).length === 0) && (
                 <Button
                   onClick={() => generateDynamicParameters(true)} // Always force fresh generation
                   disabled={isLoadingParameters || !formData.position}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 w-full sm:w-auto"
                   title="Generate completely new parameters, ignoring any cached versions"
                 >
                   {isLoadingParameters ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Generating...
+                      <span className="text-sm sm:text-base">Generating...</span>
                     </>
                   ) : (
                     <>
                       <Brain className="h-4 w-4" />
-                      Generate AI Parameters
+                      <span className="text-sm sm:text-base">Generate AI Parameters</span>
                     </>
                   )}
                 </Button>
@@ -1786,17 +1790,17 @@ const HRInterviewCreator = () => {
                 <Button
                   onClick={saveParameters}
                   disabled={isSavingParameters}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
                 >
                   {isSavingParameters ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Saving...
+                      <span className="text-sm sm:text-base">Saving...</span>
                     </>
                   ) : (
                     <>
                       <Save className="h-4 w-4" />
-                      Save Parameters
+                      <span className="text-sm sm:text-base">Save Parameters</span>
                     </>
                   )}
                 </Button>
@@ -1936,34 +1940,34 @@ const HRInterviewCreator = () => {
                           </div>
                           
                           {/* Parameter Details Grid */}
-                          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
                             <div className="space-y-2">
-                              <Label>Weight (%)</Label>
-                              <div className="text-lg font-semibold text-gray-900">
+                              <Label className="text-xs sm:text-sm">Weight (%)</Label>
+                              <div className="text-base sm:text-lg font-semibold text-gray-900">
                                 {param.weight}%
                               </div>
                             </div>
                             <div className="space-y-2">
-                              <Label>Min Questions</Label>
-                              <div className="text-lg font-semibold text-gray-900">
+                              <Label className="text-xs sm:text-sm">Min Questions</Label>
+                              <div className="text-base sm:text-lg font-semibold text-gray-900">
                                 {param.min_questions}
                               </div>
                             </div>
                             <div className="space-y-2">
-                              <Label>Max Questions</Label>
-                              <div className="text-lg font-semibold text-gray-900">
+                              <Label className="text-xs sm:text-sm">Max Questions</Label>
+                              <div className="text-base sm:text-lg font-semibold text-gray-900">
                                 {param.max_questions}
                               </div>
                             </div>
                             <div className="space-y-2">
-                              <Label title="Time allocated for candidate to answer (question reading time is additional)">Answer Time (min)</Label>
-                              <div className="text-lg font-semibold text-gray-900">
+                              <Label className="text-xs sm:text-sm" title="Time allocated for candidate to answer (question reading time is additional)">Answer Time (min)</Label>
+                              <div className="text-base sm:text-lg font-semibold text-gray-900">
                                 {param.max_time}
                               </div>
                             </div>
                             <div className="space-y-2">
-                              <Label>Level</Label>
-                              <div className="text-lg font-semibold text-gray-900">
+                              <Label className="text-xs sm:text-sm">Level</Label>
+                              <div className="text-base sm:text-lg font-semibold text-gray-900">
                                 {param.level}
                               </div>
                             </div>
@@ -2003,15 +2007,16 @@ const HRInterviewCreator = () => {
                             />
                           </div>
                           
-                          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 sm:gap-4">
                             <div className="space-y-2">
-                              <Label>Weight (%)</Label>
+                              <Label className="text-xs sm:text-sm">Weight (%)</Label>
                               <Input
                                 type="number"
                                 min="0"
                                 max="100"
                                 value={param.weight}
                                 onChange={(e) => updateParameter(key, 'weight', e.target.value)}
+                                className="text-sm sm:text-base"
                               />
                             </div>
                             <div className="space-y-2">

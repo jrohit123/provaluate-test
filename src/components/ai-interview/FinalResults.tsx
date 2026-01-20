@@ -1550,38 +1550,39 @@ const FinalResults = () => {
       <div className={`w-full transition-colors duration-300 ${
         isDarkMode ? 'bg-gray-800' : 'bg-white border-b border-gray-200'
       }`}>
-        <div className="py-4 px-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+        <div className="py-3 sm:py-4 px-3 sm:px-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="flex items-center space-x-2 sm:space-x-4">
               <button
                 onClick={() => navigate('/dashboard', { state: { activeSection: 'interview-dashboard' } })}
-                className={`flex items-center space-x-2 transition-colors ${
+                className={`flex items-center space-x-2 transition-colors text-sm sm:text-base ${
                   isDarkMode 
                     ? 'text-gray-300 hover:text-white' 
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                <ArrowLeft className="h-5 w-5" />
-                <span>Back to Dashboard</span>
+                <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="hidden sm:inline">Back to Dashboard</span>
+                <span className="sm:hidden">Back</span>
               </button>
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex flex-wrap items-center gap-2 sm:space-x-4">
               <button
                 onClick={toggleTheme}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                className={`flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 rounded-lg transition-colors text-xs sm:text-sm ${
                   isDarkMode 
                     ? 'bg-gray-700 hover:bg-gray-600 text-white' 
                     : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200'
                 }`}
                 title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
               >
-                {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                <span>{isDarkMode ? 'Light' : 'Dark'}</span>
+                {isDarkMode ? <Sun className="h-3 w-3 sm:h-4 sm:w-4" /> : <Moon className="h-3 w-3 sm:h-4 sm:w-4" />}
+                <span className="hidden sm:inline">{isDarkMode ? 'Light' : 'Dark'}</span>
               </button>
               <button
                 onClick={generatePDFReport}
                 disabled={isGeneratingPDF}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                className={`flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 rounded-lg transition-colors text-xs sm:text-sm ${
                   isDarkMode 
                     ? 'bg-red-600 hover:bg-red-700 text-white' 
                     : 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200'
@@ -1590,39 +1591,42 @@ const FinalResults = () => {
               >
                 {isGeneratingPDF ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Generating PDF...</span>
+                    <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
+                    <span className="hidden sm:inline">Generating PDF...</span>
+                    <span className="sm:hidden">PDF...</span>
                   </>
                 ) : (
                   <>
-                    <FileText className="h-4 w-4" />
-                    <span>Download PDF Report</span>
+                    <FileText className="h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">Download PDF Report</span>
+                    <span className="sm:hidden">PDF</span>
                   </>
                 )}
               </button>
 
               <button
                 onClick={downloadExcel}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                className={`flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 rounded-lg transition-colors text-xs sm:text-sm ${
                   isDarkMode 
                     ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
                     : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
                 }`}
                 title="Download comprehensive Excel report with multiple sheets including overview, parameters, questions, answers, media files, and score analysis"
               >
-                <FileSpreadsheet className="h-4 w-4" />
-                <span>Excel Report</span>
+                <FileSpreadsheet className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Excel Report</span>
+                <span className="sm:hidden">Excel</span>
               </button>
               <button
                 onClick={shareReport}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                className={`flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 rounded-lg transition-colors text-xs sm:text-sm ${
                   isDarkMode 
                     ? 'bg-gray-700 hover:bg-gray-600 text-white' 
                     : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200'
                 }`}
               >
-                <Share2 className="h-4 w-4" />
-                <span>Share</span>
+                <Share2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Share</span>
               </button>
             </div>
           </div>
@@ -1630,35 +1634,35 @@ const FinalResults = () => {
       </div>
 
       {/* Main Content */}
-      <div className="py-8 px-4 w-full">
+      <div className="py-4 sm:py-8 px-3 sm:px-4 w-full">
         {/* Interview Overview */}
-        <div className={`rounded-lg p-6 mb-8 transition-colors duration-300 ${
+        <div className={`rounded-lg p-4 sm:p-6 mb-6 sm:mb-8 transition-colors duration-300 ${
           isDarkMode ? 'bg-gray-800' : 'bg-white border border-gray-200 shadow-sm'
         }`}>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             <div className="text-center">
-              <div className={`text-3xl font-bold ${
+              <div className={`text-2xl sm:text-3xl font-bold ${
                 isDarkMode ? 'text-blue-400' : 'text-blue-600'
               }`}>{interview?.overall_score?.toFixed(1) || 'N/A'}/10</div>
-              <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Overall Score</div>
+              <div className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Overall Score</div>
               <div className={`text-xs mt-1 px-2 py-1 rounded-full text-white ${getScoreClass(interview?.overall_score || 0)}`}>
-                {getScoreLabel(interview?.overall_score || 0)} Performance
+                {getScoreLabel(interview?.overall_score || 0)}
               </div>
             </div>
             <div className="text-center">
-              <div className={`text-3xl font-bold ${
+              <div className={`text-2xl sm:text-3xl font-bold ${
                 isDarkMode ? 'text-green-400' : 'text-green-600'
               }`}>{parameterCount}</div>
-              <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Parameters Assessed</div>
+              <div className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Parameters</div>
             </div>
             <div className="text-center">
-              <div className={`text-3xl font-bold ${
+              <div className={`text-2xl sm:text-3xl font-bold ${
                 isDarkMode ? 'text-yellow-400' : 'text-yellow-600'
               }`}>{interview?.total_questions || 0}</div>
-              <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Questions</div>
+              <div className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Questions</div>
             </div>
              <div className="text-center">
-               <div className={`text-3xl font-bold ${
+               <div className={`text-2xl sm:text-3xl font-bold ${
                  isDarkMode ? 'text-purple-400' : 'text-purple-600'
                }`}>
                  {interview.completed_at && interview.started_at 
@@ -1666,7 +1670,7 @@ const FinalResults = () => {
                    : `${interview.duration_minutes || 30} min`
                  }
                </div>
-               <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Duration</div>
+               <div className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Duration</div>
              </div>
           </div>
         </div>
@@ -1674,13 +1678,13 @@ const FinalResults = () => {
 
         {/* Unified Assessment Dashboard */}
         {reportData?.questions && reportData.questions.length > 0 && (
-          <div className={`rounded-lg p-6 transition-colors duration-300 ${
+          <div className={`rounded-lg p-4 sm:p-6 transition-colors duration-300 ${
             isDarkMode ? 'bg-gray-800' : 'bg-white border border-gray-200 shadow-sm'
           }`}>
-            <h2 className={`text-2xl font-bold mb-8 flex items-center ${
+            <h2 className={`text-xl sm:text-2xl font-bold mb-6 sm:mb-8 flex items-center ${
               isDarkMode ? 'text-white' : 'text-gray-900'
             }`}>
-              <BarChart3 className="h-6 w-6 mr-3" />
+              <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3" />
               Assessment Dashboard
             </h2>
             
@@ -1758,12 +1762,12 @@ const FinalResults = () => {
               return (
                 <div className="space-y-6">
                   {/* Enhanced Parameter Tabs with Performance Metrics */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
                     {Object.entries(parameters).map(([paramKey, param]: [string, any]) => (
                       <button
                         key={paramKey}
                         onClick={() => setSelectedParameter(paramKey)}
-                        className={`p-6 rounded-xl transition-all duration-200 text-left ${
+                        className={`p-4 sm:p-6 rounded-xl transition-all duration-200 text-left ${
                           selectedParameter === paramKey
                             ? isDarkMode 
                               ? 'bg-blue-600 text-white shadow-lg transform scale-105'
@@ -1773,9 +1777,9 @@ const FinalResults = () => {
                               : 'bg-white text-gray-800 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 hover:scale-102 shadow-sm hover:shadow-md'
                         }`}
                       >
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-bold text-lg leading-tight">{param.name}</h4>
+                          <div className="space-y-3 sm:space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h4 className="font-bold text-base sm:text-lg leading-tight">{param.name}</h4>
                             {param.isPersonal ? (
                               <div className={`px-3 py-1 rounded-full text-sm font-medium ${
                                 selectedParameter === paramKey && !isDarkMode
@@ -1787,7 +1791,7 @@ const FinalResults = () => {
                                 Review Only
                               </div>
                             ) : (
-                              <div className={`text-3xl font-bold ${
+                              <div className={`text-2xl sm:text-3xl font-bold ${
                                 selectedParameter === paramKey 
                                   ? isDarkMode ? 'text-white' : 'text-blue-700'
                                   : getScoreColor(param.averageScore)
@@ -1797,8 +1801,8 @@ const FinalResults = () => {
                             )}
                           </div>
                           
-                          <div className="space-y-3">
-                            <div className="flex justify-between text-lg font-medium opacity-90">
+                          <div className="space-y-2 sm:space-y-3">
+                            <div className="flex justify-between text-sm sm:text-lg font-medium opacity-90">
                               {param.isPersonal ? (
                                 <span>No scoring applied</span>
                               ) : (
@@ -1840,17 +1844,17 @@ const FinalResults = () => {
                   {/* Questions for Selected Parameter */}
                   {selectedParameter && parameters[selectedParameter] && (
             <div className="space-y-6">
-                      <div className={`rounded-xl p-6 mb-6 transition-colors duration-300 ${
+                      <div className={`rounded-xl p-4 sm:p-6 mb-4 sm:mb-6 transition-colors duration-300 ${
                         isDarkMode ? 'bg-gray-700' : 'bg-gray-50 border border-gray-200 shadow-sm'
                       }`}>
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                           <div>
-                            <h3 className={`text-2xl font-bold ${
+                            <h3 className={`text-xl sm:text-2xl font-bold ${
                               isDarkMode ? 'text-white' : 'text-gray-900'
                             }`}>
                               {parameters[selectedParameter].name}
                             </h3>
-                            <p className={`text-lg mt-3 leading-relaxed ${
+                            <p className={`text-sm sm:text-lg mt-2 sm:mt-3 leading-relaxed ${
                               isDarkMode ? 'text-gray-300' : 'text-gray-600'
                             }`}>
                               {parameters[selectedParameter].isPersonal 
@@ -1859,17 +1863,17 @@ const FinalResults = () => {
                               }
                             </p>
                           </div>
-                          <div className="text-right">
+                          <div className="text-left sm:text-right">
                             {parameters[selectedParameter].isPersonal ? (
-                              <div className="bg-blue-600 text-white px-4 py-2 rounded-full text-lg font-medium">
+                              <div className="bg-blue-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-sm sm:text-lg font-medium">
                                 Review Only
                               </div>
                             ) : (
-                              <div className={`text-4xl font-bold ${getScoreColor(parameters[selectedParameter].averageScore)}`}>
+                              <div className={`text-3xl sm:text-4xl font-bold ${getScoreColor(parameters[selectedParameter].averageScore)}`}>
                                 {parameters[selectedParameter].averageScore}/10
                               </div>
                             )}
-                            <div className={`text-lg font-medium ${
+                            <div className={`text-sm sm:text-lg font-medium ${
                               isDarkMode ? 'text-gray-300' : 'text-gray-600'
                             }`}>
                               {parameters[selectedParameter].questionCount} questions
@@ -1888,14 +1892,14 @@ const FinalResults = () => {
                           }`}>
                             {/* Question Header - Always Visible */}
                             <div 
-                              className={`p-6 cursor-pointer transition-colors ${
+                              className={`p-4 sm:p-6 cursor-pointer transition-colors ${
                                 isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-50'
                               }`}
                               onClick={() => toggleQuestion(questionId)}
                             >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                  <h4 className={`text-xl font-bold ${
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
+                                <div className="flex items-center gap-3 sm:gap-4">
+                                  <h4 className={`text-base sm:text-xl font-bold ${
                                     isDarkMode ? 'text-white' : 'text-gray-900'
                                   }`}>Question {index + 1}</h4>
                                   {parameters[selectedParameter].isPersonal ? (
@@ -1903,16 +1907,16 @@ const FinalResults = () => {
                                       Review Only
                                     </div>
                                   ) : (
-                                    <div className={`text-2xl font-bold ${getScoreColor(answer.score)}`}>
+                                    <div className={`text-xl sm:text-2xl font-bold ${getScoreColor(answer.score)}`}>
                                       {answer.score}/10
                                     </div>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <span className={`text-sm ${
+                                  <span className={`text-xs sm:text-sm ${
                                     isDarkMode ? 'text-gray-400' : 'text-gray-500'
                                   }`}>
-                                    {isExpanded ? 'Click to collapse' : 'Click to expand'}
+                                    {isExpanded ? 'Collapse' : 'Expand'}
                                   </span>
                                   {isExpanded ? (
                                     <ChevronUp className={`h-5 w-5 ${
@@ -1941,10 +1945,10 @@ const FinalResults = () => {
                             
                             {/* Expandable Content */}
                             {isExpanded && (
-                              <div className={`px-6 pb-6 border-t ${
+                              <div className={`px-4 sm:px-6 pb-4 sm:pb-6 border-t ${
                                 isDarkMode ? 'border-gray-600' : 'border-gray-200'
                               }`}>
-                                <div className="pt-6 space-y-6">
+                                <div className="pt-4 sm:pt-6 space-y-4 sm:space-y-6">
                                   {/* Full Question */}
                                   <div>
                                     <h5 className={`font-bold mb-3 text-lg ${
@@ -1966,11 +1970,11 @@ const FinalResults = () => {
                                   </div>
 
                                   {/* Audio/Video Buttons */}
-                                  <div className="flex gap-4">
+                                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                                     {answer.audio_url && (
                                       <button
                                         onClick={() => playAudio(answer.audio_url)}
-                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                                        className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm sm:text-base"
                                       >
                                         <Download className="h-4 w-4" />
                                         Play Audio
@@ -1980,7 +1984,7 @@ const FinalResults = () => {
                                     {answer.question_video_url && (
                                       <button
                                         onClick={() => playVideo(answer.question_video_url)}
-                                        className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                                        className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm sm:text-base"
                                       >
                                         <Download className="h-4 w-4" />
                                         Play Video
