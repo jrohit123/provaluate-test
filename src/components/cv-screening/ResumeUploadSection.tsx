@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Upload, FileText, User, CheckCircle, Play, Briefcase, Grid, Loader2, Download, X, RefreshCw } from 'lucide-react';
+import { Upload, FileText, User, CheckCircle, Play, Briefcase, Grid, Loader2, Download, X, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -180,6 +180,12 @@ export const ResumeUploadSection = () => {
   const [processingCompleted, setProcessingCompleted] = useState<boolean>(false);
   const [companyUsageInfo, setCompanyUsageInfo] = useState<CompanyUsageInfo | null>(null);
   const [showRechargeDialog, setShowRechargeDialog] = useState(false);
+  const [jdCriteriaMismatch, setJdCriteriaMismatch] = useState<{
+    isMismatched: boolean;
+    jdTitle: string;
+    criteriaName: string;
+    reason: string;
+  } | null>(null);
 
   // ✅ ADD: Read directly from URL params on mount (before Dashboard's useEffect runs)
   // This ensures we pick up JD and criteria immediately when opening from extension
@@ -566,6 +572,31 @@ export const ResumeUploadSection = () => {
     }
   }, [user?.id, user?.profile?.company_id, selectedJobDescriptionId, toast]);
 
+  // Helper function to validate JD-Criteria compatibility
+  const validateJdCriteriaCompatibility = async (jdId: string, criteriaId: string): Promise<boolean> => {
+    if (!jdId || !criteriaId) return false;
+    
+    try {
+      const { data, error } = await supabase
+        .from('criteria')
+        .select('criteria_id, criteria_name, jd_id')
+        .eq('criteria_id', criteriaId)
+        .single();
+      
+      if (error || !data) return false;
+      
+      const criteriaJdId = data.jd_id;
+      const isGlobalCriteria = criteriaJdId === null;
+      const isMatchingJD = criteriaJdId === jdId;
+      
+      // Valid if criteria is global OR matches the JD
+      return isGlobalCriteria || isMatchingJD;
+    } catch (error) {
+      console.error('Error validating JD-Criteria compatibility:', error);
+      return false;
+    }
+  };
+
   // Load resumes, job descriptions, and criteria grids when component mounts or user changes
   useEffect(() => {
     if (user?.profile?.company_id) {
@@ -619,6 +650,38 @@ export const ResumeUploadSection = () => {
       }
     }
   }, [criteriaGrids, selectedCriteriaGridId, toast]);
+
+  // ✅ NEW: Validate JD-Criteria compatibility when both are selected
+  useEffect(() => {
+    const validateExistingSelection = async () => {
+      if (selectedJobDescriptionId && selectedCriteriaGridId) {
+        const isValid = await validateJdCriteriaCompatibility(selectedJobDescriptionId, selectedCriteriaGridId);
+        
+        if (!isValid) {
+          const selectedJD = jobDescriptions.find(jd => jd.jd_id === selectedJobDescriptionId);
+          const currentCriteria = criteriaGrids.find(grid => grid.id === selectedCriteriaGridId);
+          
+          // Set persistent mismatch warning
+          setJdCriteriaMismatch({
+            isMismatched: true,
+            jdTitle: selectedJD?.title || 'Selected Job',
+            criteriaName: currentCriteria?.name || 'Selected Criteria',
+            reason: `The selected criteria "${currentCriteria?.name || 'Unknown'}" was created for a different job description and is not suitable for "${selectedJD?.title || 'this job'}". Please select a compatible criteria.`
+          });
+        } else {
+          // Valid combination - clear mismatch warning
+          setJdCriteriaMismatch(null);
+        }
+      } else {
+        // No selection - clear any mismatch
+        setJdCriteriaMismatch(null);
+      }
+    };
+
+    if (selectedJobDescriptionId && selectedCriteriaGridId && criteriaGrids.length > 0) {
+      validateExistingSelection();
+    }
+  }, [selectedJobDescriptionId, selectedCriteriaGridId, criteriaGrids, jobDescriptions]);
 
   // Fetch assessment reports filtered by selected JD and criteria
   const fetchAssessmentReports = useCallback(async () => {
@@ -910,6 +973,35 @@ export const ResumeUploadSection = () => {
       return;
     }
 
+    // ✅ NEW: Check for mismatch before processing
+    if (jdCriteriaMismatch?.isMismatched) {
+      toast({
+        title: "❌ Cannot Process Resumes",
+        description: "There is a mismatch between the selected job description and criteria. Please configure a compatible combination before processing.",
+        variant: "destructive",
+        duration: 7000,
+      });
+      return;
+    }
+
+    // ✅ NEW: Validate JD-Criteria compatibility
+    const selectedJDId = sessionStorage.getItem('selectedJDId') || '';
+    const selectedCriteriaGridId = sessionStorage.getItem('selectedCriteriaGridId') || '';
+    
+    if (selectedJDId && selectedCriteriaGridId) {
+      const isValid = await validateJdCriteriaCompatibility(selectedJDId, selectedCriteriaGridId);
+      if (!isValid) {
+        const selectedJD = jobDescriptions.find(jd => jd.jd_id === selectedJDId);
+        toast({
+          title: "❌ Cannot Process Resumes",
+          description: `The selected criteria doesn't match the job description "${selectedJD?.title || 'Unknown'}". Please select a compatible criteria combination.`,
+          variant: "destructive",
+          duration: 7000,
+        });
+        return;
+      }
+    }
+
     // Check CV processing limits before proceeding
     if (companyUsageInfo && !companyUsageInfo.canProcessCV) {
       setShowRechargeDialog(true);
@@ -1137,6 +1229,17 @@ export const ResumeUploadSection = () => {
   };
 
   const handleFileSelect = () => {
+    // ✅ NEW: Block file upload if JD-Criteria mismatch exists
+    if (jdCriteriaMismatch?.isMismatched) {
+      toast({
+        title: "⚠️ Cannot Upload Files",
+        description: "There is a mismatch between the selected job description and criteria. Please configure a compatible combination before uploading files.",
+        variant: "destructive",
+        duration: 5000,
+      });
+      return;
+    }
+
     // Block file upload if trial expired or CVs exhausted
     if (companyUsageInfo && !companyUsageInfo.canProcessCV) {
       toast({
@@ -1260,6 +1363,41 @@ export const ResumeUploadSection = () => {
     const selectedJD = jobDescriptions.find(jd => jd.jd_id === jdId);
     setCurrentJobDescription(selectedJD || null);
     
+    // ✅ NEW: Validate current criteria with new JD
+    if (selectedCriteriaGridId) {
+      const isValid = await validateJdCriteriaCompatibility(jdId, selectedCriteriaGridId);
+      
+      if (!isValid) {
+        const currentCriteria = criteriaGrids.find(grid => grid.id === selectedCriteriaGridId);
+        
+        // Set persistent mismatch warning
+        setJdCriteriaMismatch({
+          isMismatched: true,
+          jdTitle: selectedJD?.title || 'Selected Job',
+          criteriaName: currentCriteria?.name || 'Selected Criteria',
+          reason: `The selected criteria "${currentCriteria?.name || 'Unknown'}" was created for a different job description and is not suitable for "${selectedJD?.title || 'this job'}". Please select a compatible criteria.`
+        });
+        
+        // Clear the incompatible criteria selection
+        setSelectedCriteriaGridId('');
+        sessionStorage.removeItem('selectedCriteriaGridId');
+        setCurrentEvaluationCriteria(null);
+        
+        toast({
+          title: "⚠️ Criteria Mismatch Detected",
+          description: `The criteria doesn't match the selected job. Please select appropriate criteria from the dropdown.`,
+          variant: "destructive",
+          duration: 5000,
+        });
+      } else {
+        // Valid combination - clear mismatch warning
+        setJdCriteriaMismatch(null);
+      }
+    } else {
+      // No criteria selected - clear any previous mismatch
+      setJdCriteriaMismatch(null);
+    }
+    
     // Reload criteria grids filtered by selected JD
     await loadCriteriaGrids();
     
@@ -1270,7 +1408,36 @@ export const ResumeUploadSection = () => {
   };
 
   // Handle criteria grid selection
-  const handleCriteriaGridSelect = (gridId: string) => {
+  const handleCriteriaGridSelect = async (gridId: string) => {
+    // ✅ NEW: Validate criteria matches selected JD
+    if (selectedJobDescriptionId) {
+      const isValid = await validateJdCriteriaCompatibility(selectedJobDescriptionId, gridId);
+      
+      if (!isValid) {
+        const selectedJD = jobDescriptions.find(jd => jd.jd_id === selectedJobDescriptionId);
+        const selectedCriteria = criteriaGrids.find(grid => grid.id === gridId);
+        
+        // Set persistent mismatch warning
+        setJdCriteriaMismatch({
+          isMismatched: true,
+          jdTitle: selectedJD?.title || 'Selected Job',
+          criteriaName: selectedCriteria?.name || 'Selected Criteria',
+          reason: `The criteria "${selectedCriteria?.name || 'Unknown'}" doesn't match the selected job description "${selectedJD?.title || 'Unknown'}". Please select a compatible criteria.`
+        });
+        
+        toast({
+          title: "⚠️ Criteria Mismatch",
+          description: `This criteria doesn't match the selected job description. The warning will remain until you select a compatible combination.`,
+          variant: "destructive",
+          duration: 5000,
+        });
+        return; // Don't select this criteria
+      }
+    }
+    
+    // ✅ Valid combination - clear mismatch warning
+    setJdCriteriaMismatch(null);
+    
     setSelectedCriteriaGridId(gridId);
     sessionStorage.setItem('selectedCriteriaGridId', gridId);
     // Stop any existing auto-refresh when switching criteria grids
@@ -1390,6 +1557,7 @@ export const ResumeUploadSection = () => {
           description: "Please select a job description from the dropdown above first.",
           variant: "destructive",
         });
+        setIsEvaluating(false);
         return;
       }
 
@@ -1399,6 +1567,33 @@ export const ResumeUploadSection = () => {
           description: "Please select an evaluation criteria grid from the dropdown above first.",
           variant: "destructive",
         });
+        setIsEvaluating(false);
+        return;
+      }
+
+      // ✅ NEW: Check for mismatch before processing
+      if (jdCriteriaMismatch?.isMismatched) {
+        toast({
+          title: "❌ Cannot Process Resumes",
+          description: "There is a mismatch between the selected job description and criteria. Please configure a compatible combination before processing.",
+          variant: "destructive",
+          duration: 7000,
+        });
+        setIsEvaluating(false);
+        return;
+      }
+
+      // ✅ NEW: Double-check validation before processing
+      const isValid = await validateJdCriteriaCompatibility(selectedJDId, selectedCriteriaGridId);
+      if (!isValid) {
+        const selectedJD = jobDescriptions.find(jd => jd.jd_id === selectedJDId);
+        toast({
+          title: "❌ Cannot Process Resumes",
+          description: `The selected criteria doesn't match the job description "${selectedJD?.title || 'Unknown'}". Please select a compatible criteria combination.`,
+          variant: "destructive",
+          duration: 7000,
+        });
+        setIsEvaluating(false);
         return;
       }
 
@@ -1791,6 +1986,22 @@ export const ResumeUploadSection = () => {
       {/* Trial Expiration Warning */}
       <TrialExpirationWarning />
 
+      {/* JD-Criteria Mismatch Warning */}
+      {jdCriteriaMismatch?.isMismatched && (
+        <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-400 rounded-r-lg shadow-sm animate-fade-in">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
+            </div>
+            <div className="ml-3 flex-1">
+              <p className="text-sm text-red-700">
+                Please select appropriate combination of job description and criteria so as to proceed for CV processing. Please check what criterias are available for your selected JD.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Row: Job Description Selection, Criteria Selection, and Provaluate Button */}
       <Card className="animate-fade-in mb-6">
         <CardContent className="p-4 sm:p-6">
@@ -1990,7 +2201,7 @@ export const ResumeUploadSection = () => {
                 <div className="flex gap-2 justify-center">
                   <Button 
                     onClick={handleFileSelect}
-                    disabled={companyUsageInfo && !companyUsageInfo.canProcessCV}
+                    disabled={(companyUsageInfo && !companyUsageInfo.canProcessCV) || jdCriteriaMismatch?.isMismatched}
                     className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Add More Files
@@ -2041,7 +2252,7 @@ export const ResumeUploadSection = () => {
                     e.stopPropagation(); // Prevent event from bubbling to dropzone
                     handleFileSelect();
                   }}
-                  disabled={companyUsageInfo && !companyUsageInfo.canProcessCV}
+                  disabled={(companyUsageInfo && !companyUsageInfo.canProcessCV) || jdCriteriaMismatch?.isMismatched}
                   className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Select Files
@@ -2059,7 +2270,7 @@ export const ResumeUploadSection = () => {
                 
                 <Button
                   onClick={handleEvaluation}
-                  disabled={isEvaluating || !selectedJobDescriptionId || !selectedCriteriaGridId || !hasResumesToAnalyze || (companyUsageInfo && !companyUsageInfo.canProcessCV)}
+                  disabled={isEvaluating || !selectedJobDescriptionId || !selectedCriteriaGridId || !hasResumesToAnalyze || (companyUsageInfo && !companyUsageInfo.canProcessCV) || jdCriteriaMismatch?.isMismatched}
                   className={`relative w-full ${
                     processingState.status === 'processing' 
                       ? 'bg-blue-600 hover:bg-blue-700' 
@@ -2136,26 +2347,7 @@ export const ResumeUploadSection = () => {
                 )}
 
                 {/* Show helper text below button */}
-                {processingState.status === 'idle' && (
-                  <div className="text-center mt-2">
-                    <p className="text-xs text-muted-foreground">
-                      {!selectedJobDescriptionId || !selectedCriteriaGridId 
-                        ? "Select job description and criteria above"
-                        : !hasResumesToAnalyze
-                        ? "Upload resumes or select existing assessments"
-                        : hasExistingAssessments && !hasNewlyUploadedResumes
-                        ? "Ready to re-analyze existing resumes"
-                        : (companyUsageInfo && !companyUsageInfo.canProcessCV)
-                        ? "CV processing limit reached. Please recharge to continue."
-                        : "Ready to evaluate resumes"}
-                    </p>
-                    {(selectedJobDescriptionId && selectedCriteriaGridId && !hasResumesToAnalyze) && (
-                      <p className="text-xs text-gray-500 italic mt-1">
-                        Disclaimer: AI can make mistakes. Please use the tool judiciously.
-                      </p>
-                    )}
-                  </div>
-                )}
+                {/* Status messages removed - nothing shown below the Pro-Valuate button */}
               </div>
             </div>
                 </CardContent>
