@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
 import { useAuth } from '@/hooks/use-auth';
 import { 
@@ -66,6 +67,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
   const [savedDecisions, setSavedDecisions] = useState<{[key: string]: string}>({});
   const [savedComments, setSavedComments] = useState<{[key: string]: string}>({});
   const [expandedComments, setExpandedComments] = useState<{[key: string]: boolean}>({});
+  const [expandDialogStates, setExpandDialogStates] = useState<{[key: string]: boolean}>({});
 
   useEffect(() => {
     fetchInterviews();
@@ -205,6 +207,13 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
 
   const toggleCommentsExpanded = (interviewId: string) => {
     setExpandedComments(prev => ({
+      ...prev,
+      [interviewId]: !prev[interviewId]
+    }));
+  };
+
+  const toggleExpandDialog = (interviewId: string) => {
+    setExpandDialogStates(prev => ({
       ...prev,
       [interviewId]: !prev[interviewId]
     }));
@@ -564,32 +573,141 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
 
                       {/* Comments Section */}
                       <div className="space-y-2">
-                        <Label className="text-xs font-medium text-gray-700">Comments</Label>
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                          <Label className="text-xs font-medium text-gray-700">Comments</Label>
+                          {(localComments[interview.id] || interview.hr_comments || '') && (
+                            <Dialog open={expandDialogStates[interview.id] || false} onOpenChange={(open) => setExpandDialogStates(prev => ({...prev, [interview.id]: open}))}>
+                              <DialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-blue-600 hover:text-blue-700 flex items-center gap-1 w-full sm:w-auto"
+                                >
+                                  <Maximize2 className="h-4 w-4" />
+                                  Expand
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[80vh] overflow-hidden">
+                                <DialogHeader>
+                                  <DialogTitle className="text-lg sm:text-xl">Interview Comments - {interview.candidate_name}</DialogTitle>
+                                  <DialogDescription className="text-sm sm:text-base">
+                                    View and edit detailed comments for this candidate interview.
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <div className="overflow-y-auto max-h-[60vh]">
+                                  <textarea
+                                    value={localComments[interview.id] || interview.hr_comments || ''}
+                                    onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
+                                    placeholder="Enter your comments..."
+                                    className="w-full p-3 sm:p-4 border border-gray-300 rounded-md text-sm sm:text-base resize-none focus:outline-none focus:border-gray-300"
+                                    rows={15}
+                                  />
+                                </div>
+                                <div className="flex justify-end gap-2 p-4 border-t">
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => setExpandDialogStates(prev => ({...prev, [interview.id]: false}))}
+                                  >
+                                    Close
+                                  </Button>
+                                  <Button
+                                    onClick={() => {
+                                      handleSave(interview.id);
+                                      setExpandDialogStates(prev => ({...prev, [interview.id]: false}));
+                                    }}
+                                    disabled={saveStates[interview.id] === 'saving' || !hasUnsavedChanges(interview.id)}
+                                    className={`
+                                      transition-all duration-200
+                                      ${saveStates[interview.id] === 'saved' 
+                                        ? 'bg-green-500 text-white hover:bg-green-600' 
+                                        : saveStates[interview.id] === 'saving'
+                                        ? 'bg-yellow-500 text-white cursor-not-allowed' 
+                                        : saveStates[interview.id] === 'error'
+                                        ? 'bg-red-500 text-white hover:bg-red-600'
+                                        : hasUnsavedChanges(interview.id)
+                                        ? 'bg-blue-500 text-white hover:bg-blue-600'
+                                        : 'bg-gray-400 text-white cursor-not-allowed'
+                                      }
+                                    `}
+                                  >
+                                    {saveStates[interview.id] === 'saved' ? '✓ Saved' : 
+                                     saveStates[interview.id] === 'saving' ? 'Saving...' :
+                                     saveStates[interview.id] === 'error' ? '✗ Error' :
+                                     hasUnsavedChanges(interview.id) ? 'Save' : '✓ Saved'}
+                                  </Button>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                          )}
+                        </div>
                         <div className="relative">
                           <textarea
                             value={localComments[interview.id] || interview.hr_comments || ''}
                             onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
                             placeholder="Enter your comments..."
-                            className="w-full p-2 pr-8 border border-gray-300 rounded-md text-xs resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            rows={expandedComments[interview.id] ? 4 : 2}
+                            className="w-full p-2 pr-8 border border-gray-300 rounded-md text-xs resize-none focus:outline-none focus:border-gray-300"
+                            rows={2}
                           />
-                          {(localComments[interview.id] || interview.hr_comments || '') && (
-                            <button
-                              onClick={() => toggleCommentsExpanded(interview.id)}
-                              className={`absolute top-2 right-2 p-1 transition-colors rounded ${
-                                isLongText(localComments[interview.id] || interview.hr_comments || '') 
-                                  ? 'text-blue-500 hover:text-blue-700 hover:bg-blue-50' 
-                                  : 'text-gray-400 hover:text-gray-600'
-                              }`}
-                              title={expandedComments[interview.id] ? "Collapse editor" : "Expand editor"}
-                            >
-                              {expandedComments[interview.id] ? (
-                                <Minimize2 className="w-4 h-4" />
-                              ) : (
+                          <Dialog open={expandDialogStates[interview.id] || false} onOpenChange={(open) => setExpandDialogStates(prev => ({...prev, [interview.id]: open}))}>
+                            <DialogTrigger asChild>
+                              <button
+                                className="absolute top-2 right-2 p-1 transition-colors rounded text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                                title="Open in expanded view"
+                              >
                                 <Maximize2 className="w-4 h-4" />
-                              )}
-                            </button>
-                          )}
+                              </button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[80vh] overflow-hidden">
+                              <DialogHeader>
+                                <DialogTitle className="text-lg sm:text-xl">Interview Comments - {interview.candidate_name}</DialogTitle>
+                                <DialogDescription className="text-sm sm:text-base">
+                                  View and edit detailed comments for this candidate interview.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="overflow-y-auto max-h-[60vh]">
+                                <textarea
+                                  value={localComments[interview.id] || interview.hr_comments || ''}
+                                  onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
+                                  placeholder="Enter your comments..."
+                                  className="w-full p-3 sm:p-4 border border-gray-300 rounded-md text-sm sm:text-base resize-none focus:outline-none focus:border-gray-300"
+                                  rows={15}
+                                />
+                              </div>
+                              <div className="flex justify-end gap-2 p-4 border-t">
+                                <Button
+                                  variant="outline"
+                                  onClick={() => setExpandDialogStates(prev => ({...prev, [interview.id]: false}))}
+                                >
+                                  Close
+                                </Button>
+                                <Button
+                                  onClick={() => {
+                                    handleSave(interview.id);
+                                    setExpandDialogStates(prev => ({...prev, [interview.id]: false}));
+                                  }}
+                                  disabled={saveStates[interview.id] === 'saving' || !hasUnsavedChanges(interview.id)}
+                                  className={`
+                                    transition-all duration-200
+                                    ${saveStates[interview.id] === 'saved' 
+                                      ? 'bg-green-500 text-white hover:bg-green-600' 
+                                      : saveStates[interview.id] === 'saving'
+                                      ? 'bg-yellow-500 text-white cursor-not-allowed' 
+                                      : saveStates[interview.id] === 'error'
+                                      ? 'bg-red-500 text-white hover:bg-red-600'
+                                      : hasUnsavedChanges(interview.id)
+                                      ? 'bg-blue-500 text-white hover:bg-blue-600'
+                                      : 'bg-gray-400 text-white cursor-not-allowed'
+                                      }
+                                    `}
+                                >
+                                  {saveStates[interview.id] === 'saved' ? '✓ Saved' : 
+                                   saveStates[interview.id] === 'saving' ? 'Saving...' :
+                                   saveStates[interview.id] === 'error' ? '✗ Error' :
+                                   hasUnsavedChanges(interview.id) ? 'Save' : '✓ Saved'}
+                                </Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
                         </div>
                       </div>
 
@@ -753,26 +871,69 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                               value={localComments[interview.id] || interview.hr_comments || ''}
                               onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
                               placeholder="Enter your comments..."
-                              className="w-full p-2 pr-8 border border-gray-300 rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              rows={expandedComments[interview.id] ? 6 : 2}
+                              className="w-full p-2 pr-8 border border-gray-300 rounded-md text-sm resize-none focus:outline-none focus:border-gray-300"
+                              rows={2}
                             />
-                            {(localComments[interview.id] || interview.hr_comments || '') && (
-                              <button
-                                onClick={() => toggleCommentsExpanded(interview.id)}
-                                className={`absolute top-2 right-2 p-1 transition-colors rounded ${
-                                  isLongText(localComments[interview.id] || interview.hr_comments || '') 
-                                    ? 'text-blue-500 hover:text-blue-700 hover:bg-blue-50' 
-                                    : 'text-gray-400 hover:text-gray-600'
-                                }`}
-                                title={expandedComments[interview.id] ? "Collapse editor" : "Expand editor"}
-                              >
-                                {expandedComments[interview.id] ? (
-                                  <Minimize2 className="w-4 h-4" />
-                                ) : (
+                            <Dialog open={expandDialogStates[interview.id] || false} onOpenChange={(open) => setExpandDialogStates(prev => ({...prev, [interview.id]: open}))}>
+                              <DialogTrigger asChild>
+                                <button
+                                  className="absolute top-2 right-2 p-1 transition-colors rounded text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                                  title="Open in expanded view"
+                                >
                                   <Maximize2 className="w-4 h-4" />
-                                )}
-                              </button>
-                            )}
+                                </button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[80vh] overflow-hidden">
+                                <DialogHeader>
+                                  <DialogTitle className="text-lg sm:text-xl">Interview Comments - {interview.candidate_name}</DialogTitle>
+                                  <DialogDescription className="text-sm sm:text-base">
+                                    View and edit detailed comments for this candidate interview.
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <div className="overflow-y-auto max-h-[60vh]">
+                                  <textarea
+                                    value={localComments[interview.id] || interview.hr_comments || ''}
+                                    onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
+                                    placeholder="Enter your comments..."
+                                    className="w-full p-3 sm:p-4 border border-gray-300 rounded-md text-sm sm:text-base resize-none focus:outline-none focus:border-gray-300"
+                                    rows={15}
+                                  />
+                                </div>
+                                <div className="flex justify-end gap-2 p-4 border-t">
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => setExpandDialogStates(prev => ({...prev, [interview.id]: false}))}
+                                  >
+                                    Close
+                                  </Button>
+                                  <Button
+                                    onClick={() => {
+                                      handleSave(interview.id);
+                                      setExpandDialogStates(prev => ({...prev, [interview.id]: false}));
+                                    }}
+                                    disabled={saveStates[interview.id] === 'saving' || !hasUnsavedChanges(interview.id)}
+                                    className={`
+                                      transition-all duration-200
+                                      ${saveStates[interview.id] === 'saved' 
+                                        ? 'bg-green-500 text-white hover:bg-green-600' 
+                                        : saveStates[interview.id] === 'saving'
+                                        ? 'bg-yellow-500 text-white cursor-not-allowed' 
+                                        : saveStates[interview.id] === 'error'
+                                        ? 'bg-red-500 text-white hover:bg-red-600'
+                                        : hasUnsavedChanges(interview.id)
+                                        ? 'bg-blue-500 text-white hover:bg-blue-600'
+                                        : 'bg-gray-400 text-white cursor-not-allowed'
+                                        }
+                                    `}
+                                  >
+                                    {saveStates[interview.id] === 'saved' ? '✓ Saved' : 
+                                     saveStates[interview.id] === 'saving' ? 'Saving...' :
+                                     saveStates[interview.id] === 'error' ? '✗ Error' :
+                                     hasUnsavedChanges(interview.id) ? 'Save' : '✓ Saved'}
+                                  </Button>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
                           </div>
                         </td>
                         {/* Action Column */}
