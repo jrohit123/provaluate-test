@@ -1184,7 +1184,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 sm:gap-0">
                     <span className="font-medium text-sm sm:text-base text-gray-900 break-words">{score.parameter}</span>
                     <div className="text-left sm:text-right">
-                      <span className="text-base sm:text-lg font-bold text-gray-900">{Math.round(score.score * 10)}%</span>
+                      <span className="text-base sm:text-lg font-bold text-gray-900">{Math.round(score.score * 10)}</span>
                       <span className="text-xs sm:text-sm text-gray-500 sm:ml-4 block sm:inline">Weight: {score.weightage}%</span>
                     </div>
                   </div>

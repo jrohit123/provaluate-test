@@ -2298,7 +2298,7 @@ export const ResumeUploadSection = () => {
                           </div>
                           <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-0 sm:w-12">
                             <div className="text-left sm:text-right font-semibold text-xs sm:text-sm">
-                              {percentage !== null ? `${percentage}%` : '—'}
+                              {percentage !== null ? percentage : '—'}
                             </div>
                             <div className="text-right text-xs text-muted-foreground sm:w-20">
                               W: {score.weightage ?? 0}%
