@@ -327,9 +327,8 @@ const ConversationalInterview = () => {
   // Web Speech Refs - Single source of truth
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const webSpeechActiveRef = useRef(false);
-  const accumulatedTranscriptRef = useRef<string>(''); // Persistent transcript accumulator across restarts
 
-  // Web Speech Implementation - Chrome Demo Pattern (Fixed for continuous speech)
+  // Web Speech Implementation - Maximum Chrome Compatibility with Debug Logging
   const initWebSpeech = useCallback(() => {
     if (recognitionRef.current) return;
     
@@ -343,12 +342,13 @@ const ConversationalInterview = () => {
     const recognition = new SpeechRecognition();
     
     // CRITICAL: Match Chrome demo settings exactly
-    recognition.continuous = true;     // Don't stop on pauses - most critical setting
-    recognition.interimResults = true; // Show real-time "gray text" for responsiveness
-    recognition.lang = 'en-US';         // Explicit dialect to avoid accuracy issues
-    recognition.maxAlternatives = 1;    // Only need best result
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    recognition.maxAlternatives = 1;
 
-    // Track state - use local variables for session tracking
+    // Track state
+    let finalTranscript = '';
     let startTimestamp = 0;
     let restartCount = 0;
 
@@ -356,7 +356,6 @@ const ConversationalInterview = () => {
       startTimestamp = Date.now();
       console.log('🎤 [SPEECH START] Recognition started at', new Date().toISOString());
       console.log('📊 [SPEECH START] Restart count:', restartCount);
-      console.log('📊 [SPEECH START] Current final transcript length:', accumulatedTranscriptRef.current.length);
     };
 
     recognition.onaudiostart = () => {
@@ -374,36 +373,30 @@ const ConversationalInterview = () => {
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       const now = Date.now();
       const elapsed = ((now - startTimestamp) / 1000).toFixed(1);
+      console.log(`📝 [RESULT] Got result after ${elapsed}s, resultIndex: ${event.resultIndex}, total results: ${event.results.length}`);
       
       let interimTranscript = '';
       
-      // CHROME DEMO PATTERN: Process from resultIndex, but handle final results specially
-      // Final results are permanent and should be accumulated in persistent ref
-      // Interim results should replace each other
-      
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      // Start from resultIndex to avoid reprocessing
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
         const result = event.results[i];
-        const transcript = result[0].transcript;
         
         if (result.isFinal) {
-          // Add final result to persistent accumulated transcript ref
-          accumulatedTranscriptRef.current += transcript;
-          console.log('✅ [FINAL]', transcript, `(accumulated: ${accumulatedTranscriptRef.current.length} chars)`);
+          finalTranscript += result[0].transcript;
+          console.log('✅ [FINAL]', result[0].transcript);
         } else {
-          // Interim results just get appended to interim string
-          interimTranscript += transcript;
+          interimTranscript += result[0].transcript;
+          console.log('⏳ [INTERIM]', result[0].transcript);
         }
       }
       
-      // Combine permanent final (from ref) + temporary interim
-      const fullText = (accumulatedTranscriptRef.current + interimTranscript).trim();
+      const fullText = (finalTranscript + interimTranscript).trim();
       setTranscript(fullText);
-      
-      console.log(`📊 [TRANSCRIPT] Final: ${accumulatedTranscriptRef.current.length}ch, Interim: ${interimTranscript.length}ch, Total: ${fullText.length}ch`);
+      console.log(`📊 [TRANSCRIPT UPDATE] Total length: ${fullText.length} chars`);
     };
 
     recognition.onspeechend = () => {
-      console.log('🔇 [SPEECH END] Speech ended (but recognition continues)');
+      console.log('🔇 [SPEECH END] Speech ended (but recognition should continue)');
     };
 
     recognition.onsoundend = () => {
@@ -421,6 +414,7 @@ const ConversationalInterview = () => {
       
       console.error(`❌ [ERROR] Type: "${errorType}", after ${elapsed}s`);
       console.error(`❌ [ERROR] Message:`, e.message);
+      console.error(`❌ [ERROR] Full event:`, e);
       
       // Handle fatal errors
       if (errorType === 'not-allowed') {
@@ -460,7 +454,6 @@ const ConversationalInterview = () => {
       console.log(`⏱️ [RECOGNITION END] Session lasted ${elapsed}s`);
       console.log(`🔄 [RECOGNITION END] Restart count: ${restartCount}`);
       console.log(`🎯 [RECOGNITION END] webSpeechActiveRef: ${webSpeechActiveRef.current}`);
-      console.log(`📊 [RECOGNITION END] Final transcript preserved: ${accumulatedTranscriptRef.current.length} chars`);
       
       // Auto-restart if still supposed to be active
       if (webSpeechActiveRef.current) {
@@ -499,7 +492,6 @@ const ConversationalInterview = () => {
         });
       } else {
         console.log('⏹️ [NO RESTART] webSpeechActiveRef is false');
-        // IMPORTANT: Don't reset accumulatedTranscriptRef here - it should persist until manually cleared
       }
     };
 
@@ -964,17 +956,13 @@ const ConversationalInterview = () => {
         stopWebSpeech();
         if (recognitionRef.current) {
           try {
-            // Use stop() instead of abort() to cleanly stop recognition without nullifying object
-            recognitionRef.current.stop();
+            recognitionRef.current.abort();
           } catch (e) {
-            console.log('⚠️ Error stopping recognition:', e);
+            console.log('⚠️ Error aborting recognition:', e);
           }
-          // Keep recognition object alive - don't nullify to avoid memory leaks
-          // Just control activity with webSpeechActiveRef
+          recognitionRef.current = null;
         }
         webSpeechActiveRef.current = false;
-        // Clear accumulated transcript ref for new question
-        accumulatedTranscriptRef.current = '';
 
         console.log('🔄 Transcript and Web Speech fully reset for new question');
 
@@ -2512,10 +2500,6 @@ const ConversationalInterview = () => {
     });
 
     // ✅ CRITICAL: Listen for real-time transcription updates
-    // DISABLED: Socket-started transcription conflicts with Web Speech API
-    // Web Speech API is the single source of truth for transcript updates
-    // Having two sources fight for the same state causes text flicker/overwrite
-    /*
     socket.on('transcription_update', (data) => {
       console.log('📡 Received transcription segment:', data.segment);
       
@@ -2557,7 +2541,6 @@ const ConversationalInterview = () => {
         console.log('📝 Skipping empty/short segment');
       }
     });
-    */
 
     socket.on('transcription_error', (data) => {
       console.error('❌ Transcription error:', data);
