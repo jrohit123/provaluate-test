@@ -29,10 +29,16 @@ interface SpeechRecognition extends EventTarget {
   start: () => void;
   stop: () => void;
   abort: () => void;
+  onstart: () => void;
+  onaudiostart: () => void;
+  onsoundstart: () => void;
+  onspeechstart: () => void;
   onresult: (event: SpeechRecognitionEvent) => void;
+  onspeechend: () => void;
+  onsoundend: () => void;
+  onaudioend: () => void;
   onerror: (event: SpeechRecognitionErrorEvent) => void;
   onend: () => void;
-  _healthCheckInterval?: NodeJS.Timeout;
 }
 
 declare global {
@@ -321,8 +327,9 @@ const ConversationalInterview = () => {
   // Web Speech Refs - Single source of truth
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const webSpeechActiveRef = useRef(false);
+  const accumulatedTranscriptRef = useRef<string>(''); // Persistent transcript accumulator across restarts
 
-  // Web Speech Implementation
+  // Web Speech Implementation - Chrome Demo Pattern (Fixed for continuous speech)
   const initWebSpeech = useCallback(() => {
     if (recognitionRef.current) return;
     
@@ -334,164 +341,190 @@ const ConversationalInterview = () => {
     }
     
     const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.interimResults = true;
-    recognition.continuous = true;
-    recognition.maxAlternatives = 1;
+    
+    // CRITICAL: Match Chrome demo settings exactly
+    recognition.continuous = true;     // Don't stop on pauses - most critical setting
+    recognition.interimResults = true; // Show real-time "gray text" for responsiveness
+    recognition.lang = 'en-US';         // Explicit dialect to avoid accuracy issues
+    recognition.maxAlternatives = 1;    // Only need best result
 
-    // Chrome-specific optimizations
-    if ('webkitSpeechRecognition' in window) {
-      recognition.interimResults = true;
-      recognition.continuous = true;
-    }
+    // Track state - use local variables for session tracking
+    let startTimestamp = 0;
+    let restartCount = 0;
 
-    let accumulatedFinal = '';
-    let restartTimeout: NodeJS.Timeout | null = null;
-    let lastRestartTime = 0;
-    const MIN_RESTART_INTERVAL = 100;
+    recognition.onstart = () => {
+      startTimestamp = Date.now();
+      console.log('🎤 [SPEECH START] Recognition started at', new Date().toISOString());
+      console.log('📊 [SPEECH START] Restart count:', restartCount);
+      console.log('📊 [SPEECH START] Current final transcript length:', accumulatedTranscriptRef.current.length);
+    };
+
+    recognition.onaudiostart = () => {
+      console.log('🔊 [AUDIO START] Microphone audio detected');
+    };
+
+    recognition.onsoundstart = () => {
+      console.log('🔉 [SOUND START] Sound detected');
+    };
+
+    recognition.onspeechstart = () => {
+      console.log('🗣️ [SPEECH DETECT] Speech detected');
+    };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = '';
+      const now = Date.now();
+      const elapsed = ((now - startTimestamp) / 1000).toFixed(1);
+      
+      let interimTranscript = '';
+      
+      // CHROME DEMO PATTERN: Process from resultIndex, but handle final results specially
+      // Final results are permanent and should be accumulated in persistent ref
+      // Interim results should replace each other
+      
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const res = event.results[i];
-        if (res.isFinal) {
-          accumulatedFinal += res[0].transcript + ' ';
-          console.log('✅ Final transcript segment:', res[0].transcript);
+        const result = event.results[i];
+        const transcript = result[0].transcript;
+        
+        if (result.isFinal) {
+          // Add final result to persistent accumulated transcript ref
+          accumulatedTranscriptRef.current += transcript;
+          console.log('✅ [FINAL]', transcript, `(accumulated: ${accumulatedTranscriptRef.current.length} chars)`);
         } else {
-          interim += res[0].transcript;
+          // Interim results just get appended to interim string
+          interimTranscript += transcript;
         }
       }
-      const liveText = (accumulatedFinal + interim).trim();
-      setTranscript(liveText);
+      
+      // Combine permanent final (from ref) + temporary interim
+      const fullText = (accumulatedTranscriptRef.current + interimTranscript).trim();
+      setTranscript(fullText);
+      
+      console.log(`📊 [TRANSCRIPT] Final: ${accumulatedTranscriptRef.current.length}ch, Interim: ${interimTranscript.length}ch, Total: ${fullText.length}ch`);
+    };
+
+    recognition.onspeechend = () => {
+      console.log('🔇 [SPEECH END] Speech ended (but recognition continues)');
+    };
+
+    recognition.onsoundend = () => {
+      console.log('🔕 [SOUND END] Sound ended');
+    };
+
+    recognition.onaudioend = () => {
+      console.log('🔇 [AUDIO END] Audio ended');
     };
 
     recognition.onerror = (e: SpeechRecognitionErrorEvent) => {
       const errorType = e?.error || 'unknown';
-      console.warn('SpeechRecognition error:', errorType, e);
+      const now = Date.now();
+      const elapsed = ((now - startTimestamp) / 1000).toFixed(1);
       
-      switch (errorType) {
-        case 'network':
-          console.log('🔄 Network error - will attempt restart');
-          break;
-        case 'no-speech':
-          console.log('⏸️ No speech detected - recognition will continue');
-          break;
-        case 'aborted':
-          console.log('⚠️ Recognition aborted - will restart if still active');
-          break;
-        case 'audio-capture':
-          console.error('❌ Audio capture error - microphone issue');
-          toast.error('Microphone error. Please check your microphone permissions.');
-          webSpeechActiveRef.current = false;
-          break;
-        case 'not-allowed':
-          console.error('❌ Microphone permission denied');
-          toast.error('Microphone permission denied. Please allow microphone access.');
-          webSpeechActiveRef.current = false;
-          break;
-        default:
-          console.warn('⚠️ Unknown speech recognition error:', errorType);
+      console.error(`❌ [ERROR] Type: "${errorType}", after ${elapsed}s`);
+      console.error(`❌ [ERROR] Message:`, e.message);
+      
+      // Handle fatal errors
+      if (errorType === 'not-allowed') {
+        console.error('🚫 [FATAL] Microphone permission denied');
+        toast.error('Microphone permission denied.');
+        webSpeechActiveRef.current = false;
+        return;
+      }
+      
+      if (errorType === 'audio-capture') {
+        console.error('🚫 [FATAL] No microphone detected');
+        toast.error('No microphone detected. Please check your settings.');
+        webSpeechActiveRef.current = false;
+        return;
+      }
+      
+      // Log but continue for non-fatal errors
+      if (errorType === 'no-speech') {
+        console.warn('⏸️ [WARNING] No speech detected - will continue');
+      }
+      
+      if (errorType === 'network') {
+        console.warn('🌐 [WARNING] Network error - will restart');
+      }
+      
+      if (errorType === 'aborted') {
+        console.warn('⚠️ [WARNING] Recognition aborted');
       }
     };
 
     recognition.onend = () => {
-      console.log('🔚 Speech recognition ended');
+      const now = Date.now();
+      const elapsed = ((now - startTimestamp) / 1000).toFixed(1);
+      restartCount++;
       
+      console.log('🛑 [RECOGNITION END]');
+      console.log(`⏱️ [RECOGNITION END] Session lasted ${elapsed}s`);
+      console.log(`🔄 [RECOGNITION END] Restart count: ${restartCount}`);
+      console.log(`🎯 [RECOGNITION END] webSpeechActiveRef: ${webSpeechActiveRef.current}`);
+      console.log(`📊 [RECOGNITION END] Final transcript preserved: ${accumulatedTranscriptRef.current.length} chars`);
+      
+      // Auto-restart if still supposed to be active
       if (webSpeechActiveRef.current) {
-        if (restartTimeout) {
-          clearTimeout(restartTimeout);
-        }
-
-        const now = Date.now();
-        if (now - lastRestartTime < MIN_RESTART_INTERVAL) {
-          console.log('⚠️ Restart attempted too soon, scheduling delayed restart');
-          restartTimeout = setTimeout(() => {
-            if (webSpeechActiveRef.current) {
-              tryRestart();
-            }
-          }, MIN_RESTART_INTERVAL);
-          return;
-        }
-
-        tryRestart();
-      }
-    };
-
-    const tryRestart = () => {
-      try {
-        if (webSpeechActiveRef.current) {
-          lastRestartTime = Date.now();
-          recognition.start();
-          console.log('🔄 Speech recognition restarted successfully');
-        }
-      } catch (error: any) {
-        if (error.message && error.message.includes('already started')) {
-          console.log('✅ Recognition already running, no restart needed');
-        } else {
-          console.error('❌ Failed to restart recognition:', error);
-          if (webSpeechActiveRef.current && restartTimeout === null) {
-            restartTimeout = setTimeout(() => {
-              restartTimeout = null;
-              tryRestart();
-            }, 500);
+        console.log('🔄 [RESTART] Attempting immediate restart...');
+        
+        // CRITICAL: Use requestAnimationFrame for smoother restart
+        requestAnimationFrame(() => {
+          if (!webSpeechActiveRef.current) {
+            console.log('⏹️ [RESTART] Cancelled - no longer active');
+            return;
           }
-        }
+          
+          try {
+            recognition.start();
+            console.log(`✅ [RESTART] Successfully restarted (attempt #${restartCount})`);
+          } catch (error: any) {
+            console.error('❌ [RESTART ERROR]', error.message);
+            
+            if (error.message?.includes('already started')) {
+              console.log('✅ [RESTART] Already running - good!');
+            } else {
+              // Retry with setTimeout as fallback
+              console.log('🔄 [RESTART] Retrying with 100ms delay...');
+              setTimeout(() => {
+                if (webSpeechActiveRef.current) {
+                  try {
+                    recognition.start();
+                    console.log('✅ [RESTART RETRY] Success');
+                  } catch (retryError: any) {
+                    console.error('❌ [RESTART RETRY] Failed:', retryError.message);
+                  }
+                }
+              }, 100);
+            }
+          }
+        });
+      } else {
+        console.log('⏹️ [NO RESTART] webSpeechActiveRef is false');
+        // IMPORTANT: Don't reset accumulatedTranscriptRef here - it should persist until manually cleared
       }
     };
-
-    // Add periodic health check
-    const healthCheckInterval = setInterval(() => {
-      if (webSpeechActiveRef.current) {
-        console.log('🏥 Health check - recognition active:', webSpeechActiveRef.current);
-      }
-    }, 5000);
-
-    // Store health check interval for cleanup
-    (recognition as any)._healthCheckInterval = healthCheckInterval;
 
     recognitionRef.current = recognition;
+    console.log('🎯 [INIT] Speech recognition object created and configured');
   }, []);
 
   const startWebSpeech = useCallback(() => {
     initWebSpeech();
     if (!recognitionRef.current) return;
     
+    webSpeechActiveRef.current = true;
+    
     try {
-      webSpeechActiveRef.current = true;
-      
-      // Reset any previous state
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch {
-          // Ignore if already stopped
-        }
+      recognitionRef.current.start();
+      console.log('✅ Web Speech started successfully');
+    } catch (error: any) {
+      if (!error.message?.includes('already started')) {
+        console.error('❌ Failed to start Web Speech:', error);
       }
-      
-      // Small delay to ensure clean start
-      setTimeout(() => {
-        try {
-          recognitionRef.current?.start();
-          console.log('✅ Web Speech started successfully');
-        } catch (error: any) {
-          if (!error.message?.includes('already started')) {
-            console.error('❌ Failed to start Web Speech:', error);
-          }
-        }
-      }, 100);
-    } catch (error) {
-      console.error('❌ Error starting Web Speech:', error);
     }
   }, [initWebSpeech]);
 
   const stopWebSpeech = useCallback(() => {
     webSpeechActiveRef.current = false;
-    
-    // Clean up health check interval
-    if (recognitionRef.current && (recognitionRef.current as any)._healthCheckInterval) {
-      clearInterval((recognitionRef.current as any)._healthCheckInterval);
-      (recognitionRef.current as any)._healthCheckInterval = null;
-    }
     
     try {
       recognitionRef.current?.stop();
@@ -931,13 +964,17 @@ const ConversationalInterview = () => {
         stopWebSpeech();
         if (recognitionRef.current) {
           try {
-            recognitionRef.current.abort();
+            // Use stop() instead of abort() to cleanly stop recognition without nullifying object
+            recognitionRef.current.stop();
           } catch (e) {
-            console.log('⚠️ Error aborting recognition:', e);
+            console.log('⚠️ Error stopping recognition:', e);
           }
-          recognitionRef.current = null;
+          // Keep recognition object alive - don't nullify to avoid memory leaks
+          // Just control activity with webSpeechActiveRef
         }
         webSpeechActiveRef.current = false;
+        // Clear accumulated transcript ref for new question
+        accumulatedTranscriptRef.current = '';
 
         console.log('🔄 Transcript and Web Speech fully reset for new question');
 
@@ -2475,6 +2512,10 @@ const ConversationalInterview = () => {
     });
 
     // ✅ CRITICAL: Listen for real-time transcription updates
+    // DISABLED: Socket-started transcription conflicts with Web Speech API
+    // Web Speech API is the single source of truth for transcript updates
+    // Having two sources fight for the same state causes text flicker/overwrite
+    /*
     socket.on('transcription_update', (data) => {
       console.log('📡 Received transcription segment:', data.segment);
       
@@ -2516,6 +2557,7 @@ const ConversationalInterview = () => {
         console.log('📝 Skipping empty/short segment');
       }
     });
+    */
 
     socket.on('transcription_error', (data) => {
       console.error('❌ Transcription error:', data);
