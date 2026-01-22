@@ -32,6 +32,10 @@ export const API_CONFIG = {
     GET_QUESTIONS: '/api/get-questions',
     TRACK_COMPLETION_VIEW: '/api/track-completion-view',
     
+    // Candidate Photo (cross-browser storage)
+    UPLOAD_CANDIDATE_PHOTO: '/api/upload-candidate-photo',
+    GET_CANDIDATE_PHOTO: '/api/get-candidate-photo',
+    
     // Interview Configuration
     SAVE_INTERVIEW_CONFIG: '/api/save-interview-config',
     
