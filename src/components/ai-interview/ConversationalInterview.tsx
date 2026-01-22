@@ -324,12 +324,231 @@ const ConversationalInterview = () => {
     }
   }, [terminateInterview]);
   
+  // Browser detection utility - properly distinguishes Chrome and Edge
+  const detectBrowser = useCallback(() => {
+    const userAgent = navigator.userAgent.toLowerCase();
+    // Edge detection must come first since Edge contains "chrome" in user agent
+    const isEdge = /edg/.test(userAgent) || /edgios/.test(userAgent);
+    // Chrome: contains "chrome" but NOT "edg" (Edge is Chromium-based)
+    const isChrome = /chrome/.test(userAgent) && !isEdge && !/opr/.test(userAgent) && !/brave/.test(userAgent);
+    
+    console.log('🔍 [BROWSER DETECTION]', {
+      userAgent: userAgent.substring(0, 100),
+      isChrome,
+      isEdge,
+      detected: isChrome ? 'Chrome (OpenAI)' : isEdge ? 'Edge (Web Speech)' : 'Other'
+    });
+    
+    return { isChrome, isEdge, userAgent };
+  }, []);
+
   // Web Speech Refs - Single source of truth
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const webSpeechActiveRef = useRef(false);
+  const accumulatedTranscriptRef = useRef(''); // Permanent storage for the current question
+  const watchdogTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // OpenAI Whisper API refs (for Chrome)
+  const openAIAudioRecorderRef = useRef<any>(null);
+  const openAIAudioStreamRef = useRef<MediaStream | null>(null);
+  const openAITranscriptionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const openAIAudioChunksRef = useRef<Blob[]>([]);
+  const transcriptionModeRef = useRef<'web-speech' | 'openai' | null>(null);
+  const lastTranscriptionTimeRef = useRef<number>(0);
 
-  // Web Speech Implementation - Maximum Chrome Compatibility with Debug Logging
+  // Deduplication function to remove overlapping text
+  const cleanTranscript = useCallback((newText: string, existingText: string): string => {
+    if (!newText) return existingText;
+    
+    // Remove common duplicates at word boundaries
+    const words = newText.trim().split(/\s+/);
+    const existingWords = existingText.trim().split(/\s+/);
+    
+    // Find overlap - check if start of new text matches end of existing
+    let overlapIndex = 0;
+    for (let i = 1; i <= Math.min(words.length, existingWords.length); i++) {
+      const newStart = words.slice(0, i).join(' ');
+      const existingEnd = existingWords.slice(-i).join(' ');
+      if (newStart.toLowerCase() === existingEnd.toLowerCase()) {
+        overlapIndex = i;
+      }
+    }
+    
+    // Remove overlapping portion from new text
+    const uniqueWords = words.slice(overlapIndex);
+    return existingText + (existingText ? ' ' : '') + uniqueWords.join(' ');
+  }, []);
+
+  // Check if audio chunk has sufficient volume (silence detection)
+  const checkAudioVolume = async (blob: Blob): Promise<boolean> => {
+    try {
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      const arrayBuffer = await blob.arrayBuffer();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+      // Calculate RMS (volume)
+      const channelData = audioBuffer.getChannelData(0);
+      let sum = 0;
+      for (let i = 0; i < channelData.length; i++) {
+        sum += channelData[i] * channelData[i];
+      }
+      const rms = Math.sqrt(sum / channelData.length);
+
+      await audioContext.close();
+      return rms >= 0.01; // Threshold for non-silent audio
+    } catch (error) {
+      console.warn('⚠️ [OPENAI] Could not check audio volume, proceeding anyway:', error);
+      return true; // If we can't check, assume it's valid
+    }
+  };
+
+  // OpenAI Whisper API Implementation (for Chrome) - Optimized
+  const initOpenAISpeech = useCallback(async () => {
+    // ✅ Safety check: Only initialize if mode is set to OpenAI
+    if (transcriptionModeRef.current !== 'openai') {
+      console.warn('⚠️ [OPENAI] Transcription mode is not "openai", skipping initialization');
+      return;
+    }
+
+    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+    if (!apiKey) {
+      console.error('❌ OpenAI API key not found. Please set VITE_OPENAI_API_KEY in your .env file.');
+      toast.error('OpenAI API key not configured.');
+      return;
+    }
+
+    console.log('🎯 [OPENAI] Initializing OpenAI Whisper API for Chrome...');
+
+    try {
+      // Get microphone stream with optimized settings for Whisper
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 16000, // ✅ Whisper's native sample rate
+          channelCount: 1
+        }
+      });
+
+      openAIAudioStreamRef.current = stream;
+
+      // Create RecordRTC recorder for audio chunks with optimized settings
+      const recorder = new RecordRTC(stream, {
+        type: 'audio',
+        mimeType: 'audio/webm', // ✅ Better compression than WAV
+        numberOfAudioChannels: 1,
+        desiredSampRate: 16000, // ✅ Match Whisper's native rate
+        recorderType: RecordRTC.StereoAudioRecorder,
+        timeSlice: 3000, // ✅ 3-second chunks: balance between responsiveness and phonetic context
+        ondataavailable: async (blob: Blob) => {
+          // ✅ Safety check: Only process if still in OpenAI mode
+          if (transcriptionModeRef.current !== 'openai') {
+            console.log('⏭️ [OPENAI] Mode changed, stopping processing');
+            return;
+          }
+
+          if (!webSpeechActiveRef.current || blob.size < 1000) {
+            console.log('⏭️ [OPENAI] Skipping tiny/inactive chunk');
+            return;
+          }
+
+          // Rate limiting protection - prevent API spam
+          // Adjusted to match 3-second chunks (allow processing every 2.5s minimum)
+          const now = Date.now();
+          if (now - lastTranscriptionTimeRef.current < 2500) {
+            console.log('⏭️ [OPENAI] Rate limit protection - skipping');
+            return;
+          }
+
+          console.log('🎤 [OPENAI] Processing audio chunk:', blob.size, 'bytes');
+
+          // Optional: Silence detection (skip silent chunks)
+          const hasVolume = await checkAudioVolume(blob);
+          if (!hasVolume) {
+            console.log('⏭️ [OPENAI] Skipping silent chunk');
+            return;
+          }
+
+          lastTranscriptionTimeRef.current = now;
+
+          // Send to OpenAI Whisper API
+          try {
+            // ✅ Get context from previous transcriptions for better accuracy
+            // Use last 150-200 characters to provide context without overwhelming the prompt
+            const previousContext = accumulatedTranscriptRef.current.trim();
+            const contextPrompt = previousContext.length > 0
+              ? previousContext.slice(-200).trim() // Last ~200 characters for context
+              : '';
+
+            const formData = new FormData();
+            formData.append('file', blob, 'audio.webm');
+            formData.append('model', 'whisper-1');
+            formData.append('language', 'en');
+            formData.append('response_format', 'text'); // ✅ Plain text, no JSON overhead
+            formData.append('temperature', '0'); // ✅ More deterministic for accurate transcription
+            
+            // ✅ CRITICAL: Add prompt with previous context for continuity
+            // This helps Whisper understand context and correctly transcribe words
+            // that might be cut off at the beginning of a new chunk
+            if (contextPrompt) {
+              formData.append('prompt', contextPrompt);
+              console.log('📝 [OPENAI] Using context prompt:', contextPrompt.slice(-50) + '...');
+            }
+
+            const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${apiKey}`,
+              },
+              body: formData,
+            });
+
+            if (!response.ok) {
+              console.error('❌ [OPENAI] API error:', response.status);
+              return;
+            }
+
+            // ✅ Direct text response (no JSON parsing needed)
+            const transcribedText = (await response.text()).trim();
+
+            if (transcribedText && transcribedText.length > 0) {
+              // ✅ Deduplicate before appending (less aggressive since prompt helps with context)
+              // The prompt parameter reduces the need for aggressive deduplication
+              accumulatedTranscriptRef.current = cleanTranscript(
+                transcribedText,
+                accumulatedTranscriptRef.current
+              );
+              
+              setTranscript(accumulatedTranscriptRef.current.trim());
+              console.log('✅ [OPENAI] Transcribed:', transcribedText);
+              console.log('📊 [OPENAI] Total transcript length:', accumulatedTranscriptRef.current.length);
+            }
+          } catch (error: any) {
+            console.error('❌ [OPENAI] Transcription error:', error.message);
+            // Don't stop on error, continue recording
+          }
+        }
+      });
+
+      openAIAudioRecorderRef.current = recorder;
+      recorder.startRecording();
+      console.log('🎯 [OPENAI] Audio recording started for transcription');
+    } catch (error: any) {
+      console.error('❌ [OPENAI] Failed to initialize:', error);
+      toast.error('Failed to start OpenAI transcription. Please check microphone permissions.');
+      webSpeechActiveRef.current = false;
+    }
+  }, [cleanTranscript]);
+
+  // Web Speech Implementation - Edge Browser (Fixed for continuous speech)
   const initWebSpeech = useCallback(() => {
+    // ✅ Safety check: Only initialize if mode is set to web-speech
+    if (transcriptionModeRef.current !== 'web-speech') {
+      console.warn('⚠️ [WEB SPEECH] Transcription mode is not "web-speech", skipping initialization');
+      return;
+    }
+
     if (recognitionRef.current) return;
     
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -339,6 +558,8 @@ const ConversationalInterview = () => {
       return;
     }
     
+    console.log('🎯 [WEB SPEECH] Initializing Web Speech API for Edge...');
+    
     const recognition = new SpeechRecognition();
     
     // CRITICAL: Match Chrome demo settings exactly
@@ -347,15 +568,34 @@ const ConversationalInterview = () => {
     recognition.lang = 'en-US';
     recognition.maxAlternatives = 1;
 
-    // Track state
-    let finalTranscript = '';
+    // Track state - session-specific variables
     let startTimestamp = 0;
     let restartCount = 0;
 
+    // Silence watchdog: Forces restart if no audio for 10 seconds
+    const resetWatchdog = () => {
+      if (watchdogTimerRef.current) {
+        clearTimeout(watchdogTimerRef.current);
+      }
+      watchdogTimerRef.current = setTimeout(() => {
+        if (webSpeechActiveRef.current && recognitionRef.current) {
+          console.log('🐕 [WATCHDOG] Silence detected, refreshing session...');
+          try {
+            recognitionRef.current.stop(); // Forces onend -> restart cycle
+          } catch (e) {
+            console.warn('⚠️ [WATCHDOG] Error stopping recognition:', e);
+          }
+        }
+      }, 10000); // 10 second threshold
+    };
+
     recognition.onstart = () => {
       startTimestamp = Date.now();
+      restartCount++;
       console.log('🎤 [SPEECH START] Recognition started at', new Date().toISOString());
       console.log('📊 [SPEECH START] Restart count:', restartCount);
+      console.log('📊 [SPEECH START] Current final transcript length:', accumulatedTranscriptRef.current.length);
+      resetWatchdog(); // Reset watchdog on start
     };
 
     recognition.onaudiostart = () => {
@@ -371,32 +611,46 @@ const ConversationalInterview = () => {
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
+      // ✅ Safety check: Only process if still in web-speech mode
+      if (transcriptionModeRef.current !== 'web-speech') {
+        console.log('⏭️ [WEB SPEECH] Mode changed, stopping processing');
+        return;
+      }
+
       const now = Date.now();
       const elapsed = ((now - startTimestamp) / 1000).toFixed(1);
-      console.log(`📝 [RESULT] Got result after ${elapsed}s, resultIndex: ${event.resultIndex}, total results: ${event.results.length}`);
       
       let interimTranscript = '';
       
-      // Start from resultIndex to avoid reprocessing
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
+      // CHROME DEMO PATTERN: Process from resultIndex, but handle final results specially
+      // Final results are permanent and should be accumulated in the ref
+      // Interim results should replace each other
+      
+      for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
+        const transcript = result[0].transcript;
         
         if (result.isFinal) {
-          finalTranscript += result[0].transcript;
-          console.log('✅ [FINAL]', result[0].transcript);
+          // Append new final text to the permanent ref
+          accumulatedTranscriptRef.current += transcript + ' ';
+          console.log('✅ [FINAL]', transcript, `(accumulated: ${accumulatedTranscriptRef.current.length} chars)`);
         } else {
-          interimTranscript += result[0].transcript;
-          console.log('⏳ [INTERIM]', result[0].transcript);
+          // Interim results just get appended to interim string
+          interimTranscript += transcript;
         }
       }
       
-      const fullText = (finalTranscript + interimTranscript).trim();
+      // UI updates with the cumulative text
+      const fullText = (accumulatedTranscriptRef.current + interimTranscript).trim();
       setTranscript(fullText);
-      console.log(`📊 [TRANSCRIPT UPDATE] Total length: ${fullText.length} chars`);
+      
+      console.log(`📊 [TRANSCRIPT] Final: ${accumulatedTranscriptRef.current.length}ch, Interim: ${interimTranscript.length}ch, Total: ${fullText.length}ch`);
+      
+      resetWatchdog(); // Reset watchdog on any result
     };
 
     recognition.onspeechend = () => {
-      console.log('🔇 [SPEECH END] Speech ended (but recognition should continue)');
+      console.log('🔇 [SPEECH END] Speech ended (but recognition continues)');
     };
 
     recognition.onsoundend = () => {
@@ -414,7 +668,6 @@ const ConversationalInterview = () => {
       
       console.error(`❌ [ERROR] Type: "${errorType}", after ${elapsed}s`);
       console.error(`❌ [ERROR] Message:`, e.message);
-      console.error(`❌ [ERROR] Full event:`, e);
       
       // Handle fatal errors
       if (errorType === 'not-allowed') {
@@ -446,14 +699,20 @@ const ConversationalInterview = () => {
     };
 
     recognition.onend = () => {
+      // Clear watchdog on end
+      if (watchdogTimerRef.current) {
+        clearTimeout(watchdogTimerRef.current);
+        watchdogTimerRef.current = null;
+      }
+      
       const now = Date.now();
       const elapsed = ((now - startTimestamp) / 1000).toFixed(1);
-      restartCount++;
       
       console.log('🛑 [RECOGNITION END]');
       console.log(`⏱️ [RECOGNITION END] Session lasted ${elapsed}s`);
       console.log(`🔄 [RECOGNITION END] Restart count: ${restartCount}`);
       console.log(`🎯 [RECOGNITION END] webSpeechActiveRef: ${webSpeechActiveRef.current}`);
+      console.log(`📊 [RECOGNITION END] Final transcript preserved: ${accumulatedTranscriptRef.current.length} chars`);
       
       // Auto-restart if still supposed to be active
       if (webSpeechActiveRef.current) {
@@ -475,8 +734,8 @@ const ConversationalInterview = () => {
             if (error.message?.includes('already started')) {
               console.log('✅ [RESTART] Already running - good!');
             } else {
-              // Retry with setTimeout as fallback
-              console.log('🔄 [RESTART] Retrying with 100ms delay...');
+              // Retry with setTimeout as fallback - increased delay for stability
+              console.log('🔄 [RESTART] Retrying with 300ms delay...');
               setTimeout(() => {
                 if (webSpeechActiveRef.current) {
                   try {
@@ -486,12 +745,13 @@ const ConversationalInterview = () => {
                     console.error('❌ [RESTART RETRY] Failed:', retryError.message);
                   }
                 }
-              }, 100);
+              }, 300); // Increased from 100ms to 300ms for more reliable reconnection
             }
           }
         });
       } else {
         console.log('⏹️ [NO RESTART] webSpeechActiveRef is false');
+        // IMPORTANT: Don't reset accumulatedTranscriptRef here - it should persist until manually cleared
       }
     };
 
@@ -499,31 +759,139 @@ const ConversationalInterview = () => {
     console.log('🎯 [INIT] Speech recognition object created and configured');
   }, []);
 
-  const startWebSpeech = useCallback(() => {
-    initWebSpeech();
-    if (!recognitionRef.current) return;
-    
+  const startWebSpeech = useCallback(async () => {
+    const browser = detectBrowser();
     webSpeechActiveRef.current = true;
-    
-    try {
-      recognitionRef.current.start();
-      console.log('✅ Web Speech started successfully');
-    } catch (error: any) {
-      if (!error.message?.includes('already started')) {
-        console.error('❌ Failed to start Web Speech:', error);
+
+    // ✅ CHROME: Use OpenAI Whisper API
+    if (browser.isChrome) {
+      console.log('🌐 [BROWSER] ✅ Detected Chrome - using OpenAI Whisper API');
+      transcriptionModeRef.current = 'openai';
+      
+      // Ensure Web Speech is not running
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+          recognitionRef.current = null;
+        } catch (e) {
+          console.warn('⚠️ [CHROME] Cleaned up Web Speech instance');
+        }
       }
+      
+      await initOpenAISpeech();
+      return;
     }
-  }, [initWebSpeech]);
+
+    // ✅ EDGE: Use Web Speech API
+    if (browser.isEdge) {
+      console.log('🌐 [BROWSER] ✅ Detected Edge - using Web Speech API');
+      transcriptionModeRef.current = 'web-speech';
+      
+      // Ensure OpenAI is not running
+      if (openAIAudioRecorderRef.current) {
+        try {
+          openAIAudioRecorderRef.current.stopRecording();
+          openAIAudioRecorderRef.current = null;
+        } catch (e) {
+          console.warn('⚠️ [EDGE] Cleaned up OpenAI instance');
+        }
+      }
+      if (openAIAudioStreamRef.current) {
+        openAIAudioStreamRef.current.getTracks().forEach(track => track.stop());
+        openAIAudioStreamRef.current = null;
+      }
+      
+      initWebSpeech();
+      if (!recognitionRef.current) {
+        console.error('❌ [EDGE] Web Speech recognition object not created');
+        return;
+      }
+      
+      try {
+        recognitionRef.current.start();
+        console.log('✅ [EDGE] Web Speech API started successfully');
+      } catch (error: any) {
+        if (!error.message?.includes('already started')) {
+          console.error('❌ [EDGE] Failed to start Web Speech:', error);
+          toast.error('Failed to start transcription in Edge browser.');
+        }
+      }
+      return;
+    }
+
+    // ⚠️ FALLBACK: Unknown browser - try Web Speech first, then OpenAI
+    console.log('🌐 [BROWSER] ⚠️ Unknown browser - trying Web Speech API first');
+    transcriptionModeRef.current = 'web-speech';
+    initWebSpeech();
+    
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.start();
+        console.log('✅ Web Speech started successfully (fallback)');
+      } catch (error: any) {
+        if (!error.message?.includes('already started')) {
+          console.error('❌ Failed to start Web Speech, trying OpenAI...');
+          transcriptionModeRef.current = 'openai';
+          await initOpenAISpeech();
+        }
+      }
+    } else {
+      // No Web Speech API, try OpenAI
+      console.log('⚠️ Web Speech API not available, trying OpenAI...');
+      transcriptionModeRef.current = 'openai';
+      await initOpenAISpeech();
+    }
+  }, [initWebSpeech, initOpenAISpeech, detectBrowser]);
 
   const stopWebSpeech = useCallback(() => {
     webSpeechActiveRef.current = false;
     
-    try {
-      recognitionRef.current?.stop();
-      console.log('✅ Web Speech stopped successfully');
-    } catch (error) {
-      console.warn('⚠️ Error stopping Web Speech:', error);
+    // Stop based on current transcription mode
+    if (transcriptionModeRef.current === 'openai') {
+      // Stop OpenAI transcription
+      if (openAIAudioRecorderRef.current) {
+        try {
+          openAIAudioRecorderRef.current.stopRecording(() => {
+            console.log('✅ OpenAI audio recording stopped');
+          });
+        } catch (error) {
+          console.warn('⚠️ Error stopping OpenAI recorder:', error);
+        }
+        openAIAudioRecorderRef.current = null;
+      }
+
+      // Stop audio stream
+      if (openAIAudioStreamRef.current) {
+        openAIAudioStreamRef.current.getTracks().forEach(track => track.stop());
+        openAIAudioStreamRef.current = null;
+      }
+
+      // Clear transcription interval
+      if (openAITranscriptionIntervalRef.current) {
+        clearInterval(openAITranscriptionIntervalRef.current);
+        openAITranscriptionIntervalRef.current = null;
+      }
+
+      // Clear audio chunks
+      openAIAudioChunksRef.current = [];
+      console.log('✅ OpenAI transcription stopped');
+    } else {
+      // Stop Web Speech API (Edge)
+      // Clear watchdog timer
+      if (watchdogTimerRef.current) {
+        clearTimeout(watchdogTimerRef.current);
+        watchdogTimerRef.current = null;
+      }
+      
+      try {
+        recognitionRef.current?.stop();
+        console.log('✅ Web Speech stopped successfully');
+      } catch (error) {
+        console.warn('⚠️ Error stopping Web Speech:', error);
+      }
     }
+
+    transcriptionModeRef.current = null;
   }, []);
 
   // Cleanup on unmount
@@ -951,9 +1319,12 @@ const ConversationalInterview = () => {
         dispatch(interviewActions.setQuestionIndex(newQuestionIndex));
         setCurrentQuestion(data.question);
 
-        // CRITICAL FIX: Reset transcript and Web Speech accumulator before next question starts
+        // CRITICAL FIX: Reset transcript and transcription accumulator before next question starts
         setTranscript('');
+        accumulatedTranscriptRef.current = ''; // CRITICAL: Wipe the "memory" for the new question
         stopWebSpeech();
+        
+        // Clear Web Speech API refs (Edge)
         if (recognitionRef.current) {
           try {
             recognitionRef.current.abort();
@@ -962,7 +1333,34 @@ const ConversationalInterview = () => {
           }
           recognitionRef.current = null;
         }
+        
+        // Clear OpenAI refs (Chrome)
+        if (openAIAudioRecorderRef.current) {
+          try {
+            openAIAudioRecorderRef.current.stopRecording();
+          } catch (e) {
+            console.log('⚠️ Error stopping OpenAI recorder:', e);
+          }
+          openAIAudioRecorderRef.current = null;
+        }
+        if (openAIAudioStreamRef.current) {
+          openAIAudioStreamRef.current.getTracks().forEach(track => track.stop());
+          openAIAudioStreamRef.current = null;
+        }
+        if (openAITranscriptionIntervalRef.current) {
+          clearInterval(openAITranscriptionIntervalRef.current);
+          openAITranscriptionIntervalRef.current = null;
+        }
+        openAIAudioChunksRef.current = [];
+        
         webSpeechActiveRef.current = false;
+        transcriptionModeRef.current = null;
+        
+        // Clear watchdog timer
+        if (watchdogTimerRef.current) {
+          clearTimeout(watchdogTimerRef.current);
+          watchdogTimerRef.current = null;
+        }
 
         console.log('🔄 Transcript and Web Speech fully reset for new question');
 

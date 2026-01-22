@@ -194,24 +194,48 @@ const CandidateInterview = () => {
     setIsCapturingPhoto(true);
     const photo = await capturePhoto();
     
-    if (photo) {
+    if (photo && interviewData?.id) {
       setCapturedPhoto(photo);
       setPhotoCaptured(true);
       
-      // Store photo in localStorage and sessionStorage
-      if (interviewData?.id) {
-        const storageKey = `candidate_photo_${interviewData.id}`;
-        const timestamp = Date.now();
+      const storageKey = `candidate_photo_${interviewData.id}`;
+      const timestamp = Date.now();
+      
+      // ✅ PRIMARY: Upload photo to server for cross-browser access
+      try {
+        // Convert data URL to blob for upload
+        const response = await fetch(photo);
+        const blob = await response.blob();
         
-        try {
-          localStorage.setItem(storageKey, photo);
-          localStorage.setItem(`${storageKey}_timestamp`, timestamp.toString());
-          sessionStorage.setItem(storageKey, photo);
-          sessionStorage.setItem(`${storageKey}_timestamp`, timestamp.toString());
-          console.log('✅ Photo stored:', storageKey);
-        } catch (error) {
-          console.error('Error storing photo:', error);
+        const formData = new FormData();
+        formData.append('photo', blob, `candidate_photo_${interviewData.id}.jpg`);
+        formData.append('interview_id', interviewData.id.toString());
+        
+        const uploadUrl = buildApiUrl(API_CONFIG.ENDPOINTS.UPLOAD_CANDIDATE_PHOTO);
+        const uploadResponse = await fetch(uploadUrl, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (uploadResponse.ok) {
+          console.log('✅ Photo uploaded to server successfully');
+        } else {
+          console.warn('⚠️ Failed to upload photo to server, using local storage only');
         }
+      } catch (uploadError) {
+        console.error('❌ Error uploading photo to server:', uploadError);
+        // Continue with local storage as fallback
+      }
+      
+      // ✅ FALLBACK: Store photo in localStorage and sessionStorage (for offline/backup)
+      try {
+        localStorage.setItem(storageKey, photo);
+        localStorage.setItem(`${storageKey}_timestamp`, timestamp.toString());
+        sessionStorage.setItem(storageKey, photo);
+        sessionStorage.setItem(`${storageKey}_timestamp`, timestamp.toString());
+        console.log('✅ Photo stored in local storage:', storageKey);
+      } catch (error) {
+        console.error('Error storing photo in local storage:', error);
       }
     }
     

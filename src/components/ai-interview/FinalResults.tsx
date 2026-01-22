@@ -1215,35 +1215,61 @@ const FinalResults = () => {
         tableStartY = 92; // Adjust table start position when termination reason is displayed
       }
 
-      // Add candidate photo with multiple fallback mechanisms
+      // Add candidate photo with multiple fallback mechanisms (server-first approach)
       try {
         const storageKey = `candidate_photo_${interviewId}`;
         let candidatePhotoDataUrl: string | null = null;
         let photoSource = 'none';
         
-        // Strategy 1: Try localStorage first (most persistent)
+        // ✅ Strategy 1: Fetch from server first (cross-browser compatible)
         try {
-          const localPhoto = localStorage.getItem(storageKey);
-          const localTimestamp = localStorage.getItem(`${storageKey}_timestamp`);
+          const photoUrl = buildApiUrl(`${API_CONFIG.ENDPOINTS.GET_CANDIDATE_PHOTO}/${interviewId}`);
+          const photoResponse = await fetch(photoUrl, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
           
-          if (localPhoto) {
-            // Check if photo is not too old (optional: 7 days max)
-            const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
-            const photoAge = localTimestamp ? Date.now() - parseInt(localTimestamp) : 0;
-            
-            if (photoAge < maxAge) {
-              candidatePhotoDataUrl = localPhoto;
-              photoSource = 'localStorage';
-              console.log('✅ Found candidate photo in localStorage');
-            } else {
-              console.log('⚠️ Photo in localStorage is too old, trying other sources');
+          if (photoResponse.ok) {
+            const photoData = await photoResponse.json();
+            if (photoData.photo && photoData.photo.startsWith('data:image/')) {
+              candidatePhotoDataUrl = photoData.photo;
+              photoSource = 'server';
+              console.log('✅ Found candidate photo on server');
             }
+          } else if (photoResponse.status !== 404) {
+            console.warn('⚠️ Server photo fetch failed, trying local storage');
           }
-        } catch (localStorageError) {
-          console.log('⚠️ localStorage access failed, trying sessionStorage');
+        } catch (serverError) {
+          console.warn('⚠️ Server photo fetch error, trying local storage:', serverError);
         }
         
-        // Strategy 2: Try sessionStorage as backup
+        // ✅ Strategy 2: Fallback to localStorage (browser-specific)
+        if (!candidatePhotoDataUrl) {
+          try {
+            const localPhoto = localStorage.getItem(storageKey);
+            const localTimestamp = localStorage.getItem(`${storageKey}_timestamp`);
+            
+            if (localPhoto) {
+              // Check if photo is not too old (optional: 7 days max)
+              const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+              const photoAge = localTimestamp ? Date.now() - parseInt(localTimestamp) : 0;
+              
+              if (photoAge < maxAge) {
+                candidatePhotoDataUrl = localPhoto;
+                photoSource = 'localStorage';
+                console.log('✅ Found candidate photo in localStorage');
+              } else {
+                console.log('⚠️ Photo in localStorage is too old');
+              }
+            }
+          } catch (localStorageError) {
+            console.log('⚠️ localStorage access failed, trying sessionStorage');
+          }
+        }
+        
+        // ✅ Strategy 3: Fallback to sessionStorage (browser-specific)
         if (!candidatePhotoDataUrl) {
           try {
             const sessionPhoto = sessionStorage.getItem(storageKey);
