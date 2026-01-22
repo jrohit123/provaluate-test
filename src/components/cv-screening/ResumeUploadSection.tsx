@@ -2077,7 +2077,7 @@ export const ResumeUploadSection = () => {
                 </SelectContent>
               </Select>
               
-              {selectedCriteriaGridId && (
+              {selectedCriteriaGridId && !jdCriteriaMismatch?.isMismatched && (
                 <div className="p-2 bg-green-50 border border-green-200 rounded text-xs">
                   <div className="flex items-center gap-1">
                     <CheckCircle className="w-3 h-3 text-green-600" />
