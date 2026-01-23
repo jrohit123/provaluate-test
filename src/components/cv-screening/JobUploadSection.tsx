@@ -30,7 +30,7 @@ interface ResolvedJD {
 }
 
 const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
-const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx', '.txt'];
+const ALLOWED_FILE_TYPES = ['.pdf', '.docx', '.txt'];
 // Backend service URLs for integration - Uses environment variables
 const BACKEND_URLS = {
   UNIFIED_SERVICE: import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com',      // app.py - unified backend service
@@ -564,8 +564,8 @@ export const JobUploadSection = () => {
     
     const extension = '.' + file.name.split('.').pop()?.toLowerCase();
     if (!ALLOWED_FILE_TYPES.includes(extension)) {
-      //return 'Invalid file type. Please upload PDF, DOC, or DOCX files';
-      return 'Invalid file type. Please upload PDF files';
+      //return 'Invalid file type. Please upload PDF, DOCX, or TXT files';
+      return 'Invalid file type. Please upload PDF, DOCX, or TXT files';
     }
     
     return null;
@@ -1044,7 +1044,7 @@ export const JobUploadSection = () => {
             >
               <Upload className="w-6 h-6 sm:w-8 sm:h-8 text-primary-400 mx-auto mb-2" />
               <p className="text-xs sm:text-sm text-muted-foreground">
-                Drop files here or click to browse (PDF, DOC, DOCX, TXT)
+                Drop files here or click to browse (PDF, DOCX, TXT)
               </p>
               {uploadedFile && (
                 <div className="mt-2 text-xs text-primary-700">Selected file: {uploadedFile.name}</div>
@@ -1054,7 +1054,7 @@ export const JobUploadSection = () => {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.doc,.docx,.txt"
+              accept=".pdf,.docx,.txt"
               onChange={handleFileChange}
               className="hidden"
             />

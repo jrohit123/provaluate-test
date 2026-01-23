@@ -49,7 +49,7 @@ interface ProcessingState {
 }
 
 const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
-const ALLOWED_FILE_TYPES = ['.pdf', '.doc', '.docx', '.txt'];
+const ALLOWED_FILE_TYPES = ['.pdf', '.docx', '.txt'];
 // Import API service instead of using webhooks
 import { apiService } from '@/services/api';
 
@@ -794,8 +794,8 @@ export const ResumeUploadSection = () => {
     
     const extension = '.' + file.name.split('.').pop()?.toLowerCase();
     if (!ALLOWED_FILE_TYPES.includes(extension)) {
-      //return 'Invalid file type. Please upload PDF, DOC, or DOCX files';
-      return 'Invalid file type. Please upload PDF files only';
+      //return 'Invalid file type. Please upload PDF, DOCX, or TXT files';
+      return 'Invalid file type. Please upload PDF, DOCX, or TXT files';
     }
     
     return null;
@@ -2245,7 +2245,7 @@ export const ResumeUploadSection = () => {
                 <Upload className="w-12 h-12 text-primary-400 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Upload Candidate Resumes</h3>
                 <p className="text-muted-foreground mb-4">
-                  Drop multiple files here or click to browse (PDF, DOC, DOCX, TXT). Select files first, then click "Start Upload".
+                  Drop multiple files here or click to browse (PDF, DOCX, TXT). Select files first, then click "Start Upload".
                 </p>
                 <Button 
                   onClick={(e) => {
