@@ -4,9 +4,10 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, FileText, Edit, RefreshCw, Loader2 } from 'lucide-react';
+import { Upload, FileText, Edit, RefreshCw, Loader2, Type, FileUp } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { DatabaseService } from '@/integrations/supabase/db';
@@ -14,6 +15,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { useSession } from '@/contexts/SessionContext';
 import { UsageTrackingService } from '@/services/usageTrackingService';
 import { Document, Page, pdfjs } from 'react-pdf';
+import { RichTextEditor, extractPlainText, extractHighlightedText } from './RichTextEditor';
+import { API_CONFIG, apiCall } from '@/constants/api';
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.js`;
 
 interface ResolvedJD {
@@ -75,6 +78,9 @@ export const JobUploadSection = () => {
   } | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [isManageSectionExpanded, setIsManageSectionExpanded] = useState(false);
+  const [editorContent, setEditorContent] = useState<string>('');
+  const [inputMode, setInputMode] = useState<'file' | 'editor'>('file');
+  const [isExtractingText, setIsExtractingText] = useState(false);
 
   // Get JD status configuration based on usage
   const getJDStatusConfig = (jdLimitInfo: any) => {
@@ -587,8 +593,7 @@ export const JobUploadSection = () => {
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
       setUploadedFile(file);
-      // setJobTitle('');
-      // setIsJobFieldsDisabled(true); // Removed as per edit hint
+      extractTextFromFile(file);
     }
   };
   const handleJobDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -600,9 +605,124 @@ export const JobUploadSection = () => {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
-      setUploadedFile(files[0]);
-      // setJobTitle('');
-      // setIsJobFieldsDisabled(true); // Removed as per edit hint
+      const file = files[0];
+      setUploadedFile(file);
+      // Auto-extract text and load into editor
+      extractTextFromFile(file);
+    }
+  };
+
+  const extractTextFromFile = async (file: File) => {
+    setIsExtractingText(true);
+    try {
+      const fileExtension = file.name.split('.').pop()?.toLowerCase();
+      let extractedText = '';
+
+      // For TXT files, extract directly in the browser
+      if (fileExtension === 'txt') {
+        try {
+          extractedText = await file.text();
+        } catch (error) {
+          console.error('Error reading text file:', error);
+          // Fall through to backend extraction
+        }
+      }
+
+      // For PDF, DOCX, or if TXT extraction failed, use backend extraction
+      if (!extractedText && (fileExtension === 'pdf' || fileExtension === 'docx' || fileExtension === 'doc' || fileExtension === 'txt')) {
+        console.log('🔄 Extracting text from file using backend:', file.name);
+        
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await apiCall(API_CONFIG.ENDPOINTS.EXTRACT_JD_TEXT, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ Text extraction failed:', errorText);
+          throw new Error(`Failed to extract text: ${errorText}`);
+        }
+
+        const result = await response.json();
+        extractedText = result.extractedText || result.text || '';
+        
+        if (!extractedText) {
+          throw new Error('No text extracted from file');
+        }
+
+        console.log('✅ Text extracted successfully, length:', extractedText.length);
+      }
+
+      // Clean the extracted text while preserving formatting (line breaks, paragraphs)
+      if (extractedText) {
+        const cleanedText = extractedText
+          .replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F\u007F-\u009F]/g, '') // Remove control characters but keep \n, \r, \t
+          .replace(/\\u[0-9A-Fa-f]{4}/g, '') // Remove Unicode escape sequences
+          .replace(/\\[rtbf]/g, ' ') // Replace some escape sequences with spaces (keep \n)
+          .replace(/\\n/g, '\n') // Convert literal \n to actual newline
+          .replace(/[^\x20-\x7E\u00A0-\u00FF\n\r\t]/g, '') // Remove non-printable characters but keep newlines and tabs
+          .replace(/[&]{3,}/g, ' ') // Remove excessive ampersands (3+)
+          .replace(/[0-9]{10,}/g, '') // Remove very long sequences of numbers (10+)
+          .replace(/[ \t]+/g, ' ') // Replace multiple spaces/tabs with single space (but keep newlines)
+          .replace(/\n{4,}/g, '\n\n\n') // Limit excessive newlines to max 3
+          .replace(/\r\n/g, '\n') // Normalize Windows line endings
+          .replace(/\r/g, '\n') // Normalize Mac line endings
+          .trim(); // Remove leading/trailing whitespace
+
+        console.log('🔄 Cleaned text length:', cleanedText.length);
+        console.log('🔄 Text preview (first 200 chars):', cleanedText.substring(0, 200));
+
+        // Load cleaned text into editor and switch to editor tab
+        // Preserve formatting by converting to HTML for the rich text editor
+        // TipTap can handle plain text, but we'll format it nicely
+        let formattedHtml = cleanedText;
+        
+        // Convert to HTML while preserving structure
+        // Split by double newlines for paragraphs
+        const paragraphs = cleanedText.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+        
+        if (paragraphs.length > 1) {
+          // Multiple paragraphs - format as <p> tags
+          formattedHtml = paragraphs
+            .map(para => {
+              // Within each paragraph, preserve single newlines as <br>
+              const lines = para.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+              return lines.join('<br/>');
+            })
+            .map(para => `<p>${para}</p>`)
+            .join('');
+        } else {
+          // Single block - preserve newlines as <br>
+          formattedHtml = cleanedText
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0)
+            .join('<br/>');
+          formattedHtml = `<p>${formattedHtml}</p>`;
+        }
+        
+        setEditorContent(formattedHtml);
+        setInputMode('editor');
+        
+        toast({
+          title: "Text Extracted Successfully",
+          description: `Extracted ${cleanedText.length} characters. Text has been loaded into the editor with formatting preserved. You can now edit, format, and highlight it.`,
+        });
+      } else {
+        throw new Error('No text could be extracted from the file');
+      }
+    } catch (error) {
+      console.error('❌ Error extracting text:', error);
+      toast({
+        title: "Extraction Error",
+        description: error instanceof Error ? error.message : "Could not extract text from file. Please paste it manually into the editor.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExtractingText(false);
     }
   };
 
@@ -636,10 +756,23 @@ export const JobUploadSection = () => {
       return;
     }
 
-    if (!uploadedFile) {
+    // Check if we have either a file or editor content
+    const hasEditorContent = editorContent.trim().length > 0;
+    const plainText = hasEditorContent ? extractPlainText(editorContent) : '';
+    
+    if (!uploadedFile && !hasEditorContent) {
       toast({
-        title: "File Required",
-        description: "Please select a job description file before processing.",
+        title: "Content Required",
+        description: "Please upload a file or enter text in the editor before processing.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (hasEditorContent && plainText.trim().length < 50) {
+      toast({
+        title: "Content Too Short",
+        description: "Please enter at least 50 characters of job description text.",
         variant: "destructive",
       });
       return;
@@ -664,7 +797,46 @@ export const JobUploadSection = () => {
 
         // Create FormData for the complete upload workflow
         const formData = new FormData();
-        formData.append('file', uploadedFile);
+        
+        // If we have editor content, send it as text (PRIORITY - process only this)
+        if (hasEditorContent && plainText) {
+          // Clean the plain text while preserving formatting (line breaks, paragraphs)
+          // The extractPlainText function already preserves newlines from HTML
+          const cleanedPlainText = plainText
+            .replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F\u007F-\u009F]/g, '') // Remove control characters but keep \n, \r, \t
+            .replace(/\\u[0-9A-Fa-f]{4}/g, '') // Remove Unicode escape sequences
+            .replace(/\\[rtbf]/g, ' ') // Replace some escape sequences with spaces (keep \n)
+            .replace(/\\n/g, '\n') // Convert literal \n to actual newline
+            .replace(/[^\x20-\x7E\u00A0-\u00FF\n\r\t]/g, '') // Remove non-printable characters but keep newlines and tabs
+            .replace(/[&]{3,}/g, ' ') // Remove excessive ampersands (3+)
+            .replace(/[0-9]{10,}/g, '') // Remove very long sequences of numbers (10+)
+            .replace(/[ \t]+/g, ' ') // Replace multiple spaces/tabs with single space (but keep newlines)
+            .replace(/\n{4,}/g, '\n\n\n') // Limit excessive newlines to max 3
+            .replace(/\r\n/g, '\n') // Normalize Windows line endings
+            .replace(/\r/g, '\n') // Normalize Mac line endings
+            .trim();
+          
+          formData.append('text_content', cleanedPlainText);
+          formData.append('html_content', editorContent); // Preserve formatting for future use
+          formData.append('source', 'editor'); // Track that this came from editor
+          
+          // Extract highlighted text if any
+          const highlights = extractHighlightedText(editorContent);
+          if (highlights.length > 0) {
+            formData.append('highlighted_text', JSON.stringify(highlights));
+          }
+          
+          console.log('📝 Sending text content from editor:', cleanedPlainText.length, 'characters');
+          console.log('📝 Text preview (first 300 chars with newlines):');
+          console.log(cleanedPlainText.substring(0, 300));
+          console.log('📝 Newline count in text:', (cleanedPlainText.match(/\n/g) || []).length);
+        } else if (uploadedFile) {
+          // Only send file if no editor content (file will be extracted on backend)
+          formData.append('file', uploadedFile);
+          formData.append('source', 'file'); // Track that this came from file
+          console.log('📁 Sending file for processing:', uploadedFile.name);
+        }
+        
         formData.append('title', jobTitle);
         formData.append('user_id', user.id);
         formData.append('company_id', user.profile.company_id);
@@ -745,6 +917,8 @@ export const JobUploadSection = () => {
         setTimeout(() => {
           setJobTitle('');
           setUploadedFile(null);
+          setEditorContent('');
+          setInputMode('file');
           setProcessingStatus('idle');
         }, 2000); // Show success for 2 seconds before resetting
       } catch (backendError) {
@@ -976,12 +1150,6 @@ export const JobUploadSection = () => {
               </div>
             )}
             
-            <div className="flex items-center gap-2 sm:gap-4 my-4 sm:my-6 text-xs sm:text-sm font-medium text-[#1e5da8]">
-              <span className="flex-1 h-px bg-[#1e5da8]/30" />
-              <span>OR</span>
-              <span className="flex-1 h-px bg-[#1e5da8]/30" />
-            </div>
-
             <div className="rounded-lg border border-primary-200 bg-primary-50/40 p-3 sm:p-4">
               <label className="mb-2 block text-sm font-medium text-primary-700">
                 Create a new job description
@@ -996,68 +1164,69 @@ export const JobUploadSection = () => {
               />
             </div>
 
-            {/* Job Description Content Preview */}
-            {/*
-            {selectedJDContent && (
-              <div className="mb-3">
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Job Description Content Preview</label>
-                {selectedJDFileType === 'pdf' ? (
-                  <div className="border rounded bg-gray-100 p-2 flex flex-col items-center">
-                    <Document
-                      file={selectedJDContent}
-                      onLoadSuccess={onDocumentLoadSuccess}
-                      loading={<span>Loading PDF...</span>}
-                      error={<span>Failed to load PDF.</span>}
-                    >
-                      <Page pageNumber={pageNumber} width={400} />
-                    </Document>
-                    <div className="flex gap-2 mt-2 items-center">
-                      <button
-                        onClick={() => setPageNumber(p => Math.max(1, p - 1))}
-                        disabled={pageNumber <= 1}
-                        className="px-2 py-1 text-xs border rounded disabled:opacity-50"
-                      >Prev</button>
-                      <span className="text-xs">Page {pageNumber} of {numPages}</span>
-                      <button
-                        onClick={() => setPageNumber(p => Math.min(numPages, p + 1))}
-                        disabled={pageNumber >= numPages}
-                        className="px-2 py-1 text-xs border rounded disabled:opacity-50"
-                      >Next</button>
-                    </div>
-                  </div>
-                ) : (
-                  <textarea
-                    className="w-full min-h-32 p-2 border rounded bg-gray-100 text-xs"
-                    value={selectedJDContent}
-                    readOnly
-                  />
-                )}
-              </div>
-            )}
-            */}
+            {/* Input Mode Tabs */}
+            <Tabs value={inputMode} onValueChange={(value) => setInputMode(value as 'file' | 'editor')} className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="file" className="flex items-center gap-2">
+                  <FileUp className="w-4 h-4" />
+                  Upload File
+                </TabsTrigger>
+                <TabsTrigger value="editor" className="flex items-center gap-2">
+                  <Type className="w-4 h-4" />
+                  Text Editor
+                </TabsTrigger>
+              </TabsList>
 
-            <div 
-              className="rounded-lg border-2 border-dashed border-primary-200 bg-primary-50/40 p-4 sm:p-6 text-center hover:border-primary-400 transition-colors cursor-pointer"
-              onClick={handleJobDescriptionClick}
-              onDrop={handleJobDrop}
-              onDragOver={handleJobDragOver}
-            >
-              <Upload className="w-6 h-6 sm:w-8 sm:h-8 text-primary-400 mx-auto mb-2" />
-              <p className="text-xs sm:text-sm text-muted-foreground">
-                Drop files here or click to browse (PDF, DOCX, TXT)
-              </p>
-              {uploadedFile && (
-                <div className="mt-2 text-xs text-primary-700">Selected file: {uploadedFile.name}</div>
-              )}
-            </div>
-            
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.docx,.txt"
-              onChange={handleFileChange}
-              className="hidden"
-            />
+              <TabsContent value="file" className="space-y-4">
+                <div 
+                  className="rounded-lg border-2 border-dashed border-primary-200 bg-primary-50/40 p-4 sm:p-6 text-center hover:border-primary-400 transition-colors cursor-pointer"
+                  onClick={handleJobDescriptionClick}
+                  onDrop={handleJobDrop}
+                  onDragOver={handleJobDragOver}
+                >
+                  <Upload className="w-6 h-6 sm:w-8 sm:h-8 text-primary-400 mx-auto mb-2" />
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Drop files here or click to browse (PDF, DOCX, TXT)
+                  </p>
+                  {uploadedFile && (
+                    <div className="mt-2 text-xs text-primary-700">
+                      Selected file: {uploadedFile.name}
+                      {isExtractingText && (
+                        <div className="mt-2 flex items-center justify-center gap-2">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Extracting text...</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.docx,.txt"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+              </TabsContent>
+
+              <TabsContent value="editor" className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-primary-700">
+                    Job Description Content
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Type or paste your job description. Use the toolbar to format text and highlight important parts.
+                  </p>
+                  <RichTextEditor
+                    content={editorContent}
+                    onChange={setEditorContent}
+                    placeholder="Enter your job description here. You can format text, add headings, create lists, and highlight important sections..."
+                    minHeight="400px"
+                  />
+                </div>
+              </TabsContent>
+            </Tabs>
             
             <div className="space-y-2">
               <Button 

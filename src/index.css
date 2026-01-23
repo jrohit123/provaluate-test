@@ -118,3 +118,82 @@
     }
   }
 }
+
+/* TipTap Editor Styles */
+.tiptap-editor {
+  @apply text-foreground;
+}
+
+.tiptap-editor p {
+  @apply mb-2;
+}
+
+.tiptap-editor p.is-editor-empty:first-child::before {
+  @apply text-muted-foreground;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.tiptap-editor h1 {
+  @apply text-3xl font-bold mb-4 mt-6;
+}
+
+.tiptap-editor h2 {
+  @apply text-2xl font-bold mb-3 mt-5;
+}
+
+.tiptap-editor h3 {
+  @apply text-xl font-bold mb-2 mt-4;
+}
+
+.tiptap-editor ul,
+.tiptap-editor ol {
+  @apply list-disc list-inside mb-2 ml-4;
+}
+
+.tiptap-editor ol {
+  @apply list-decimal;
+}
+
+.tiptap-editor li {
+  @apply mb-1;
+}
+
+.tiptap-editor strong {
+  @apply font-bold;
+}
+
+.tiptap-editor em {
+  @apply italic;
+}
+
+.tiptap-editor s {
+  @apply line-through;
+}
+
+.tiptap-editor mark {
+  @apply bg-yellow-200 dark:bg-yellow-800;
+  @apply rounded px-1;
+}
+
+.tiptap-editor code {
+  @apply bg-muted px-1 py-0.5 rounded text-sm font-mono;
+}
+
+.tiptap-editor pre {
+  @apply bg-muted p-4 rounded-lg overflow-x-auto mb-4;
+}
+
+.tiptap-editor pre code {
+  @apply bg-transparent p-0;
+}
+
+.tiptap-editor blockquote {
+  @apply border-l-4 border-primary pl-4 italic my-4;
+}
+
+.tiptap-editor hr {
+  @apply border-t border-border my-6;
+}
