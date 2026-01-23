@@ -78,7 +78,7 @@ export const Header = () => {
         </div>
         <Button variant="outline" onClick={handleLogout} className="text-xs sm:text-sm px-2 sm:px-4 h-8 sm:h-10">
           <span className="hidden sm:inline">Logout</span>
-          <span className="sm:hidden">Out</span>
+          <span className="sm:hidden">Logout</span>
         </Button>
       </div>
     </header>
