@@ -4,10 +4,12 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, FileText, Edit, RefreshCw, Loader2, Type, FileUp } from 'lucide-react';
+import { Upload, FileText, Edit, RefreshCw, Loader2, Type, FileUp, Settings } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { DatabaseService } from '@/integrations/supabase/db';
@@ -81,6 +83,8 @@ export const JobUploadSection = () => {
   const [editorContent, setEditorContent] = useState<string>('');
   const [inputMode, setInputMode] = useState<'file' | 'editor'>('file');
   const [isExtractingText, setIsExtractingText] = useState(false);
+  const [viewMode, setViewMode] = useState<'resolved' | 'extracted' | null>(null);
+  const [extractedText, setExtractedText] = useState<string>('');
 
   // Get JD status configuration based on usage
   const getJDStatusConfig = (jdLimitInfo: any) => {
@@ -242,6 +246,7 @@ export const JobUploadSection = () => {
     }
     
     await loadResolvedJD(selectedJobDescriptionId);
+    setViewMode('resolved');
     // loadResolvedJD already calls loadJobDescriptions() when data is found
     toast({
       title: "Refreshed",
@@ -300,40 +305,58 @@ export const JobUploadSection = () => {
     console.log('Selected JD ID changed:', selectedJobDescriptionId);
     if (selectedJobDescriptionId) {
       loadResolvedJD(selectedJobDescriptionId);
+      // Set default view to resolved when JD is selected
+      setViewMode('resolved');
     } else {
       setResolvedJD(null);
       setResolvedJDId(null);
+      setViewMode(null);
     }
   }, [selectedJobDescriptionId]);
 
   useEffect(() => {
     if (selectedJobDescriptionId && jobDescriptions.length > 0) {
       const jd = jobDescriptions.find(jd => jd.jd_id === selectedJobDescriptionId);
-      if (jd && jd.jd_file) {
-        const ext = jd.jd_file.split('.').pop().toLowerCase();
-        setSelectedJDFileType(ext);
-        if (ext === 'pdf') {
-          setSelectedJDContent(jd.jd_file); // store URL for PDF
+      if (jd) {
+        // Load extracted text from description column
+        if (jd.description) {
+          setExtractedText(jd.description);
         } else {
-          fetch(jd.jd_file)
-            .then(async (res) => {
-              const contentType = res.headers.get('Content-Type') || '';
-              if (contentType.includes('text') || jd.jd_file.endsWith('.txt')) {
-                return res.text();
-              } else if (jd.jd_file.endsWith('.doc') || jd.jd_file.endsWith('.docx')) {
-                return '[Preview not available for DOC/DOCX files]';
-              } else {
-                return '[Preview not available for this file type]';
-              }
-            })
-            .then(setSelectedJDContent)
-            .catch(() => setSelectedJDContent('[Unable to load file content]'));
+          setExtractedText('');
+        }
+        
+        // Load file content for preview
+        if (jd.jd_file) {
+          const ext = jd.jd_file.split('.').pop().toLowerCase();
+          setSelectedJDFileType(ext);
+          if (ext === 'pdf') {
+            setSelectedJDContent(jd.jd_file); // store URL for PDF
+          } else {
+            fetch(jd.jd_file)
+              .then(async (res) => {
+                const contentType = res.headers.get('Content-Type') || '';
+                if (contentType.includes('text') || jd.jd_file.endsWith('.txt')) {
+                  return res.text();
+                } else if (jd.jd_file.endsWith('.doc') || jd.jd_file.endsWith('.docx')) {
+                  return '[Preview not available for DOC/DOCX files]';
+                } else {
+                  return '[Preview not available for this file type]';
+                }
+              })
+              .then(setSelectedJDContent)
+              .catch(() => setSelectedJDContent('[Unable to load file content]'));
+          }
+        } else {
+          setSelectedJDContent('');
         }
       } else {
         setSelectedJDContent('');
+        setExtractedText('');
       }
     } else {
       setSelectedJDContent('');
+      setExtractedText('');
+      setViewMode(null);
     }
   }, [selectedJobDescriptionId, jobDescriptions]);
 
@@ -343,7 +366,7 @@ export const JobUploadSection = () => {
     try {
       const { data, error } = await supabase
         .from('job_descriptions')
-        .select('jd_id, title, jd_file, created_at, status')
+        .select('jd_id, title, jd_file, created_at, status, description')
         .eq('company_id', user.profile.company_id)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -954,7 +977,7 @@ export const JobUploadSection = () => {
 
 
   // When a JD is selected from dropdown, automatically set in session
-  const handleJDSelect = (jdId: string) => {
+  const handleJDSelect = async (jdId: string) => {
     setSelectedJobDescriptionId(jdId);
     sessionStorage.setItem('selectedJDId', jdId);
     // Stop any existing auto-refresh when switching to a different JD
@@ -968,6 +991,17 @@ export const JobUploadSection = () => {
         title: selectedJD.title,
         file: selectedJD.jd_file
       });
+      
+      // Load extracted text if available
+      if (selectedJD.description) {
+        setExtractedText(selectedJD.description);
+      } else {
+        setExtractedText('');
+      }
+      
+      // Load resolved JD by default and show it
+      await loadResolvedJD(jdId);
+      setViewMode('resolved');
       
       toast({
         title: "Job Description Selected",
@@ -987,33 +1021,186 @@ export const JobUploadSection = () => {
 
       {/* Job Description Upload */}
       <Card className="animate-fade-in">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
-              <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
-              Job Description
-            </CardTitle>
-            <CardDescription>
-              Upload your job description file OR select an existing one from the dropdown
-            </CardDescription>
+          <CardHeader className="relative">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+              <div className="flex-1 min-w-0">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
+                  <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600 flex-shrink-0" />
+                  <span className="truncate">Job Description</span>
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm mt-1">
+                  Upload your job description file OR select an existing one from the dropdown
+                </CardDescription>
+              </div>
+              {/* Manage Job Descriptions Button */}
+              {jobDescriptions.length > 0 && (
+                <div className="w-full sm:w-auto sm:ml-4 flex flex-col sm:items-end gap-1 flex-shrink-0">
+                  {/* Status Message */}
+                  {jdLimitInfo && (
+                    <p className={`text-xs font-medium text-right ${
+                      statusConfig === 'critical' ? 'text-red-600' :
+                      statusConfig === 'warning' ? 'text-amber-600' :
+                      statusConfig === 'caution' ? 'text-yellow-600' :
+                      'text-emerald-600'
+                    }`}>
+                      {statusConfig === 'critical' 
+                        ? `Limit Reached: ${jdLimitInfo.currentActiveJDCount}/${jdLimitInfo.maxActiveJDs} active`
+                        : statusConfig === 'warning'
+                        ? `Almost Full: ${jdLimitInfo.currentActiveJDCount}/${jdLimitInfo.maxActiveJDs} active, ${jdLimitInfo.remainingJDs} remaining`
+                        : statusConfig === 'caution'
+                        ? `Getting Full: ${jdLimitInfo.currentActiveJDCount}/${jdLimitInfo.maxActiveJDs} active, ${jdLimitInfo.remainingJDs} remaining`
+                        : `${jdLimitInfo.currentActiveJDCount}/${jdLimitInfo.maxActiveJDs} active, ${jdLimitInfo.remainingJDs} available`}
+                    </p>
+                  )}
+                  <Dialog open={isManageSectionExpanded} onOpenChange={setIsManageSectionExpanded}>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                      >
+                        <Settings className="w-4 h-4 mr-1.5 sm:mr-2" />
+                        <span className="hidden sm:inline">Manage Job Descriptions</span>
+                        <span className="sm:hidden">Manage Job Descriptions</span>
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>Manage Job Descriptions</DialogTitle>
+                        <DialogDescription>
+                          Enable or disable job descriptions. Active job descriptions are used for CV screening.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 mt-4">
+                      {/* Status Info */}
+                      <div className={`rounded-lg border-2 ${currentStatus.border} ${currentStatus.bg} p-4`}>
+                        <div className="flex items-center gap-2 sm:gap-3 mb-3">
+                          <div className={`p-1 sm:p-1.5 rounded-full ${currentStatus.bg.replace('/40', '')} border ${currentStatus.border} shadow-inner flex-shrink-0`}>
+                            <svg className={`h-4 w-4 sm:h-5 sm:w-5 ${currentStatus.iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={currentStatus.icon} />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="text-sm font-semibold text-gray-900">
+                                Status
+                              </h3>
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${currentStatus.badgeBg} ${currentStatus.badgeText}`}>
+                                {statusConfig === 'healthy' ? 'Available' : 
+                                 statusConfig === 'caution' ? 'Getting Full' :
+                                 statusConfig === 'warning' ? 'Almost Full' : 'Limit Reached'}
+                              </span>
+                            </div>
+                            
+                            {/* Progress Bar */}
+                            {jdLimitInfo && (
+                              <div className="mt-2 w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                                <div 
+                                  className={`h-full rounded-full ${currentStatus.progressColor} transition-all duration-500`}
+                                  style={{
+                                    width: `${Math.min(100, (jdLimitInfo.currentActiveJDCount / jdLimitInfo.maxActiveJDs) * 100)}%`
+                                  }}
+                                ></div>
+                              </div>
+                            )}
+                            
+                            <div className="flex items-center justify-between mt-1.5">
+                              <p className="text-xs text-gray-600">
+                                {jdLimitInfo ? (
+                                  <>{jdLimitInfo.currentActiveJDCount} of {jdLimitInfo.maxActiveJDs} active</>
+                                ) : null}
+                              </p>
+                              <p className={`text-xs font-medium ${currentStatus.text}`}>
+                                {currentStatus.message}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Job Descriptions List */}
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {jobDescriptions.map(jd => {
+                          const isActive = jd.status === 'active';
+                          const isDisabled = updatingStatus === jd.jd_id || 
+                            (!isActive && jdLimitInfo?.remainingJDs === 0);
+                            
+                          return (
+                            <div 
+                              key={jd.jd_id} 
+                              className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-lg transition-colors gap-3 ${
+                                isActive ? 'bg-green-50 border border-green-100' : 'bg-white border border-gray-100'
+                              } ${isDisabled ? 'opacity-70' : 'hover:shadow-sm'}`}
+                            >
+                              <div className="flex-1 min-w-0 w-full sm:w-auto">
+                                <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">
+                                  {jd.title}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  Last updated: {new Date(jd.updated_at || jd.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 sm:gap-3 ml-0 sm:ml-2 w-full sm:w-auto justify-between sm:justify-start">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {isActive ? 'Active' : 'Inactive'}
+                                </span>
+                                <Switch
+                                  checked={isActive}
+                                  onCheckedChange={() => !isDisabled && toggleJDStatus(jd.jd_id, jd.status || 'active')}
+                                  disabled={isDisabled}
+                                  className={`${isDisabled ? 'opacity-50' : ''} ${
+                                    isActive ? 'data-[state=checked]:bg-green-500' : ''
+                                  }`}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      
+                      {jdLimitInfo?.remainingJDs === 0 && (
+                        <div className="p-3 rounded-lg bg-red-50 border border-red-100">
+                          <div className="flex">
+                            <svg className="h-5 w-5 text-red-400 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            <div>
+                              <h4 className="text-sm font-medium text-red-800">Active Job Description Limit Reached</h4>
+                              <p className="text-xs text-red-700 mt-0.5">
+                                You've reached your limit of {jdLimitInfo.maxActiveJDs} active job descriptions. 
+                                Please deactivate another JD to activate a new one.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
 
             {/* Select Job Description */}
             <div className="mb-3">
               <div className="rounded-lg border border-primary-200 bg-primary-50/40 p-3 sm:p-4">
-                <label className="mb-2 block text-sm font-medium text-primary-700">
+                <label className="mb-2 block text-xs sm:text-sm font-medium text-primary-700">
                   Select an existing job description
                 </label>
                 <Select value={selectedJobDescriptionId} onValueChange={handleJDSelect}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full text-sm">
                     <SelectValue placeholder="Choose job description" />
                   </SelectTrigger>
                   <SelectContent>
                     {jobDescriptions.map(jd => (
-                      <SelectItem key={jd.jd_id} value={jd.jd_id}>
-                        <div className="flex items-center justify-between w-full">
-                          <span>{jd.title}</span>
-                          <span className={`ml-2 text-xs ${jd.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>
+                      <SelectItem key={jd.jd_id} value={jd.jd_id} className="text-sm">
+                        <div className="flex items-center justify-between w-full gap-2">
+                          <span className="truncate flex-1">{jd.title}</span>
+                          <span className={`ml-2 text-xs flex-shrink-0 ${jd.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>
                             {jd.status === 'active' ? '● Active' : '○ Disabled'}
                           </span>
                         </div>
@@ -1024,134 +1211,8 @@ export const JobUploadSection = () => {
               </div>
             </div>
 
-            {/* Manage Job Descriptions */}
-            {jobDescriptions.length > 0 && (
-              <div className={`mb-3 rounded-lg border-2 ${currentStatus.border} ${currentStatus.bg} transition-all duration-200 shadow-sm hover:shadow-md`}>
-                <button
-                  onClick={() => setIsManageSectionExpanded(!isManageSectionExpanded)}
-                  className={`w-full px-4 py-3 flex items-center justify-between hover:bg-white/50 transition-colors rounded-t-md ${isManageSectionExpanded ? 'border-b border-gray-200' : ''}`}
-                >
-                  <div className="text-left flex-1 min-w-0">
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <div className={`p-1 sm:p-1.5 rounded-full ${currentStatus.bg.replace('/40', '')} border ${currentStatus.border} shadow-inner flex-shrink-0`}>
-                        <svg className={`h-4 w-4 sm:h-5 sm:w-5 ${currentStatus.iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={currentStatus.icon} />
-                        </svg>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-xs sm:text-sm font-semibold text-gray-900">
-                            Manage Job Descriptions
-                          </h3>
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${currentStatus.badgeBg} ${currentStatus.badgeText}`}>
-                            {statusConfig === 'healthy' ? 'Available' : 
-                             statusConfig === 'caution' ? 'Getting Full' :
-                             statusConfig === 'warning' ? 'Almost Full' : 'Limit Reached'}
-                          </span>
-                        </div>
-                        
-                        {/* Progress Bar */}
-                        {jdLimitInfo && (
-                          <div className="mt-2 w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full ${currentStatus.progressColor} transition-all duration-500`}
-                              style={{
-                                width: `${Math.min(100, (jdLimitInfo.currentActiveJDCount / jdLimitInfo.maxActiveJDs) * 100)}%`
-                              }}
-                            ></div>
-                          </div>
-                        )}
-                        
-                        <div className="flex items-center justify-between mt-1.5">
-                          <p className="text-xs text-gray-600">
-                            {jdLimitInfo ? (
-                              <>{jdLimitInfo.currentActiveJDCount} of {jdLimitInfo.maxActiveJDs} active</>
-                            ) : null}
-                          </p>
-                          <p className={`text-xs font-medium ${currentStatus.text}`}>
-                            {currentStatus.message}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <svg 
-                    className={`h-5 w-5 text-gray-400 transform transition-transform ${
-                      isManageSectionExpanded ? 'rotate-180' : ''
-                    }`} 
-                    fill="none" 
-                    viewBox="0 0 24 24" 
-                    stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                
-                {isManageSectionExpanded && (
-                  <div className="px-4 py-3 bg-white/50">
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {jobDescriptions.map(jd => {
-                        const isActive = jd.status === 'active';
-                        const isDisabled = updatingStatus === jd.jd_id || 
-                          (!isActive && jdLimitInfo?.remainingJDs === 0);
-                          
-                        return (
-                        <div 
-                          key={jd.jd_id} 
-                          className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-lg transition-colors gap-3 ${
-                            isActive ? 'bg-green-50 border border-green-100' : 'bg-white border border-gray-100'
-                          } ${isDisabled ? 'opacity-70' : 'hover:shadow-sm'}`}
-                        >
-                          <div className="flex-1 min-w-0 w-full sm:w-auto">
-                            <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">
-                              {jd.title}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              Last updated: {new Date(jd.updated_at || jd.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2 sm:gap-3 ml-0 sm:ml-2 w-full sm:w-auto justify-between sm:justify-start">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                            }`}>
-                              {isActive ? 'Active' : 'Inactive'}
-                            </span>
-                            <Switch
-                              checked={isActive}
-                              onCheckedChange={() => !isDisabled && toggleJDStatus(jd.jd_id, jd.status || 'active')}
-                              disabled={isDisabled}
-                              className={`${isDisabled ? 'opacity-50' : ''} ${
-                                isActive ? 'data-[state=checked]:bg-green-500' : ''
-                              }`}
-                            />
-                          </div>
-                        </div>
-                      )})}
-                    </div>
-                    
-                    {jdLimitInfo?.remainingJDs === 0 && (
-                      <div className="mt-3 p-3 rounded-lg bg-red-50 border border-red-100">
-                        <div className="flex">
-                          <svg className="h-5 w-5 text-red-400 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                          </svg>
-                          <div>
-                            <h4 className="text-sm font-medium text-red-800">Active Job Description Limit Reached</h4>
-                            <p className="text-xs text-red-700 mt-0.5">
-                              You've reached your limit of {jdLimitInfo.maxActiveJDs} active job descriptions. 
-                              Please deactivate another JD to activate a new one.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-            
             <div className="rounded-lg border border-primary-200 bg-primary-50/40 p-3 sm:p-4">
-              <label className="mb-2 block text-sm font-medium text-primary-700">
+              <label className="mb-2 block text-xs sm:text-sm font-medium text-primary-700">
                 Create a new job description
               </label>
               <Input
@@ -1159,7 +1220,7 @@ export const JobUploadSection = () => {
                 placeholder="Job Title (e.g., Senior Software Engineer)"
                 value={jobTitle}
                 onChange={(e) => setJobTitle(e.target.value)}
-                className="mb-0"
+                className="mb-0 text-sm"
                 ref={jobTitleInputRef}
               />
             </div>
@@ -1208,6 +1269,125 @@ export const JobUploadSection = () => {
                   onChange={handleFileChange}
                   className="hidden"
                 />
+
+                {/* Show glider slider and content */}
+                {selectedJobDescriptionId && (
+                  <div className="flex flex-col gap-2">
+                    {/* Glider Slider */}
+                    <div className="flex items-center justify-center gap-3">
+                      <span className={`text-xs sm:text-sm font-medium transition-colors ${viewMode === 'resolved' ? 'text-primary-600' : 'text-gray-500'}`}>
+                        Resolved Data
+                      </span>
+                      <div 
+                        className="relative w-14 h-7 bg-gray-300 rounded-full cursor-pointer transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                        onClick={() => {
+                          if (viewMode === 'resolved') {
+                            setViewMode('extracted');
+                          } else {
+                            setViewMode('resolved');
+                            handleManualRefresh();
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            if (viewMode === 'resolved') {
+                              setViewMode('extracted');
+                            } else {
+                              setViewMode('resolved');
+                              handleManualRefresh();
+                            }
+                          }
+                        }}
+                      >
+                        <div 
+                          className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-300 ${
+                            viewMode === 'extracted' ? 'translate-x-7' : 'translate-x-0'
+                          }`}
+                        />
+                      </div>
+                      <span className={`text-xs sm:text-sm font-medium transition-colors ${viewMode === 'extracted' ? 'text-primary-600' : 'text-gray-500'}`}>
+                        Source JD
+                      </span>
+                    </div>
+                    
+                    {/* Resolved Data Display */}
+                    {viewMode === 'resolved' && resolvedJD && !isEditingResolvedJD && (
+                      <div className="mt-2 p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-2">
+                          <h4 className="font-semibold text-xs sm:text-sm md:text-base text-gray-900">Resolved Job Description</h4>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setIsEditingResolvedJD(true)}
+                            className="w-full sm:w-auto"
+                          >
+                            <Edit className="w-4 h-4 mr-2" />
+                            <span className="text-xs sm:text-sm">Edit</span>
+                          </Button>
+                        </div>
+                        <div className="space-y-2 text-xs sm:text-sm text-left">
+                          {/* Display detailed attributes in the format you want */}
+                          {resolvedJD.attributes && Object.entries(resolvedJD.attributes).map(([key, value]) => (
+                            <div key={`detailed-${key}`} className="flex flex-col space-y-1">
+                              <span className="font-medium capitalize text-left text-xs sm:text-sm">
+                                {key.replace(/_/g, ' ')}:
+                              </span>
+                              <div className="text-left pl-2">
+                                {typeof value === 'object' && value !== null ? 
+                                  Object.entries(value).map(([subKey, subValue]) => (
+                                    <div key={subKey} className="ml-2 mb-1">
+                                      <span className="font-medium text-gray-700 capitalize text-xs sm:text-sm">{subKey}:</span>
+                                      {Array.isArray(subValue) ? (
+                                        <div className="ml-2 text-xs sm:text-sm break-words">
+                                          {subValue.join(', ')}
+                                        </div>
+                                      ) : (
+                                        <span className="ml-2 text-xs sm:text-sm break-words">{String(subValue)}</span>
+                                      )}
+                                    </div>
+                                  )) : 
+                                  <span className="text-xs sm:text-sm break-words">{String(value) || 'N/A'}</span>
+                                }
+                              </div>
+                            </div>
+                          ))}
+                          
+                          {/* Display attributes_summary if available */}
+                          {resolvedJD.attributes_summary && (
+                            <div className="flex flex-col space-y-1">
+                              <span className="font-medium text-left text-xs sm:text-sm">Attributes Summary:</span>
+                              <span className="text-left pl-2 text-xs sm:text-sm break-words">
+                                {resolvedJD.attributes_summary}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Extracted Text Display */}
+                    {viewMode === 'extracted' && extractedText && (
+                      <div className="mt-2 p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <h4 className="font-semibold text-sm sm:text-base mb-2 text-gray-900">Extracted Job Description Text</h4>
+                        <div className="prose prose-sm max-w-none">
+                          <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm bg-white p-3 sm:p-4 rounded border overflow-x-auto max-h-96 overflow-y-auto">
+                            {extractedText}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {isWaitingForResolvedJD && (
+                      <div className="flex items-center justify-center text-xs text-blue-600">
+                        <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                        Resolving JD...
+                      </div>
+                    )}
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="editor" className="space-y-4">
@@ -1246,11 +1426,16 @@ export const JobUploadSection = () => {
               
               {/* Show limit info */}
               {jdLimitInfo && (
-                <div className="text-sm text-gray-600 mt-2">
+                <div className="text-sm mt-2">
                   {jdLimitInfo.maxActiveJDs === 0 ? (
-                    <span className="text-green-600">Unlimited active job descriptions</span>
+                    <span className="text-emerald-600 font-medium">Unlimited active job descriptions</span>
                   ) : (
-                    <span className={jdLimitInfo.remainingJDs <= 0 ? 'text-red-600 font-medium' : 'text-gray-600'}>
+                    <span className={`font-medium ${
+                      statusConfig === 'critical' ? 'text-red-600' :
+                      statusConfig === 'warning' ? 'text-amber-600' :
+                      statusConfig === 'caution' ? 'text-yellow-600' :
+                      'text-emerald-600'
+                    }`}>
                       {jdLimitInfo.currentActiveJDCount} / {jdLimitInfo.maxActiveJDs} active JDs
                       {jdLimitInfo.remainingJDs > 0 && ` (${jdLimitInfo.remainingJDs} remaining)`}
                       {jdLimitInfo.remainingJDs <= 0 && ' - Limit reached'}
@@ -1258,167 +1443,84 @@ export const JobUploadSection = () => {
                   )}
                 </div>
               )}
-              
-              {/* Show refresh button and auto-refresh status */}
-              {selectedJobDescriptionId && (
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleManualRefresh}
-                    className="w-full sm:flex-1"
-                    disabled={processingStatus === 'processing'}
-                  >
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    <span className="hidden sm:inline">Show Resolved JD Data</span>
-                    <span className="sm:hidden">Show Resolved JD</span>
-                  </Button>
-                  
-                  {isWaitingForResolvedJD && (
-                    <div className="flex items-center text-xs text-blue-600">
-                      <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                      Resolving JD...
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
-
-            {resolvedJD && !isEditingResolvedJD && (
-              <div className="mt-4 p-3 sm:p-4 bg-gray-50 rounded-lg">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-2">
-                  <h4 className="font-semibold text-left text-sm sm:text-base">Resolved Job Description</h4>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsEditingResolvedJD(true)}
-                  >
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit
-                  </Button>
-                </div>
-                
-
-                
-                <div className="space-y-2 text-sm text-left">
-                  {/* Display detailed attributes in the format you want */}
-                  {resolvedJD.attributes && Object.entries(resolvedJD.attributes).map(([key, value]) => (
-                    <div key={`detailed-${key}`} className="flex flex-col space-y-1">
-                      <span className="font-medium capitalize text-left">
-                        {key.replace(/_/g, ' ')}:
-                      </span>
-                      <div className="text-left pl-2">
-                        {typeof value === 'object' && value !== null ? 
-                          Object.entries(value).map(([subKey, subValue]) => (
-                            <div key={subKey} className="ml-2 mb-1">
-                              <span className="font-medium text-gray-700 capitalize">{subKey}:</span>
-                              {Array.isArray(subValue) ? (
-                                <div className="ml-2 text-sm">
-                                  {subValue.join(', ')}
-                                </div>
-                              ) : (
-                                <span className="ml-2 text-sm">{String(subValue)}</span>
-                              )}
-                            </div>
-                          )) : 
-                          <span className="text-sm">{String(value) || 'N/A'}</span>
-                        }
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {/* Display attributes_summary if available */}
-                  {resolvedJD.attributes_summary && (
-                    <div className="flex flex-col space-y-1">
-                      <span className="font-medium text-left">Attributes Summary:</span>
-                      <span className="text-left pl-2 text-xs">
-                        {resolvedJD.attributes_summary}
-                      </span>
-                    </div>
-                  )}
-                  
-
-                </div>
-              </div>
-            )}
-
-            {resolvedJD && isEditingResolvedJD && (
-              <div className="mt-4 space-y-3">
-                <h4 className="font-semibold">Edit Resolved Information</h4>
-                {resolvedJD.attributes && Object.entries(resolvedJD.attributes).map(([key, value]) => (
-                  <div key={key} className="space-y-1">
-                    <label className="text-sm font-medium capitalize">
-                      {key.replace(/_/g, ' ')}
-                    </label>
-                    {typeof value === 'object' && value !== null ? (
-                      <div className="space-y-2">
-                        {Object.entries(value).map(([subKey, subValue]) => (
-                          <div key={subKey} className="space-y-1">
-                            <label className="text-xs font-medium text-gray-600 capitalize">
-                              {subKey}:
-                            </label>
-                            <Textarea
-                              value={Array.isArray(subValue) ? subValue.join(', ') : String(subValue) || ''}
-                              onChange={(e) => {
-                                const newValue = Array.isArray(subValue) 
-                                  ? e.target.value.split(',').map(item => item.trim()).filter(item => item)
-                                  : e.target.value;
-                                
-                                setResolvedJD(prev => ({
-                                  ...prev!,
-                                  attributes: {
-                                    ...prev!.attributes,
-                                    [key]: {
-                                      ...(prev!.attributes![key] as any),
-                                      [subKey]: newValue
-                                    }
-                                  }
-                                }));
-                              }}
-                              className="min-h-[40px] text-sm"
-                              placeholder={`Enter ${subKey}...`}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <Textarea
-                        value={String(value) || ''}
-                        onChange={(e) => 
-                          setResolvedJD(prev => ({
-                            ...prev!,
-                            attributes: {
-                              ...prev!.attributes,
-                              [key]: e.target.value
-                            }
-                          }))
-                        }
-                        className="min-h-[60px]"
-                        placeholder={`Enter ${key.replace(/_/g, ' ')}...`}
-                      />
-                    )}
-                  </div>
-                ))}
-                <div className="flex gap-2">
-                  <Button
-                    onClick={updateResolvedJD}
-                    className="flex-1"
-                  >
-                    Save Changes
-                  </Button>
-                  <Button
-                    onClick={() => setIsEditingResolvedJD(false)}
-                    variant="outline"
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
 
-    </div>
+        {resolvedJD && isEditingResolvedJD && (
+          <div className="mt-4 space-y-3">
+            <h4 className="font-semibold">Edit Resolved Information</h4>
+            {resolvedJD.attributes && Object.entries(resolvedJD.attributes).map(([key, value]) => (
+              <div key={key} className="space-y-1">
+                <label className="text-sm font-medium capitalize">
+                  {key.replace(/_/g, ' ')}
+                </label>
+                {typeof value === 'object' && value !== null ? (
+                  <div className="space-y-2">
+                    {Object.entries(value).map(([subKey, subValue]) => (
+                      <div key={subKey} className="space-y-1">
+                        <label className="text-xs font-medium text-gray-600 capitalize">
+                          {subKey}:
+                        </label>
+                        <Textarea
+                          value={Array.isArray(subValue) ? subValue.join(', ') : String(subValue) || ''}
+                          onChange={(e) => {
+                            const newValue = Array.isArray(subValue) 
+                              ? e.target.value.split(',').map(item => item.trim()).filter(item => item)
+                              : e.target.value;
+                            
+                            setResolvedJD(prev => ({
+                              ...prev!,
+                              attributes: {
+                                ...prev!.attributes,
+                                [key]: {
+                                  ...(prev!.attributes![key] as any),
+                                  [subKey]: newValue
+                                }
+                              }
+                            }));
+                          }}
+                          className="min-h-[40px] text-sm"
+                          placeholder={`Enter ${subKey}...`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Textarea
+                    value={String(value) || ''}
+                    onChange={(e) => 
+                      setResolvedJD(prev => ({
+                        ...prev!,
+                        attributes: {
+                          ...prev!.attributes,
+                          [key]: e.target.value
+                        }
+                      }))
+                    }
+                    className="min-h-[60px]"
+                    placeholder={`Enter ${key.replace(/_/g, ' ')}...`}
+                  />
+                )}
+              </div>
+            ))}
+            <div className="flex gap-2">
+              <Button
+                onClick={updateResolvedJD}
+                className="flex-1"
+              >
+                Save Changes
+              </Button>
+              <Button
+                onClick={() => setIsEditingResolvedJD(false)}
+                variant="outline"
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
   );
 };
