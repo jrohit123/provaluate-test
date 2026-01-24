@@ -1269,6 +1269,125 @@ export const JobUploadSection = () => {
                   onChange={handleFileChange}
                   className="hidden"
                 />
+
+                {/* Show glider slider and content */}
+                {selectedJobDescriptionId && (
+                  <div className="flex flex-col gap-2">
+                    {/* Glider Slider */}
+                    <div className="flex items-center justify-center gap-3">
+                      <span className={`text-xs sm:text-sm font-medium transition-colors ${viewMode === 'resolved' ? 'text-primary-600' : 'text-gray-500'}`}>
+                        Resolved Data
+                      </span>
+                      <div 
+                        className="relative w-14 h-7 bg-gray-300 rounded-full cursor-pointer transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                        onClick={() => {
+                          if (viewMode === 'resolved') {
+                            setViewMode('extracted');
+                          } else {
+                            setViewMode('resolved');
+                            handleManualRefresh();
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            if (viewMode === 'resolved') {
+                              setViewMode('extracted');
+                            } else {
+                              setViewMode('resolved');
+                              handleManualRefresh();
+                            }
+                          }
+                        }}
+                      >
+                        <div 
+                          className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-300 ${
+                            viewMode === 'extracted' ? 'translate-x-7' : 'translate-x-0'
+                          }`}
+                        />
+                      </div>
+                      <span className={`text-xs sm:text-sm font-medium transition-colors ${viewMode === 'extracted' ? 'text-primary-600' : 'text-gray-500'}`}>
+                        Source JD
+                      </span>
+                    </div>
+                    
+                    {/* Resolved Data Display */}
+                    {viewMode === 'resolved' && resolvedJD && !isEditingResolvedJD && (
+                      <div className="mt-2 p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-2">
+                          <h4 className="font-semibold text-xs sm:text-sm md:text-base text-gray-900">Resolved Job Description</h4>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setIsEditingResolvedJD(true)}
+                            className="w-full sm:w-auto"
+                          >
+                            <Edit className="w-4 h-4 mr-2" />
+                            <span className="text-xs sm:text-sm">Edit</span>
+                          </Button>
+                        </div>
+                        <div className="space-y-2 text-xs sm:text-sm text-left">
+                          {/* Display detailed attributes in the format you want */}
+                          {resolvedJD.attributes && Object.entries(resolvedJD.attributes).map(([key, value]) => (
+                            <div key={`detailed-${key}`} className="flex flex-col space-y-1">
+                              <span className="font-medium capitalize text-left text-xs sm:text-sm">
+                                {key.replace(/_/g, ' ')}:
+                              </span>
+                              <div className="text-left pl-2">
+                                {typeof value === 'object' && value !== null ? 
+                                  Object.entries(value).map(([subKey, subValue]) => (
+                                    <div key={subKey} className="ml-2 mb-1">
+                                      <span className="font-medium text-gray-700 capitalize text-xs sm:text-sm">{subKey}:</span>
+                                      {Array.isArray(subValue) ? (
+                                        <div className="ml-2 text-xs sm:text-sm break-words">
+                                          {subValue.join(', ')}
+                                        </div>
+                                      ) : (
+                                        <span className="ml-2 text-xs sm:text-sm break-words">{String(subValue)}</span>
+                                      )}
+                                    </div>
+                                  )) : 
+                                  <span className="text-xs sm:text-sm break-words">{String(value) || 'N/A'}</span>
+                                }
+                              </div>
+                            </div>
+                          ))}
+                          
+                          {/* Display attributes_summary if available */}
+                          {resolvedJD.attributes_summary && (
+                            <div className="flex flex-col space-y-1">
+                              <span className="font-medium text-left text-xs sm:text-sm">Attributes Summary:</span>
+                              <span className="text-left pl-2 text-xs sm:text-sm break-words">
+                                {resolvedJD.attributes_summary}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Extracted Text Display */}
+                    {viewMode === 'extracted' && extractedText && (
+                      <div className="mt-2 p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <h4 className="font-semibold text-sm sm:text-base mb-2 text-gray-900">Extracted Job Description Text</h4>
+                        <div className="prose prose-sm max-w-none">
+                          <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm bg-white p-3 sm:p-4 rounded border overflow-x-auto max-h-96 overflow-y-auto">
+                            {extractedText}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {isWaitingForResolvedJD && (
+                      <div className="flex items-center justify-center text-xs text-blue-600">
+                        <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                        Resolving JD...
+                      </div>
+                    )}
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="editor" className="space-y-4">
@@ -1324,205 +1443,84 @@ export const JobUploadSection = () => {
                   )}
                 </div>
               )}
-              
-              {/* Show glider slider and content */}
-              {selectedJobDescriptionId && (
-                <div className="flex flex-col gap-2">
-                  {/* Glider Slider */}
-                  <div className="flex items-center justify-center gap-3">
-                    <span className={`text-xs sm:text-sm font-medium transition-colors ${viewMode === 'resolved' ? 'text-primary-600' : 'text-gray-500'}`}>
-                      Resolved Data
-                    </span>
-                    <div 
-                      className="relative w-14 h-7 bg-gray-300 rounded-full cursor-pointer transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-                      onClick={() => {
-                        if (viewMode === 'resolved') {
-                          setViewMode('extracted');
-                        } else {
-                          setViewMode('resolved');
-                          handleManualRefresh();
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          if (viewMode === 'resolved') {
-                            setViewMode('extracted');
-                          } else {
-                            setViewMode('resolved');
-                            handleManualRefresh();
-                          }
-                        }
-                      }}
-                    >
-                      <div 
-                        className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-300 ${
-                          viewMode === 'extracted' ? 'translate-x-7' : 'translate-x-0'
-                        }`}
-                      />
-                    </div>
-                    <span className={`text-xs sm:text-sm font-medium transition-colors ${viewMode === 'extracted' ? 'text-primary-600' : 'text-gray-500'}`}>
-                      Extracted Text
-                    </span>
-                  </div>
-                  
-                  {/* Resolved Data Display */}
-                  {viewMode === 'resolved' && resolvedJD && !isEditingResolvedJD && (
-                    <div className="mt-2 p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-2">
-                        <h4 className="font-semibold text-xs sm:text-sm md:text-base text-gray-900">Resolved Job Description</h4>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setIsEditingResolvedJD(true)}
-                          className="w-full sm:w-auto"
-                        >
-                          <Edit className="w-4 h-4 mr-2" />
-                          <span className="text-xs sm:text-sm">Edit</span>
-                        </Button>
-                      </div>
-                      <div className="space-y-2 text-xs sm:text-sm text-left">
-                        {/* Display detailed attributes in the format you want */}
-                        {resolvedJD.attributes && Object.entries(resolvedJD.attributes).map(([key, value]) => (
-                          <div key={`detailed-${key}`} className="flex flex-col space-y-1">
-                            <span className="font-medium capitalize text-left text-xs sm:text-sm">
-                              {key.replace(/_/g, ' ')}:
-                            </span>
-                            <div className="text-left pl-2">
-                              {typeof value === 'object' && value !== null ? 
-                                Object.entries(value).map(([subKey, subValue]) => (
-                                  <div key={subKey} className="ml-2 mb-1">
-                                    <span className="font-medium text-gray-700 capitalize text-xs sm:text-sm">{subKey}:</span>
-                                    {Array.isArray(subValue) ? (
-                                      <div className="ml-2 text-xs sm:text-sm break-words">
-                                        {subValue.join(', ')}
-                                      </div>
-                                    ) : (
-                                      <span className="ml-2 text-xs sm:text-sm break-words">{String(subValue)}</span>
-                                    )}
-                                  </div>
-                                )) : 
-                                <span className="text-xs sm:text-sm break-words">{String(value) || 'N/A'}</span>
-                              }
-                            </div>
-                          </div>
-                        ))}
-                        
-                        {/* Display attributes_summary if available */}
-                        {resolvedJD.attributes_summary && (
-                          <div className="flex flex-col space-y-1">
-                            <span className="font-medium text-left text-xs sm:text-sm">Attributes Summary:</span>
-                            <span className="text-left pl-2 text-xs sm:text-sm break-words">
-                              {resolvedJD.attributes_summary}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Extracted Text Display */}
-                  {viewMode === 'extracted' && extractedText && (
-                    <div className="mt-2 p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <h4 className="font-semibold text-sm sm:text-base mb-2 text-gray-900">Extracted Job Description Text</h4>
-                      <div className="prose prose-sm max-w-none">
-                        <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm bg-white p-3 sm:p-4 rounded border overflow-x-auto max-h-96 overflow-y-auto">
-                          {extractedText}
-                        </pre>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {isWaitingForResolvedJD && (
-                    <div className="flex items-center justify-center text-xs text-blue-600">
-                      <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                      Resolving JD...
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
-
-
-            {resolvedJD && isEditingResolvedJD && (
-              <div className="mt-4 space-y-3">
-                <h4 className="font-semibold">Edit Resolved Information</h4>
-                {resolvedJD.attributes && Object.entries(resolvedJD.attributes).map(([key, value]) => (
-                  <div key={key} className="space-y-1">
-                    <label className="text-sm font-medium capitalize">
-                      {key.replace(/_/g, ' ')}
-                    </label>
-                    {typeof value === 'object' && value !== null ? (
-                      <div className="space-y-2">
-                        {Object.entries(value).map(([subKey, subValue]) => (
-                          <div key={subKey} className="space-y-1">
-                            <label className="text-xs font-medium text-gray-600 capitalize">
-                              {subKey}:
-                            </label>
-                            <Textarea
-                              value={Array.isArray(subValue) ? subValue.join(', ') : String(subValue) || ''}
-                              onChange={(e) => {
-                                const newValue = Array.isArray(subValue) 
-                                  ? e.target.value.split(',').map(item => item.trim()).filter(item => item)
-                                  : e.target.value;
-                                
-                                setResolvedJD(prev => ({
-                                  ...prev!,
-                                  attributes: {
-                                    ...prev!.attributes,
-                                    [key]: {
-                                      ...(prev!.attributes![key] as any),
-                                      [subKey]: newValue
-                                    }
-                                  }
-                                }));
-                              }}
-                              className="min-h-[40px] text-sm"
-                              placeholder={`Enter ${subKey}...`}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <Textarea
-                        value={String(value) || ''}
-                        onChange={(e) => 
-                          setResolvedJD(prev => ({
-                            ...prev!,
-                            attributes: {
-                              ...prev!.attributes,
-                              [key]: e.target.value
-                            }
-                          }))
-                        }
-                        className="min-h-[60px]"
-                        placeholder={`Enter ${key.replace(/_/g, ' ')}...`}
-                      />
-                    )}
-                  </div>
-                ))}
-                <div className="flex gap-2">
-                  <Button
-                    onClick={updateResolvedJD}
-                    className="flex-1"
-                  >
-                    Save Changes
-                  </Button>
-                  <Button
-                    onClick={() => setIsEditingResolvedJD(false)}
-                    variant="outline"
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
 
-    </div>
+        {resolvedJD && isEditingResolvedJD && (
+          <div className="mt-4 space-y-3">
+            <h4 className="font-semibold">Edit Resolved Information</h4>
+            {resolvedJD.attributes && Object.entries(resolvedJD.attributes).map(([key, value]) => (
+              <div key={key} className="space-y-1">
+                <label className="text-sm font-medium capitalize">
+                  {key.replace(/_/g, ' ')}
+                </label>
+                {typeof value === 'object' && value !== null ? (
+                  <div className="space-y-2">
+                    {Object.entries(value).map(([subKey, subValue]) => (
+                      <div key={subKey} className="space-y-1">
+                        <label className="text-xs font-medium text-gray-600 capitalize">
+                          {subKey}:
+                        </label>
+                        <Textarea
+                          value={Array.isArray(subValue) ? subValue.join(', ') : String(subValue) || ''}
+                          onChange={(e) => {
+                            const newValue = Array.isArray(subValue) 
+                              ? e.target.value.split(',').map(item => item.trim()).filter(item => item)
+                              : e.target.value;
+                            
+                            setResolvedJD(prev => ({
+                              ...prev!,
+                              attributes: {
+                                ...prev!.attributes,
+                                [key]: {
+                                  ...(prev!.attributes![key] as any),
+                                  [subKey]: newValue
+                                }
+                              }
+                            }));
+                          }}
+                          className="min-h-[40px] text-sm"
+                          placeholder={`Enter ${subKey}...`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Textarea
+                    value={String(value) || ''}
+                    onChange={(e) => 
+                      setResolvedJD(prev => ({
+                        ...prev!,
+                        attributes: {
+                          ...prev!.attributes,
+                          [key]: e.target.value
+                        }
+                      }))
+                    }
+                    className="min-h-[60px]"
+                    placeholder={`Enter ${key.replace(/_/g, ' ')}...`}
+                  />
+                )}
+              </div>
+            ))}
+            <div className="flex gap-2">
+              <Button
+                onClick={updateResolvedJD}
+                className="flex-1"
+              >
+                Save Changes
+              </Button>
+              <Button
+                onClick={() => setIsEditingResolvedJD(false)}
+                variant="outline"
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
   );
 };
