@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
 import { SessionManager } from '@/utils/sessionManager';
 
 export default function Onboarding() {
@@ -65,6 +64,7 @@ export default function Onboarding() {
       return;
     }
     setLoading(true);
+    let willNavigate = false;
     try {
       // Get user email and validate it exists
       const email = user?.email;
@@ -223,12 +223,10 @@ export default function Onboarding() {
             },
             handler: async function (response: any) {
               try {
-                toast.success('Onboarding complete! Subscription activated. Redirecting to dashboard...');
                 // Changed from window.location.replace to navigate
                 setTimeout(() => navigate('/dashboard?section=main-dashboard'), 1000);
               } catch (error: any) {
                 console.error('Error processing subscription:', error);
-                toast.success('Onboarding complete! Redirecting to dashboard...');
                 setTimeout(() => navigate('/dashboard?section=main-dashboard'), 1000);
               }
             },
@@ -236,7 +234,6 @@ export default function Onboarding() {
               ondismiss: function() {
                 // User closed payment modal - still allow them to proceed
                 // They can use "Recharge" button later to complete payment
-                toast.info('Payment cancelled. You can complete payment later from your dashboard.');
                 // Changed from window.location.replace to navigate
                 setTimeout(() => navigate('/dashboard?section=main-dashboard'), 1000);
               }
@@ -247,36 +244,48 @@ export default function Onboarding() {
           
           rzp1.on('payment.failed', function (response: any) {
             console.error('Payment failed:', response.error);
-            toast.warning('Payment failed. You can try again from your dashboard.');
             // Changed from window.location.replace to navigate
             setTimeout(() => navigate('/dashboard?section=main-dashboard'), 1000);
           });
           
           rzp1.open();
-          setLoading(false);
+          // Keep loading true - don't show form again, Razorpay modal will handle the UI
           return; // Don't navigate yet, wait for payment
         } catch (subscriptionError: any) {
           console.error('Error creating subscription:', subscriptionError);
-          // If subscription creation fails, still allow onboarding but show warning
-          toast.warning('Onboarding complete but subscription setup failed. Please use "Recharge" button to complete payment.');
-          setTimeout(() => navigate('/dashboard?section=main-dashboard'), 1000);
+          // If subscription creation fails, still allow onboarding
+          willNavigate = true;
+          navigate('/dashboard?section=main-dashboard');
           return;
         }
       } else {
         // FreeTrial - no payment needed, just navigate
-        toast.success('Onboarding complete! Redirecting to your dashboard.');
         console.log('User profile created!');
-        // Changed from window.location.replace to navigate
-        setTimeout(() => navigate('/dashboard?section=main-dashboard'), 500);
+        willNavigate = true;
+        // Navigate immediately - keep loading true so form doesn't show again
+        navigate('/dashboard?section=main-dashboard');
       }
     } catch (err) {
       setError(err.message || 'Onboarding failed.');
-    } finally {
       setLoading(false);
+    } finally {
+      // Only set loading to false if we're not navigating
+      // If we're navigating, keep loading true to prevent form from showing
+      if (!willNavigate) {
+        setLoading(false);
+      }
     }
   };
 
-  if (loading) return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="text-lg text-gray-600">Loading...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">

@@ -9,6 +9,7 @@ import './App.css';
 import { useSessionTimeout } from '@/hooks/use-session-timeout';
 import { SessionTimeoutDialog } from '@/components/session/SessionTimeoutDialog';
 import { SessionManager } from '@/utils/sessionManager';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Import existing pages
 import Login from "./pages/Login";
@@ -132,6 +133,38 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+// Toast component that adapts to mobile
+const AdaptiveToaster = () => {
+  const isMobile = useIsMobile();
+  
+  return (
+    <HotToaster 
+      position={isMobile ? "top-center" : "top-right"}
+      toastOptions={{
+        duration: 4000,
+        style: {
+          background: '#1f2937',
+          color: '#fff',
+          border: '1px solid #374151',
+          maxWidth: isMobile ? '90%' : '400px',
+        },
+        success: {
+          iconTheme: {
+            primary: '#10b981',
+            secondary: '#fff',
+          },
+        },
+        error: {
+          iconTheme: {
+            primary: '#ef4444',
+            secondary: '#fff',
+          },
+        },
+      }}
+    />
+  );
+};
+
 const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
@@ -185,29 +218,7 @@ const App = () => {
           {/* Toast Providers */}
           <Toaster />
           <Sonner />
-          <HotToaster 
-            position="top-right"
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: '#1f2937',
-                color: '#fff',
-                border: '1px solid #374151',
-              },
-              success: {
-                iconTheme: {
-                  primary: '#10b981',
-                  secondary: '#fff',
-                },
-              },
-              error: {
-                iconTheme: {
-                  primary: '#ef4444',
-                  secondary: '#fff',
-                },
-              },
-            }}
-          />
+          <AdaptiveToaster />
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>

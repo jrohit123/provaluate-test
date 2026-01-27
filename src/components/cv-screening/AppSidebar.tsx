@@ -9,6 +9,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ActiveSection } from '@/pages/Dashboard';
@@ -93,6 +94,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
   const { user } = useAuth();
   const navigate = useNavigate();
   const { currentJobDescription, currentEvaluationCriteria, isSessionComplete } = useSession();
+  const { isMobile, setOpenMobile } = useSidebar();
   
   // State for collapsible sections
   const [isCvScreeningOpen, setIsCvScreeningOpen] = useState(true);
@@ -105,6 +107,11 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
   const handleSectionChange = (section: ActiveSection) => {
     onSectionChange(section);
     navigate(`/dashboard?section=${section}`);
+    
+    // Close mobile sidebar after navigation
+    if (isMobile) {
+      setOpenMobile(false);
+    }
   };
 
   // Get completion status and tooltip for CV Screening items

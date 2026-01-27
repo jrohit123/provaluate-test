@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/cv-screening/AppSidebar';
@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileText, Users, ArrowRight, Upload, BarChart3, Wrench, Monitor } from 'lucide-react';
 import { useSession } from '@/contexts/SessionContext';
+import { UiAnalyticsService } from '@/services/uiAnalyticsService';
 
 export type ActiveSection = 'main-dashboard' | 'job-upload' | 'evaluation-criteria' | 'resume-upload' | 'match-scorecard' | 'interview-creation' | 'ai-interview' | 'setup' | 'interview-dashboard' | 'settings';
 
@@ -27,6 +28,7 @@ const Dashboard = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { isSessionComplete } = useSession();
+  const mainScrollRef = useRef<HTMLDivElement | null>(null);
 
   // Get activeSection from URL parameter, default to 'main-dashboard'
   const activeSection = (searchParams.get('section') as ActiveSection) || 'main-dashboard';
@@ -63,6 +65,51 @@ const Dashboard = () => {
     setSearchParams({ section });
   };
 
+  // Track which section the recruiter is viewing
+  useEffect(() => {
+    UiAnalyticsService.track({
+      name: 'dashboard_section_viewed',
+      area: 'cv_screening_dashboard',
+      metadata: { section: activeSection },
+    });
+  }, [activeSection]);
+
+  // Track scroll depth on the main dashboard content area
+  useEffect(() => {
+    const container = mainScrollRef.current;
+    if (!container) return;
+
+    const thresholds = [0.25, 0.5, 0.75, 1];
+    const seen = new Set<number>();
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const depth =
+        scrollHeight <= clientHeight
+          ? 1
+          : (scrollTop + clientHeight) / scrollHeight;
+
+      thresholds.forEach((t) => {
+        if (!seen.has(t) && depth >= t) {
+          seen.add(t);
+          UiAnalyticsService.track({
+            name: 'dashboard_scroll_depth',
+            area: 'cv_screening_dashboard',
+            metadata: { depth: t, section: activeSection },
+          });
+        }
+      });
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    // Trigger once on mount to capture short pages
+    handleScroll();
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+    };
+  }, [activeSection]);
+
   const renderMainContent = () => {
     switch (activeSection) {
       case 'main-dashboard':
@@ -92,26 +139,26 @@ const Dashboard = () => {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-gray-50">
+      <div className="flex w-full bg-gray-50 min-h-screen">
         <AppSidebar activeSection={activeSection} onSectionChange={setActiveSection} />
         <div className="flex-1 flex flex-col min-w-0">
           <Header />
-          <main className="flex-1 overflow-auto">
+          <main ref={mainScrollRef} className="flex-1">
             {renderMainContent()}
+            <footer className="bg-white border-t px-4 sm:px-6 py-3 sm:py-4 text-center text-xs sm:text-sm text-muted-foreground mt-auto">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-0 sm:space-x-2">
+                <span>© ProValuate 2025</span>
+                <span className="hidden sm:inline">|</span>
+                <a href="#" className="text-indigo-600 hover:text-indigo-800 transition-colors whitespace-nowrap">Privacy Policy</a>
+                <span className="hidden sm:inline">|</span>
+                <a href="#" className="text-indigo-600 hover:text-indigo-800 transition-colors whitespace-nowrap">Terms</a>
+                <span className="hidden sm:inline">|</span>
+                <a href="mailto:rj@aitamate.com?&subject=ProValuate&body=Hi,%0D%0A%0D%0AI'd like to know more about ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors whitespace-nowrap">Contact</a>
+                <span className="hidden sm:inline">|</span>
+                <span className="whitespace-nowrap">Powered by <a href="http://aitamate.com" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-700">aitamate</a></span>
+              </div>
+            </footer>
           </main>
-          <footer className="bg-white border-t px-4 sm:px-6 py-3 sm:py-4 text-center text-xs sm:text-sm text-muted-foreground">
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-0 sm:space-x-2">
-              <span>© ProValuate 2025</span>
-              <span className="hidden sm:inline">|</span>
-              <a href="#" className="text-indigo-600 hover:text-indigo-800 transition-colors">Privacy Policy</a>
-              <span className="hidden sm:inline">|</span>
-              <a href="#" className="text-indigo-600 hover:text-indigo-800 transition-colors">Terms</a>
-              <span className="hidden sm:inline">|</span>
-              <a href="mailto:rj@aitamate.com?&subject=ProValuate&body=Hi,%0D%0A%0D%0AI'd like to know more about ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors">Contact</a>
-              <span className="hidden sm:inline">|</span>
-              <span>Powered by <a href="http://aitamate.com" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-700">aitamate</a></span>
-            </div>
-          </footer>
         </div>
       </div>
     </SidebarProvider>

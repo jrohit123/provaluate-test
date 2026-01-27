@@ -1573,7 +1573,11 @@ export default function AdminUserManagement() {
           </Dialog>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto relative">
+          {/* Swipe hint for mobile */}
+          <div className="absolute top-2 right-2 bg-blue-50 border border-blue-200 rounded px-2 py-1 text-xs text-blue-700 flex items-center gap-1 z-10 md:hidden">
+            <span>← Swipe to scroll →</span>
+          </div>
           <table className="min-w-full text-xs sm:text-sm border">
             <thead>
               <tr className="bg-gray-100">

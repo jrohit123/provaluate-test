@@ -973,101 +973,116 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Job Description and Criteria Grid Selection - Only Visible in Multi-Candidate Mode */}
       {!selectedCandidateData && (
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-center flex-wrap mb-4 sm:mb-6">
-          {/* Job Description Selection */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-primary-600 flex-shrink-0" />
-              <span className="text-xs sm:text-sm text-gray-600 font-medium">Job:</span>
-            </div>
-            <Select value={selectedJobDescriptionId} onValueChange={handleJobDescriptionSelect}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="Select job description..." />
-              </SelectTrigger>
-              <SelectContent>
-                {jobDescriptions.map(jd => (
-                  <SelectItem key={jd.jd_id} value={jd.jd_id}>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{jd.title}</span>
-                      <span className="text-xs text-muted-foreground">
-                        Created: {new Date(jd.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedJobDescriptionId && (
-              <CheckCircle className="w-4 h-4 text-green-600" />
-            )}
-          </div>
-
-          {/* Evaluation Criteria Selection */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Grid className="w-4 h-4 text-primary-600 flex-shrink-0" />
-              <span className="text-xs sm:text-sm text-gray-600 font-medium">Criteria:</span>
-            </div>
-            <Select value={selectedCriteriaGridId} onValueChange={handleCriteriaGridSelect}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="Select criteria..." />
-              </SelectTrigger>
-              <SelectContent>
-                {criteriaGrids.map(grid => (
-                  <SelectItem key={grid.id} value={grid.id}>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{grid.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {grid.criteriaCount} parameters
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-                </Select>
-                {selectedCriteriaGridId && (
-                  <CheckCircle className="w-4 h-4 text-green-600" />
-                )}
+        <div className="flex flex-col gap-3 mb-4 sm:mb-6">
+          {/* Filters Row 1: Job and Criteria */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Job Description Selection */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-primary-600 flex-shrink-0" />
+                <span className="text-sm text-gray-600 font-medium">Job Description</span>
               </div>
-
-          {/* Recommendation Filter */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              <span className="text-xs sm:text-sm text-gray-600 font-medium">Filter:</span>
+              <Select value={selectedJobDescriptionId} onValueChange={handleJobDescriptionSelect}>
+                <SelectTrigger className="w-full h-11 sm:h-10">
+                  <SelectValue placeholder="Select job description..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {jobDescriptions.map(jd => (
+                    <SelectItem key={jd.jd_id} value={jd.jd_id}>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{jd.title}</span>
+                        <span className="text-xs text-muted-foreground">
+                          Created: {new Date(jd.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={recommendationFilter} onValueChange={handleRecommendationFilter}>
-              <SelectTrigger className="w-full sm:w-44">
-                <SelectValue placeholder="Filter by recommendation" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Recommendations</SelectItem>
-                {getAvailableRecommendations().map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+
+            {/* Evaluation Criteria Selection */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Grid className="w-4 h-4 text-primary-600 flex-shrink-0" />
+                <span className="text-sm text-gray-600 font-medium">Evaluation Criteria</span>
+              <span className="text-xs text-gray-500 hidden sm:inline">(How to assess candidates)</span>
+              </div>
+              <Select value={selectedCriteriaGridId} onValueChange={handleCriteriaGridSelect}>
+                <SelectTrigger className="w-full h-11 sm:h-10">
+                  <SelectValue placeholder="Select criteria..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {criteriaGrids.map(grid => (
+                    <SelectItem key={grid.id} value={grid.id}>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{grid.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {grid.criteriaCount} parameters
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          
-          {/* Sort Button */}
-          <Button variant="outline" size="sm" onClick={handleSortToggle} className="w-full sm:w-auto">
-            {sortOrder === 'desc' ? (
-              <ArrowDown className="w-4 h-4 mr-2" />
-            ) : (
-              <ArrowUp className="w-4 h-4 mr-2" />
-            )}
-            <span className="hidden sm:inline">Sort {sortOrder === 'desc' ? 'High→Low' : 'Low→High'}</span>
-            <span className="sm:hidden">Sort</span>
-          </Button>
-          
-          {/* Export Button */}
-          <Button variant="outline" size="sm" onClick={handleExportReport} className="w-full sm:w-auto">
-            <Download className="w-4 h-4 mr-2" />
-            <span className="hidden sm:inline">Export Report</span>
-            <span className="sm:hidden">Export</span>
-          </Button>
+
+          {/* Filters Row 2: Filter, Sort, Export */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Recommendation Filter */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-sm text-gray-600 font-medium">Filter</span>
+              </div>
+              <Select value={recommendationFilter} onValueChange={handleRecommendationFilter}>
+                <SelectTrigger className="w-full h-11 sm:h-10">
+                  <SelectValue placeholder="Filter by recommendation" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Recommendations</SelectItem>
+                  {getAvailableRecommendations().map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Sort Button */}
+            <div className="flex flex-col gap-2">
+              <span className="text-sm text-gray-600 font-medium opacity-0 pointer-events-none">Sort</span>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleSortToggle} 
+                className="w-full h-11 sm:h-10"
+              >
+                {sortOrder === 'desc' ? (
+                  <ArrowDown className="w-4 h-4 mr-2" />
+                ) : (
+                  <ArrowUp className="w-4 h-4 mr-2" />
+                )}
+                <span>Sort {sortOrder === 'desc' ? 'High→Low' : 'Low→High'}</span>
+              </Button>
+            </div>
+            
+            {/* Export Button */}
+            <div className="flex flex-col gap-2">
+              <span className="text-sm text-gray-600 font-medium opacity-0 pointer-events-none">Export</span>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleExportReport} 
+                className="w-full h-11 sm:h-10"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                <span>Export Report</span>
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

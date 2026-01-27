@@ -79,7 +79,7 @@ export const SessionConflictDialog = ({
 
   return (
     <AlertDialog open={isOpen} onOpenChange={() => {}}>
-      <AlertDialogContent className="max-w-md border-2 border-orange-200 bg-white">
+      <AlertDialogContent className="max-w-md border-2 border-orange-200 bg-white mx-4 max-h-[90vh] overflow-y-auto">
         <AlertDialogHeader>
           <div className="flex items-center gap-3">
             <div className="bg-orange-100 p-2 rounded-full">
@@ -130,14 +130,14 @@ export const SessionConflictDialog = ({
             onClick={handleKeepExisting}
             disabled={isLoading}
             variant="outline"
-            className="border-gray-300 hover:bg-gray-50"
+            className="border-gray-300 hover:bg-gray-50 h-11 sm:h-10 min-h-[44px]"
           >
             {isLoading ? 'Processing...' : 'Keep Existing Session'}
           </Button>
           <Button
             onClick={handleReplaceWithNew}
             disabled={isLoading}
-            className="bg-orange-600 hover:bg-orange-700 text-white"
+            className="bg-orange-600 hover:bg-orange-700 text-white h-11 sm:h-10 min-h-[44px]"
           >
             {isLoading ? 'Processing...' : 'Login Here (Logout Other)'}
           </Button>

@@ -17,6 +17,8 @@ import { useSearchParams } from 'react-router-dom'; // ✅ ADD: Import useSearch
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { LoadingOverlay } from '@/components/LoadingOverlay';
+import { UiAnalyticsService } from '@/services/uiAnalyticsService';
 
 interface ResumeData {
   id: string;
@@ -186,6 +188,22 @@ export const ResumeUploadSection = () => {
     criteriaName: string;
     reason: string;
   } | null>(null);
+
+  const isProcessingOverlayVisible =
+    processingState.status === 'processing' || isWaitingForAssessments;
+
+  // Track completion of a full CV screening run
+  useEffect(() => {
+    if (processingCompleted) {
+      UiAnalyticsService.track({
+        name: 'cv_screening_completed',
+        area: 'cv_screening_resume_upload',
+        metadata: {
+          resumeCount: resumes.length,
+        },
+      });
+    }
+  }, [processingCompleted, resumes.length]);
 
   // ✅ ADD: Read directly from URL params on mount (before Dashboard's useEffect runs)
   // This ensures we pick up JD and criteria immediately when opening from extension
@@ -2513,6 +2531,15 @@ export const ResumeUploadSection = () => {
         })
       )}
       </div>
+
+      {/* Global processing overlay for long-running evaluation */}
+      <LoadingOverlay
+        isOpen={isProcessingOverlayVisible}
+        contextKey="cv-screening"
+        messagesCategory="cv-screening"
+        title="Analyzing resumes against your job criteria…"
+        subtitle="We’re parsing profiles, aligning them to your JD, and computing match scores."
+      />
 
       {/* Scorecard Dialog */}
       <Dialog open={showScorecard} onOpenChange={setShowScorecard}>

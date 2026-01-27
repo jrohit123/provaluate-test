@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import { CVScreeningGuidedTour } from './CVScreeningGuidedTour';
 import { BrowserExtensionInfo } from './BrowserExtensionInfo';
 import { ActiveSection } from '@/pages/Dashboard';
+import { UiAnalyticsService } from '@/services/uiAnalyticsService';
 
 interface MainDashboardProps {
   onSectionChange: (section: string) => void;
@@ -236,7 +237,13 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
           <Button 
             size="sm"
-            onClick={() => setIsExtensionInfoOpen(true)}
+            onClick={() => {
+              UiAnalyticsService.track({
+                name: 'dashboard_click_browser_extension_info',
+                area: 'cv_screening_dashboard',
+              });
+              setIsExtensionInfoOpen(true);
+            }}
             className="flex items-center justify-center gap-2 w-full sm:w-auto"
           >
             <Puzzle className="w-4 h-4" />
@@ -245,7 +252,13 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
           </Button>
           <Button 
             size="sm"
-            onClick={() => setIsGuidedTourOpen(true)}
+            onClick={() => {
+              UiAnalyticsService.track({
+                name: 'dashboard_click_guided_tour',
+                area: 'cv_screening_dashboard',
+              });
+              setIsGuidedTourOpen(true);
+            }}
             className="flex items-center justify-center gap-2 w-full sm:w-auto"
           >
             <HelpCircle className="w-4 h-4" />
@@ -381,7 +394,13 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {/* 1. Manage Job Descriptions */}
             <Button
-              onClick={() => onSectionChange('job-upload')}
+              onClick={() => {
+                UiAnalyticsService.track({
+                  name: 'dashboard_quick_action_job_upload',
+                  area: 'cv_screening_dashboard',
+                });
+                onSectionChange('job-upload');
+              }}
               className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
             >
               <FileText className="w-5 h-5" />
@@ -390,7 +409,13 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
 
             {/* 2. Manage Evaluation Criteria */}
             <Button
-              onClick={() => onSectionChange('evaluation-criteria')}
+              onClick={() => {
+                UiAnalyticsService.track({
+                  name: 'dashboard_quick_action_evaluation_criteria',
+                  area: 'cv_screening_dashboard',
+                });
+                onSectionChange('evaluation-criteria');
+              }}
               className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
             >
               <Wrench className="w-5 h-5" />
@@ -399,7 +424,13 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
 
             {/* 3. Upload Resumes */}
             <Button
-              onClick={() => onSectionChange('resume-upload')}
+              onClick={() => {
+                UiAnalyticsService.track({
+                  name: 'dashboard_quick_action_resume_upload',
+                  area: 'cv_screening_dashboard',
+                });
+                onSectionChange('resume-upload');
+              }}
               className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
             >
               <Upload className="w-5 h-5" />
@@ -408,7 +439,13 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
 
             {/* 4. View Reports */}
             <Button
-              onClick={() => onSectionChange('match-scorecard')}
+              onClick={() => {
+                UiAnalyticsService.track({
+                  name: 'dashboard_quick_action_match_scorecard',
+                  area: 'cv_screening_dashboard',
+                });
+                onSectionChange('match-scorecard');
+              }}
               className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
             >
               <BarChart3 className="w-5 h-5" />
@@ -423,7 +460,13 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {/* Interview Configuration */}
               <Button
-                onClick={() => onSectionChange('setup')}
+                onClick={() => {
+                  UiAnalyticsService.track({
+                    name: 'dashboard_quick_action_interview_setup',
+                    area: 'interview_management',
+                  });
+                  onSectionChange('setup');
+                }}
                 className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
               >
                 <Cog className="w-5 h-5" />
@@ -432,7 +475,13 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
 
               {/* Assessment Manager */}
               <Button
-                onClick={() => onSectionChange('ai-interview')}
+                onClick={() => {
+                  UiAnalyticsService.track({
+                    name: 'dashboard_quick_action_assessment_manager',
+                    area: 'interview_management',
+                  });
+                  onSectionChange('ai-interview');
+                }}
                 className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
               >
                 <Users className="w-5 h-5" />
@@ -441,7 +490,13 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
 
               {/* Interview Dashboard */}
               <Button
-                onClick={() => onSectionChange('interview-dashboard')}
+                onClick={() => {
+                  UiAnalyticsService.track({
+                    name: 'dashboard_quick_action_interview_dashboard',
+                    area: 'interview_management',
+                  });
+                  onSectionChange('interview-dashboard');
+                }}
                 className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
               >
                 <Monitor className="w-5 h-5" />
