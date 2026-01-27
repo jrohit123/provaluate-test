@@ -40,9 +40,10 @@ export const CVScreeningGuidedTour = ({
       section: 'job-upload',
       primaryCta: 'Go to Job Upload',
       bullets: [
-        'Start from an existing JD or create a new one in a few clicks.',
-        'Paste or upload your JD (PDF / DOCX / TXT) and let the system extract key details.',
-        'Use the AI-resolved view to clean up and standardize requirements.',
+        'Select an existing job description from your saved list, or create a new one by uploading a file or using the text editor.',
+        'Upload your JD in PDF, DOCX, or TXT format—the system automatically extracts key information like skills, experience, and qualifications.',
+        'Review and edit the AI-resolved structured data to ensure all job requirements are accurately captured and standardized.',
+        'Activate or deactivate job descriptions as needed—manage your active JD limit based on your plan.',
       ],
     },
     {
@@ -53,9 +54,10 @@ export const CVScreeningGuidedTour = ({
       section: 'evaluation-criteria',
       primaryCta: 'Go to Evaluation Criteria',
       bullets: [
-        'Create a criteria grid with parameters like skills, experience, domain fit, and culture add.',
-        'Assign weightages so the algorithm knows what matters most for this role.',
-        'Reuse criteria grids across multiple roles and hiring cycles.',
+        'Define evaluation parameters such as technical skills, years of experience, domain expertise, education, certifications, and soft skills.',
+        'Assign percentage weightages to each parameter (must total 100%) to indicate their relative importance in the scoring algorithm.',
+        'Save criteria grids with descriptive names for easy reuse—create role-specific or default criteria that work across multiple job descriptions.',
+        'Upload criteria from Excel/CSV files for bulk setup, or manually add/edit parameters with calculation notes for transparency.',
       ],
     },
     {
@@ -66,9 +68,10 @@ export const CVScreeningGuidedTour = ({
       section: 'resume-upload',
       primaryCta: 'Go to Resume Upload',
       bullets: [
-        'Select the JD and criteria grid you want to use for this batch.',
-        'Upload multiple resumes at once—formats like PDF, DOCX, TXT are supported.',
-        'We parse, normalize, and score each profile automatically in the background.',
+        'First, select the job description and evaluation criteria grid you want to use for this batch of resumes.',
+        'Upload multiple candidate resumes simultaneously—supports PDF, DOCX, DOC, and TXT file formats for bulk processing.',
+        'The system automatically parses each resume, extracts relevant information, and evaluates candidates against your criteria in the background.',
+        'Monitor real-time progress as resumes are processed—you\'ll see completion status and can view individual candidate scorecards once analysis is done.',
       ],
     },
     {
@@ -79,9 +82,10 @@ export const CVScreeningGuidedTour = ({
       section: 'match-scorecard',
       primaryCta: 'View All Results',
       bullets: [
-        'View candidates ranked by overall match score for this role.',
-        'Open the scorecard to see parameter-wise scores and AI explanations.',
-        'Use recommendations to decide who to shortlist, review further, or reject.',
+        'Browse all candidates ranked by their overall match score—see who best fits your job requirements at a glance.',
+        'Click on any candidate to view their detailed scorecard with parameter-wise breakdowns, AI-generated explanations, and resume highlights.',
+        'Use the recommendation system (Strong Match, Good Match, Review, No Match) to quickly identify top candidates and make informed shortlisting decisions.',
+        'Filter and sort candidates by score, recommendation status, or specific criteria to find the perfect fit for your role.',
       ],
     },
   ];

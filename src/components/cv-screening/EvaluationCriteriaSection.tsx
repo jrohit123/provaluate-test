@@ -4,7 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, Plus, Trash2, Download, Save, Grid, Briefcase, AlertCircle } from 'lucide-react';
+import { Upload, Plus, Trash2, Download, Save, Grid, Briefcase, AlertCircle, ArrowRight } from 'lucide-react';
+import { useSwipe } from '@/hooks/use-swipe';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -29,6 +32,8 @@ export const EvaluationCriteriaSection = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { currentJobDescription, currentEvaluationCriteria, setCurrentEvaluationCriteria } = useSession();
+  const isMobile = useIsMobile();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [criteriaData, setCriteriaData] = useState<CriteriaItem[]>([]);  // Start empty - will be populated when grid is selected
   
   const [savedGrids, setSavedGrids] = useState<SavedCriteriaGrid[]>([]);
@@ -93,6 +98,34 @@ export const EvaluationCriteriaSection = () => {
       }
     }
   }, [currentEvaluationCriteria, savedGrids, selectedGridId]);
+
+  // Swipe detection for navigation (mobile only)
+  useSwipe({
+    enabled: isMobile,
+    onSwipeLeft: () => {
+      if (selectedGridId) {
+        setSearchParams({ section: 'resume-upload' });
+      }
+    },
+    onSwipeRight: () => {
+      // Swipe right to go back to Job Upload
+      setSearchParams({ section: 'job-upload' });
+    },
+  });
+
+  // Show swipe indicator when criteria is selected
+  useEffect(() => {
+    if (selectedGridId && isMobile) {
+      const timer = setTimeout(() => {
+        toast({
+          title: "✓ Evaluation Criteria Set",
+          description: "Swipe left → Resume Upload | Swipe right ← Job Upload",
+          duration: 5000,
+        });
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedGridId, isMobile, toast]);
 
   // Sync selected JD from sessionStorage and reload grids when JD changes (fallback)
   useEffect(() => {
@@ -493,7 +526,7 @@ export const EvaluationCriteriaSection = () => {
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-      {/* Show selected JD banner */}
+{/* Show selected JD banner */}
       {selectedJD ? (
         <Card className="bg-blue-50 border-blue-200 animate-fade-in">
           <CardContent className="p-3 sm:p-4">
@@ -619,10 +652,6 @@ export const EvaluationCriteriaSection = () => {
 
             {/* Desktop Table Layout */}
             <div className="hidden md:block overflow-x-auto border border-primary-100 rounded-lg relative">
-              {/* Swipe hint for mobile - shown on first visit */}
-              <div className="absolute top-2 right-2 bg-blue-50 border border-blue-200 rounded px-2 py-1 text-xs text-blue-700 flex items-center gap-1 z-10">
-                <span>← Swipe to scroll →</span>
-              </div>
               <table className="w-full table-auto">
                 <thead className="bg-primary-50 text-left">
                   <tr className="text-xs font-semibold text-primary-800 uppercase tracking-wide">

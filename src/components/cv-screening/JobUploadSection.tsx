@@ -4,7 +4,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, FileText, Edit, RefreshCw, Loader2, Type, FileUp, Settings } from 'lucide-react';
+import { Upload, FileText, Edit, RefreshCw, Loader2, Type, FileUp, Settings, Wrench, ArrowRight } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -16,9 +16,12 @@ import { DatabaseService } from '@/integrations/supabase/db';
 import { useAuth } from '@/hooks/use-auth';
 import { useSession } from '@/contexts/SessionContext';
 import { UsageTrackingService } from '@/services/usageTrackingService';
+import { useSearchParams } from 'react-router-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { RichTextEditor, extractPlainText, extractHighlightedText } from './RichTextEditor';
 import { API_CONFIG, apiCall } from '@/constants/api';
+import { useSwipe } from '@/hooks/use-swipe';
+import { useIsMobile } from '@/hooks/use-mobile';
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.js`;
 
 interface ResolvedJD {
@@ -49,6 +52,9 @@ const BACKEND_URLS = {
 export const JobUploadSection = () => {
   const { user, loading, error } = useAuth();
   const { currentJobDescription, setCurrentJobDescription } = useSession();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isMobile = useIsMobile();
+  const { toast } = useToast();
   const [jobTitle, setJobTitle] = useState('');
   const [jobDescriptions, setJobDescriptions] = useState<any[]>([]);
   const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => {
@@ -60,7 +66,6 @@ export const JobUploadSection = () => {
   });
   const [selectedJDContent, setSelectedJDContent] = useState<string>('');
   const [selectedJDFileType, setSelectedJDFileType] = useState<string>('');
-  const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const jobTitleInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -976,6 +981,31 @@ export const JobUploadSection = () => {
 
 
 
+  // Swipe detection for navigation (mobile only)
+  useSwipe({
+    enabled: isMobile,
+    onSwipeLeft: () => {
+      if (selectedJobDescriptionId) {
+        setSearchParams({ section: 'evaluation-criteria' });
+      }
+    },
+  });
+
+  // Show swipe indicator when JD is selected
+  useEffect(() => {
+    if (selectedJobDescriptionId && isMobile) {
+      // Show toast after a short delay to let the selection toast finish
+      const timer = setTimeout(() => {
+        toast({
+          title: "✓ Job Description Selected",
+          description: "Swipe left → to go to Evaluation Criteria",
+          duration: 5000,
+        });
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedJobDescriptionId, isMobile, toast]);
+
   // When a JD is selected from dropdown, automatically set in session
   const handleJDSelect = async (jdId: string) => {
     setSelectedJobDescriptionId(jdId);
@@ -1017,8 +1047,6 @@ export const JobUploadSection = () => {
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-      
-
       {/* Job Description Upload */}
       <Card className="animate-fade-in">
           <CardHeader className="relative">
@@ -1521,6 +1549,6 @@ export const JobUploadSection = () => {
             </div>
           </div>
         )}
-      </div>
+    </div>
   );
 };

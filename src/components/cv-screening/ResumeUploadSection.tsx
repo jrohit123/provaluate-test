@@ -2,7 +2,9 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Upload, FileText, User, CheckCircle, Play, Briefcase, Grid, Loader2, Download, X, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Upload, FileText, User, CheckCircle, Play, Briefcase, Grid, Loader2, Download, X, RefreshCw, AlertTriangle, ArrowRight, BarChart3 } from 'lucide-react';
+import { useSwipe } from '@/hooks/use-swipe';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -169,7 +171,8 @@ export const ResumeUploadSection = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const { setCurrentJobDescription, setCurrentEvaluationCriteria, isSessionComplete } = useSession();
-  const [searchParams] = useSearchParams(); // ✅ ADD: Get search params
+  const [searchParams, setSearchParams] = useSearchParams(); // ✅ ADD: Get search params
+  const isMobile = useIsMobile();
   const [processingState, setProcessingState] = useState<ProcessingState>({
     status: 'idle',
     message: ''
@@ -179,6 +182,40 @@ export const ResumeUploadSection = () => {
   const [expectedResumeCount, setExpectedResumeCount] = useState<number>(0);
   const [lastProgressCount, setLastProgressCount] = useState<number>(0);
   const [initialReportCount, setInitialReportCount] = useState<number>(0);
+
+  // Check if analysis is complete (has completed reports)
+  const hasCompletedReports = assessmentReports.some(report => 
+    report.final_match !== null && 
+    report.final_match !== undefined
+  );
+
+  // Swipe detection for navigation (mobile only)
+  useSwipe({
+    enabled: isMobile,
+    onSwipeLeft: () => {
+      if (hasCompletedReports && selectedJobDescriptionId && selectedCriteriaGridId) {
+        setSearchParams({ section: 'match-scorecard' });
+      }
+    },
+    onSwipeRight: () => {
+      // Swipe right to go back to Evaluation Criteria
+      setSearchParams({ section: 'evaluation-criteria' });
+    },
+  });
+
+  // Show swipe indicator when analysis is complete
+  useEffect(() => {
+    if (hasCompletedReports && selectedJobDescriptionId && selectedCriteriaGridId && isMobile) {
+      const timer = setTimeout(() => {
+        toast({
+          title: "✓ Resume Analysis Complete",
+          description: "Swipe left → View Results | Swipe right ← Evaluation Criteria",
+          duration: 5000,
+        });
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [hasCompletedReports, selectedJobDescriptionId, selectedCriteriaGridId, isMobile, toast]);
   const [processingCompleted, setProcessingCompleted] = useState<boolean>(false);
   const [companyUsageInfo, setCompanyUsageInfo] = useState<CompanyUsageInfo | null>(null);
   const [showRechargeDialog, setShowRechargeDialog] = useState(false);

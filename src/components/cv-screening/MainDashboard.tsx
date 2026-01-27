@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, Upload, BarChart3, Wrench, Cog, Users, Monitor, HelpCircle, Puzzle } from 'lucide-react';
+import { FileText, Upload, BarChart3, Wrench, Cog, Users, Monitor, HelpCircle, Puzzle, ChevronDown } from 'lucide-react';
 import { useSession } from '@/contexts/SessionContext';
 import { useAuth } from '@/hooks/use-auth';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,6 +9,8 @@ import { CVScreeningGuidedTour } from './CVScreeningGuidedTour';
 import { BrowserExtensionInfo } from './BrowserExtensionInfo';
 import { ActiveSection } from '@/pages/Dashboard';
 import { UiAnalyticsService } from '@/services/uiAnalyticsService';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface MainDashboardProps {
   onSectionChange: (section: string) => void;
@@ -17,11 +19,15 @@ interface MainDashboardProps {
 export function MainDashboard({ onSectionChange }: MainDashboardProps) {
   const { isSessionComplete, currentJobDescription, currentEvaluationCriteria } = useSession();
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   
   // State for guided tour modal
   const [isGuidedTourOpen, setIsGuidedTourOpen] = useState(false);
   // State for browser extension info modal
   const [isExtensionInfoOpen, setIsExtensionInfoOpen] = useState(false);
+  // State for collapsible sections (mobile only) - closed by default
+  const [isCVScreeningOpen, setIsCVScreeningOpen] = useState(false);
+  const [isInterviewOpen, setIsInterviewOpen] = useState(false);
   
   // State for real data
   const [stats, setStats] = useState({
@@ -389,9 +395,26 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* CV Screening Section */}
-          <div>
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">CV Screening</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <Collapsible 
+            open={isMobile ? isCVScreeningOpen : true} 
+            onOpenChange={isMobile ? setIsCVScreeningOpen : undefined}
+            disabled={!isMobile}
+          >
+            <div className={`mb-3 sm:mb-4 ${isMobile ? 'bg-blue-50 border border-blue-200 rounded-lg p-3' : ''}`}>
+              <CollapsibleTrigger 
+                asChild 
+                className={isMobile ? "w-full" : "pointer-events-none"}
+              >
+                <div className={`flex items-center justify-between ${isMobile ? 'cursor-pointer' : ''}`}>
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-900">CV Screening</h3>
+                  {isMobile && (
+                    <ChevronDown className={`h-5 w-5 text-blue-600 transition-transform duration-200 ${isCVScreeningOpen ? 'rotate-180' : ''}`} />
+                  )}
+                </div>
+              </CollapsibleTrigger>
+            </div>
+            <CollapsibleContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {/* 1. Manage Job Descriptions */}
             <Button
               onClick={() => {
@@ -451,13 +474,32 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
               <BarChart3 className="w-5 h-5" />
               <div className="font-semibold text-xs sm:text-sm text-center">4. View Reports</div>
             </Button>
-            </div>
-          </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           {/* Interview Management Section */}
           <div className="mt-4 sm:mt-6">
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Interview Management</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+            <Collapsible 
+              open={isMobile ? isInterviewOpen : true} 
+              onOpenChange={isMobile ? setIsInterviewOpen : undefined}
+              disabled={!isMobile}
+            >
+              <div className={`mb-3 sm:mb-4 ${isMobile ? 'bg-blue-50 border border-blue-200 rounded-lg p-3' : ''}`}>
+                <CollapsibleTrigger 
+                  asChild 
+                  className={isMobile ? "w-full" : "pointer-events-none"}
+                >
+                  <div className={`flex items-center justify-between ${isMobile ? 'cursor-pointer' : ''}`}>
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900">Interview Management</h3>
+                    {isMobile && (
+                      <ChevronDown className={`h-5 w-5 text-blue-600 transition-transform duration-200 ${isInterviewOpen ? 'rotate-180' : ''}`} />
+                    )}
+                  </div>
+                </CollapsibleTrigger>
+              </div>
+              <CollapsibleContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {/* Interview Configuration */}
               <Button
                 onClick={() => {
@@ -502,7 +544,9 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
                 <Monitor className="w-5 h-5" />
                 <div className="font-semibold text-xs sm:text-sm text-center">Interview Dashboard</div>
               </Button>
-            </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         </CardContent>
       </Card>
