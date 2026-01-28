@@ -194,8 +194,7 @@ const ConversationalInterview = () => {
   const videoChunksRef = useRef([]);
   const completionTimerRef = useRef(null);
   const [isCreatingInterview] = useState(false);
-  const [screenStream, setScreenStream] = useState(null);
-  const [screenPermissionGranted, setScreenPermissionGranted] = useState(false);
+  const [cameraPermissionGranted, setCameraPermissionGranted] = useState(false);
   
   // AI Assistant states
   const [aiSpeaking, setAiSpeaking] = useState(false);
@@ -209,7 +208,7 @@ const ConversationalInterview = () => {
   const [recordingCountdown, setRecordingCountdown] = useState(0);
   const [answerTimer, setAnswerTimer] = useState(0);
   const [isAnswerTimerActive, setIsAnswerTimerActive] = useState(false);
-  const [hasRequestedScreenPermissions, setHasRequestedScreenPermissions] = useState(false);
+  const [hasRequestedCameraPermissions, setHasRequestedCameraPermissions] = useState(false);
   const [answerSubmitted, setAnswerSubmitted] = useState(false);
   const [waveformHeights, setWaveformHeights] = useState<number[]>([]);
   const [speechPattern, setSpeechPattern] = useState<number[]>([]);
@@ -925,10 +924,7 @@ const ConversationalInterview = () => {
       videoStreamRef.current.getTracks().forEach(track => track.stop());
       videoStreamRef.current = null;
     }
-    if (screenStream) {
-      screenStream.getTracks().forEach(track => track.stop());
-      setScreenStream(null);
-    }
+    // Camera stream cleanup is handled by videoStreamRef
 
     toast.success('⏰ Interview time completed! Finishing interview...', { id: 'interview-time-completed', duration: 1500 });
 
@@ -950,7 +946,7 @@ const ConversationalInterview = () => {
       finalizeInterview();
     }, 500);
 
-  }, [isRecording, isVideoRecording, navigate, screenStream, stopWebSpeech]);
+  }, [isRecording, isVideoRecording, navigate, stopWebSpeech]);
 
   const handleQuestionTimerEnd = useCallback(() => {
     console.log('⏰ Question timer expired, auto-advancing...');
@@ -1036,21 +1032,75 @@ const ConversationalInterview = () => {
     // Reset answer submitted state for new interview
     setAnswerSubmitted(false);
     setSubmissionStatus('idle');
-    // Reset screen permissions flag for new interview
-    setHasRequestedScreenPermissions(false);
+    // Reset camera permissions flag for new interview
+    setHasRequestedCameraPermissions(false);
     
          // Use a more robust initialization approach
      const initializeInterview = async () => {
        try {
          // Load interview data first
          await loadInterviewData();
-         // Initialize camera
+         // Initialize camera (this will request camera permissions)
+         console.log('🎥 Initializing camera before interview starts...');
          await initializeCamera();
+         setCameraPermissionGranted(true);
+         setHasRequestedCameraPermissions(true);
         // Initialize audio worklet
         await initializeAudio();
-         // Request screen permissions immediately - before welcome message
-         console.log('🖥️ Requesting screen permissions before interview starts...');
-         await requestScreenPermissions();
+         // Start welcome message after camera is ready
+         setTimeout(() => {
+           if (!hasSpokenWelcomeRef.current) {
+             console.log('🎤 Starting welcome message and requesting fullscreen...');
+             requestFullscreen();
+             const welcomeMessage = `Hello ${interviewData.candidateName}! Welcome to your ${interviewData.position} interview. I'm excited to meet you today and learn more about your experience and skills. This is a great opportunity to showcase your talents, so take a deep breath and remember - you've got this! I'll be your AI interviewer today, and I'm here to make this experience as comfortable as possible for you. All the best for your interview! Let's begin with our first question.`;
+             if (aiAudioEnabled && 'speechSynthesis' in window) {
+               console.log('🎤 Setting aiSpeaking to true and aiMessage to welcome message');
+               const pattern = createSpeechPattern(welcomeMessage);
+               setSpeechPattern(pattern);
+               setPatternIndex(0);
+               setAiSpeaking(true);
+               setAiMessage(welcomeMessage);
+               const utterance = new SpeechSynthesisUtterance(welcomeMessage);
+               utterance.rate = 0.9;
+               utterance.pitch = 1.0;
+               utterance.volume = 0.8;
+               utterance.onend = () => {
+                 console.log('🎤 Welcome message finished, starting first question...');
+                 setAiSpeaking(false);
+                 setAiMessage('');
+                 hasSpokenWelcomeRef.current = true;
+                 setIsInterviewTimerActive(true);
+                 setTimeout(() => {
+                   if (currentQuestion && (currentQuestion.question || currentQuestion.question_text)) {
+                     const questionText = currentQuestion.question || currentQuestion.question_text;
+                     const questionMessage = `Question 1: ${questionText}`;
+                     console.log('📝 FIRST: Displaying question and keeping it visible:', questionMessage);
+                     setAiMessage(questionMessage);
+                     setIsWelcomeMessage(false);
+                     hasSpokenFirstQuestionRef.current = true;
+                     setTimeout(() => {
+                       console.log('🎤 THEN: Speaking question after display');
+                       speakWithAI(questionMessage);
+                     }, 500);
+                   }
+                 }, 1000);
+               };
+               utterance.onerror = (error) => {
+                 console.error('❌ Error speaking welcome message:', error);
+                 setAiSpeaking(false);
+                 hasSpokenWelcomeRef.current = true;
+                 setIsInterviewTimerActive(true);
+               };
+               speechSynthesis.speak(utterance);
+             } else {
+               console.log('🎤 Speech synthesis unavailable or disabled, skipping audio welcome');
+               setAiSpeaking(false);
+               setAiMessage('');
+               hasSpokenWelcomeRef.current = true;
+               setIsInterviewTimerActive(true);
+             }
+           }
+         }, 1000);
          // Log state for debugging
          logSpokenState();
        } catch (error) {
@@ -1199,8 +1249,8 @@ const ConversationalInterview = () => {
       setRecordingCountdown(0);
       setAnswerTimer(0);
       setIsAnswerTimerActive(false);
-      // Reset screen permissions flag
-      setHasRequestedScreenPermissions(false);
+      // Reset camera permissions flag
+      setHasRequestedCameraPermissions(false);
       
       const response = await apiCall(`${API_CONFIG.ENDPOINTS.FINISH_INTERVIEW}/${interviewData.interviewId}`, {
         method: 'POST',
@@ -1395,7 +1445,7 @@ const ConversationalInterview = () => {
           console.log('🔍 Available data keys:', Object.keys(data));
         }
         
-        // Keep screen permissions state - don't reset this
+        // Keep camera permissions state - don't reset this
         
         // Clean up question text and speak the question (only if not already spoken)
         let cleanQuestionText = '';
@@ -2075,12 +2125,12 @@ const ConversationalInterview = () => {
   
     const startQuestionRecording = async () => {
     try {
-      console.log('🖥️ Starting screen recording...');
-      console.log('🔍 Current state - isRecording:', isRecording, 'isVideoOn:', isVideoOn, 'screenPermissionGranted:', screenPermissionGranted, 'hasRequestedScreenPermissions:', hasRequestedScreenPermissions);
+      console.log('🎥 Starting camera video recording...');
+      console.log('🔍 Current state - isRecording:', isRecording, 'isVideoOn:', isVideoOn, 'cameraPermissionGranted:', cameraPermissionGranted, 'hasRequestedCameraPermissions:', hasRequestedCameraPermissions);
       
-      // Check if screen permissions are already granted
-      if (!screenPermissionGranted || !screenStream) {
-        toast.error('❌ Screen recording permissions required. Please allow screen access first.');
+      // Check if camera permissions are already granted and camera stream is available
+      if (!cameraPermissionGranted || !streamRef.current || !isVideoOn) {
+        toast.error('❌ Camera permissions required. Please allow camera access first.');
         return;
       }
       
@@ -2098,7 +2148,14 @@ const ConversationalInterview = () => {
         }
       }
       
-      console.log('✅ Using approved screen stream for recording');
+      console.log('✅ Using camera stream for recording');
+      
+      // Get camera video stream (already initialized)
+      const cameraStream = streamRef.current;
+      if (!cameraStream) {
+        toast.error('❌ Camera stream not available. Please refresh and try again.');
+        return;
+      }
       
       // Re-enable microphone recording ONLY to capture audio blob for upload (not for transcription)
       let audioRecorder = null;
@@ -2128,8 +2185,8 @@ const ConversationalInterview = () => {
       }
       const combinedStream = new MediaStream();
       
-      // Add video tracks from screen stream
-      screenStream.getVideoTracks().forEach(track => {
+      // Add video tracks from camera stream
+      cameraStream.getVideoTracks().forEach(track => {
         combinedStream.addTrack(track);
       });
 
@@ -2153,13 +2210,13 @@ const ConversationalInterview = () => {
         videoBitsPerSecond: INTERVIEW_CONSTANTS.MEDIA.VIDEO_BITRATE,
         timeSlice: INTERVIEW_CONSTANTS.MEDIA.TIME_SLICE,
         ondataavailable: function(blob) {
-          console.log('🖥️ Combined video+audio chunk available:', blob.type, blob.size);
+          console.log('🎥 Combined video+audio chunk available:', blob.type, blob.size);
         }
       });
       
       // Start video recorder
       questionVideoRecorder.startRecording();
-      console.log('🖥️ Video recording started');
+      console.log('🎥 Video recording started');
       
       // Start browser Web Speech recognition for live transcript
       startWebSpeech();
@@ -2173,7 +2230,7 @@ const ConversationalInterview = () => {
       setVideoRecorder(questionVideoRecorder);
       
       // Initialize timer for first question when recording actually starts (after permissions are granted)
-      if (!hasRequestedScreenPermissions) {
+      if (!hasRequestedCameraPermissions) {
         console.log('⏰ Starting timer for first question - recording is about to begin');
         // Only initialize timer if we don't already have correct values from API response
         if (currentQuestionMaxTime === 0) {
@@ -2212,8 +2269,8 @@ const ConversationalInterview = () => {
       // Do not use socket transcription; Web Speech handles transcription
       
     } catch (error) {
-      console.error('❌ Automatic screen recording start error:', error);
-      toast.error('❌ Failed to start screen recording. Please refresh and try again.');
+      console.error('❌ Automatic camera recording start error:', error);
+      toast.error('❌ Failed to start camera recording. Please refresh and try again.');
     }
   };
   
@@ -2306,8 +2363,8 @@ const ConversationalInterview = () => {
           console.log('🎯 Clean question text from interviewData:', cleanQuestionText);
         }
         
-        // Welcome message and first question will be handled after screen access is granted
-        console.log('🔍 Interview data loaded, waiting for screen access to start welcome message');
+        // Welcome message and first question will be handled after camera access is granted
+        console.log('🔍 Interview data loaded, waiting for camera access to start welcome message');
         
       } else {
         console.error('❌ Failed to load interview data:', response.status);
@@ -2594,16 +2651,23 @@ const ConversationalInterview = () => {
       }
       
       streamRef.current = stream;
+      videoStreamRef.current = stream;
       setIsVideoOn(true);
+      setCameraPermissionGranted(true);
+      setHasRequestedCameraPermissions(true);
       
       // Monitor camera status
       const videoTrack = stream.getVideoTracks()[0];
       videoTrack.onended = () => {
         setIsVideoOn(false);
+        setCameraPermissionGranted(false);
+        toast.error('Camera access lost. Interview may be affected.');
       };
       
     } catch (error) {
       console.error('Error accessing camera:', error);
+      setCameraPermissionGranted(false);
+      setHasRequestedCameraPermissions(false);
       toast.error('Camera access required for interview');
       navigate('/setup');
     }
@@ -2737,137 +2801,7 @@ const ConversationalInterview = () => {
     }
   }, [fullscreenAttempts, terminateInterview]);
 
-  // Request screen sharing permissions once at the start
-  const requestScreenPermissions = useCallback(async () => {
-    try {
-      // console.log('🖥️ Requesting screen sharing permissions...');
-
-      const displayMediaOptions: any = {
-        video: {
-          displaySurface: 'browser',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30 }
-        },
-        audio: true,
-        preferCurrentTab: false
-      };
-
-      const stream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
-
-      console.log('✅ Screen stream obtained successfully');
-      setScreenStream(stream);
-      setScreenPermissionGranted(true);
-      setHasRequestedScreenPermissions(true);
-
-      //toast.success('✅ Screen access granted! Starting interview...');
-
-      // Start welcome message after screen access is granted
-      setTimeout(() => {
-        if (!hasSpokenWelcomeRef.current) {
-          console.log('🎤 Starting welcome message and requesting fullscreen...');
-
-          requestFullscreen();
-
-          const welcomeMessage = `Hello ${interviewData.candidateName}! Welcome to your ${interviewData.position} interview. I'm excited to meet you today and learn more about your experience and skills. This is a great opportunity to showcase your talents, so take a deep breath and remember - you've got this! I'll be your AI interviewer today, and I'm here to make this experience as comfortable as possible for you. All the best for your interview! Let's begin with our first question.`;
-
-          // Speak welcome message
-          if (aiAudioEnabled && 'speechSynthesis' in window) {
-            console.log('🎤 Setting aiSpeaking to true and aiMessage to welcome message');
-
-            // Create speech pattern for the welcome message
-            const pattern = createSpeechPattern(welcomeMessage);
-            setSpeechPattern(pattern);
-            setPatternIndex(0);
-
-            setAiSpeaking(true);
-            setAiMessage(welcomeMessage);
-            const utterance = new SpeechSynthesisUtterance(welcomeMessage);
-            utterance.rate = 0.9;
-            utterance.pitch = 1.0;
-            utterance.volume = 0.8;
-
-            utterance.onend = () => {
-              console.log('🎤 Welcome message finished, starting first question...');
-              setAiSpeaking(false);
-              setAiMessage('');
-              hasSpokenWelcomeRef.current = true;
-              setIsInterviewTimerActive(true);
-
-              // Start first question after welcome
-              setTimeout(() => {
-                if (currentQuestion && (currentQuestion.question || currentQuestion.question_text)) {
-                  const questionText = currentQuestion.question || currentQuestion.question_text;
-                  const questionMessage = `Question 1: ${questionText}`;
-
-                  console.log('📝 FIRST: Displaying question and keeping it visible:', questionMessage);
-                  setAiMessage(questionMessage);
-                  setIsWelcomeMessage(false);
-
-                  hasSpokenFirstQuestionRef.current = true;
-
-                  setTimeout(() => {
-                    console.log('🎤 THEN: Speaking question after display');
-                    speakWithAI(questionMessage);
-                  }, 500);
-                }
-              }, 1000);
-            };
-
-            utterance.onerror = (error) => {
-              console.error('❌ Error speaking welcome message:', error);
-              setAiSpeaking(false);
-              hasSpokenWelcomeRef.current = true;
-              setIsInterviewTimerActive(true);
-            };
-
-            speechSynthesis.speak(utterance);
-          } else {
-            console.log('🎤 Speech synthesis unavailable or disabled, skipping audio welcome');
-            setAiSpeaking(false);
-            setAiMessage('');
-            hasSpokenWelcomeRef.current = true;
-            setIsInterviewTimerActive(true);
-          }
-        }
-      }, 1000);
-
-      const [videoTrack] = stream.getVideoTracks();
-      if (videoTrack) {
-        videoTrack.onended = () => {
-          console.log('⚠️ User stopped screen sharing');
-          setScreenPermissionGranted(false);
-          setScreenStream(null);
-          setIsFullscreen(false);
-          toast('⚠️ Screen sharing stopped. Interview will be terminated.', {
-            icon: '⚠️',
-            style: {
-              background: '#fbbf24',
-              color: '#92400e',
-            },
-          });
-
-          // IMPROVEMENT: Auto-terminate if screen sharing stops
-          setTimeout(() => {
-            terminateInterview('Screen sharing stopped by candidate');
-          }, 3000);
-        };
-      }
-
-    } catch (error: any) {
-      console.error('❌ Screen sharing permission denied:', error);
-      setScreenPermissionGranted(false);
-      setScreenStream(null);
-      if (error?.name === 'NotAllowedError') {
-        toast.error('❌ Screen sharing permission denied. Interview cannot proceed.');
-        setTimeout(() => {
-          terminateInterview('Screen sharing permission denied');
-        }, 2000);
-      } else {
-        toast.error('❌ Screen sharing not supported in this browser.');
-      }
-    }
-  }, [aiAudioEnabled, currentQuestion, interviewData, requestFullscreen, speakWithAI, terminateInterview]);
+  // Camera permissions are handled in initializeCamera function
 
   useEffect(() => {
     const socket = io(API_CONFIG.BASE_URL, {
@@ -2983,17 +2917,7 @@ const ConversationalInterview = () => {
 
   // Disable socket-started transcription; Web Speech is the single source of truth
 
-  // Cleanup effect for screen stream when component unmounts
-  useEffect(() => {
-    return () => {
-      // Clean up screen stream when component unmounts
-      if (screenStream) {
-        screenStream.getTracks().forEach(track => track.stop());
-        setScreenStream(null);
-        setScreenPermissionGranted(false);
-      }
-    };
-  }, [screenStream]);
+  // Camera stream cleanup is handled by videoStreamRef and streamRef
 
   useEffect(() => {
     return () => {
@@ -3066,15 +2990,15 @@ const ConversationalInterview = () => {
         videoRecorder.stopRecording(() => {
                   try {
           const videoBlob = videoRecorder.getBlob();
-          console.log('🖥️ Retrieved screen video blob:', videoBlob);
-          console.log('🖥️ Video blob size:', videoBlob?.size);
-          console.log('🖥️ Video blob type:', videoBlob?.type);
+          console.log('🎥 Retrieved camera video blob:', videoBlob);
+          console.log('🎥 Video blob size:', videoBlob?.size);
+          console.log('🎥 Video blob type:', videoBlob?.type);
             
             if (videoBlob && videoBlob.size > 0) {
               setQuestionVideoBlob(videoBlob);
               videoBlobRetrieved = true;
-              console.log('✅ Screen video blob set successfully');
-              toast.success(`✅ Screen recording saved! (${(videoBlob.size / 1024 / 1024).toFixed(1)} MB)`);
+              console.log('✅ Camera video blob set successfully');
+              toast.success(`✅ Camera recording saved! (${(videoBlob.size / 1024 / 1024).toFixed(1)} MB)`);
             } else {
               console.log('❌ Video blob is empty or null');
             }
@@ -3095,7 +3019,6 @@ const ConversationalInterview = () => {
     }
     
     // Don't stop videoStreamRef.current here as it's the camera stream
-    // The screen stream is managed separately and should persist
     
     // No audio fallback needed
     
@@ -3406,7 +3329,7 @@ const ConversationalInterview = () => {
             </div>
           </div>
 
-          {/* Candidate Panel - Camera/Screen Sharing Card */}
+          {/* Candidate Panel - Camera Video Card */}
           <div className="lg:col-span-3 glass rounded-2xl p-1 border border-white/10">
                          <div className="bg-gray-800/50 rounded-xl p-1 h-[450px] flex items-center justify-center overflow-hidden relative border border-gray-600/30">
               {/* Camera Button - Top Right Corner */}
@@ -3592,11 +3515,11 @@ const ConversationalInterview = () => {
                  {/* Instructions */}
          <div className="glass rounded-2xl p-4 border border-white/10 mb-6">
            <div className="text-center">
-              {!screenPermissionGranted ? (
+              {!cameraPermissionGranted ? (
                 <div className="text-blue-300 text-sm transition-all duration-500 ease-in-out">
-                  <p>🖥️ Setting up screen access for interview security...</p>
+                  <p>🎥 Setting up camera access for interview...</p>
                   <div className="mt-2 text-xs text-gray-400">
-                    Screen sharing is required and will be requested automatically
+                    Camera access is required and will be requested automatically
                   </div>
                 </div>
               ) : recordingCountdown > 0 ? (
@@ -3615,7 +3538,7 @@ const ConversationalInterview = () => {
                  <div>
                    <p>✅ Question finished! Click "Start Recording" to begin recording your answer.</p>
                    <div className="mt-2 text-xs text-green-400">
-                     🎥 Screen access already granted - ready to record
+                     🎥 Camera access already granted - ready to record
                    </div>
                  </div>
                </div>

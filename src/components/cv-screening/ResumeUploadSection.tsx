@@ -3,9 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Upload, FileText, User, CheckCircle, Play, Briefcase, Grid, Loader2, Download, X, RefreshCw, AlertTriangle, ArrowRight, BarChart3 } from 'lucide-react';
-import { useSwipe } from '@/hooks/use-swipe';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { useToast } from '@/hooks/use-toast';
+import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
+import { useCurrentStep, useNavigateToStep, WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { UsageTrackingService, CompanyUsageInfo } from '@/services/usageTrackingService';
@@ -152,7 +152,11 @@ const getMatchStatus = (score: number) => {
   return { status: 'nomatch', text: 'No Match', className: 'bg-orange-100 text-orange-700' };
 };
 
-export const ResumeUploadSection = () => {
+interface ResumeUploadSectionProps {
+  onSectionReady?: () => void;
+}
+
+export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps) => {
   const [resumes, setResumes] = useState<ResumeData[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<SelectedFileData[]>([]); // Add state for selected files with status
   const [newlyUploadedIds, setNewlyUploadedIds] = useState<Set<string>>(new Set()); // Track newly uploaded resumes
@@ -172,7 +176,8 @@ export const ResumeUploadSection = () => {
   const { user } = useAuth();
   const { setCurrentJobDescription, setCurrentEvaluationCriteria, isSessionComplete } = useSession();
   const [searchParams, setSearchParams] = useSearchParams(); // ✅ ADD: Get search params
-  const isMobile = useIsMobile();
+  const currentStep = useCurrentStep();
+  const navigateToStep = useNavigateToStep();
   const [processingState, setProcessingState] = useState<ProcessingState>({
     status: 'idle',
     message: ''
@@ -188,18 +193,6 @@ export const ResumeUploadSection = () => {
     report.final_match !== null && 
     report.final_match !== undefined
   );
-
-  // Swipe detection for navigation (mobile only)
-  useSwipe({
-    enabled: isMobile,
-    onSwipeLeft: () => {
-      setSearchParams({ section: 'match-scorecard' });
-    },
-    onSwipeRight: () => {
-      // Swipe right to go back to Evaluation Criteria
-      setSearchParams({ section: 'evaluation-criteria' });
-    },
-  });
 
   const [processingCompleted, setProcessingCompleted] = useState<boolean>(false);
   const [companyUsageInfo, setCompanyUsageInfo] = useState<CompanyUsageInfo | null>(null);
@@ -654,6 +647,12 @@ export const ResumeUploadSection = () => {
       setInitialReportCount(0);
     }
   }, [user?.profile?.company_id, loadResumes, loadJobDescriptions, loadCriteriaGrids]);
+
+  useEffect(() => {
+    if (!user) return;
+    const t = setTimeout(() => onSectionReady?.(), 700);
+    return () => clearTimeout(t);
+  }, [user, onSectionReady]);
 
   // Check company's CV processing limits
   const checkCompanyUsageLimits = async () => {
@@ -2022,7 +2021,18 @@ export const ResumeUploadSection = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+    <div className="min-h-screen">
+      {/* Mobile Navigation Progress Bar */}
+      <div className="lg:hidden">
+        <CompactStepProgress
+          current={currentStep}
+          total={WORKFLOW_STEPS.length}
+          steps={WORKFLOW_STEPS}
+          onStepClick={navigateToStep}
+        />
+      </div>
+      
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Trial Expiration Warning */}
       <TrialExpirationWarning />
 
@@ -2043,7 +2053,7 @@ export const ResumeUploadSection = () => {
       )}
 
       {/* Top Row: Job Description Selection, Criteria Selection, and Provaluate Button */}
-      <Card className="animate-fade-in mb-6">
+      <Card className="animate-fade-in mb-6" data-tour="resume-upload-area">
         <CardContent className="p-4 sm:p-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 items-start">
             <div className="mb-4 sm:mb-6">
@@ -2633,6 +2643,7 @@ export const ResumeUploadSection = () => {
         disabled={companyUsageInfo && !companyUsageInfo.canProcessCV}
         className="hidden"
       />
+      </div>
     </div>
   );
 };

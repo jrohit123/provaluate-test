@@ -5,7 +5,6 @@ import { useSession } from '@/contexts/SessionContext';
 import { useAuth } from '@/hooks/use-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { useState, useEffect } from 'react';
-import { CVScreeningGuidedTour } from './CVScreeningGuidedTour';
 import { BrowserExtensionInfo } from './BrowserExtensionInfo';
 import { ActiveSection } from '@/pages/Dashboard';
 import { UiAnalyticsService } from '@/services/uiAnalyticsService';
@@ -14,15 +13,15 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 interface MainDashboardProps {
   onSectionChange: (section: string) => void;
+  onStartTour?: () => void;
+  onDashboardReady?: () => void;
 }
 
-export function MainDashboard({ onSectionChange }: MainDashboardProps) {
+export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }: MainDashboardProps) {
   const { isSessionComplete, currentJobDescription, currentEvaluationCriteria } = useSession();
   const { user } = useAuth();
   const isMobile = useIsMobile();
   
-  // State for guided tour modal
-  const [isGuidedTourOpen, setIsGuidedTourOpen] = useState(false);
   // State for browser extension info modal
   const [isExtensionInfoOpen, setIsExtensionInfoOpen] = useState(false);
   // State for collapsible sections (mobile only) - closed by default
@@ -42,181 +41,93 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
   const [consumedCVs, setConsumedCVs] = useState(0);
   const [consumedUsers, setConsumedUsers] = useState(0);
 
-  // Fetch real data from database
+  // Fetch real data from database (independent fetches run in parallel)
   const fetchStats = async () => {
-    if (!user?.profile?.company_id) return;
-    
+    const cid = user?.profile?.company_id;
+    if (!cid) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      
-      // Fetch company data to get selected plan
-      const { data: companyData } = await supabase
-        .from('companies')
-        .select('*')
-        .eq('company_id', user.profile.company_id)
-        .single();
-      
+
+      const [
+        companyRes,
+        usersCountRes,
+        jobRowsRes,
+        interviewCountRes,
+        criteriaRes,
+      ] = await Promise.all([
+        supabase.from('companies').select('*').eq('company_id', cid).single(),
+        supabase.from('users').select('*', { count: 'exact', head: true }).eq('company_id', cid).eq('user_status', 'active'),
+        supabase.from('job_descriptions').select('jd_file, jd_id').eq('company_id', cid).eq('status', 'active'),
+        supabase.from('jd_for_interview').select('*', { count: 'exact', head: true }).eq('company_id', cid),
+        supabase.from('criteria').select('criteria_name, created_at, company_id, criteria_id').or(`company_id.eq.${cid},company_id.is.null`).order('created_at', { ascending: false }),
+      ]);
+
+      const companyData = companyRes.data;
+      const userCount = usersCountRes.count ?? 0;
+      const companyJobDescriptions = jobRowsRes.data ?? [];
+      const jobCount = companyJobDescriptions.length;
+      const interviewJobCount = interviewCountRes.count ?? 0;
+      const criteriaData = criteriaRes.data ?? [];
+
       setCompanyData(companyData);
-      
-      // Set consumed CVs from company data
       setConsumedCVs(companyData?.cv_processed_count || 0);
-      
-      // Fetch active users count for the company
-      const { count: userCount } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .eq('company_id', user.profile.company_id)
-        .eq('user_status', 'active');
-      
-      setConsumedUsers(userCount || 0);
-      
-      // Fetch plan data if company has a selected plan
+      setConsumedUsers(userCount);
+
+      const uniqueCriteria = criteriaData.reduce((acc: { [key: string]: any }, curr) => {
+        if (!acc[curr.criteria_name] || new Date(curr.created_at) > new Date(acc[curr.criteria_name].created_at)) {
+          acc[curr.criteria_name] = curr;
+        }
+        return acc;
+      }, {});
+      const criteriaCount = Object.keys(uniqueCriteria).length;
+      const companyCriteria = criteriaData;
+      const criteriaIds = companyCriteria.map((c: { criteria_id: string }) => c.criteria_id);
+
       if (companyData?.selected_plan) {
         const { data: planData } = await supabase
           .from('plans')
           .select('*')
           .eq('plan_name', companyData.selected_plan)
           .single();
-        
         setPlanData(planData);
       }
-      
-      // Fetch active job descriptions count (CV screening)
-      const { count: jobCount } = await supabase
-        .from('job_descriptions')
-        .select('*', { count: 'exact', head: true })
-        .eq('company_id', user.profile.company_id)
-        .eq('status', 'active');
-      
-      // Fetch interview job descriptions count (AI interview)
-      const { count: interviewJobCount } = await supabase
-        .from('jd_for_interview')
-        .select('*', { count: 'exact', head: true })
-        .eq('company_id', user.profile.company_id);
-      
-      // Combined count for interview job descriptions (both tables)
-      const combinedInterviewJobCount = (jobCount || 0) + (interviewJobCount || 0);
-      
-      // Fetch criteria sets count (all criteria for the company + global templates, unique names, latest version only)
-      const { data: criteriaData } = await supabase
-        .from('criteria')
-        .select('criteria_name, created_at, company_id')
-        .or(`company_id.eq.${user.profile.company_id},company_id.is.null`)
-        .order('created_at', { ascending: false });
-      
-      // Get unique criteria names (latest entry for each name)
-      const uniqueCriteria = criteriaData ? criteriaData.reduce((acc: { [key: string]: any }, curr) => {
-        if (!acc[curr.criteria_name] || new Date(curr.created_at) > new Date(acc[curr.criteria_name].created_at)) {
-          acc[curr.criteria_name] = curr;
-        }
-        return acc;
-      }, {}) : {};
-      
-      const criteriaCount = Object.keys(uniqueCriteria).length;
-      
-      console.log('MainDashboard - User criteria data:', criteriaData);
-      console.log('MainDashboard - Unique user criteria:', uniqueCriteria);
-      console.log('MainDashboard - User criteria count:', criteriaCount);
-      console.log('MainDashboard - Criteria names:', Object.keys(uniqueCriteria));
-      
-      // Fetch assessments count filtered by company (through criteria_id AND resolved_jd_id)
-      // ✅ FIX: Filter by resolved_jd_id to ensure company isolation
-      // Since assessment_reports has no company_id, we filter through: 
-      // assessment_reports.resolved_jd_id → resolved_jd.referenced_jd → job_descriptions.jd_file → job_descriptions.company_id
+
       let assessmentCount = 0;
-
       try {
-        // First, get all active job descriptions for this company
-        const { data: companyJobDescriptions, error: jdError } = await supabase
-          .from('job_descriptions')
-          .select('jd_file, jd_id')
-          .eq('company_id', user.profile.company_id)
-          .eq('status', 'active');
-
-        if (jdError) {
-          console.error('❌ Error fetching job descriptions for assessment count:', jdError);
-        }
-
-        console.log(`📊 Company has ${companyJobDescriptions?.length || 0} active job descriptions`);
-
-        if (companyJobDescriptions && companyJobDescriptions.length > 0) {
-          // Get all jd_file URLs for this company
+        if (companyJobDescriptions.length > 0) {
           const jdFileUrls = companyJobDescriptions
-            .map(jd => jd.jd_file)
-            .filter(Boolean)
-            .filter((url): url is string => typeof url === 'string');
-          
+            .map((jd: { jd_file?: string }) => jd.jd_file)
+            .filter(Boolean) as string[];
           if (jdFileUrls.length > 0) {
-            // Get all resolved_jd_ids that belong to this company's job descriptions
             const { data: resolvedJds, error: resolvedError } = await supabase
               .from('resolved_jd')
               .select('resolved_jd_id')
               .in('referenced_jd', jdFileUrls);
-
-            if (resolvedError) {
-              console.error('❌ Error fetching resolved JDs for assessment count:', resolvedError);
-            }
-
-            const resolvedJdIds = resolvedJds?.map(r => r.resolved_jd_id) || [];
-            console.log(`🔗 Found ${resolvedJdIds.length} resolved JD IDs for company's job descriptions`);
-
-            if (resolvedJdIds.length > 0) {
-              // Get company criteria IDs (including global criteria with company_id = NULL)
-              const { data: companyCriteria, error: criteriaError } = await supabase
-                .from('criteria')
-                .select('criteria_id, criteria_name, company_id')
-                .or(`company_id.eq.${user.profile.company_id},company_id.is.null`);
-
-              if (criteriaError) {
-                console.error('❌ Error fetching criteria for assessment count:', criteriaError);
-              }
-
-              const criteriaIds = companyCriteria?.map(c => c.criteria_id) || [];
-              console.log(`📋 Found ${criteriaIds.length} criteria IDs (company + global)`);
-
-              // ✅ KEY FIX: Count assessments that match BOTH criteria_id AND resolved_jd_id
-              // This ensures we only count assessments for THIS company's job descriptions,
-              // preventing cross-company data leakage when using shared global criteria
+            if (!resolvedError && resolvedJds?.length) {
+              const resolvedJdIds = resolvedJds.map((r: { resolved_jd_id: string }) => r.resolved_jd_id);
               if (criteriaIds.length > 0) {
                 const { count, error: assessmentError } = await supabase
                   .from('assessment_reports')
                   .select('*', { count: 'exact', head: true })
                   .in('criteria_id', criteriaIds)
                   .in('resolved_jd_id', resolvedJdIds);
-
-                if (assessmentError) {
-                  console.error('❌ Error counting assessments:', assessmentError);
-                  console.error('Assessment error details:', JSON.stringify(assessmentError, null, 2));
-                } else {
-                  assessmentCount = count || 0;
-                  console.log(`✅ Assessment count for company: ${assessmentCount}`);
-                  console.log(`   - Using ${criteriaIds.length} criteria IDs`);
-                  console.log(`   - Filtering by ${resolvedJdIds.length} resolved JD IDs`);
-                }
-              } else {
-                console.log('⚠️ No criteria IDs found, assessment count = 0');
+                if (!assessmentError) assessmentCount = count ?? 0;
               }
-            } else {
-              console.log('ℹ️ No resolved JDs found for company job descriptions, assessment count = 0');
             }
-          } else {
-            console.log('ℹ️ No valid JD file URLs found, assessment count = 0');
           }
-        } else {
-          console.log('ℹ️ No job descriptions found for company, assessment count = 0');
         }
-      } catch (error) {
-        console.error('❌ Unexpected error calculating assessment count:', error);
-        assessmentCount = 0; // Fail safely to 0
+      } catch (e) {
+        console.error('❌ Unexpected error calculating assessment count:', e);
       }
 
-      console.log('MainDashboard - Final assessment count:', assessmentCount);
-      
       setStats({
-        jobDescriptions: jobCount || 0,
+        jobDescriptions: jobCount,
         criteriaSets: criteriaCount,
-        assessments: assessmentCount || 0,
-        interviewJobDescriptions: combinedInterviewJobCount
+        assessments: assessmentCount,
+        interviewJobDescriptions: jobCount + interviewJobCount,
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -225,47 +136,62 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
     }
   };
 
-  // Load stats when component mounts
+  // Load stats when component mounts (only once user exists)
   useEffect(() => {
-    if (user?.profile?.company_id) {
+    if (!user) return;
+    if (user.profile?.company_id) {
       fetchStats();
+    } else {
+      setLoading(false);
     }
-  }, [user?.profile?.company_id]);
+  }, [user?.profile?.company_id, user]);
+
+  // Notify parent only after stats have loaded AND user exists. Delay so loaded UI has painted.
+  useEffect(() => {
+    if (!loading && user) {
+      const t = setTimeout(() => onDashboardReady?.(), 400);
+      return () => clearTimeout(t);
+    }
+  }, [loading, user, onDashboardReady]);
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
-        <div>
+        <div data-tour="dashboard-welcome">
         <p className="text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Welcome to your faster hiring workspace!</p>
         <h1 className="text-xl sm:text-2xl font-bold text-primary-800">Dashboard</h1>
         </div>
+        {/* Extension above Guided Tour on mobile (flex-col); same row on desktop (sm:flex-row) */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          <span data-tour="browser-extension" className="inline-flex w-full sm:w-auto order-1">
+            <Button
+              size="sm"
+              onClick={() => {
+                UiAnalyticsService.track({
+                  name: 'dashboard_click_browser_extension_info',
+                  area: 'cv_screening_dashboard',
+                });
+                setIsExtensionInfoOpen(true);
+              }}
+              className="flex items-center justify-center gap-2 w-full sm:w-auto"
+            >
+              <Puzzle className="w-4 h-4" />
+              <span className="hidden sm:inline">Browser Extension</span>
+              <span className="sm:hidden">Extension</span>
+            </Button>
+          </span>
           <Button 
             size="sm"
-            onClick={() => {
-              UiAnalyticsService.track({
-                name: 'dashboard_click_browser_extension_info',
-                area: 'cv_screening_dashboard',
-              });
-              setIsExtensionInfoOpen(true);
-            }}
-            className="hidden sm:flex items-center justify-center gap-2 w-full sm:w-auto"
-          >
-            <Puzzle className="w-4 h-4" />
-            <span className="hidden sm:inline">Browser Extension</span>
-            <span className="sm:hidden">Extension</span>
-          </Button>
-          <Button 
-            size="sm"
+            data-tour="guided-tour-trigger"
             onClick={() => {
               UiAnalyticsService.track({
                 name: 'dashboard_click_guided_tour',
                 area: 'cv_screening_dashboard',
               });
-              setIsGuidedTourOpen(true);
+              onStartTour?.();
             }}
-            className="flex items-center justify-center gap-2 w-full sm:w-auto"
+            className="flex items-center justify-center gap-2 w-full sm:w-auto order-2"
           >
             <HelpCircle className="w-4 h-4" />
             <span className="hidden sm:inline">Guided Tour</span>
@@ -278,13 +204,6 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
       <BrowserExtensionInfo 
         open={isExtensionInfoOpen} 
         onOpenChange={setIsExtensionInfoOpen} 
-      />
-
-      {/* Guided Tour Modal */}
-      <CVScreeningGuidedTour
-        open={isGuidedTourOpen}
-        onOpenChange={setIsGuidedTourOpen}
-        onNavigate={(section) => onSectionChange(section)}
       />
 
       {/* Top Cards Row */}
@@ -386,7 +305,7 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
       </div>
 
       {/* Quick Actions Section */}
-      <Card className="animate-fade-in">
+      <Card className="animate-fade-in" data-tour="quick-actions">
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
           <CardDescription>

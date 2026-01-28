@@ -32,6 +32,7 @@ import CandidateCompletion from "./components/ai-interview/CandidateCompletion";
 
 
 import { supabase } from "@/integrations/supabase/client";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { InterviewProvider } from "@/contexts/InterviewContext";
 import { SessionProvider } from "@/contexts/SessionContext";
 import './App.css';
@@ -170,9 +171,10 @@ const App = () => {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <BrowserRouter>
-          <InterviewProvider>
-            <SessionProvider>
-              <Routes>
+          <AuthProvider>
+            <InterviewProvider>
+              <SessionProvider>
+                <Routes>
             {/* Authentication Routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
@@ -211,14 +213,14 @@ const App = () => {
             {/* Default route - redirect to login */}
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<NotFound />} />
-            </Routes>
-            </SessionProvider>
-          </InterviewProvider>
-          
-          {/* Toast Providers */}
-          <Toaster />
-          <Sonner />
-          <AdaptiveToaster />
+                </Routes>
+                {/* Toast Providers */}
+                <Toaster />
+                <Sonner />
+                <AdaptiveToaster />
+              </SessionProvider>
+            </InterviewProvider>
+          </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>

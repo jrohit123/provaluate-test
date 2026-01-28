@@ -5,9 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, Plus, Trash2, Download, Save, Grid, Briefcase, AlertCircle, ArrowRight } from 'lucide-react';
-import { useSwipe } from '@/hooks/use-swipe';
-import { useIsMobile } from '@/hooks/use-mobile';
-import { useSearchParams } from 'react-router-dom';
+import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
+import { useCurrentStep, useNavigateToStep, WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,12 +27,16 @@ interface SavedCriteriaGrid {
   created_at: string;
 }
 
-export const EvaluationCriteriaSection = () => {
+interface EvaluationCriteriaSectionProps {
+  onSectionReady?: () => void;
+}
+
+export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteriaSectionProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { currentJobDescription, currentEvaluationCriteria, setCurrentEvaluationCriteria } = useSession();
-  const isMobile = useIsMobile();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const currentStep = useCurrentStep();
+  const navigateToStep = useNavigateToStep();
   const [criteriaData, setCriteriaData] = useState<CriteriaItem[]>([]);  // Start empty - will be populated when grid is selected
   
   const [savedGrids, setSavedGrids] = useState<SavedCriteriaGrid[]>([]);
@@ -61,6 +64,12 @@ export const EvaluationCriteriaSection = () => {
       loadSavedGrids();
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const t = setTimeout(() => onSectionReady?.(), 600);
+    return () => clearTimeout(t);
+  }, [user?.id, onSectionReady]);
 
   // Sync selectedJobDescriptionId from SessionContext when it changes
   useEffect(() => {
@@ -98,19 +107,6 @@ export const EvaluationCriteriaSection = () => {
       }
     }
   }, [currentEvaluationCriteria, savedGrids, selectedGridId]);
-
-  // Swipe detection for navigation (mobile only)
-  useSwipe({
-    enabled: isMobile,
-    onSwipeLeft: () => {
-      setSearchParams({ section: 'resume-upload' });
-    },
-    onSwipeRight: () => {
-      // Swipe right to go back to Job Upload
-      setSearchParams({ section: 'job-upload' });
-    },
-  });
-
 
   // Sync selected JD from sessionStorage and reload grids when JD changes (fallback)
   useEffect(() => {
@@ -510,41 +506,52 @@ export const EvaluationCriteriaSection = () => {
   const selectedJD = jobDescriptions.find(jd => jd.jd_id === selectedJobDescriptionId);
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-{/* Show selected JD banner */}
-      {selectedJD ? (
-        <Card className="bg-blue-50 border-blue-200 animate-fade-in">
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-blue-600 flex-shrink-0" />
-              <span className="text-xs sm:text-sm font-medium text-blue-800 break-words">
-                Creating criteria for: <strong>{selectedJD.title}</strong>
-              </span>
-            </div>
-            <p className="text-xs text-blue-600 mt-1">
-              This criteria will be associated with the selected job description. To create a default criteria that works for all JDs, include "Default" in the name.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="bg-yellow-50 border-yellow-200 animate-fade-in">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-yellow-600" />
-              <span className="text-sm font-medium text-yellow-800">
-                No job description selected
-              </span>
-            </div>
-            <p className="text-xs text-yellow-700 mt-1">
-              Please select a job description in the Job Upload section first. Criteria saved without a JD selection will be treated as default (works for all JDs).
-            </p>
-          </CardContent>
-        </Card>
-      )}
+    <div className="min-h-screen">
+      {/* Mobile Navigation Progress Bar */}
+      <div className="lg:hidden">
+        <CompactStepProgress
+          current={currentStep}
+          total={WORKFLOW_STEPS.length}
+          steps={WORKFLOW_STEPS}
+          onStepClick={navigateToStep}
+        />
+      </div>
+      
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+        {/* Show selected JD banner */}
+        {selectedJD ? (
+          <Card className="bg-blue-50 border-blue-200 animate-fade-in">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                <span className="text-xs sm:text-sm font-medium text-blue-800 break-words">
+                  Creating criteria for: <strong>{selectedJD.title}</strong>
+                </span>
+              </div>
+              <p className="text-xs text-blue-600 mt-1">
+                This criteria will be associated with the selected job description. To create a default criteria that works for all JDs, include "Default" in the name.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="bg-yellow-50 border-yellow-200 animate-fade-in">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-yellow-600" />
+                <span className="text-sm font-medium text-yellow-800">
+                  No job description selected
+                </span>
+              </div>
+              <p className="text-xs text-yellow-700 mt-1">
+                Please select a job description in the Job Upload section first. Criteria saved without a JD selection will be treated as default (works for all JDs).
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
-      <div className="grid lg:grid-cols-1 gap-6">
+        <div className="grid lg:grid-cols-1 gap-6">
         {/* Evaluation Criteria - Now editable and with Select for Session button */}
-        <Card className="animate-fade-in">
+        <Card className="animate-fade-in" data-tour="evaluation-criteria-area">
           <CardHeader>
             <CardTitle className="flex items-center justify-between gap-2 text-lg sm:text-xl">
               <div className="flex items-center gap-2">
@@ -575,7 +582,8 @@ export const EvaluationCriteriaSection = () => {
               </SelectContent>
             </Select>
           </div>
-            <div className="flex items-center gap-2 sm:gap-4 my-4 sm:my-6 text-xs sm:text-sm font-medium text-[#1e5da8]">
+          
+          <div className="flex items-center gap-2 sm:gap-4 my-4 sm:my-6 text-xs sm:text-sm font-medium text-[#1e5da8]">
               <span className="flex-1 h-px bg-[#1e5da8]/30" />
               <span className="whitespace-nowrap">OR Create new</span>
               <span className="flex-1 h-px bg-[#1e5da8]/30" />
@@ -766,6 +774,7 @@ export const EvaluationCriteriaSection = () => {
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
     </div>
   );

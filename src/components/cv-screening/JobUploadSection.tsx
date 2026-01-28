@@ -20,8 +20,8 @@ import { useSearchParams } from 'react-router-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { RichTextEditor, extractPlainText, extractHighlightedText } from './RichTextEditor';
 import { API_CONFIG, apiCall } from '@/constants/api';
-import { useSwipe } from '@/hooks/use-swipe';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
+import { useCurrentStep, useNavigateToStep, WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.js`;
 
 interface ResolvedJD {
@@ -49,12 +49,17 @@ const BACKEND_URLS = {
 
 // Legacy webhook URL (kept for compatibility)
 //const JD_WEBHOOK_URL = "https://automations.aitamate.com/webhook/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
-export const JobUploadSection = () => {
+interface JobUploadSectionProps {
+  onSectionReady?: () => void;
+}
+
+export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
   const { user, loading, error } = useAuth();
   const { currentJobDescription, setCurrentJobDescription } = useSession();
   const [searchParams, setSearchParams] = useSearchParams();
-  const isMobile = useIsMobile();
   const { toast } = useToast();
+  const currentStep = useCurrentStep();
+  const navigateToStep = useNavigateToStep();
   const [jobTitle, setJobTitle] = useState('');
   const [jobDescriptions, setJobDescriptions] = useState<any[]>([]);
   const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => {
@@ -283,6 +288,12 @@ export const JobUploadSection = () => {
       checkJDLimit();
     }
   }, [user, loading, error]);
+
+  useEffect(() => {
+    if (!user || loading) return;
+    const t = setTimeout(() => onSectionReady?.(), 600);
+    return () => clearTimeout(t);
+  }, [user, loading, onSectionReady]);
 
   // Sync selectedJobDescriptionId from SessionContext when it changes
   useEffect(() => {
@@ -979,16 +990,6 @@ export const JobUploadSection = () => {
     }
   };
 
-
-
-  // Swipe detection for navigation (mobile only)
-  useSwipe({
-    enabled: isMobile,
-    onSwipeLeft: () => {
-      setSearchParams({ section: 'evaluation-criteria' });
-    },
-  });
-
   // When a JD is selected from dropdown, automatically set in session
   const handleJDSelect = async (jdId: string) => {
     setSelectedJobDescriptionId(jdId);
@@ -1029,9 +1030,20 @@ export const JobUploadSection = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+    <div className="min-h-screen">
+      {/* Mobile Navigation Progress Bar */}
+      <div className="lg:hidden">
+        <CompactStepProgress
+          current={currentStep}
+          total={WORKFLOW_STEPS.length}
+          steps={WORKFLOW_STEPS}
+          onStepClick={navigateToStep}
+        />
+      </div>
+      
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Job Description Upload */}
-      <Card className="animate-fade-in">
+      <Card className="animate-fade-in" data-tour="job-upload-area">
           <CardHeader className="relative">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
               <div className="flex-1 min-w-0">
@@ -1432,8 +1444,8 @@ export const JobUploadSection = () => {
                   </>
                 ) : (
                   <>
-                    <span className="sm:hidden">Process Jobs</span>
-                    <span className="hidden sm:inline">Process Job Descriptions</span>
+                    <span className="sm:hidden">Process Job</span>
+                    <span className="hidden sm:inline">Process Job Description</span>
                   </>
                 )}
               </Button>
@@ -1535,6 +1547,7 @@ export const JobUploadSection = () => {
             </div>
           </div>
         )}
+      </div>
     </div>
   );
 };

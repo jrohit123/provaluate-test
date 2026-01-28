@@ -77,7 +77,7 @@ export const Header = () => {
   return (
     <header className="bg-[#1e5da8] border-b px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 sm:gap-4">
       <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-        <SidebarTrigger className="text-white flex-shrink-0" />
+        <SidebarTrigger className="text-white flex-shrink-0" data-tour="sidebar-trigger" />
         <div className="min-w-0">
           <h1 className="text-base sm:text-xl font-semibold text-white truncate">ProValuate</h1>
           <p className="text-xs sm:text-sm text-white hidden sm:block">Smart Candidate Evaluation Platform</p>

@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import Joyride, { type CallBackProps } from 'react-joyride';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/cv-screening/AppSidebar';
 import { JobUploadSection } from '@/components/cv-screening/JobUploadSection';
@@ -13,11 +14,19 @@ import HRInterviewCreator from '@/components/ai-interview/HRInterviewCreator';
 import AIsetup from '@/components/ai-interview/AIsetup';
 import InterviewDashboard from '@/components/ai-interview/InterviewDashboard';
 import { useAuth } from '@/hooks/use-auth';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, Users, ArrowRight, Upload, BarChart3, Wrench, Monitor } from 'lucide-react';
 import { useSession } from '@/contexts/SessionContext';
 import { UiAnalyticsService } from '@/services/uiAnalyticsService';
+import { useIsMobile } from '@/hooks/use-mobile';
+import {
+  getMainTourSteps,
+  getSectionTourSteps,
+  getSectionTourStorageKey,
+  isSidebarOnlyTarget,
+  TOUR_OPEN_SIDEBAR_EVENT,
+  TOUR_SECTIONS,
+  TOUR_STORAGE_KEY,
+  waitForTarget,
+} from '@/constants/tour';
 
 export type ActiveSection = 'main-dashboard' | 'job-upload' | 'evaluation-criteria' | 'resume-upload' | 'match-scorecard' | 'interview-creation' | 'ai-interview' | 'setup' | 'interview-dashboard' | 'settings';
 
@@ -25,10 +34,39 @@ const Dashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
   const { user } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
   const { isSessionComplete } = useSession();
   const mainScrollRef = useRef<HTMLDivElement | null>(null);
+  const isMobile = useIsMobile();
+
+  // Guided tour state
+  const [tourRun, setTourRun] = useState(false);
+  const [tourStepIndex, setTourStepIndex] = useState(0);
+  const [tourMode, setTourMode] = useState<'main' | 'section'>('main');
+  const [tourSection, setTourSection] = useState<ActiveSection | null>(null);
+  const [dashboardReady, setDashboardReady] = useState(false);
+  const [pendingMainTour, setPendingMainTour] = useState(false);
+  const [sectionReadyMap, setSectionReadyMap] = useState<Partial<Record<ActiveSection, boolean>>>({});
+  const prevSectionRef = useRef<ActiveSection | null>(null);
+
+  const isAdmin = user?.profile?.role === 'admin' || user?.profile?.role === 'superadmin';
+
+  const tourSteps = useMemo(() => {
+    if (tourMode === 'section' && tourSection) return getSectionTourSteps(tourSection);
+    return getMainTourSteps(isMobile);
+  }, [tourMode, tourSection, isMobile]);
+
+  const joyrideSteps = useMemo(
+    () =>
+      tourSteps.map((s) => ({
+        target: s.target,
+        content: s.content,
+        title: s.title,
+        placement: s.placement,
+        disableBeacon: true,
+        ...(s.disableScrolling != null && { disableScrolling: s.disableScrolling }),
+      })),
+    [tourSteps]
+  );
 
   // Get activeSection from URL parameter, default to 'main-dashboard'
   const activeSection = (searchParams.get('section') as ActiveSection) || 'main-dashboard';
@@ -64,6 +102,172 @@ const Dashboard = () => {
   const setActiveSection = (section: ActiveSection) => {
     setSearchParams({ section });
   };
+
+  const handleDashboardReady = useCallback(() => setDashboardReady(true), []);
+
+  const handleSectionReady = useCallback((section: ActiveSection) => {
+    setSectionReadyMap((m) => ({ ...m, [section]: true }));
+  }, []);
+
+  const endTour = useCallback(() => {
+    try {
+      if (tourMode === 'section' && tourSection) {
+        localStorage.setItem(getSectionTourStorageKey(tourSection), 'true');
+      } else {
+        localStorage.setItem(TOUR_STORAGE_KEY, 'true');
+      }
+    } catch {
+      /* ignore */
+    }
+    setTourRun(false);
+    setTourStepIndex(0);
+    setTourMode('main');
+    setTourSection(null);
+  }, [tourMode, tourSection]);
+
+  const startMainTour = useCallback(
+    (ignoreCompleted = false) => {
+      if (!ignoreCompleted && localStorage.getItem(TOUR_STORAGE_KEY) === 'true') return;
+      setTourStepIndex(0);
+      setTourMode('main');
+      setTourSection(null);
+      setSearchParams({ section: 'main-dashboard' }, { replace: true });
+      if (activeSection === 'main-dashboard' && dashboardReady) {
+        setTourRun(true);
+      } else {
+        setPendingMainTour(true);
+      }
+    },
+    [activeSection, dashboardReady, setSearchParams]
+  );
+
+  const startSectionTour = useCallback((section: ActiveSection) => {
+    if (localStorage.getItem(getSectionTourStorageKey(section)) === 'true') return;
+    if (section === 'settings' && !isAdmin) return;
+    setTourStepIndex(0);
+    setTourMode('section');
+    setTourSection(section);
+    setTourRun(true);
+  }, [isAdmin]);
+
+  const goToNextStep = useCallback(
+    async (fromIndex: number) => {
+      const nextIndex = fromIndex + 1;
+      if (nextIndex >= tourSteps.length) {
+        endTour();
+        return;
+      }
+      const nextStep = tourSteps[nextIndex];
+      const navSection = nextStep?.navigateToSection;
+
+      if (navSection && activeSection !== navSection) {
+        setSearchParams({ section: navSection });
+        try {
+          await waitForTarget(nextStep.target, { timeoutMs: 4000, intervalMs: 150 });
+        } catch {
+          /* skip step if target not found */
+        }
+      }
+
+      if (isMobile && nextStep && isSidebarOnlyTarget(nextStep.target)) {
+        window.dispatchEvent(new CustomEvent(TOUR_OPEN_SIDEBAR_EVENT));
+        await new Promise((r) => setTimeout(r, 350));
+      }
+
+      // Scroll next target into view so step 4 (extension) is visible before we advance
+      const el = document.querySelector(nextStep.target);
+      if (el) {
+        el.scrollIntoView({ behavior: 'auto', block: 'center' });
+        await new Promise((r) => setTimeout(r, 350));
+      }
+
+      setTourStepIndex(nextIndex);
+    },
+    [activeSection, endTour, setSearchParams, tourSteps]
+  );
+
+  const handleTourCallback = useCallback(
+    async (data: CallBackProps) => {
+      const { action, index, status, type } = data;
+      const isSkip = action === 'skip' || status === 'skipped';
+      const isClose = action === 'close';
+      const isFinish = status === 'finished';
+
+      if (isSkip || isClose || isFinish) {
+        endTour();
+        return;
+      }
+
+      if (type === 'error:target_not_found') {
+        console.warn('[Tour] Target not found for step', index, '- ending tour.');
+        endTour();
+        return;
+      }
+
+      // Only advance on user-initiated Next/Back (step:after). Ignore tour:status etc. to prevent
+      // fast-forward when we programmatically update stepIndex.
+      if (type !== 'step:after') return;
+
+      if (action === 'prev') {
+        setTourStepIndex(Math.max(0, index - 1));
+        return;
+      }
+
+      if (action === 'next') {
+        await goToNextStep(index);
+      }
+    },
+    [endTour, goToNextStep, joyrideSteps.length]
+  );
+
+  // Reset dashboard ready when leaving main-dashboard; clear pending tour
+  useEffect(() => {
+    if (activeSection !== 'main-dashboard') {
+      setDashboardReady(false);
+      setPendingMainTour(false);
+    }
+  }, [activeSection]);
+
+  // Clear section ready when leaving that section (so we wait again on next visit)
+  useEffect(() => {
+    const prev = prevSectionRef.current;
+    if (prev && prev !== activeSection) {
+      setSectionReadyMap((m) => ({ ...m, [prev]: false }));
+    }
+    prevSectionRef.current = activeSection;
+  }, [activeSection]);
+
+  // Start main tour when pending and dashboard is ready (e.g. manual Guided Tour before load)
+  useEffect(() => {
+    if (
+      activeSection !== 'main-dashboard' ||
+      !dashboardReady ||
+      !pendingMainTour ||
+      tourRun
+    )
+      return;
+    setPendingMainTour(false);
+    setTourRun(true);
+  }, [activeSection, dashboardReady, pendingMainTour, tourRun]);
+
+  // Auto-start main tour only after dashboard (with stats) has fully loaded and user has seen it
+  useEffect(() => {
+    if (activeSection !== 'main-dashboard' || tourRun || pendingMainTour) return;
+    if (localStorage.getItem(TOUR_STORAGE_KEY) === 'true') return;
+    if (!dashboardReady) return;
+    const t = setTimeout(() => startMainTour(false), 1200);
+    return () => clearTimeout(t);
+  }, [activeSection, tourRun, pendingMainTour, dashboardReady, startMainTour]);
+
+  // Auto-start section tour when first visiting a tour-enabled section, only after that section has loaded
+  useEffect(() => {
+    if (!TOUR_SECTIONS.includes(activeSection) || tourRun) return;
+    if (activeSection === 'settings' && !isAdmin) return;
+    if (localStorage.getItem(getSectionTourStorageKey(activeSection)) === 'true') return;
+    if (!sectionReadyMap[activeSection]) return;
+    const t = setTimeout(() => startSectionTour(activeSection), 400);
+    return () => clearTimeout(t);
+  }, [activeSection, tourRun, isAdmin, sectionReadyMap, startSectionTour]);
 
   // Track which section the recruiter is viewing
   useEffect(() => {
@@ -113,15 +317,26 @@ const Dashboard = () => {
   const renderMainContent = () => {
     switch (activeSection) {
       case 'main-dashboard':
-        return <MainDashboard onSectionChange={setActiveSection} />;
+        return (
+          <MainDashboard
+            onSectionChange={setActiveSection}
+            onStartTour={() => startMainTour(true)}
+            onDashboardReady={handleDashboardReady}
+          />
+        );
       case 'job-upload':
-        return <JobUploadSection />;
+        return <JobUploadSection onSectionReady={() => handleSectionReady('job-upload')} />;
       case 'evaluation-criteria':
-        return <EvaluationCriteriaSection />;
+        return <EvaluationCriteriaSection onSectionReady={() => handleSectionReady('evaluation-criteria')} />;
       case 'resume-upload':
-        return <ResumeUploadSection />;
+        return <ResumeUploadSection onSectionReady={() => handleSectionReady('resume-upload')} />;
       case 'match-scorecard':
-        return <MatchScorecardSection onCandidateSelect={setSelectedCandidate} />;
+        return (
+          <MatchScorecardSection
+            onCandidateSelect={setSelectedCandidate}
+            onSectionReady={() => handleSectionReady('match-scorecard')}
+          />
+        );
       case 'interview-creation':
         return <HRInterviewCreator />;
       case 'ai-interview':
@@ -131,14 +346,62 @@ const Dashboard = () => {
       case 'interview-dashboard':
         return <InterviewDashboard onSectionChange={setActiveSection} />;
       case 'settings':
-        return <AdminUserManagement />;
+        return <AdminUserManagement onSectionReady={() => handleSectionReady('settings')} />;
       default:
-        return <MainDashboard onSectionChange={setActiveSection} />;
+        return (
+          <MainDashboard
+            onSectionChange={setActiveSection}
+            onStartTour={() => startMainTour(true)}
+            onDashboardReady={handleDashboardReady}
+          />
+        );
     }
   };
 
   return (
     <SidebarProvider>
+      <Joyride
+        run={tourRun}
+        steps={joyrideSteps}
+        stepIndex={tourStepIndex}
+        callback={handleTourCallback}
+        continuous
+        showProgress
+        showSkipButton
+        disableOverlayClose={true}
+        scrollToFirstStep={false}
+        spotlightPadding={8}
+        locale={{ skip: 'Skip tour', back: 'Back', next: 'Next', last: 'Finish' }}
+        styles={{
+          options: {
+            primaryColor: 'hsl(220, 100%, 40%)',
+            zIndex: 10000,
+            arrowColor: '#fff',
+            backgroundColor: '#fff',
+            overlayColor: 'rgba(0,0,0,0.5)',
+            textColor: '#1f2937',
+          },
+          tooltip: {
+            borderRadius: 8,
+            padding: 16,
+            maxWidth: isMobile
+              ? (typeof window !== 'undefined' ? Math.min(window.innerWidth * 0.92, 360) : 360)
+              : 400,
+          },
+          tooltipContainer: {
+            textAlign: 'left',
+          },
+          buttonNext: {
+            minHeight: 44,
+          },
+          buttonBack: {
+            minHeight: 44,
+          },
+          buttonSkip: {
+            minHeight: 44,
+          },
+        }}
+      />
       <div className="flex w-full bg-gray-50 min-h-screen">
         <AppSidebar activeSection={activeSection} onSectionChange={setActiveSection} />
         <div className="flex-1 flex flex-col min-w-0">

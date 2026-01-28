@@ -9,9 +9,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { useSearchParams } from 'react-router-dom';
-import { useSwipe } from '@/hooks/use-swipe';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
+import { useCurrentStep, useNavigateToStep, WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
 import * as XLSX from 'xlsx';
 
 interface Candidate {
@@ -36,9 +35,10 @@ interface MatchScorecardSectionProps {
   selectedCandidateId?: string;
   selectedCandidateData?: any;
   onClose?: () => void;
+  onSectionReady?: () => void;
 }
 
-export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, selectedCandidateData, onClose }: MatchScorecardSectionProps) => {
+export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, selectedCandidateData, onClose, onSectionReady }: MatchScorecardSectionProps) => {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [filteredCandidates, setFilteredCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,20 +49,8 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
   const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => sessionStorage.getItem('selectedJDId') || '');
   const [criteriaGrids, setCriteriaGrids] = useState<any[]>([]);
   const [selectedCriteriaGridId, setSelectedCriteriaGridId] = useState<string>(() => sessionStorage.getItem('selectedCriteriaGridId') || '');
-  const [searchParams, setSearchParams] = useSearchParams();
-  const isMobile = useIsMobile();
-
-  // Swipe detection for navigation (mobile only)
-  useSwipe({
-    enabled: isMobile,
-    threshold: 30, // Lower threshold for easier detection
-    minVelocity: 0.2, // Lower velocity requirement
-    onSwipeRight: () => {
-      // Swipe right to go back to Resume Upload
-      console.log('🔄 Swipe right detected in MatchScorecardSection - navigating to resume-upload');
-      setSearchParams({ section: 'resume-upload' });
-    },
-  });
+  const currentStep = useCurrentStep();
+  const navigateToStep = useNavigateToStep();
 
   // Keep local state in sync with sessionStorage resets (e.g., on login/logout)
   useEffect(() => {
@@ -636,6 +624,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
       fetchAssessmentReports();
     } else {
       console.log('No company_id, not fetching reports');
+      setLoading(false);
     }
   }, [user?.profile?.company_id, user?.company?.company_id, fetchAssessmentReports, selectedCandidateData]);
 
@@ -660,6 +649,12 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     
     setFilteredCandidates(filtered);
   }, [candidates, sortOrder, recommendationFilter]);
+
+  useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(() => onSectionReady?.(), 400);
+    return () => clearTimeout(t);
+  }, [loading, onSectionReady]);
 
   // Load job descriptions and criteria grids when component mounts
   useEffect(() => {
@@ -987,21 +982,32 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
   const displayCandidates = filteredCandidates;
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+    <div className="min-h-screen">
+      {/* Mobile Navigation Progress Bar */}
+      <div className="lg:hidden">
+        <CompactStepProgress
+          current={currentStep}
+          total={WORKFLOW_STEPS.length}
+          steps={WORKFLOW_STEPS}
+          onStepClick={navigateToStep}
+        />
+      </div>
+      
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6" data-tour="match-scorecard-area">
       {/* Job Description and Criteria Grid Selection - Only Visible in Multi-Candidate Mode */}
       {!selectedCandidateData && (
-        <div className="flex flex-col gap-3 mb-4 sm:mb-6">
-          {/* Filters Row 1: Job and Criteria */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="mb-4 sm:mb-6">
+          {/* Single Row Layout for Desktop, Stacked for Mobile */}
+          <div className="flex flex-col lg:flex-row gap-3 lg:items-end">
             {/* Job Description Selection */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-2 flex-1 lg:flex-initial lg:min-w-[200px]">
+              <div className="flex items-center gap-2 lg:flex-shrink-0">
                 <Briefcase className="w-4 h-4 text-primary-600 flex-shrink-0" />
-                <span className="text-sm text-gray-600 font-medium">Job Description</span>
+                <span className="text-sm text-gray-600 font-medium whitespace-nowrap">Job:</span>
               </div>
               <Select value={selectedJobDescriptionId} onValueChange={handleJobDescriptionSelect}>
-                <SelectTrigger className="w-full h-11 sm:h-10">
-                  <SelectValue placeholder="Select job description..." />
+                <SelectTrigger className="w-full lg:w-[200px] h-11 sm:h-10">
+                  <SelectValue placeholder="Select job..." />
                 </SelectTrigger>
                 <SelectContent>
                   {jobDescriptions.map(jd => (
@@ -1019,14 +1025,13 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
             </div>
 
             {/* Evaluation Criteria Selection */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-2 flex-1 lg:flex-initial lg:min-w-[200px]">
+              <div className="flex items-center gap-2 lg:flex-shrink-0">
                 <Grid className="w-4 h-4 text-primary-600 flex-shrink-0" />
-                <span className="text-sm text-gray-600 font-medium">Evaluation Criteria</span>
-              <span className="text-xs text-gray-500 hidden sm:inline">(How to assess candidates)</span>
+                <span className="text-sm text-gray-600 font-medium whitespace-nowrap">Criteria:</span>
               </div>
               <Select value={selectedCriteriaGridId} onValueChange={handleCriteriaGridSelect}>
-                <SelectTrigger className="w-full h-11 sm:h-10">
+                <SelectTrigger className="w-full lg:w-[200px] h-11 sm:h-10">
                   <SelectValue placeholder="Select criteria..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -1043,19 +1048,16 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                 </SelectContent>
               </Select>
             </div>
-          </div>
 
-          {/* Filters Row 2: Filter, Sort, Export */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Recommendation Filter */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-2 flex-1 lg:flex-initial lg:min-w-[150px]">
+              <div className="flex items-center gap-2 lg:flex-shrink-0">
                 <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                <span className="text-sm text-gray-600 font-medium">Filter</span>
+                <span className="text-sm text-gray-600 font-medium whitespace-nowrap">Filter:</span>
               </div>
               <Select value={recommendationFilter} onValueChange={handleRecommendationFilter}>
-                <SelectTrigger className="w-full h-11 sm:h-10">
-                  <SelectValue placeholder="Filter by recommendation" />
+                <SelectTrigger className="w-full lg:w-[150px] h-11 sm:h-10">
+                  <SelectValue placeholder="All..." />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Recommendations</SelectItem>
@@ -1069,31 +1071,29 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
             </div>
             
             {/* Sort Button */}
-            <div className="flex flex-col gap-2">
-              <span className="text-sm text-gray-600 font-medium opacity-0 pointer-events-none">Sort</span>
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-2 lg:flex-shrink-0">
               <Button 
                 variant="outline" 
                 size="sm" 
                 onClick={handleSortToggle} 
-                className="w-full h-11 sm:h-10"
+                className="w-full lg:w-auto h-11 sm:h-10"
               >
                 {sortOrder === 'desc' ? (
                   <ArrowDown className="w-4 h-4 mr-2" />
                 ) : (
                   <ArrowUp className="w-4 h-4 mr-2" />
                 )}
-                <span>Sort {sortOrder === 'desc' ? 'High→Low' : 'Low→High'}</span>
+                <span>Sort {sortOrder === 'desc' ? 'High-Low' : 'Low-High'}</span>
               </Button>
             </div>
             
             {/* Export Button */}
-            <div className="flex flex-col gap-2">
-              <span className="text-sm text-gray-600 font-medium opacity-0 pointer-events-none">Export</span>
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-2 lg:flex-shrink-0">
               <Button 
                 variant="outline" 
                 size="sm" 
                 onClick={handleExportReport} 
-                className="w-full h-11 sm:h-10"
+                className="w-full lg:w-auto h-11 sm:h-10"
               >
                 <Download className="w-4 h-4 mr-2" />
                 <span>Export Report</span>
@@ -1254,6 +1254,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
         ))}
         </div>
       )}
+      </div>
     </div>
   );
 };

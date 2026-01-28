@@ -599,7 +599,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                                     value={localComments[interview.id] || interview.hr_comments || ''}
                                     onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
                                     placeholder="Enter your comments..."
-                                    className="w-full p-3 sm:p-4 border border-gray-300 rounded-md text-sm sm:text-base resize-none focus:outline-none focus:border-gray-300"
+                                    className="w-full p-3 sm:p-4 border border-gray-300 rounded-md text-sm sm:text-base resize-none focus:outline-none focus:border-gray-300 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
                                     rows={15}
                                   />
                                 </div>
@@ -645,7 +645,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                             value={localComments[interview.id] || interview.hr_comments || ''}
                             onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
                             placeholder="Enter your comments..."
-                            className="w-full p-2 pr-8 border border-gray-300 rounded-md text-xs resize-none focus:outline-none focus:border-gray-300"
+                            className="w-full p-2 pr-8 border border-gray-300 rounded-md text-xs resize-none focus:outline-none focus:border-gray-300 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
                             rows={2}
                           />
                           <Dialog open={expandDialogStates[interview.id] || false} onOpenChange={(open) => setExpandDialogStates(prev => ({...prev, [interview.id]: open}))}>
@@ -669,7 +669,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                                   value={localComments[interview.id] || interview.hr_comments || ''}
                                   onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
                                   placeholder="Enter your comments..."
-                                  className="w-full p-3 sm:p-4 border border-gray-300 rounded-md text-sm sm:text-base resize-none focus:outline-none focus:border-gray-300"
+                                  className="w-full p-3 sm:p-4 border border-gray-300 rounded-md text-sm sm:text-base resize-none focus:outline-none focus:border-gray-300 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
                                   rows={15}
                                 />
                               </div>
@@ -871,7 +871,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                               value={localComments[interview.id] || interview.hr_comments || ''}
                               onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
                               placeholder="Enter your comments..."
-                              className="w-full p-2 pr-8 border border-gray-300 rounded-md text-sm resize-none focus:outline-none focus:border-gray-300"
+                              className="w-full p-2 pr-8 border border-gray-300 rounded-md text-sm resize-none focus:outline-none focus:border-gray-300 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
                               rows={2}
                             />
                             <Dialog open={expandDialogStates[interview.id] || false} onOpenChange={(open) => setExpandDialogStates(prev => ({...prev, [interview.id]: open}))}>
@@ -895,7 +895,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                                     value={localComments[interview.id] || interview.hr_comments || ''}
                                     onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
                                     placeholder="Enter your comments..."
-                                    className="w-full p-3 sm:p-4 border border-gray-300 rounded-md text-sm sm:text-base resize-none focus:outline-none focus:border-gray-300"
+                                    className="w-full p-3 sm:p-4 border border-gray-300 rounded-md text-sm sm:text-base resize-none focus:outline-none focus:border-gray-300 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
                                     rows={15}
                                   />
                                 </div>
