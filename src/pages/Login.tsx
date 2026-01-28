@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Users, Clock, CheckCircle, Shield, Mail, FileText, BarChart, UserPlus, LogIn } from "lucide-react";
 import { SessionManager } from '@/utils/sessionManager';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const PYTHON_API_BASE = import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com';
 
@@ -26,6 +27,7 @@ const Login = () => {
   const [resetLoading, setResetLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   // Remove useAuth import and usage, use Supabase directly
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -265,10 +267,13 @@ const Login = () => {
           // no-op
         }
 
-      toast({
-        title: "Welcome!",
-        description: "You've been logged in successfully.",
-      });
+      // Show toast only on desktop
+      if (!isMobile) {
+        toast({
+          title: "Welcome!",
+          description: "You've been logged in successfully.",
+        });
+      }
 
       navigate('/dashboard?section=main-dashboard');
     } catch (error: any) {

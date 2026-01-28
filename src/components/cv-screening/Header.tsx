@@ -6,11 +6,13 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { SessionManager } from '@/utils/sessionManager';
 import { supabase } from '@/integrations/supabase/client';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export const Header = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+  const isMobile = useIsMobile();
 
   /**
    * Delete a cookie by name
@@ -49,10 +51,14 @@ export const Header = () => {
       // no-op
     }
 
-    toast({
-      title: "Logged out successfully",
-      description: "You've been logged out of your account.",
-    });
+    // Show toast only on desktop
+    if (!isMobile) {
+      toast({
+        title: "Logged out successfully",
+        description: "You've been logged out of your account.",
+      });
+    }
+
     navigate('/login');
   };
 

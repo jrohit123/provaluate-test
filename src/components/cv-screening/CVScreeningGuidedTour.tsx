@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { FileText, Wrench, Upload, BarChart3, ArrowRight, CheckCircle, Type, FileUp, Settings, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { FileText, Wrench, Upload, BarChart3, ArrowRight, CheckCircle, Type, FileUp, Settings, RefreshCw, SlidersHorizontal, Smartphone, ArrowLeftRight } from 'lucide-react';
 import { ActiveSection } from '@/pages/Dashboard';
 
 interface CVScreeningGuidedTourProps {
@@ -88,6 +88,20 @@ export const CVScreeningGuidedTour = ({
         'Filter and sort candidates by score, recommendation status, or specific criteria to find the perfect fit for your role.',
       ],
     },
+    {
+      id: 0,
+      title: 'Mobile Navigation: Swipe to Move Between Steps',
+      subtitle: 'On mobile devices, you can quickly navigate between CV screening steps using swipe gestures.',
+      icon: Smartphone,
+      section: 'main-dashboard',
+      primaryCta: 'Got it, continue',
+      bullets: [
+        'Swipe left → to move forward to the next step (e.g., from Job Description to Evaluation Criteria, or from Resume Upload to View Results).',
+        'Swipe right ← to go back to the previous step (available from all sections—Evaluation Criteria, Resume Upload, and View Results).',
+        'Swipe gestures only work on mobile devices—desktop users can use the sidebar or buttons to navigate.',
+        'You can swipe freely between all 4 steps at any time, regardless of completion status—no restrictions!',
+      ],
+    },
   ];
 
   const totalSteps = steps.length;
@@ -153,15 +167,27 @@ export const CVScreeningGuidedTour = ({
           </ul>
 
           <div className="mt-4">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full sm:w-auto flex items-center justify-center gap-2"
-              onClick={() => handleNavigate(activeStep.section)}
-            >
-              {activeStep.primaryCta}
-              <ArrowRight className="w-3 h-3" />
-            </Button>
+            {activeStep.id === 0 ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full sm:w-auto flex items-center justify-center gap-2"
+                onClick={() => onOpenChange(false)}
+              >
+                {activeStep.primaryCta}
+                <ArrowRight className="w-3 h-3" />
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full sm:w-auto flex items-center justify-center gap-2"
+                onClick={() => handleNavigate(activeStep.section)}
+              >
+                {activeStep.primaryCta}
+                <ArrowRight className="w-3 h-3" />
+              </Button>
+            )}
           </div>
         </div>
 

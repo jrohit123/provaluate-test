@@ -103,9 +103,7 @@ export const EvaluationCriteriaSection = () => {
   useSwipe({
     enabled: isMobile,
     onSwipeLeft: () => {
-      if (selectedGridId) {
-        setSearchParams({ section: 'resume-upload' });
-      }
+      setSearchParams({ section: 'resume-upload' });
     },
     onSwipeRight: () => {
       // Swipe right to go back to Job Upload
@@ -113,19 +111,6 @@ export const EvaluationCriteriaSection = () => {
     },
   });
 
-  // Show swipe indicator when criteria is selected
-  useEffect(() => {
-    if (selectedGridId && isMobile) {
-      const timer = setTimeout(() => {
-        toast({
-          title: "✓ Evaluation Criteria Set",
-          description: "Swipe left → Resume Upload | Swipe right ← Job Upload",
-          duration: 5000,
-        });
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [selectedGridId, isMobile, toast]);
 
   // Sync selected JD from sessionStorage and reload grids when JD changes (fallback)
   useEffect(() => {

@@ -9,6 +9,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
+import { useSearchParams } from 'react-router-dom';
+import { useSwipe } from '@/hooks/use-swipe';
+import { useIsMobile } from '@/hooks/use-mobile';
 import * as XLSX from 'xlsx';
 
 interface Candidate {
@@ -46,6 +49,20 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
   const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => sessionStorage.getItem('selectedJDId') || '');
   const [criteriaGrids, setCriteriaGrids] = useState<any[]>([]);
   const [selectedCriteriaGridId, setSelectedCriteriaGridId] = useState<string>(() => sessionStorage.getItem('selectedCriteriaGridId') || '');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isMobile = useIsMobile();
+
+  // Swipe detection for navigation (mobile only)
+  useSwipe({
+    enabled: isMobile,
+    threshold: 30, // Lower threshold for easier detection
+    minVelocity: 0.2, // Lower velocity requirement
+    onSwipeRight: () => {
+      // Swipe right to go back to Resume Upload
+      console.log('🔄 Swipe right detected in MatchScorecardSection - navigating to resume-upload');
+      setSearchParams({ section: 'resume-upload' });
+    },
+  });
 
   // Keep local state in sync with sessionStorage resets (e.g., on login/logout)
   useEffect(() => {

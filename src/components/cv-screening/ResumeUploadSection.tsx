@@ -193,9 +193,7 @@ export const ResumeUploadSection = () => {
   useSwipe({
     enabled: isMobile,
     onSwipeLeft: () => {
-      if (hasCompletedReports && selectedJobDescriptionId && selectedCriteriaGridId) {
-        setSearchParams({ section: 'match-scorecard' });
-      }
+      setSearchParams({ section: 'match-scorecard' });
     },
     onSwipeRight: () => {
       // Swipe right to go back to Evaluation Criteria
@@ -203,19 +201,6 @@ export const ResumeUploadSection = () => {
     },
   });
 
-  // Show swipe indicator when analysis is complete
-  useEffect(() => {
-    if (hasCompletedReports && selectedJobDescriptionId && selectedCriteriaGridId && isMobile) {
-      const timer = setTimeout(() => {
-        toast({
-          title: "✓ Resume Analysis Complete",
-          description: "Swipe left → View Results | Swipe right ← Evaluation Criteria",
-          duration: 5000,
-        });
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [hasCompletedReports, selectedJobDescriptionId, selectedCriteriaGridId, isMobile, toast]);
   const [processingCompleted, setProcessingCompleted] = useState<boolean>(false);
   const [companyUsageInfo, setCompanyUsageInfo] = useState<CompanyUsageInfo | null>(null);
   const [showRechargeDialog, setShowRechargeDialog] = useState(false);

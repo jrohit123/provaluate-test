@@ -985,26 +985,9 @@ export const JobUploadSection = () => {
   useSwipe({
     enabled: isMobile,
     onSwipeLeft: () => {
-      if (selectedJobDescriptionId) {
-        setSearchParams({ section: 'evaluation-criteria' });
-      }
+      setSearchParams({ section: 'evaluation-criteria' });
     },
   });
-
-  // Show swipe indicator when JD is selected
-  useEffect(() => {
-    if (selectedJobDescriptionId && isMobile) {
-      // Show toast after a short delay to let the selection toast finish
-      const timer = setTimeout(() => {
-        toast({
-          title: "✓ Job Description Selected",
-          description: "Swipe left → to go to Evaluation Criteria",
-          duration: 5000,
-        });
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [selectedJobDescriptionId, isMobile, toast]);
 
   // When a JD is selected from dropdown, automatically set in session
   const handleJDSelect = async (jdId: string) => {
@@ -1085,11 +1068,11 @@ export const JobUploadSection = () => {
                       <Button
                         variant="default"
                         size="sm"
-                        className="w-full sm:w-auto"
+                        className="w-full sm:w-auto text-xs sm:text-sm h-9 sm:h-10"
                       >
                         <Settings className="w-4 h-4 mr-1.5 sm:mr-2" />
                         <span className="hidden sm:inline">Manage Job Descriptions</span>
-                        <span className="sm:hidden">Manage Job Descriptions</span>
+                        <span className="sm:hidden">Manage Jobs</span>
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -1439,16 +1422,19 @@ export const JobUploadSection = () => {
             <div className="space-y-2">
               <Button 
                 onClick={handleProcessJobDescription} 
-                className="w-full"
+                className="w-full h-10 sm:h-11 text-sm sm:text-base"
                 disabled={processingStatus === 'processing' || (jdLimitInfo && !jdLimitInfo.canCreateJD)}
               >
                 {processingStatus === 'processing' ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Processing Job Description...
+                    <span className="text-xs sm:text-sm">Processing...</span>
                   </>
                 ) : (
-                  'Process Job Description'
+                  <>
+                    <span className="sm:hidden">Process Jobs</span>
+                    <span className="hidden sm:inline">Process Job Descriptions</span>
+                  </>
                 )}
               </Button>
               

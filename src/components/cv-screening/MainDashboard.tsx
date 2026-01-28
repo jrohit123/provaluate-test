@@ -250,7 +250,7 @@ export function MainDashboard({ onSectionChange }: MainDashboardProps) {
               });
               setIsExtensionInfoOpen(true);
             }}
-            className="flex items-center justify-center gap-2 w-full sm:w-auto"
+            className="hidden sm:flex items-center justify-center gap-2 w-full sm:w-auto"
           >
             <Puzzle className="w-4 h-4" />
             <span className="hidden sm:inline">Browser Extension</span>
