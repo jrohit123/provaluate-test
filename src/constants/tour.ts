@@ -12,6 +12,7 @@ export const TOUR_SECTIONS: ActiveSection[] = [
   'resume-upload',
   'match-scorecard',
   'settings',
+  'career-portal',
 ];
 
 export function getSectionTourStorageKey(section: ActiveSection): string {
@@ -126,12 +127,28 @@ const SECTION_SETTINGS: TourStep[] = [
   },
 ];
 
+const SECTION_CAREER_PORTAL: TourStep[] = [
+  {
+    target: '[data-tour="career-portal-company-details"]',
+    content: 'Set your career page slug, logo URL, and vision text. The slug becomes your public URL (e.g. /careers/yourcompany). Click Save to update.',
+    placement: 'bottom',
+    disableScrolling: true,
+  },
+  {
+    target: '[data-tour="career-portal-jd-list"]',
+    content: 'Choose default evaluation criteria and toggle "Post on career page" for each job. Only active JDs with both set will appear on your public career page.',
+    placement: 'top',
+    disableScrolling: true,
+  },
+];
+
 const SECTION_TOUR_MAP: Record<ActiveSection, TourStep[]> = {
   'job-upload': SECTION_JOB_UPLOAD,
   'evaluation-criteria': SECTION_EVALUATION_CRITERIA,
   'resume-upload': SECTION_RESUME_UPLOAD,
   'match-scorecard': SECTION_MATCH_SCORECARD,
   settings: SECTION_SETTINGS,
+  'career-portal': SECTION_CAREER_PORTAL,
   'main-dashboard': [],
   'interview-creation': [],
   'ai-interview': [],

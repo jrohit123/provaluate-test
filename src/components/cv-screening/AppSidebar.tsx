@@ -1,4 +1,4 @@
-import { Upload, FileText, BarChart3, User, Lightbulb, Settings, Users, Monitor, Wrench, Cog, ChevronDown, ChevronRight, Search, Video, CheckCircle } from 'lucide-react';
+import { Upload, FileText, BarChart3, User, Lightbulb, Settings, Users, Monitor, Wrench, Cog, ChevronDown, ChevronRight, Search, Video, CheckCircle, Globe } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -89,6 +89,14 @@ const settingsItem = {
   icon: Settings,
   section: 'settings' as ActiveSection,
   description: 'Configure preferences'
+};
+
+// Career Portal (below Settings)
+const careerPortalItem = {
+  title: 'Career Portal',
+  icon: Globe,
+  section: 'career-portal' as ActiveSection,
+  description: 'Configure career page and which JDs are visible to candidates'
 };
 
 export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) {
@@ -284,6 +292,26 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
             </SidebarGroupContent>
           </SidebarGroup>
         )}
+
+        {/* Career Portal - Below Settings */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => handleSectionChange(careerPortalItem.section)}
+                  isActive={activeSection === careerPortalItem.section}
+                  className="group relative"
+                  tooltip={careerPortalItem.title}
+                  data-tour="section-career-portal"
+                >
+                  <careerPortalItem.icon className="w-4 h-4" />
+                  <span className="font-bold text-[#1A56DB]">{careerPortalItem.title}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
       
       <SidebarFooter className="p-4">

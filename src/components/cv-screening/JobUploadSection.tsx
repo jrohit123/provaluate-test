@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { DatabaseService } from '@/integrations/supabase/db';
@@ -89,6 +90,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
     remainingJDs: number;
   } | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [disableConfirmJd, setDisableConfirmJd] = useState<{ jdId: string; title: string } | null>(null);
   const [isManageSectionExpanded, setIsManageSectionExpanded] = useState(false);
   const [editorContent, setEditorContent] = useState<string>('');
   const [inputMode, setInputMode] = useState<'file' | 'editor'>('file');
@@ -382,7 +384,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
     try {
       const { data, error } = await supabase
         .from('job_descriptions')
-        .select('jd_id, title, jd_file, created_at, status, description')
+        .select('jd_id, title, jd_file, created_at, updated_at, status, description, post_on_career_page')
         .eq('company_id', user.profile.company_id)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -429,6 +431,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
     }
     
     setUpdatingStatus(jdId);
+    setDisableConfirmJd(null); // close confirm dialog if open
     
     try {
       const { error } = await supabase
@@ -455,6 +458,18 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
     } finally {
       setUpdatingStatus(null);
     }
+  };
+
+  const handleDisableJDToggle = (jd: { jd_id: string; title: string | null; status?: string; post_on_career_page?: boolean | null }) => {
+    const isActive = jd.status === 'active';
+    if (isActive) {
+      // Disabling: show warning if posted on career page
+      if (jd.post_on_career_page) {
+        setDisableConfirmJd({ jdId: jd.jd_id, title: jd.title || 'Untitled' });
+        return;
+      }
+    }
+    toggleJDStatus(jd.jd_id, jd.status || 'active');
   };
 
   const loadResolvedJD = async (jdId: string) => {
@@ -1031,6 +1046,32 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
 
   return (
     <div className="min-h-screen">
+      {/* Confirm disable JD when posted on career page */}
+      <AlertDialog open={!!disableConfirmJd} onOpenChange={(open) => !open && setDisableConfirmJd(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Disable this job description?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This JD has been posted on the career page already. So are you sure you want to disable it? Some CVs have been or might have been assessed. Disabling will remove it from your public career page.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDisableConfirmJd(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (disableConfirmJd) {
+                  toggleJDStatus(disableConfirmJd.jdId, 'active');
+                }
+                setDisableConfirmJd(null);
+              }}
+            >
+              Yes, I&apos;m sure
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Mobile Navigation Progress Bar */}
       <div className="lg:hidden">
         <CompactStepProgress
@@ -1171,7 +1212,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                                 </span>
                                 <Switch
                                   checked={isActive}
-                                  onCheckedChange={() => !isDisabled && toggleJDStatus(jd.jd_id, jd.status || 'active')}
+                                  onCheckedChange={() => !isDisabled && handleDisableJDToggle(jd)}
                                   disabled={isDisabled}
                                   className={`${isDisabled ? 'opacity-50' : ''} ${
                                     isActive ? 'data-[state=checked]:bg-green-500' : ''

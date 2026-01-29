@@ -10,6 +10,7 @@ import { Header } from '@/components/cv-screening/Header';
 import { MainDashboard } from '@/components/cv-screening/MainDashboard';
 import { EvaluationCriteriaSection } from '@/components/cv-screening/EvaluationCriteriaSection';
 import AdminUserManagement from '@/components/cv-screening/AdminUserManagement';
+import { CareerPortalSection } from '@/components/cv-screening/CareerPortalSection';
 import HRInterviewCreator from '@/components/ai-interview/HRInterviewCreator';
 import AIsetup from '@/components/ai-interview/AIsetup';
 import InterviewDashboard from '@/components/ai-interview/InterviewDashboard';
@@ -28,7 +29,7 @@ import {
   waitForTarget,
 } from '@/constants/tour';
 
-export type ActiveSection = 'main-dashboard' | 'job-upload' | 'evaluation-criteria' | 'resume-upload' | 'match-scorecard' | 'interview-creation' | 'ai-interview' | 'setup' | 'interview-dashboard' | 'settings';
+export type ActiveSection = 'main-dashboard' | 'job-upload' | 'evaluation-criteria' | 'resume-upload' | 'match-scorecard' | 'career-portal' | 'interview-creation' | 'ai-interview' | 'setup' | 'interview-dashboard' | 'settings';
 
 const Dashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -337,6 +338,8 @@ const Dashboard = () => {
             onSectionReady={() => handleSectionReady('match-scorecard')}
           />
         );
+      case 'career-portal':
+        return <CareerPortalSection onSectionReady={() => handleSectionReady('career-portal')} />;
       case 'interview-creation':
         return <HRInterviewCreator />;
       case 'ai-interview':
