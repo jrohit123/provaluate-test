@@ -85,7 +85,8 @@ const SECTION_JOB_UPLOAD: TourStep[] = [
   {
     target: '[data-tour="job-upload-area"]',
     content: 'Select an existing job description from the dropdown or create one by writing the name of job first and then uploading a file or using the editor. Finally, press process job button to process the job description. Manage and activate JDs using manage JDs button as per your selected plan.',
-    placement: 'right',
+    placement: 'bottom',
+    disableScrolling: true,
   },
 ];
 
@@ -93,7 +94,8 @@ const SECTION_EVALUATION_CRITERIA: TourStep[] = [
   {
     target: '[data-tour="evaluation-criteria-area"]',
     content: 'Pick a criteria grid or create one. Add parameters and weights (total 100%), then save. Use Excel upload for bulk setup.',
-    placement: 'right',
+    placement: 'bottom',
+    disableScrolling: true,
   },
 ];
 
@@ -101,7 +103,8 @@ const SECTION_RESUME_UPLOAD: TourStep[] = [
   {
     target: '[data-tour="resume-upload-area"]',
     content: 'Choose JD and criteria above, then upload resumes and press the Pro-Valuate button. We score them automatically. Start upload when ready.',
-    placement: 'right',
+    placement: 'bottom',
+    disableScrolling: true,
   },
 ];
 
@@ -109,7 +112,8 @@ const SECTION_MATCH_SCORECARD: TourStep[] = [
   {
     target: '[data-tour="match-scorecard-area"]',
     content: 'View ranked candidates, filter by recommendation, and sort by score. Click a candidate for the full scorecard.',
-    placement: 'right',
+    placement: 'bottom',
+    disableScrolling: true,
   },
 ];
 
@@ -118,6 +122,7 @@ const SECTION_SETTINGS: TourStep[] = [
     target: '[data-tour="settings-user-management"]',
     content: 'Manage company users and invite new team members. Recharge, change plan, or update billing from here.',
     placement: 'bottom',
+    disableScrolling: true,
   },
 ];
 
