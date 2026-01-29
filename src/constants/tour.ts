@@ -52,18 +52,18 @@ export const MAIN_TOUR_STEPS: TourStep[] = [
   {
     target: '[data-tour="sidebar"]',
     content:
-      'Use the sidebar to move between CV Screening steps: Job Upload, Evaluation Criteria, Resume Upload, and View Results. Interview tools are here too.',
+      'Use the sidebar to move between CV Screening steps in the following order: Job Upload, Evaluation Criteria, Resume Upload, and View Results. For detailed understanding of each step in CV Screening , visit each step to get step based tour',
     placement: 'right',
     disableScrolling: true,
   },
   {
     target: '[data-tour="quick-actions"]',
-    content: 'Or use these buttons to jump to any step. Start with Create Job Descriptions.',
+    content: 'Or use these buttons to jump to any step. Start with Create Job Descriptions.When you click on any step, you will see a progress tracker, so that you can track your progress properly.',
     placement: 'bottom',
   },
   {
     target: '[data-tour="browser-extension"]',
-    content: 'Use our extension to pull JDs and criteria from job boards into ProValuate.',
+    content: 'Use our extension to pull JDs and criteria from job boards into ProValuate. The extension will work only in Desktop.',
     placement: 'bottom',
     disableScrolling: false,
   },
@@ -84,7 +84,7 @@ export function getMainTourSteps(isMobile: boolean): TourStep[] {
 const SECTION_JOB_UPLOAD: TourStep[] = [
   {
     target: '[data-tour="job-upload-area"]',
-    content: 'Select an existing job description from the dropdown or create one by uploading a file or using the editor. Manage and activate JDs here.',
+    content: 'Select an existing job description from the dropdown or create one by writing the name of job first and then uploading a file or using the editor. Finally, press process job button to process the job description. Manage and activate JDs using manage JDs button as per your selected plan.',
     placement: 'right',
   },
 ];
@@ -100,7 +100,7 @@ const SECTION_EVALUATION_CRITERIA: TourStep[] = [
 const SECTION_RESUME_UPLOAD: TourStep[] = [
   {
     target: '[data-tour="resume-upload-area"]',
-    content: 'Choose JD and criteria above, then upload resumes. We score them automatically. Start upload when ready.',
+    content: 'Choose JD and criteria above, then upload resumes and press the Pro-Valuate button. We score them automatically. Start upload when ready.',
     placement: 'right',
   },
 ];
