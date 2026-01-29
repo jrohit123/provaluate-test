@@ -22,14 +22,39 @@ interface Plan {
 const Pricing = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAnnual, setIsAnnual] = useState(false);
-  const [currency, setCurrency] = useState<'INR' | 'USD'>('INR');
+  const [isAnnual, setIsAnnual] = useState(true);
+  const [currency, setCurrency] = useState<'INR' | 'USD'>('USD');
+  const [exchangeRate, setExchangeRate] = useState(90); // Fallback rate
+  const [loadingRate, setLoadingRate] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
     fetchPlans();
+    fetchExchangeRate();
   }, []);
+
+  // Fetch real-time exchange rate from free API
+  const fetchExchangeRate = async () => {
+    setLoadingRate(true);
+    try {
+      const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+      if (!response.ok) throw new Error('Failed to fetch exchange rate');
+      
+      const data = await response.json();
+      const rate = data.rates?.INR;
+      
+      if (rate && typeof rate === 'number') {
+        setExchangeRate(rate);
+        console.log('Real-time exchange rate: 1 USD =', rate, 'INR');
+      }
+    } catch (error) {
+      console.error('Error fetching exchange rate:', error);
+      // Keep fallback rate of 90 if API fails
+    } finally {
+      setLoadingRate(false);
+    }
+  };
 
   const fetchPlans = async () => {
     try {
@@ -65,7 +90,7 @@ const Pricing = () => {
     
     // Convert currency if needed
     if (currency === 'USD') {
-      price = price / 90; // Convert INR to USD (1 USD = 90 INR)
+      price = price / exchangeRate; // Convert INR to USD using real-time rate
     }
     
     // Round up the final price
@@ -161,9 +186,6 @@ const Pricing = () => {
             <span className={`text-sm font-medium ${currency === 'USD' ? 'text-gray-900' : 'text-gray-600'}`}>
               USD
             </span>
-            {/* <Badge className="bg-blue-100 text-blue-800 ml-2 hover:bg-blue-100">
-              1 USD = 90 INR
-            </Badge> */}
           </div>
         </div>
 
@@ -175,12 +197,12 @@ const Pricing = () => {
             </div>
           ) : (
             plans.map((plan) => {
-              // Calculate prices
-              const monthlyBasePrice = currency === 'USD' ? Math.ceil(plan.plan_cost / 90) : plan.plan_cost;
+              // Calculate prices using real-time exchange rate
+              const monthlyBasePrice = currency === 'USD' ? Math.ceil(plan.plan_cost / exchangeRate) : plan.plan_cost;
               const annualBasePrice = plan.plan_cost * 12;
-              const annualDiscountedPrice = isAnnual ? Math.ceil(annualBasePrice * 0.85 * (currency === 'USD' ? 1/90 : 1)) : 0;
+              const annualDiscountedPrice = isAnnual ? Math.ceil(annualBasePrice * 0.85 * (currency === 'USD' ? 1/exchangeRate : 1)) : 0;
               const monthlyPrice = monthlyBasePrice;
-              const annualPrice = currency === 'USD' ? Math.ceil(annualBasePrice / 90) : annualBasePrice;
+              const annualPrice = currency === 'USD' ? Math.ceil(annualBasePrice / exchangeRate) : annualBasePrice;
               const displayPrice = isAnnual ? annualDiscountedPrice : monthlyPrice;
 
               return (
@@ -236,7 +258,7 @@ const Pricing = () => {
                       <li className="flex items-start space-x-3">
                         <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
                         <span className="text-sm text-gray-700">
-                          <strong>{plan.max_cvs === 0 ? 'Unlimited' : plan.max_cvs}</strong> CVs per week
+                          <strong>{plan.max_cvs === 0 ? 'Unlimited' : isAnnual ? plan.max_cvs * 12 : plan.max_cvs}</strong> CVs {isAnnual ? 'per year' : 'per month'}
                         </span>
                       </li>
                       <li className="flex items-start space-x-3">
@@ -349,7 +371,7 @@ const Pricing = () => {
               We're here to help! Our team is ready to answer any questions about our plans and features.
             </p>
             <a
-              href="mailto:rj@aitamate.com?subject=ProValuate%20Pricing%20Inquiry"
+              href="mailto:sales@aitamate.com?subject=ProValuate%20Pricing%20Inquiry"
               className="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
             >
               <Mail className="h-5 w-5" />
@@ -363,7 +385,7 @@ const Pricing = () => {
       <footer className="bg-white border-t mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center text-gray-600">
-            <p>© 2024 ProValuate. All rights reserved.</p>
+            <p>© 2025 ProValuate. All rights reserved.</p>
             <p className="text-sm mt-2">
               AI-powered resume evaluation and job matching platform for recruiters
             </p>
