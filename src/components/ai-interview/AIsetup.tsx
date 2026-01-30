@@ -27,6 +27,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import StructuredInterviewSetup from './StructuredInterviewSetup';
+import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
+import { useInterviewCurrentStep, useInterviewNavigateToStep, INTERVIEW_WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
+
+interface AIsetupProps {
+  onSectionReady?: () => void;
+}
 
 interface FormData {
   position: string;
@@ -54,9 +60,11 @@ interface CustomParameter {
 
 
 
-const HRInterviewCreator = () => {
+const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const interviewCurrentStep = useInterviewCurrentStep();
+  const interviewNavigateToStep = useInterviewNavigateToStep();
   
   const [formData, setFormData] = useState<FormData>({
     position: '',
@@ -1418,15 +1426,30 @@ const HRInterviewCreator = () => {
     });
   };
 
+  useEffect(() => {
+    const t = setTimeout(() => onSectionReady?.(), 500);
+    return () => clearTimeout(t);
+  }, [onSectionReady]);
+
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+    <div className="min-h-screen">
+      {/* Mobile step progress (interview workflow) */}
+      <div className="lg:hidden">
+        <CompactStepProgress
+          current={interviewCurrentStep}
+          total={INTERVIEW_WORKFLOW_STEPS.length}
+          steps={INTERVIEW_WORKFLOW_STEPS}
+          onStepClick={interviewNavigateToStep}
+        />
+      </div>
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       <div className="mb-4 sm:mb-6">
         <h2 className="text-xl sm:text-2xl font-bold text-primary-800 mb-2">Interview Parameters Setup</h2>
         <p className="text-sm sm:text-base text-muted-foreground">Select the role and configure the interview settings</p>
       </div>
 
       {/* Interview Configuration Section */}
-      <Card className="animate-fade-in">
+      <Card className="animate-fade-in" data-tour="setup-area">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
@@ -2352,6 +2375,7 @@ const HRInterviewCreator = () => {
         />
       )}
 
+      </div>
     </div>
   );
 };

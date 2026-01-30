@@ -1284,7 +1284,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                 placeholder="Job Title (e.g., Senior Software Engineer)"
                 value={jobTitle}
                 onChange={(e) => setJobTitle(e.target.value)}
-                className="mb-0 text-sm"
+                className="mb-0 text-base"
                 ref={jobTitleInputRef}
               />
             </div>
@@ -1475,7 +1475,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
             <div className="space-y-2">
               <Button 
                 onClick={handleProcessJobDescription} 
-                className="w-full h-10 sm:h-11 text-sm sm:text-base"
+                className="w-full h-10 sm:h-11 text-base"
                 disabled={processingStatus === 'processing' || (jdLimitInfo && !jdLimitInfo.canCreateJD)}
               >
                 {processingStatus === 'processing' ? (

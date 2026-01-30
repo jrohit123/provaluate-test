@@ -13,6 +13,9 @@ export const TOUR_SECTIONS: ActiveSection[] = [
   'match-scorecard',
   'settings',
   'career-portal',
+  'setup',
+  'ai-interview',
+  'interview-dashboard',
 ];
 
 export function getSectionTourStorageKey(section: ActiveSection): string {
@@ -42,29 +45,28 @@ export interface TourStep {
   disableScrolling?: boolean;
 }
 
-// ----- Main tour (dashboard): welcome → sidebar → quick-actions → browser extension (end) -----
+// ----- Main tour (dashboard): short, informative steps -----
 
 export const MAIN_TOUR_STEPS: TourStep[] = [
   {
     target: '[data-tour="dashboard-welcome"]',
-    content: "Welcome to ProValuate. This quick tour shows how to go from a job description to a ranked shortlist. Let's go.",
+    content: 'Welcome. This tour shows how to go from job description to ranked shortlist.',
     placement: 'bottom',
   },
   {
     target: '[data-tour="sidebar"]',
-    content:
-      'Use the sidebar to move between CV Screening steps in the following order: Job Upload, Evaluation Criteria, Resume Upload, and View Results. For detailed understanding of each step in CV Screening , visit each step to get step based tour',
+    content: 'Sidebar: move between CV Screening steps (Job → Criteria → Resumes → Results). Each section has its own short tour.',
     placement: 'right',
     disableScrolling: true,
   },
   {
     target: '[data-tour="quick-actions"]',
-    content: 'Or use these buttons to jump to any step. Start with Create Job Descriptions.When you click on any step, you will see a progress tracker, so that you can track your progress properly.',
+    content: 'Jump to any step with these buttons. On mobile you’ll see a step progress bar.',
     placement: 'bottom',
   },
   {
     target: '[data-tour="browser-extension"]',
-    content: 'Use our extension to pull JDs and criteria from job boards into ProValuate. The extension will work only in Desktop.',
+    content: 'Extension: pull JDs and criteria from job boards into ProValuate (desktop only).',
     placement: 'bottom',
     disableScrolling: false,
   },
@@ -80,12 +82,12 @@ export function getMainTourSteps(isMobile: boolean): TourStep[] {
   return steps;
 }
 
-// ----- Section tours (contextual, when user opens that section) -----
+// ----- Section tours: short, informative (contextual when user opens section) -----
 
 const SECTION_JOB_UPLOAD: TourStep[] = [
   {
     target: '[data-tour="job-upload-area"]',
-    content: 'Select an existing job description from the dropdown or create one by writing the name of job first and then uploading a file or using the editor. Finally, press process job button to process the job description. Manage and activate JDs using manage JDs button as per your selected plan.',
+    content: 'Pick a JD from the dropdown or create one: enter title, upload file or use editor, then Process. Use Manage JDs to activate per plan.',
     placement: 'bottom',
     disableScrolling: true,
   },
@@ -94,7 +96,7 @@ const SECTION_JOB_UPLOAD: TourStep[] = [
 const SECTION_EVALUATION_CRITERIA: TourStep[] = [
   {
     target: '[data-tour="evaluation-criteria-area"]',
-    content: 'Pick a criteria grid or create one. Add parameters and weights (total 100%), then save. Use Excel upload for bulk setup.',
+    content: 'Select or create a criteria grid. Add parameters and weights (must total 100%). Save. Use Excel upload for bulk.',
     placement: 'bottom',
     disableScrolling: true,
   },
@@ -103,7 +105,7 @@ const SECTION_EVALUATION_CRITERIA: TourStep[] = [
 const SECTION_RESUME_UPLOAD: TourStep[] = [
   {
     target: '[data-tour="resume-upload-area"]',
-    content: 'Choose JD and criteria above, then upload resumes and press the Pro-Valuate button. We score them automatically. Start upload when ready.',
+    content: 'Select JD and criteria above. Upload resumes and click Pro-Valuate to score automatically.',
     placement: 'bottom',
     disableScrolling: true,
   },
@@ -112,7 +114,7 @@ const SECTION_RESUME_UPLOAD: TourStep[] = [
 const SECTION_MATCH_SCORECARD: TourStep[] = [
   {
     target: '[data-tour="match-scorecard-area"]',
-    content: 'View ranked candidates, filter by recommendation, and sort by score. Click a candidate for the full scorecard.',
+    content: 'See ranked candidates. Filter by recommendation, sort by score. Click a row for full scorecard.',
     placement: 'bottom',
     disableScrolling: true,
   },
@@ -121,7 +123,7 @@ const SECTION_MATCH_SCORECARD: TourStep[] = [
 const SECTION_SETTINGS: TourStep[] = [
   {
     target: '[data-tour="settings-user-management"]',
-    content: 'Manage company users and invite new team members. Recharge, change plan, or update billing from here.',
+    content: 'Manage users, invite team. Recharge, change plan, or update billing here.',
     placement: 'bottom',
     disableScrolling: true,
   },
@@ -130,13 +132,54 @@ const SECTION_SETTINGS: TourStep[] = [
 const SECTION_CAREER_PORTAL: TourStep[] = [
   {
     target: '[data-tour="career-portal-company-details"]',
-    content: 'Set your career page slug, logo URL, and vision text. The slug becomes your public URL (e.g. /careers/yourcompany). Click Save to update.',
+    content: 'Set career page slug, logo, and text. Slug = public URL (e.g. /careers/yourcompany). Save to apply.',
     placement: 'bottom',
     disableScrolling: true,
   },
   {
     target: '[data-tour="career-portal-jd-list"]',
-    content: 'Choose default evaluation criteria and toggle "Post on career page" for each job. Only active JDs with both set will appear on your public career page.',
+    content: 'Set default criteria and “Post on career page” per job. Only active JDs with both appear on the public page.',
+    placement: 'top',
+    disableScrolling: true,
+  },
+];
+
+// ----- Interview section tours -----
+
+const SECTION_SETUP: TourStep[] = [
+  {
+    target: '[data-tour="setup-area"]',
+    content: 'Configure interview: pick or create a JD, set duration and question count. Choose AI (dynamic) or Structured (pre-defined questions). Save parameters.',
+    placement: 'bottom',
+    disableScrolling: true,
+  },
+];
+
+const SECTION_AI_INTERVIEW: TourStep[] = [
+  {
+    target: '[data-tour="ai-interview-area"]',
+    content: 'Add candidates (name + email). Pick position and duration. Create interview, then copy link or send email. Use “Send Interview” for reminders.',
+    placement: 'bottom',
+    disableScrolling: true,
+  },
+];
+
+const SECTION_INTERVIEW_DASHBOARD: TourStep[] = [
+  {
+    target: '[data-tour="interview-dashboard-stats"]',
+    content: 'Overview: total, active, completed, terminated. Use “Start New Interview” to create and send a new interview.',
+    placement: 'bottom',
+    disableScrolling: true,
+  },
+  {
+    target: '[data-tour="interview-dashboard-filters"]',
+    content: 'Search by name or email. Filter by status (All, Active, Completed, Terminated).',
+    placement: 'bottom',
+    disableScrolling: true,
+  },
+  {
+    target: '[data-tour="interview-dashboard-area"]',
+    content: 'Sessions list: open a row for details, record decision, send reminder, or copy interview link.',
     placement: 'top',
     disableScrolling: true,
   },
@@ -150,10 +193,10 @@ const SECTION_TOUR_MAP: Record<ActiveSection, TourStep[]> = {
   settings: SECTION_SETTINGS,
   'career-portal': SECTION_CAREER_PORTAL,
   'main-dashboard': [],
-  'interview-creation': [],
-  'ai-interview': [],
-  setup: [],
-  'interview-dashboard': [],
+  'interview-creation': SECTION_AI_INTERVIEW,
+  'ai-interview': SECTION_AI_INTERVIEW,
+  setup: SECTION_SETUP,
+  'interview-dashboard': SECTION_INTERVIEW_DASHBOARD,
 };
 
 export function getSectionTourSteps(section: ActiveSection): TourStep[] {

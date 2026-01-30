@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -314,6 +314,15 @@ const Pricing = () => {
               );
             })
           )}
+
+          {/* One-time plans – coming soon (after Mastery / last plan) */}
+          <Card className="border-2 border-dashed border-emerald-500 flex flex-col opacity-95">
+            <CardContent className="flex-1 flex flex-col items-center justify-center py-12 px-4">
+              <p className="text-lg font-semibold text-gray-900 text-center">
+                One-time plans coming soon
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Features Comparison */}
@@ -389,6 +398,13 @@ const Pricing = () => {
             <p className="text-sm mt-2">
               AI-powered resume evaluation and job matching platform for recruiters
             </p>
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 mt-4 text-sm">
+              <Link to="/privacy" className="text-indigo-600 hover:text-indigo-800">Privacy Policy</Link>
+              <span>|</span>
+              <Link to="/terms" className="text-indigo-600 hover:text-indigo-800">Terms</Link>
+              <span>|</span>
+              <a href="mailto:sales@aitamate.com?subject=ProValuate%20Contact" className="text-indigo-600 hover:text-indigo-800">Contact</a>
+            </div>
           </div>
         </div>
       </footer>

@@ -9,13 +9,17 @@ import {
   CheckCircle,
   XCircle,
   Camera,
-  RotateCcw
+  RotateCcw,
+  Loader2
 } from 'lucide-react';
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
+import { getAdaptiveVideoConstraints } from '@/utils/mediaConstraints';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const CandidateInterview = () => {
   const { interviewId } = useParams();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   
   // State
   const [interviewData, setInterviewData] = useState(null);
@@ -27,6 +31,88 @@ const CandidateInterview = () => {
   const [cameraReady, setCameraReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  // System checks: 'pending' | 'checking' | 'pass' | 'fail'
+  const [browserCheck, setBrowserCheck] = useState<'pending' | 'checking' | 'pass' | 'fail'>('pending');
+  const [cameraMicCheck, setCameraMicCheck] = useState<'pending' | 'checking' | 'pass' | 'fail'>('pending');
+  const [internetCheck, setInternetCheck] = useState<'pending' | 'checking' | 'pass' | 'fail'>('pending');
+  const [permissionsCheck, setPermissionsCheck] = useState<'pending' | 'checking' | 'pass' | 'fail'>('pending');
+
+  // Run system checks step by step when interview data is ready
+  useEffect(() => {
+    if (!interviewData) return;
+
+    let cancelled = false;
+
+    let cameraMicOk = false;
+
+    const runChecks = async () => {
+      // Step 1: Modern web browser
+      setBrowserCheck('checking');
+      await new Promise((r) => setTimeout(r, 400));
+      if (cancelled) return;
+      const hasGetUserMedia = !!(
+        navigator.mediaDevices &&
+        typeof navigator.mediaDevices.getUserMedia === 'function'
+      );
+      setBrowserCheck(hasGetUserMedia ? 'pass' : 'fail');
+      if (!hasGetUserMedia) return;
+      await new Promise((r) => setTimeout(r, 350));
+
+      // Step 2: Camera & microphone permissions (and working devices)
+      setPermissionsCheck('checking');
+      await new Promise((r) => setTimeout(r, 300));
+      if (cancelled) return;
+      try {
+        const constraints = getAdaptiveVideoConstraints({
+          preferMobile: isMobile,
+          preferFrontCamera: isMobile,
+        });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: constraints,
+          audio: true,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        stream.getTracks().forEach((t) => t.stop());
+        cameraMicOk = true;
+        setPermissionsCheck('pass');
+      } catch {
+        setPermissionsCheck('fail');
+      }
+      await new Promise((r) => setTimeout(r, 350));
+
+      // Step 3: Working camera and microphone (verified by getUserMedia in step 2)
+      setCameraMicCheck('checking');
+      await new Promise((r) => setTimeout(r, 400));
+      if (cancelled) return;
+      setCameraMicCheck(cameraMicOk ? 'pass' : 'fail');
+      await new Promise((r) => setTimeout(r, 350));
+
+      // Step 4: Stable internet connection
+      setInternetCheck('checking');
+      await new Promise((r) => setTimeout(r, 300));
+      if (cancelled) return;
+      try {
+        if (!navigator.onLine) {
+          setInternetCheck('fail');
+          return;
+        }
+        const apiUrl = buildApiUrl(API_CONFIG.ENDPOINTS.GET_INTERVIEW);
+        const res = await fetch(`${apiUrl}/${interviewId}`, { method: 'HEAD', cache: 'no-store' });
+        setInternetCheck(res.ok ? 'pass' : 'fail');
+      } catch {
+        setInternetCheck('fail');
+      }
+    };
+
+    runChecks();
+    return () => {
+      cancelled = true;
+    };
+  }, [interviewData, interviewId, isMobile]);
 
   // Load interview data
   useEffect(() => {
@@ -122,11 +208,15 @@ const CandidateInterview = () => {
     }
   }, [interviewId]);
 
-  // Initialize camera for photo capture
+  // Initialize camera for photo capture (adaptive constraints for mobile)
   const initializeCamera = async () => {
     try {
+      const videoConstraints = getAdaptiveVideoConstraints({
+        preferMobile: isMobile,
+        preferFrontCamera: isMobile,
+      });
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 1280, height: 720 },
+        video: videoConstraints,
         audio: false 
       });
       
@@ -173,8 +263,8 @@ const CandidateInterview = () => {
       }
 
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
       
       const ctx = canvas.getContext('2d');
       if (!ctx) return null;
@@ -305,10 +395,10 @@ const CandidateInterview = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center px-3 sm:px-6">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your interview...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
+          <p className="text-base sm:text-lg text-gray-600">Loading your interview...</p>
         </div>
       </div>
     );
@@ -316,14 +406,14 @@ const CandidateInterview = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md mx-4 text-center">
-          <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Interview Not Found</h1>
-          <p className="text-gray-600 mb-6">{error}</p>
+      <div className="min-h-screen bg-white flex items-center justify-center px-3 sm:px-6 py-6">
+        <div className="bg-white rounded-xl shadow-lg p-6 sm:p-8 max-w-md w-full text-center">
+          <XCircle className="w-12 h-12 sm:w-16 sm:h-16 text-red-500 mx-auto mb-4 flex-shrink-0" />
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2 break-words">Interview Not Found</h1>
+          <p className="text-sm sm:text-base text-gray-600 mb-6 break-words">{error}</p>
           <button
             onClick={() => window.history.back()}
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            className="min-h-[44px] px-6 py-3 rounded-lg bg-blue-600 text-white text-sm sm:text-base font-medium hover:bg-blue-700 transition-colors touch-manipulation"
           >
             Go Back
           </button>
@@ -354,118 +444,179 @@ const CandidateInterview = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Unified Card Layout */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-6">
-          {/* Header Section */}
-          <div className="px-6 pt-6 pb-4 border-b border-gray-100">
-            <h1 className="text-3xl font-bold text-gray-800 mb-3">
-              Welcome, {interviewData.candidate_name}!
-            </h1>
-            <div className="flex items-center gap-4 text-gray-600">
-              <span className="flex items-center gap-1 text-sm">
-                <User className="w-4 h-4" />
-                {interviewData.position}
-              </span>
-              <span className="text-gray-300">•</span>
-              <span className="flex items-center gap-1 text-sm">
-                <Clock className="w-4 h-4" />
-                {interviewData.duration_minutes} minutes
-              </span>
-            </div>
+    <div className="min-h-screen bg-white flex flex-col overflow-x-hidden lg:overflow-hidden">
+      {/* Header: light blue, same as Terms / Privacy Policy */}
+      <header className="flex-shrink-0 bg-sky-100 border-b border-sky-200">
+        <div className="max-w-[1800px] mx-auto px-3 sm:px-6 py-2.5 sm:py-3 lg:py-4">
+          <img
+            src="/Logo_Transparent_BG.png"
+            alt="ProValuate"
+            className="h-9 sm:h-10 lg:h-12 w-auto object-contain"
+          />
+        </div>
+      </header>
+
+      {/* Main: on desktop no page scroll; inner area scrolls. On mobile page scrolls. */}
+      <main className="flex-1 flex flex-col min-h-0 w-full overflow-x-hidden lg:overflow-hidden">
+        <div className="flex-1 min-h-0 w-full max-w-[1800px] mx-auto px-3 sm:px-6 lg:px-10 py-3 sm:py-4 lg:py-6 pb-8 sm:pb-6 lg:pb-6 lg:overflow-y-auto overflow-visible">
+        {/* Welcome block */}
+        <section className="mb-6 sm:mb-8 min-w-0">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2 break-words">
+            Welcome, {interviewData.candidate_name}!
+          </h1>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-gray-600 text-sm sm:text-base break-words">
+            <span className="flex items-center gap-1.5">
+              <User className="w-4 h-4 text-gray-500" />
+              {interviewData.position}
+            </span>
+            <span className="text-gray-300" aria-hidden>|</span>
+            <span className="flex items-center gap-1.5">
+              <Clock className="w-4 h-4 text-gray-500" />
+              {interviewData.duration_minutes} minutes
+            </span>
           </div>
+        </section>
 
-          <div className="md:flex">
-            {/* Left Side: Interview Details */}
-            <div className="p-6 md:w-1/2">
-              <h2 className="text-2xl font-semibold text-gray-800 mb-5 flex items-center gap-3">
-                <User className="text-blue-600 w-6 h-6" />
-                Interview Details
-              </h2>
-              
-              {/* Quick Info Grid */}
-              <div className="grid grid-cols-2 gap-3 mb-5">
-                <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                  <Video className="w-4 h-4 text-gray-600" />
-                  <div>
-                    <p className="text-xs text-gray-500">Camera</p>
-                    <p className="text-sm font-medium">Required</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                  <Mic className="w-4 h-4 text-gray-600" />
-                  <div>
-                    <p className="text-xs text-gray-500">Microphone</p>
-                    <p className="text-sm font-medium">Required</p>
-                  </div>
+        {/* Two-column layout: stack on mobile, side-by-side on lg */}
+        <div className="flex flex-col lg:flex-row gap-6 sm:gap-8 lg:gap-12">
+          {/* Left column */}
+          <div className="flex-1 lg:max-w-[50%] order-1 min-w-0">
+            {/* Quick Info Grid */}
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-4 sm:mb-6">
+              <div className="flex items-center gap-2 p-2.5 sm:p-3 bg-gray-50 rounded-lg">
+                <Video className="w-4 h-4 text-gray-600 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-500">Camera</p>
+                  <p className="text-sm sm:text-base font-medium">Required</p>
                 </div>
               </div>
-
-              {/* Instructions */}
-              <div className="mb-6">
-                <h3 className="font-semibold text-gray-800 mb-3 text-base">Instructions</h3>
-                <ul className="space-y-2 text-sm text-gray-700 list-disc list-inside">
-                  <li className="leading-relaxed">Please ensure your camera and microphone are working.</li>
-                  <li className="leading-relaxed">You will be recorded throughout the session.</li>
-                  <li className="leading-relaxed">You need to first capture your photo, as it will be used for results</li>
-                  <li className="leading-relaxed">Without image capture , you cannot start the interview</li>
-                  <li className="leading-relaxed">Find a quiet environment for the interview</li>
-                  <li className="leading-relaxed">Speak clearly when answering questions</li>
-                </ul>
-              </div>
-
-              {/* Custom Instructions */}
-              {interviewData.custom_instructions && (
-                <div className="mb-4">
-                  <h3 className="font-semibold text-gray-800 mb-2 text-sm">Special Instructions</h3>
-                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <p className="text-yellow-800 text-xs">{interviewData.custom_instructions}</p>
-                  </div>
+              <div className="flex items-center gap-2 p-2.5 sm:p-3 bg-gray-50 rounded-lg">
+                <Mic className="w-4 h-4 text-gray-600 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-500">Microphone</p>
+                  <p className="text-sm sm:text-base font-medium">Required</p>
                 </div>
-              )}
-
-              {/* System Requirements */}
-              <div className="mt-6">
-                <h3 className="font-semibold text-gray-800 mb-3 text-base flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-orange-500" />
-                  System Requirements
-                </h3>
-                <ul className="space-y-2 text-sm text-gray-700">
-                  <li className="flex items-start gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0 mt-1.5"></div>
-                    <span className="leading-relaxed">Modern web browser</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0 mt-1.5"></div>
-                    <span className="leading-relaxed">Working camera and microphone</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0 mt-1.5"></div>
-                    <span className="leading-relaxed">Stable internet connection</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0 mt-1.5"></div>
-                    <span className="leading-relaxed">Camera & microphone permissions</span>
-                  </li>
-                </ul>
               </div>
             </div>
 
-            {/* Right Side: Photo Capture */}
-            <div className="p-6 md:w-1/2">
+            {/* Instructions */}
+            <section className="mb-4 sm:mb-6">
+              <h3 className="font-semibold text-gray-900 mb-2 text-sm sm:text-base">Instructions</h3>
+              <ul className="space-y-2 text-sm sm:text-base text-gray-700 list-disc list-inside pl-1 break-words">
+                <li>Capture your photo above first; it is required to start and will be used for your results.</li>
+                <li>Ensure your camera and microphone are working and that you allow access when prompted.</li>
+                <li>The session runs in fullscreen. Do not exit fullscreen or press ESC during the interview, or it will be terminated.</li>
+                <li>Stay on this browser tab; switching tabs can trigger warnings and may end the interview.</li>
+                <li>You will be recorded (video and audio). After the AI asks each question, click &quot;Start Recording&quot;, answer clearly, then submit your answer.</li>
+                <li>Your speech is transcribed live. You can edit the transcript in the on-screen box or open &quot;Full Transcript - Review & Edit&quot; to correct text before submitting each answer.</li>
+                <li>Find a quiet environment and speak clearly for the best transcription and evaluation.</li>
+              </ul>
+            </section>
+
+            {/* Custom Instructions */}
+            {interviewData.custom_instructions && (
+              <section className="mb-4 sm:mb-6">
+                <h3 className="font-semibold text-gray-900 mb-2 text-sm sm:text-base">Special Instructions</h3>
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg min-w-0">
+                  <p className="text-amber-900 text-sm sm:text-base break-words">{interviewData.custom_instructions}</p>
+                </div>
+              </section>
+            )}
+
+            {/* System Requirements */}
+            <section>
+              <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                System Requirements
+              </h3>
+              <ul className="space-y-3 text-sm sm:text-base text-gray-700 break-words">
+                  <li className="flex items-center gap-3 min-w-0">
+                    {browserCheck === 'pending' && (
+                      <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0" />
+                    )}
+                    {browserCheck === 'checking' && (
+                      <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
+                    )}
+                    {browserCheck === 'pass' && (
+                      <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    )}
+                    {browserCheck === 'fail' && (
+                      <XCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                    )}
+                    <span className="leading-relaxed min-w-0">
+                      {browserCheck === 'checking' ? 'Checking browser...' : 'Modern web browser'}
+                    </span>
+                  </li>
+                  <li className="flex items-center gap-3 min-w-0">
+                    {permissionsCheck === 'pending' && (
+                      <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0" />
+                    )}
+                    {permissionsCheck === 'checking' && (
+                      <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
+                    )}
+                    {permissionsCheck === 'pass' && (
+                      <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    )}
+                    {permissionsCheck === 'fail' && (
+                      <XCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                    )}
+                    <span className="leading-relaxed min-w-0">
+                      {permissionsCheck === 'checking' ? 'Checking camera & microphone permissions...' : 'Camera & microphone permissions'}
+                    </span>
+                  </li>
+                  <li className="flex items-center gap-3 min-w-0">
+                    {cameraMicCheck === 'pending' && (
+                      <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0" />
+                    )}
+                    {cameraMicCheck === 'checking' && (
+                      <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
+                    )}
+                    {cameraMicCheck === 'pass' && (
+                      <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    )}
+                    {cameraMicCheck === 'fail' && (
+                      <XCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                    )}
+                    <span className="leading-relaxed">
+                      {cameraMicCheck === 'checking' ? 'Checking camera and microphone...' : 'Working camera and microphone'}
+                    </span>
+                  </li>
+                  <li className="flex items-center gap-3">
+                    {internetCheck === 'pending' && (
+                      <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0" />
+                    )}
+                    {internetCheck === 'checking' && (
+                      <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
+                    )}
+                    {internetCheck === 'pass' && (
+                      <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    )}
+                    {internetCheck === 'fail' && (
+                      <XCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                    )}
+                    <span className="leading-relaxed min-w-0">
+                      {internetCheck === 'checking' ? 'Checking internet connection...' : 'Stable internet connection'}
+                    </span>
+                  </li>
+                </ul>
+              </section>
+            </div>
+
+            {/* Right: Photo Capture */}
+            <div className="flex-1 lg:max-w-[50%] order-2 min-w-0">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2 flex items-center justify-center gap-2">
+                <Camera className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                <span className="break-words">Capture Your Photo</span>
+              </h2>
+              <p className="text-gray-600 text-sm sm:text-base text-center mb-4 break-words">
+                {!photoCaptured
+                  ? 'Position yourself in the frame. Required before starting.'
+                  : 'Review your photo. You can retake if needed.'}
+              </p>
+
               {!photoCaptured ? (
                 <>
-                  <h2 className="text-2xl font-semibold text-gray-800 text-center mb-3">
-                    📸 Capture Your Photo
-                  </h2>
-                  <p className="text-gray-600 text-center mb-5 text-base">
-                    Position yourself in the frame
-                  </p>
-                  
-                  {/* Video Preview */}
-                  <div className="relative bg-gray-200 rounded-xl overflow-hidden mb-4" style={{ aspectRatio: '4/3' }}>
+                  <div className="relative bg-gray-100 rounded-xl overflow-hidden mb-3 sm:mb-4 aspect-video max-h-[40vh] sm:max-h-[50vh] min-h-[180px] sm:min-h-[200px] border border-gray-200">
                     {!cameraReady ? (
                       <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
                         <div className="text-center text-gray-500">
@@ -484,11 +635,11 @@ const CandidateInterview = () => {
                     )}
                   </div>
                   
-                  {/* Capture Button */}
+                  {/* Capture Button - touch-friendly min height */}
                   <button
                     onClick={handleCapturePhoto}
                     disabled={isCapturingPhoto || !cameraReady}
-                    className="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold"
+                    className="w-full min-h-[44px] sm:min-h-[48px] bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm sm:text-base font-semibold touch-manipulation"
                   >
                     <Camera className="w-5 h-5" />
                     {isCapturingPhoto ? 'Capturing...' : 'Capture Photo'}
@@ -496,15 +647,7 @@ const CandidateInterview = () => {
                 </>
               ) : (
                 <>
-                  <h2 className="text-2xl font-semibold text-gray-800 text-center mb-3">
-                    ✅ Photo Captured
-                  </h2>
-                  <p className="text-gray-600 text-center mb-5 text-base">
-                    Review your photo
-                  </p>
-                  
-                  {/* Photo Preview */}
-                  <div className="relative bg-gray-200 rounded-xl overflow-hidden mb-4" style={{ aspectRatio: '4/3' }}>
+                  <div className="relative bg-gray-100 rounded-xl overflow-hidden mb-3 sm:mb-4 aspect-video max-h-[40vh] sm:max-h-[50vh] min-h-[180px] sm:min-h-[200px] border border-gray-200">
                     {capturedPhoto && (
                       <img 
                         src={capturedPhoto} 
@@ -514,10 +657,10 @@ const CandidateInterview = () => {
                     )}
                   </div>
                   
-                  {/* Retake Button */}
+                  {/* Retake Button - touch-friendly min height */}
                   <button
                     onClick={handleRetakePhoto}
-                    className="w-full bg-gray-200 text-gray-800 py-3 rounded-xl hover:bg-gray-300 transition-colors flex items-center justify-center gap-2 font-semibold"
+                    className="w-full min-h-[44px] sm:min-h-[48px] bg-gray-200 text-gray-800 py-3 rounded-xl hover:bg-gray-300 transition-colors flex items-center justify-center gap-2 text-sm sm:text-base font-semibold touch-manipulation"
                   >
                     <RotateCcw className="w-5 h-5" />
                     Retake Photo
@@ -525,29 +668,30 @@ const CandidateInterview = () => {
                 </>
               )}
             </div>
-          </div>
         </div>
 
-        {/* Start Interview Button - Full Width Below Cards */}
-        <button
-          onClick={startInterview}
-          disabled={!photoCaptured}
-          className={`w-full py-5 rounded-xl transition-colors text-xl font-semibold flex items-center justify-center gap-3 ${
-            photoCaptured
-              ? 'bg-green-600 text-white hover:bg-green-700'
-              : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-          }`}
-        >
-          <CheckCircle className="w-6 h-6" />
-          Start Interview
-        </button>
-        
-        <p className="text-sm text-gray-500 mt-3 text-center">
-          {photoCaptured 
-            ? 'Click to begin your interview. Good luck!'
-            : 'Please capture your photo first to continue'}
-        </p>
-      </div>
+        {/* Primary CTA */}
+        <section className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200">
+          <button
+            onClick={startInterview}
+            disabled={!photoCaptured}
+            className={`w-full min-h-[48px] py-3 rounded-lg text-sm sm:text-base font-semibold flex items-center justify-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 touch-manipulation ${
+              photoCaptured
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            <CheckCircle className="w-5 h-5 flex-shrink-0" />
+            Start Interview
+          </button>
+          <p className="text-xs sm:text-sm text-gray-500 mt-2 text-center px-1">
+            {photoCaptured
+              ? 'You’re all set. Click above to begin.'
+              : 'Capture your photo above to enable Start Interview.'}
+          </p>
+        </section>
+        </div>
+      </main>
     </div>
   );
 };

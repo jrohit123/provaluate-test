@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import Joyride, { type CallBackProps } from 'react-joyride';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/cv-screening/AppSidebar';
@@ -341,13 +341,13 @@ const Dashboard = () => {
       case 'career-portal':
         return <CareerPortalSection onSectionReady={() => handleSectionReady('career-portal')} />;
       case 'interview-creation':
-        return <HRInterviewCreator />;
+        return <HRInterviewCreator onSectionReady={() => handleSectionReady('ai-interview')} />;
       case 'ai-interview':
-        return <HRInterviewCreator />;
+        return <HRInterviewCreator onSectionReady={() => handleSectionReady('ai-interview')} />;
       case 'setup':
-        return <AIsetup />;
+        return <AIsetup onSectionReady={() => handleSectionReady('setup')} />;
       case 'interview-dashboard':
-        return <InterviewDashboard onSectionChange={setActiveSection} />;
+        return <InterviewDashboard onSectionChange={setActiveSection} onSectionReady={() => handleSectionReady('interview-dashboard')} />;
       case 'settings':
         return <AdminUserManagement onSectionReady={() => handleSectionReady('settings')} />;
       default:
@@ -415,11 +415,11 @@ const Dashboard = () => {
               <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-0 sm:space-x-2">
                 <span>© ProValuate 2025</span>
                 <span className="hidden sm:inline">|</span>
-                <a href="#" className="text-indigo-600 hover:text-indigo-800 transition-colors whitespace-nowrap">Privacy Policy</a>
+                <Link to="/privacy" className="text-indigo-600 hover:text-indigo-800 transition-colors whitespace-nowrap">Privacy Policy</Link>
                 <span className="hidden sm:inline">|</span>
-                <a href="#" className="text-indigo-600 hover:text-indigo-800 transition-colors whitespace-nowrap">Terms</a>
+                <Link to="/terms" className="text-indigo-600 hover:text-indigo-800 transition-colors whitespace-nowrap">Terms</Link>
                 <span className="hidden sm:inline">|</span>
-                <a href="mailto:rj@aitamate.com?&subject=ProValuate&body=Hi,%0D%0A%0D%0AI'd like to know more about ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors whitespace-nowrap">Contact</a>
+                <a href="mailto:sales@aitamate.com?&subject=ProValuate&body=Hi,%0D%0A%0D%0AI'd like to know more about ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors whitespace-nowrap">Contact</a>
                 <span className="hidden sm:inline">|</span>
                 <span className="whitespace-nowrap">Powered by <a href="http://aitamate.com" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-700">aitamate</a></span>
               </div>

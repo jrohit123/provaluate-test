@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { buildApiUrl } from '@/constants/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -156,14 +156,14 @@ export default function CompanyCareerPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Same header style as dashboard: blue bar with logo */}
-      <header className="bg-[#1e5da8] border-b pl-0 pr-3 sm:pr-6 py-0 h-14 sm:h-16 flex items-center justify-start gap-2 sm:gap-4">
-        <div className="flex items-center h-full">
+      {/* Same light blue header as Privacy Policy / Terms */}
+      <header className="bg-sky-100 border-b border-sky-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-start gap-2 sm:gap-4">
+        <div className="flex items-center h-16 sm:h-20">
           {company.career_logo_url && (
             <img
               src={company.career_logo_url}
               alt=""
-              className="h-full w-auto max-h-14 sm:max-h-16 flex-shrink-0 object-contain"
+              className="h-full w-auto max-h-16 sm:max-h-20 flex-shrink-0 object-contain"
             />
           )}
         </div>
@@ -258,7 +258,15 @@ export default function CompanyCareerPage() {
         )}
       </main>
       <footer className="border-t mt-8 sm:mt-12 py-4 px-4 sm:px-6 lg:px-8 text-center text-xs text-gray-500">
-        Powered by ProValuate
+        <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+          <Link to="/privacy" className="text-indigo-600 hover:text-indigo-800">Privacy Policy</Link>
+          <span>|</span>
+          <Link to="/terms" className="text-indigo-600 hover:text-indigo-800">Terms</Link>
+          <span>|</span>
+          <a href="mailto:sales@aitamate.com?subject=ProValuate%20Contact" className="text-indigo-600 hover:text-indigo-800">Contact</a>
+          <span>|</span>
+          <span>Powered by ProValuate</span>
+        </div>
       </footer>
     </div>
   );

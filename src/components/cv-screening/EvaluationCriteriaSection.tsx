@@ -600,7 +600,7 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
                       <Input
                         value={criteria.parameter}
                         onChange={(e) => updateCriteria(criteria.id, 'parameter', e.target.value)}
-                        className="font-medium text-sm bg-transparent border border-primary-100 focus:bg-white focus:border-primary-300 h-10"
+                        className="font-medium text-base bg-transparent border border-primary-100 focus:bg-white focus:border-primary-300 h-10"
                       />
                     </div>
                     <div className="space-y-2">
@@ -612,7 +612,7 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
                           type="number"
                           value={criteria.weightage}
                           onChange={(e) => updateCriteria(criteria.id, 'weightage', parseInt(e.target.value) || 0)}
-                          className="w-24 h-10 text-sm text-center bg-primary-50 border border-primary-200"
+                          className="w-24 h-10 text-base text-center bg-primary-50 border border-primary-200"
                           min="0"
                           max="100"
                         />
@@ -634,7 +634,7 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
                       <Input
                         value={criteria.notes}
                         onChange={(e) => updateCriteria(criteria.id, 'notes', e.target.value)}
-                        className="text-sm text-muted-foreground bg-transparent border border-primary-100 focus:bg-white focus:border-primary-300 h-10"
+                        className="text-base text-muted-foreground bg-transparent border border-primary-100 focus:bg-white focus:border-primary-300 h-10"
                         placeholder="Add description..."
                       />
                     </div>
@@ -660,7 +660,7 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
                         <Input
                           value={criteria.parameter}
                           onChange={(e) => updateCriteria(criteria.id, 'parameter', e.target.value)}
-                          className="font-medium text-sm bg-transparent border border-primary-100 focus:bg-white focus:border-primary-300"
+                          className="font-medium text-base bg-transparent border border-primary-100 focus:bg-white focus:border-primary-300"
                         />
                       </td>
                       <td className="px-4 py-3">
@@ -669,7 +669,7 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
                             type="number"
                             value={criteria.weightage}
                             onChange={(e) => updateCriteria(criteria.id, 'weightage', parseInt(e.target.value) || 0)}
-                            className="w-20 h-9 text-sm text-center bg-primary-50 border border-primary-200"
+                            className="w-20 h-9 text-base text-center bg-primary-50 border border-primary-200"
                             min="0"
                             max="100"
                           />
@@ -761,7 +761,7 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
                 placeholder="Name your criteria (e.g., 'Software Engineer Evaluation')"
                 value={gridName}
                 onChange={(e) => setGridName(e.target.value)}
-                className="flex-1 h-11 sm:h-10 text-sm"
+                className="flex-1 h-11 sm:h-10 text-base"
               />
               <Button 
                 onClick={handleSaveCriteria} 

@@ -25,6 +25,12 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
+import { useInterviewCurrentStep, useInterviewNavigateToStep, INTERVIEW_WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
+
+interface HRInterviewCreatorProps {
+  onSectionReady?: () => void;
+}
 
 interface Candidate {
   name: string;
@@ -64,10 +70,12 @@ interface CustomParameters {
   [key: string]: CustomParameter;
 }
 
-const HRInterviewCreator = () => {
+const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+  const interviewCurrentStep = useInterviewCurrentStep();
+  const interviewNavigateToStep = useInterviewNavigateToStep();
   
   const [formData, setFormData] = useState<FormData>({
     candidates: [{ name: '', email: '' }],
@@ -1099,7 +1107,21 @@ const HRInterviewCreator = () => {
     });
   };
 
+  useEffect(() => {
+    const t = setTimeout(() => onSectionReady?.(), 500);
+    return () => clearTimeout(t);
+  }, [onSectionReady]);
+
   return (
+    <div className="min-h-screen">
+      <div className="lg:hidden">
+        <CompactStepProgress
+          current={interviewCurrentStep}
+          total={INTERVIEW_WORKFLOW_STEPS.length}
+          steps={INTERVIEW_WORKFLOW_STEPS}
+          onStepClick={interviewNavigateToStep}
+        />
+      </div>
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       <div className="mb-4 sm:mb-6">
         <h2 className="text-xl sm:text-2xl font-bold text-primary-800 mb-2">Final Overview</h2>
@@ -1107,7 +1129,7 @@ const HRInterviewCreator = () => {
       </div>
 
       {/* Interview Configuration Section */}
-      <Card className="animate-fade-in">
+      <Card className="animate-fade-in" data-tour="ai-interview-area">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
@@ -1727,6 +1749,7 @@ const HRInterviewCreator = () => {
           </CardContent>
         </Card>
       )}
+    </div>
     </div>
   );
 };

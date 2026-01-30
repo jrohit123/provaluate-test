@@ -49,6 +49,8 @@ declare global {
 }
 import { useTimer } from '@/hooks/useTimer';
 import { useCountdownTimer } from '@/hooks/useCountdownTimer';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { getAdaptiveVideoConstraints } from '@/utils/mediaConstraints';
 import { API_CONFIG, buildApiUrl, apiCall } from '@/constants/api';
 import { INTERVIEW_CONSTANTS } from '@/constants/interview';
 import { supabase } from '@/integrations/supabase/client';
@@ -61,12 +63,10 @@ import {
   Send,
   Clock,
   User,
-  Bot,
   Volume2,
   VolumeX,
   AlertTriangle,
   Camera,
-  CheckCircle,
   X,
   ChevronUp,
   ChevronDown,
@@ -162,6 +162,7 @@ const createSpeechPattern = (text: string) => {
 const ConversationalInterview = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const interviewData = useMemo(() => location.state || {}, [location.state]);
   
   // State management
@@ -302,14 +303,9 @@ const ConversationalInterview = () => {
 
     // Show only one warning message per tab switch
     if (currentCount <= MAX_TAB_CHANGES) {
-      toast('⚠️ Warning: Stay on this tab during the interview!', {
-        id: 'tab-switch-warning', // Use ID to prevent duplicate toasts
-        icon: '⚠️',
+      toast('Warning: Stay on this tab during the interview!', {
+        id: 'tab-switch-warning',
         duration: 3000,
-        style: {
-          background: '#fbbf24',
-          color: '#92400e',
-        },
       });
     } else if (currentCount > MAX_TAB_CHANGES) {
       console.log('🚫 Too many tab changes, terminating interview');
@@ -926,7 +922,7 @@ const ConversationalInterview = () => {
     }
     // Camera stream cleanup is handled by videoStreamRef
 
-    toast.success('⏰ Interview time completed! Finishing interview...', { id: 'interview-time-completed', duration: 1500 });
+    toast.success('Interview time completed! Finishing interview...', { id: 'interview-time-completed', duration: 1500 });
 
     // CRITICAL FIX: Immediate finalization with minimal delay
     setTimeout(() => {
@@ -1747,15 +1743,9 @@ const ConversationalInterview = () => {
                setSubmissionStatus('submitted');
                
                // Show brief success toast for user feedback
-               toast.success('✅ Answer submitted successfully!', {
+               toast.success('Answer submitted successfully!', {
                  id: 'answer-submitted',
                  duration: 2000,
-                 style: {
-                   background: '#10B981',
-                   color: 'white',
-                   fontSize: '14px',
-                   fontWeight: '500'
-                 }
                });
                
                // Generate next question immediately (no delays for smooth transition)
@@ -1854,23 +1844,13 @@ const ConversationalInterview = () => {
     }
 
     if (timeRemaining <= 30 && lastInterviewWarningRef.current !== 30) {
-      toast('⚠️ 30 seconds remaining! Please finish your current response.', {
+      toast('30 seconds remaining! Please finish your current response.', {
         id: 'interview-warning-30',
-        icon: '⚠️',
-        style: {
-          background: '#fbbf24',
-          color: '#92400e'
-        }
       });
       lastInterviewWarningRef.current = 30;
     } else if (timeRemaining <= 60 && lastInterviewWarningRef.current !== 60) {
-      toast('⚠️ 1 minute remaining in your interview!', {
+      toast('1 minute remaining in your interview!', {
         id: 'interview-warning-60',
-        icon: '⚠️',
-        style: {
-          background: '#fbbf24',
-          color: '#92400e'
-        }
       });
       lastInterviewWarningRef.current = 60;
     } else if (timeRemaining <= 120 && timeRemaining > 0) {
@@ -1895,24 +1875,13 @@ const ConversationalInterview = () => {
 
     // Prioritize 30-second warning - check this first
     if (questionTimeRemaining <= 30 && lastQuestionWarningRef.current !== 30) {
-      toast('⚠️ Less than 30 seconds remaining! Answer will auto-submit soon.', {
+      toast('Less than 30 seconds remaining! Answer will auto-submit soon.', {
         id: 'question-warning-30',
-        icon: '⚠️',
-        style: {
-          background: '#fbbf24',
-          color: '#92400e'
-        }
       });
       lastQuestionWarningRef.current = 30;
     } else if (questionTimeRemaining > 30 && questionTimeRemaining <= 60 && lastQuestionWarningRef.current !== 60) {
-      // Only show 60-second warning if time is between 30-60 seconds
-      toast('⚠️ 1 minute remaining for this question.', {
+      toast('1 minute remaining for this question.', {
         id: 'question-warning-60',
-        icon: '⚠️',
-        style: {
-          background: '#fbbf24',
-          color: '#92400e'
-        }
       });
       lastQuestionWarningRef.current = 60;
     }
@@ -2089,15 +2058,8 @@ const ConversationalInterview = () => {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.key === 'Escape' || event.keyCode === 27) && isFullscreenRef.current) {
-        toast('🚨 STOP! Pressing ESC will exit fullscreen and terminate your interview!', {
-          icon: '🚨',
+        toast('STOP! Pressing ESC will exit fullscreen and terminate your interview!', {
           duration: 2000,
-          style: {
-            background: '#ef4444',
-            color: '#fff',
-            fontSize: '16px',
-            fontWeight: 'bold',
-          },
         });
 
         if (escTerminateTimeoutRef.current) {
@@ -2130,7 +2092,7 @@ const ConversationalInterview = () => {
       
       // Check if camera permissions are already granted and camera stream is available
       if (!cameraPermissionGranted || !streamRef.current || !isVideoOn) {
-        toast.error('❌ Camera permissions required. Please allow camera access first.');
+        toast.error('Camera permissions required. Please allow camera access first.');
         return;
       }
       
@@ -2153,7 +2115,7 @@ const ConversationalInterview = () => {
       // Get camera video stream (already initialized)
       const cameraStream = streamRef.current;
       if (!cameraStream) {
-        toast.error('❌ Camera stream not available. Please refresh and try again.');
+        toast.error('Camera stream not available. Please refresh and try again.');
         return;
       }
       
@@ -2199,15 +2161,16 @@ const ConversationalInterview = () => {
       console.log('🎬 Combined stream created with video tracks:', combinedStream.getVideoTracks().length);
       console.log('🎤 Combined stream created with audio tracks:', combinedStream.getAudioTracks().length);
       
-      // Create recorder using the combined stream (video + audio)
+      // Create recorder using the combined stream (video + audio); lower presets on mobile
+      const videoBitsPerSecond = isMobile ? 600000 : INTERVIEW_CONSTANTS.MEDIA.VIDEO_BITRATE;
       const questionVideoRecorder = new RecordRTC(combinedStream, {
         type: 'video',
         mimeType: 'video/webm',
         recorderType: RecordRTC.MediaStreamRecorder,
-        quality: 7,                    // Balanced quality for recordings
-        frameRate: 20,                 // Balanced 20fps for smooth recording
+        quality: isMobile ? 4 : 7,
+        frameRate: isMobile ? 15 : 20,
         disableLogs: false,
-        videoBitsPerSecond: INTERVIEW_CONSTANTS.MEDIA.VIDEO_BITRATE,
+        videoBitsPerSecond,
         timeSlice: INTERVIEW_CONSTANTS.MEDIA.TIME_SLICE,
         ondataavailable: function(blob) {
           console.log('🎥 Combined video+audio chunk available:', blob.type, blob.size);
@@ -2270,7 +2233,7 @@ const ConversationalInterview = () => {
       
     } catch (error) {
       console.error('❌ Automatic camera recording start error:', error);
-      toast.error('❌ Failed to start camera recording. Please refresh and try again.');
+      toast.error('Failed to start camera recording. Please refresh and try again.');
     }
   };
   
@@ -2641,8 +2604,12 @@ const ConversationalInterview = () => {
 
   const initializeCamera = useCallback(async () => {
     try {
+      const videoConstraints = getAdaptiveVideoConstraints({
+        preferMobile: isMobile,
+        preferFrontCamera: isMobile,
+      });
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: true, 
+        video: videoConstraints, 
         audio: true 
       });
       
@@ -2671,7 +2638,7 @@ const ConversationalInterview = () => {
       toast.error('Camera access required for interview');
       navigate('/setup');
     }
-  }, [navigate]);
+  }, [navigate, isMobile]);
 
   // Capture candidate photo from video stream
   const captureCandidatePhoto = useCallback(async (): Promise<string | null> => {
@@ -2784,13 +2751,8 @@ const ConversationalInterview = () => {
       setFullscreenAttempts(attempts);
 
       if (attempts < 3) {
-        toast('⚠️ Please allow fullscreen for the interview', {
-          icon: '⚠️',
+        toast('Please allow fullscreen for the interview', {
           duration: 4000,
-          style: {
-            background: '#fbbf24',
-            color: '#92400e',
-          },
         });
       } else {
         toast.error('Fullscreen is required. Interview will be terminated.');
@@ -2998,13 +2960,13 @@ const ConversationalInterview = () => {
               setQuestionVideoBlob(videoBlob);
               videoBlobRetrieved = true;
               console.log('✅ Camera video blob set successfully');
-              toast.success(`✅ Camera recording saved! (${(videoBlob.size / 1024 / 1024).toFixed(1)} MB)`);
+              toast.success(`Camera recording saved! (${(videoBlob.size / 1024 / 1024).toFixed(1)} MB)`);
             } else {
               console.log('❌ Video blob is empty or null');
             }
           } catch (blobError) {
             console.error('❌ Error getting video blob:', blobError);
-            toast.error('❌ Error processing video recording');
+            toast.error('Error processing video recording');
           }
         });
       } catch (stopError) {
@@ -3054,9 +3016,13 @@ const ConversationalInterview = () => {
 
   const toggleVideo = async () => {
     if (!isVideoOn) {
-      // Try to turn camera back on
+      // Try to turn camera back on (adaptive constraints for mobile)
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const videoConstraints = getAdaptiveVideoConstraints({
+          preferMobile: isMobile,
+          preferFrontCamera: isMobile,
+        });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
@@ -3081,167 +3047,59 @@ const ConversationalInterview = () => {
 
   if (isCreatingInterview) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto mb-6"></div>
-          <h2 className="text-2xl font-bold text-white mb-4">Creating Your Interview</h2>
-          <p className="text-gray-300 text-lg">Setting up your conversational interview session...</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-6"></div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Creating Your Interview</h2>
+          <p className="text-gray-600 text-lg">Setting up your conversational interview session...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 relative overflow-hidden">
-      {/* Header */}
-      <div className="glass border-b border-white/10 relative z-10">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  <div className="w-8 h-8 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-lg flex items-center justify-center animate-pulse shadow-lg">
-                    <Bot className="w-4 h-4 text-white" />
-                  </div>
-                </div>
-                <div>
-                  <h1 className="font-semibold text-white">PROVALUATE AI INTERVIEW</h1>
-                  <p className="text-xs text-gray-400">Live AI Assistant Interview Session</p>
-                </div>
-              </div>
-              
-              <div className="hidden lg:flex items-center gap-8 text-sm">
-                <div className="flex items-center gap-3 text-gray-200">
-                  <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
-                    <User className="w-4 h-4 text-white" />
-                  </div>
-                  <div>
-                    <div className="font-semibold">{interviewData.candidateName}</div>
-                    <div className="text-xs text-gray-400">Candidate</div>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-3 text-gray-200">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 ${
-                    timeRemaining <= 60 
-                      ? 'bg-gradient-to-r from-red-500 to-red-600 animate-pulse' 
-                      : timeRemaining <= 120 
-                        ? 'bg-gradient-to-r from-yellow-500 to-orange-500' 
-                        : 'bg-gradient-to-r from-green-500 to-emerald-500'
-                  }`}>
-                    <Clock className="w-4 h-4 text-white" />
-                  </div>
-                  <div>
-                    <div className={`font-semibold transition-all duration-300 ${
-                      timeRemaining <= 60 
-                        ? 'text-red-300 animate-pulse' 
-                        : timeRemaining <= 120 
-                          ? 'text-yellow-300' 
-                          : 'text-white'
-                    }`}>
-                      {formatTime(timeRemaining)}
-                    </div>
-                    <div className="text-xs text-gray-400">Time Remaining</div>
-                    {/* Time warning indicators */}
-                    {timeRemaining <= 60 && (
-                      <div className="text-xs text-red-400 font-medium animate-pulse">
-                        ⚠️ Time running out!
-                      </div>
-                    )}
-                    {timeRemaining <= 120 && timeRemaining > 60 && (
-                      <div className="text-xs text-yellow-400 font-medium">
-                        ⚠️ Less than 2 minutes
-                      </div>
-                    )}
-                    
-                    {/* Time progress bar */}
-                    <div className="w-full bg-gray-700 rounded-full h-1.5 mt-2">
-                      <div 
-                        className={`h-1.5 rounded-full transition-all duration-300 ${
-                          timeRemaining <= 60 
-                            ? 'bg-red-500' 
-                            : timeRemaining <= 120 
-                              ? 'bg-yellow-500' 
-                              : 'bg-green-500'
-                        }`}
-                        style={{ 
-                          width: `${Math.max(0, (timeRemaining / (interviewData.duration * 60)) * 100)}%` 
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-                  
-                  {/* Answer Timer Display */}
-                  {isAnswerTimerActive && answerTimer > 0 && (
-                    <div className="flex items-center gap-3 text-gray-200">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 ${
-                        answerTimer <= 30 
-                          ? 'bg-gradient-to-r from-red-500 to-red-600 animate-pulse' 
-                          : answerTimer <= 60 
-                            ? 'bg-gradient-to-r from-yellow-500 to-orange-500' 
-                            : 'bg-gradient-to-r from-green-500 to-emerald-500'
-                      }`}>
-                        <Mic className="w-4 h-4 text-white" />
-                      </div>
-                      <div>
-                        <div className="font-semibold text-white">
-                          Recording
-                        </div>
-                        <div className="text-xs text-gray-400">Recording Status</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+    <div className="min-h-screen bg-white relative overflow-x-hidden flex flex-col">
+      {/* Header - same style as Dashboard (bg #1e5da8) */}
+      <header className="flex-shrink-0 bg-[#1e5da8] border-b relative z-10">
+        <div className="w-full px-3 sm:px-4 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-2 sm:gap-4 w-full">
+            <div className="min-w-0 flex-shrink-0 text-left">
+              <h1 className="text-lg sm:text-xl font-semibold text-white truncate">ProValuate</h1>
+              <p className="text-xs sm:text-sm text-white/90 hidden sm:block">Smart Interview Assessment Platform</p>
             </div>
-            
-            <div className="flex items-center gap-4">
-              {isInterviewTimerActive && (
-                <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs ${
-                  isFullscreen ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full ${
-                    isFullscreen ? 'bg-green-400' : 'bg-red-400 animate-pulse'
-                  }`}></div>
-                  {isFullscreen ? 'Fullscreen' : 'Exit = Terminate'}
-                </div>
-              )}
-              <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs ${
-                connectionStatus === 'connected' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
-              }`}>
-                <div className={`w-2 h-2 rounded-full ${
-                  connectionStatus === 'connected' ? 'bg-green-400' : 'bg-red-400'
-                }`}></div>
-                {connectionStatus === 'connected' ? 'Connected' : 'Disconnected'}
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6 lg:gap-8 text-base sm:text-lg flex-shrink-0">
+              <div className="flex items-center gap-2 sm:gap-3 text-white">
+                <User className="w-5 h-5 sm:w-6 sm:h-6 text-white/90 flex-shrink-0" />
+                <span className="truncate max-w-[140px] sm:max-w-[220px] font-medium">{interviewData.candidateName}</span>
               </div>
-              
-              {/* Mobile Answer Timer Display */}
-              {isRecording && (
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-blue-500/20 text-blue-300">
-                  <Mic className="w-3 h-3" />
-                  <span className="font-medium">Recording</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2 sm:gap-3 text-white">
+                <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-white/90 flex-shrink-0" />
+                <span className={`font-semibold tabular-nums ${
+                  timeRemaining <= 60 ? 'text-red-200 animate-pulse' : timeRemaining <= 120 ? 'text-yellow-200' : ''
+                }`}>
+                  {formatTime(timeRemaining)}
+                </span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Time Warning Banner */}
+      {/* Time Warning Banner - readable on narrow screens */}
       {timeRemaining <= 120 && (
-        <div className={`w-full py-4 px-6 text-center transition-all duration-500 ${
+        <div className={`flex-shrink-0 w-full py-3 sm:py-4 px-4 sm:px-6 text-center transition-all duration-500 ${
           timeRemaining <= 60 
             ? 'bg-gradient-to-r from-red-600 to-red-700 text-white animate-pulse' 
             : 'bg-gradient-to-r from-yellow-600 to-orange-600 text-white'
         }`}>
-          <div className="flex items-center justify-center gap-3">
-            <AlertTriangle className="w-6 h-6" />
-            <div className="font-semibold text-lg">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+            <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+            <div className="font-semibold text-sm sm:text-lg break-words">
               {timeRemaining <= 60 
                 ? '⚠️ INTERVIEW ENDING SOON! Please finish your current response.' 
                 : '⚠️ Less than 2 minutes remaining in your interview!'}
             </div>
-            <AlertTriangle className="w-6 h-6" />
+            <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
           </div>
           {timeRemaining <= 30 && (
             <div className="mt-2 text-sm opacity-90">
@@ -3251,98 +3109,64 @@ const ConversationalInterview = () => {
         </div>
       )}
 
-      {/* Main Interview Interface */}
-      <div className="w-full px-1 py-1 relative z-10">
-                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-1 mb-2">
-          {/* AI Assistant Panel - Question Card */}
-          <div className="lg:col-span-2 glass rounded-2xl p-1 border border-white/10">
-                         <div className="bg-gray-800/50 rounded-xl p-1 h-[450px] flex items-center justify-center relative">
-              {/* Volume Button - Top Right Corner */}
+      {/* Main Interview Interface - fixed height on mobile so no page scroll; full-width camera on mobile */}
+      <div className="flex-1 min-h-0 w-full min-w-0 px-0 py-1 sm:px-1 relative z-10 flex flex-col overflow-hidden bg-white">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-1 mb-1 flex-shrink-0 lg:mb-2">
+          {/* AI Assistant Panel - fixed height on mobile so question never pushes content down */}
+          <div className="lg:col-span-2 rounded-none sm:rounded-2xl overflow-hidden min-h-0 h-[26vh] max-h-[26vh] lg:h-[450px] lg:max-h-none lg:min-h-[450px] w-full">
+            <div className="bg-sky-100 rounded-none sm:rounded-xl p-1 sm:p-1 h-full min-h-0 flex flex-col items-center justify-center relative overflow-hidden">
+              {/* Volume Button - hidden on mobile */}
               <button
                 onClick={toggleAIAudio}
-                className={`absolute top-3 right-3 p-2 rounded-lg transition-colors z-10 backdrop-blur-sm ${
-                  aiAudioEnabled ? 'bg-green-500/30 text-green-300 hover:bg-green-500/40' : 'bg-red-500/30 text-red-300 hover:bg-red-500/40'
-                }`}
+                className="absolute top-3 right-3 min-h-[44px] min-w-[44px] p-2 rounded-lg transition-colors z-20 hidden sm:flex items-center justify-center bg-[#1e5da8]/20 text-[#1e5da8] hover:bg-[#1e5da8]/30"
               >
                 {aiAudioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
               </button>
-              {aiSpeaking && !aiMessage?.includes('Question') ? (
-                <div className="text-center w-full">
-                  {/* Animated AI Speaking - Clean waveform only */}
-                  
-                  {/* Audio Waveform */}
-                  <div className="flex items-end justify-center gap-1 mb-4 h-20">
-                    {[...Array(15)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="w-1.5 bg-gradient-to-t from-blue-400 via-purple-400 to-pink-400 rounded-full transition-all duration-500 ease-in-out"
-                        style={{
-                          height: `${waveformHeights[i] || 42}px`
-                        }}
-                      ></div>
-                    ))}
+              <div className="w-full min-h-0 flex-1 flex items-center justify-center px-2 py-2 overflow-hidden">
+                {aiSpeaking && !aiMessage?.includes('Question') ? (
+                  <div className="text-center w-full">
+                    <div className="flex items-end justify-center gap-1 mb-4 h-20">
+                      {[...Array(15)].map((_, i) => (
+                        <div
+                          key={i}
+                          className="w-1.5 bg-gradient-to-t from-blue-400 to-blue-600 rounded-full transition-all duration-500 ease-in-out"
+                          style={{ height: `${waveformHeights[i] || 42}px` }}
+                        />
+                      ))}
+                    </div>
+                    <div className="text-blue-700 text-base sm:text-lg font-medium mt-4">AI is speaking...</div>
                   </div>
-                  
-                  {/* Speaking Text */}
-                  <div className="text-blue-300 text-lg font-medium mt-4">
-                    🤖 AI is speaking...
+                ) : (
+                  <div className="text-center w-full h-full min-h-0 flex items-center justify-center overflow-y-auto overflow-x-hidden">
+                    {!isWelcomeMessage && (
+                      <div className="inline-block text-left bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 w-full max-w-full my-auto">
+                        <p
+                          className="text-gray-900 font-medium leading-relaxed break-words text-base sm:text-lg"
+                        >
+                          {aiMessage}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ) : (
-                <div className="text-center w-full">
-                   {/* Submission Status Indicator */}
-                   {answerSubmitted && (
-                     <div className="bg-green-600/20 border border-green-500/30 rounded-lg p-3 mb-3 animate-pulse">
-                       <div className="flex items-center gap-2">
-                         <div className="w-2 h-2 bg-green-400 rounded-full animate-ping"></div>
-                         <p className="text-green-300 text-sm font-medium">✅ Answer submitted successfully! Moving to next question...</p>
-                       </div>
-                     </div>
-                   )}
-
-                   {/* AI Message - clean during question reading */}
-                   {!isWelcomeMessage && (
-                     <div className="bg-gray-700/50 rounded-lg p-3 mb-3">
-                       <p className="text-white text-lg font-medium leading-relaxed">{aiMessage}</p>
-                     </div>
-                   )}
-                   
-                   {/* Status Indicator - only show when AI is not speaking */}
-                   {!aiSpeaking && (
-                     <div className="flex items-center justify-center gap-2 mb-3">
-                       <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                       <p className="text-gray-300 text-sm">Ready to speak</p>
-                     </div>
-                   )}
-                   
-                   {/* Auto-start interview */}
-                   {!hasSpokenWelcomeRef.current && !aiSpeaking && (
-                     <div className="text-center">
-                       <div className="animate-pulse">
-                         <div className="w-4 h-4 bg-blue-400 rounded-full mx-auto mb-2"></div>
-                         <p className="text-blue-300 text-sm">Starting interview automatically...</p>
-                       </div>
-                     </div>
-                   )}
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Candidate Panel - Camera Video Card */}
-          <div className="lg:col-span-3 glass rounded-2xl p-1 border border-white/10">
-                         <div className="bg-gray-800/50 rounded-xl p-1 h-[450px] flex items-center justify-center overflow-hidden relative border border-gray-600/30">
-              {/* Camera Button - Top Right Corner */}
+          {/* Candidate Panel - Camera Video Card - full width on mobile, fixed height */}
+          <div className="lg:col-span-3 rounded-none sm:rounded-2xl overflow-hidden min-h-0 h-[26vh] max-h-[26vh] lg:h-[450px] lg:max-h-none lg:min-h-[450px] w-full">
+            <div className="bg-white rounded-none sm:rounded-xl p-0 sm:p-1 h-full min-h-0 w-full flex items-center justify-center overflow-hidden relative aspect-video lg:aspect-auto">
+              {/* Camera Button - hidden on mobile */}
               <button
                 onClick={toggleVideo}
-                className="absolute top-3 right-3 p-2 rounded-lg transition-colors z-20 backdrop-blur-sm bg-red-500/30 text-red-300 hover:bg-red-500/40"
+                className="absolute top-3 right-3 min-h-[44px] min-w-[44px] p-2 rounded-lg transition-colors z-20 hidden sm:flex items-center justify-center bg-[#1e5da8]/20 text-[#1e5da8] hover:bg-[#1e5da8]/30"
               >
                 {isVideoOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
               </button>
               
               {/* Camera Required Warning - Top Left Corner */}
               {!isVideoOn && (
-                <div className="absolute top-3 left-3 flex items-center gap-1 px-2 py-1 bg-red-500/30 text-red-300 rounded-full text-xs z-20 backdrop-blur-sm">
+                <div className="absolute top-3 left-3 flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs z-20">
                   <AlertTriangle className="w-3 h-3" />
                   Camera Required
                 </div>
@@ -3353,10 +3177,8 @@ const ConversationalInterview = () => {
                     ref={videoRef}
                     autoPlay
                     muted
-                    
                     playsInline
-                    className="w-full h-full object-cover rounded-lg shadow-2xl transform scale-105 hover:scale-110 transition-transform duration-300"
-                    style={{ height: '430px', width: '100%' }}
+                    className="w-full h-full min-h-[180px] object-cover rounded-none sm:rounded-lg shadow-md lg:transform lg:scale-105 lg:hover:scale-110 transition-transform duration-300"
                   />
                   
                   {/* Countdown Overlay */}
@@ -3370,138 +3192,75 @@ const ConversationalInterview = () => {
                 </>
               ) : (
                 <div className="text-center">
-                  <VideoOff className="w-16 h-16 text-red-400 mx-auto mb-4" />
-                  <p className="text-red-300 font-medium">Camera is required</p>
-                  <p className="text-gray-400 text-sm">Please turn on your camera to continue</p>
+                  <VideoOff className="w-16 h-16 text-red-500 mx-auto mb-4" />
+                  <p className="text-red-700 font-medium">Camera is required</p>
+                  <p className="text-gray-500 text-sm">Please turn on your camera to continue</p>
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Real-time Editable Transcription Card - Full Width */}
-        <div className={`glass rounded-xl p-2 border transition-all duration-300 mb-2 ${
-          aiSpeaking
-            ? 'border-blue-500/30 bg-blue-900/10'
-            : answerSubmitted 
-              ? 'border-gray-600/30 bg-gray-800/30'
-              : 'border-green-500/30 bg-green-900/10'
-        }`}>
-          {/* Header with expand/collapse controls */}
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full animate-pulse ${
-                aiSpeaking
-                  ? 'bg-blue-400'
-                  : answerSubmitted 
-                    ? 'bg-gray-400'
-                    : 'bg-green-400'
-              }`} />
-              <span className={`text-xs font-medium ${
-                aiSpeaking
-                  ? 'text-blue-300'
-                    : answerSubmitted 
-                      ? 'text-gray-400'
-                      : 'text-green-300'
-              }`}>
-                {aiSpeaking
-                  ? '🎤 AI Speaking - Locked'
-                    : answerSubmitted 
-                      ? '✅ Answer Submitted'
-                      : recordingCountdown > 0
-                        ? '⏱️ Get Ready - Editable'
-                        : isRecording
-                          ? '🎙️ Recording - Editable'
-                          : '✏️ Editable'
-                }
-              </span>
-            </div>
-            <button
-              onClick={() => setIsTranscriptDialogOpen(true)}
-              className="p-1 rounded-lg transition-all duration-200 bg-gray-700/50 text-gray-400 hover:bg-gray-700/70"
-              title="View full transcript"
-            >
-              <Maximize2 className="w-3 h-3" />
-            </button>
-          </div>
-          
+        {/* Transcription - flex-shrink-0 so it never pushes buttons off screen on mobile */}
+        <div className="relative mb-1 flex-shrink-0">
           <textarea
             ref={transcriptTextareaRef}
             value={transcript}
             onChange={(e) => {
-              // Allow editing during countdown, recording, and answer period (not submitted, and AI not speaking)
               if (!answerSubmitted && !aiSpeaking) {
                 setTranscript(e.target.value);
               }
             }}
             placeholder="Start speaking to see real-time transcription here..."
             disabled={answerSubmitted || aiSpeaking}
-            className={`w-full rounded-lg p-3 transition-all duration-300 text-sm leading-relaxed resize-none ${
+            className={`w-full rounded-xl p-3 pr-12 transition-all duration-300 text-base sm:text-lg leading-relaxed resize-none bg-sky-100 border border-sky-200 text-black placeholder:text-black ${
               aiSpeaking
-                ? 'bg-gray-900/70 text-gray-300 cursor-not-allowed border border-blue-500/20'
+                ? 'cursor-not-allowed opacity-90'
                 : answerSubmitted 
-                  ? 'bg-gray-900/50 text-gray-400 cursor-not-allowed border border-gray-600/20'
-                  : 'bg-gray-800/50 text-white cursor-text border border-gray-600/30 focus:border-green-500/50 focus:outline-none focus:ring-2 focus:ring-green-500/20'
-            } min-h-[140px] max-h-[180px]`}
-            style={{
-              fontFamily: 'inherit',
-              opacity: aiSpeaking ? 0.7 : answerSubmitted ? 0.5 : 1
-            }}
+                  ? 'cursor-not-allowed opacity-80'
+                  : 'cursor-text focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200'
+            } min-h-[90px] max-h-[120px] sm:min-h-[140px] sm:max-h-[180px]`}
+            style={{ fontFamily: 'inherit' }}
           />
+          <button
+            onClick={() => setIsTranscriptDialogOpen(true)}
+            className="absolute top-3 right-3 min-h-[36px] min-w-[36px] p-1.5 rounded-lg bg-sky-200 text-sky-800 hover:bg-sky-300 flex items-center justify-center transition-colors"
+            title="View full transcript"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Transcript Dialog */}
+        {/* Transcript Dialog - solid, no transparency */}
         <Dialog open={isTranscriptDialogOpen} onOpenChange={setIsTranscriptDialogOpen}>
-          <DialogContent className={`max-w-4xl max-h-[80vh] overflow-hidden ${
-            aiSpeaking
-              ? 'border-blue-500/30 bg-blue-900/10'
-              : answerSubmitted 
-                ? 'border-gray-600/30 bg-gray-800/30'
-                : 'border-green-500/30 bg-green-900/10'
-          }`}>
+          <DialogContent className="w-[95vw] max-w-4xl max-h-[80vh] overflow-hidden bg-white border border-sky-200 shadow-xl">
             <DialogHeader>
-              <DialogTitle className={`${
-                aiSpeaking
-                  ? 'text-blue-300'
-                  : answerSubmitted 
-                    ? 'text-gray-400'
-                    : 'text-green-300'
-              }`}>Full Transcript - Review & Edit</DialogTitle>
+              <DialogTitle className="text-gray-900">Full Transcript - Review & Edit</DialogTitle>
             </DialogHeader>
-            <div className="p-4">
+            <div className="p-4 bg-white border border-sky-200 rounded-lg">
               <textarea
                 value={transcript}
                 onChange={(e) => {
-                  // Allow editing during countdown, recording, and answer period (not submitted, and AI not speaking)
                   if (!answerSubmitted && !aiSpeaking) {
                     setTranscript(e.target.value);
                   }
                 }}
                 disabled={answerSubmitted || aiSpeaking}
-                className={`w-full rounded-lg p-4 transition-all duration-300 text-sm leading-relaxed resize-none ${
+                className={`w-full rounded-lg p-4 transition-all duration-300 text-base sm:text-lg leading-relaxed resize-none bg-sky-100 border border-sky-200 text-black placeholder:text-black ${
                   aiSpeaking
-                    ? 'bg-gray-900/70 text-gray-300 cursor-not-allowed border border-blue-500/20'
+                    ? 'cursor-not-allowed opacity-90'
                     : answerSubmitted 
-                      ? 'bg-gray-900/50 text-gray-400 cursor-not-allowed border border-gray-600/20'
-                      : 'bg-gray-800/50 text-white cursor-text border border-gray-600/30 focus:border-green-500/50 focus:outline-none focus:ring-2 focus:ring-green-500/20'
+                      ? 'cursor-not-allowed opacity-80'
+                      : 'cursor-text focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200'
                 } min-h-[400px] max-h-[500px]`}
-                style={{
-                  fontFamily: 'inherit',
-                  opacity: aiSpeaking ? 0.7 : answerSubmitted ? 0.5 : 1
-                }}
+                style={{ fontFamily: 'inherit' }}
               />
-              <div className={`mt-3 text-xs text-center ${
-                aiSpeaking
-                  ? 'text-blue-300'
-                  : answerSubmitted 
-                    ? 'text-gray-400'
-                    : 'text-green-300'
-              }`}>
+              <div className="mt-3 text-xs text-center text-black">
                 {aiSpeaking
-                  ? '🎤 AI is speaking. Transcript will be editable during your answer.'
+                  ? 'AI is speaking. Transcript will be editable during your answer.'
                   : answerSubmitted 
-                    ? '📋 Answer has been submitted.'
-                    : '✏️ You can edit your transcript in this expanded view.'
+                    ? 'Answer has been submitted.'
+                    : 'You can edit your transcript in this expanded view.'
                 }
               </div>
             </div>
@@ -3512,128 +3271,55 @@ const ConversationalInterview = () => {
 
 
 
-                 {/* Instructions */}
-         <div className="glass rounded-2xl p-4 border border-white/10 mb-6">
-           <div className="text-center">
-              {!cameraPermissionGranted ? (
-                <div className="text-blue-300 text-sm transition-all duration-500 ease-in-out">
-                  <p>🎥 Setting up camera access for interview...</p>
-                  <div className="mt-2 text-xs text-gray-400">
-                    Camera access is required and will be requested automatically
-                  </div>
-                </div>
-              ) : recordingCountdown > 0 ? (
-                <div className="text-blue-300 text-sm transition-all duration-500 ease-in-out">
-                  <p>🎥 Recording will start in {recordingCountdown}...</p>
-                  <div className="mt-1 text-xs text-gray-400">
-                    {/*Get ready to answer the question*/}
-                  </div>
-                </div>
-              ) : !questionFinishedSpeaking && !isRecording ? (
-                <div className="text-gray-300 text-sm transition-all duration-500 ease-in-out">
-                  {/*<p>🎤 Listen carefully to the question...</p>*/}
-                </div>
-              ) : questionFinishedSpeaking && !isRecording ? (
-               <div className="text-green-300 text-sm transition-all duration-500 ease-in-out">
-                 <div>
-                   <p>✅ Question finished! Click "Start Recording" to begin recording your answer.</p>
-                   <div className="mt-2 text-xs text-green-400">
-                     🎥 Camera access already granted - ready to record
-                   </div>
+                 {/* Reserved space for question timer - flex-shrink-0; smaller on mobile so buttons stay visible */}
+         <div className="min-h-[60px] sm:min-h-[120px] mb-1 flex-shrink-0 flex items-center justify-center">
+           {isRecording && isQuestionTimerActive && questionTimeRemaining > 0 && (
+             <div className="w-full max-w-2xl mx-auto">
+               <div className="flex items-center justify-between mb-2">
+                 <div className="flex items-center gap-2">
+                   <Clock className="w-4 h-4 text-sky-500" />
+                   <span className="text-sm font-medium text-sky-600">
+                     Question Time: {formatTime(questionTimeRemaining)} / {formatTime(currentQuestionMaxTime)}
+                   </span>
                  </div>
+                 <span className="text-xs text-sky-600">
+                   {Math.round((questionTimeRemaining / currentQuestionMaxTime) * 100)}% remaining
+                 </span>
                </div>
-             ) : isRecording ? (
-               <div>
-                 {/* Original Long Timer Bar */}
-                 {isQuestionTimerActive && questionTimeRemaining > 0 && (
-                   <div className="mt-2 w-full max-w-2xl mx-auto">
-                     <div className="flex items-center justify-between mb-2">
-                       <div className="flex items-center gap-2">
-                         <Clock className={`w-4 h-4 ${
-                           questionTimeRemaining <= 30 
-                             ? 'text-red-400' 
-                             : questionTimeRemaining <= 60 
-                               ? 'text-yellow-400' 
-                               : 'text-green-400'
-                         }`} />
-                         <span className={`text-sm font-medium ${
-                           questionTimeRemaining <= 30 
-                             ? 'text-red-400' 
-                             : questionTimeRemaining <= 60 
-                               ? 'text-yellow-400' 
-                               : 'text-green-400'
-                         }`}>
-                           Question Time: {formatTime(questionTimeRemaining)} / {formatTime(currentQuestionMaxTime)}
-                         </span>
-                       </div>
-                       <span className="text-xs text-gray-500">
-                         {Math.round((questionTimeRemaining / currentQuestionMaxTime) * 100)}% remaining
-                       </span>
-                     </div>
-                     
-                     {/* Progress Bar */}
-                     <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                       <div 
-                         className={`h-full transition-all duration-1000 ease-linear ${
-                           questionTimeRemaining <= 30 
-                             ? 'bg-gradient-to-r from-red-500 to-red-600 animate-pulse' 
-                             : questionTimeRemaining <= 60 
-                               ? 'bg-gradient-to-r from-yellow-500 to-yellow-600' 
-                               : 'bg-gradient-to-r from-green-500 to-green-600'
-                         }`}
-                         style={{ 
-                           width: `${(questionTimeRemaining / currentQuestionMaxTime) * 100}%`,
-                           transition: 'width 1s linear'
-                         }}
-                       ></div>
-                     </div>
-                     
-                     {/* Warning Messages */}
-                     {questionTimeRemaining <= 30 && (
-                       <div className="mt-2 text-red-400 text-sm font-medium animate-pulse flex items-center gap-2">
-                         <AlertTriangle className="w-4 h-4" />
-                         ⚠️ Time running out! Answer will auto-submit in {questionTimeRemaining} seconds
-                       </div>
-                     )}
-                     {questionTimeRemaining <= 60 && questionTimeRemaining > 30 && (
-                       <div className="mt-2 text-yellow-400 text-sm font-medium flex items-center gap-2">
-                         <AlertTriangle className="w-4 h-4" />
-                         ⚠️ Less than 1 minute remaining for this question
-                       </div>
-                     )}
-                   </div>
-                 )}
+               <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                 <div 
+                   className="h-full transition-all duration-1000 ease-linear bg-gradient-to-r from-sky-500 to-sky-600"
+                   style={{ 
+                     width: `${(questionTimeRemaining / currentQuestionMaxTime) * 100}%`,
+                     transition: 'width 1s linear'
+                   }}
+                 />
                </div>
-             ) : answerSubmitted ? (
-               <div className="text-green-300 text-sm">
-                 <div className="text-center">
-                   <div className="w-16 h-16 bg-green-500/20 rounded-full mx-auto mb-3 flex items-center justify-center">
-                     <CheckCircle className="w-8 h-8 text-green-400" />
-                   </div>
-                   <p className="text-lg font-semibold text-green-300 mb-2">✅ Answer Submitted Successfully!</p>
-                   <p className="text-sm text-green-200">
-                     {isGeneratingQuestion ? 'Generating next question...' : 'Loading next question...'}
-                   </p>
-                   <div className="mt-3 flex justify-center">
-                     <div className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div>
-                   </div>
+               {questionTimeRemaining <= 30 && (
+                 <div className="mt-2 text-sky-600 text-sm font-medium animate-pulse">
+                   Time running out! Answer will auto-submit in {questionTimeRemaining} seconds
                  </div>
-               </div>
-             ) : null}
-           </div>
+               )}
+               {questionTimeRemaining <= 60 && questionTimeRemaining > 30 && (
+                 <div className="mt-2 text-sky-600 text-sm font-medium">
+                   Less than 1 minute remaining for this question
+                 </div>
+               )}
+             </div>
+           )}
          </div>
 
 
 
-                 {/* Controls */}
-         <div className="flex items-center justify-center gap-4">
+                 {/* Controls - flex-shrink-0 so always visible; no page scroll needed */}
+         <div className="flex flex-shrink-0 flex-wrap items-center justify-center gap-3 sm:gap-4 py-2 sm:py-3 lg:py-0 lg:pb-2 bg-white border-t border-gray-200 px-2 sm:-mx-1 sm:px-2">
            
                                            {/* Stop Recording Button - only show when recording */}
              {isRecording && (
                <button
                  onClick={stopQuestionRecording}
                  disabled={!isVideoOn || isSubmitting}
-                 className="flex items-center gap-2 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-all duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                 className="flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-6 py-3 bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white rounded-xl font-medium transition-all duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
                >
                  <MicOff className="w-5 h-5" />
                  Stop Recording
@@ -3643,16 +3329,12 @@ const ConversationalInterview = () => {
                        <button
               onClick={handleSubmitAnswer}
               disabled={!audioBlob || isSubmitting || !isVideoOn || answerSubmitted}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+              className={`flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-6 py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                 answerSubmitted || submissionStatus === 'submitted'
                   ? 'bg-green-600 text-white cursor-default animate-pulse' 
                   : isSubmitting 
-                    ? submissionStatus === 'uploading' 
-                      ? 'bg-blue-500 text-white cursor-wait'
-                      : submissionStatus === 'processing'
-                        ? 'bg-yellow-500 text-white cursor-wait'
-                        : 'bg-yellow-500 text-white cursor-wait'
-                    : 'bg-green-500 hover:bg-green-600 text-white'
+                    ? 'bg-[#1e5da8]/80 text-white cursor-wait'
+                    : 'bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white'
               }`}
             >
               {isSubmitting ? (
@@ -3680,14 +3362,14 @@ const ConversationalInterview = () => {
             </button>
             
             
-            {/* End Interview Button - always visible */}
+            {/* End Interview Button - same colour as Submit */}
             <button
               onClick={() => {
                 if (window.confirm('Are you sure you want to end the interview? This action cannot be undone.')) {
                   terminateInterview('Manual termination by candidate willingly');
                 }
               }}
-              className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-all"
+              className="flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-6 py-3 bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white rounded-xl font-medium transition-all"
             >
               <X className="w-5 h-5" />
               End Interview
