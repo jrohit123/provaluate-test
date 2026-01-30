@@ -314,6 +314,15 @@ const Pricing = () => {
               );
             })
           )}
+
+          {/* One-time plans – coming soon (after Mastery / last plan) */}
+          <Card className="border-2 border-dashed border-emerald-500 flex flex-col opacity-95">
+            <CardContent className="flex-1 flex flex-col items-center justify-center py-12 px-4">
+              <p className="text-lg font-semibold text-gray-900 text-center">
+                One-time plans coming soon
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Features Comparison */}
