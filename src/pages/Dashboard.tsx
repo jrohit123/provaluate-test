@@ -107,7 +107,7 @@ const Dashboard = () => {
               <span className="hidden sm:inline">|</span>
               <a href="#" className="text-indigo-600 hover:text-indigo-800 transition-colors">Terms</a>
               <span className="hidden sm:inline">|</span>
-              <a href="mailto:rj@aitamate.com?&subject=ProValuate&body=Hi,%0D%0A%0D%0AI'd like to know more about ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors">Contact</a>
+              <a href="mailto:sales@aitamate.com?&subject=ProValuate&body=Hi,%0D%0A%0D%0AI'd like to know more about ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors">Contact</a>
               <span className="hidden sm:inline">|</span>
               <span>Powered by <a href="http://aitamate.com" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-700">aitamate</a></span>
             </div>
