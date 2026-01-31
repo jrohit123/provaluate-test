@@ -833,7 +833,7 @@ const FinalResults = () => {
       
       
       // Add headers with styling
-      const headerRow = overviewSheet.addRow(['FIELD', 'VALUES', 'STATUS']);
+      const headerRow = overviewSheet.addRow(['FIELD', 'VALUES']);
       headerRow.font = { bold: true, size: 12 };
       headerRow.fill = {
         type: 'pattern',
@@ -842,21 +842,19 @@ const FinalResults = () => {
       };
       
       // Add data rows
-      overviewSheet.addRow(['Candidate Name', reportData.interview?.candidate_name || 'N/A', 'Available']);
-      overviewSheet.addRow(['Position Applied', reportData.interview?.position || 'N/A', 'Available']);
+      overviewSheet.addRow(['Candidate Name', reportData.interview?.candidate_name || 'N/A']);
+      overviewSheet.addRow(['Position Applied', reportData.interview?.position || 'N/A']);
       
       // Use the same overall score that the UI displays
       const overallScore = reportData.interview?.overall_score;
       const displayScore = overallScore ? parseFloat(overallScore).toFixed(1) : 'N/A';
       
-      overviewSheet.addRow(['Overall Score', displayScore, 'Available']);
-      overviewSheet.addRow(['Total Questions', reportData.questions?.length || 0, 'Available']);
+      overviewSheet.addRow(['Overall Score', displayScore]);
+      overviewSheet.addRow(['Total Questions', reportData.questions?.length || 0]);
       // Remove Interview Type row - not needed
-      overviewSheet.addRow(['Assessment Date', new Date().toLocaleDateString(), 'Available']);
-      overviewSheet.addRow(['Report Generated', new Date().toLocaleTimeString(), 'Available']);
-      overviewSheet.addRow(['Performance Level', getScoreLabel(reportData.interview?.overall_score || 0), 'Available']);
-      overviewSheet.addRow(['Audio Files', reportData.answers?.filter(a => a.audio_url).length || 0, 'Available']);
-      overviewSheet.addRow(['Video Files', reportData.answers?.filter(a => a.question_video_url).length || 0, 'Available']);
+      overviewSheet.addRow(['Assessment Date', new Date().toLocaleDateString()]);
+      overviewSheet.addRow(['Report generated time', new Date().toLocaleTimeString()]);
+      overviewSheet.addRow(['Performance Level', getScoreLabel(reportData.interview?.overall_score || 0)]);
       
       // 2. PARAMETERS SHEET
       if (reportData.parameters && reportData.parameters.length > 0) {
@@ -940,94 +938,6 @@ const FinalResults = () => {
         });
       }
       
-      // 4. MEDIA FILES SHEET
-      const mediaSheet = workbook.addWorksheet('Media Files');
-      
-      // Add headers with styling
-      const mediaHeaderRow = mediaSheet.addRow(['MEDIA TYPE', 'QUESTION', 'PARAMETER', 'URL', 'STATUS', 'FILE TYPE']);
-      mediaHeaderRow.font = { bold: true, size: 12 };
-      mediaHeaderRow.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFE0E0E0' }
-      };
-      
-      // Add data rows - Group all audio files first, then all video files
-      if (reportData.answers) {
-        // Sort answers by question_order to ensure proper order
-        const sortedAnswers = [...reportData.answers].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
-        
-        // First, add all audio files using question_order matching
-        sortedAnswers.forEach((answer) => {
-          const questionOrder = answer.question_order || 0;
-          const question = reportData.questions?.find(q => (q.question_order || 0) === questionOrder);
-          const parameter = question?.parameter_name || question?.parameter_key || 'N/A';
-          
-          // Only add if we have a valid parameter and audio URL
-          if (answer.audio_url && parameter !== 'N/A') {
-            mediaSheet.addRow(['Audio Recording', questionOrder + 1, parameter, answer.audio_url, 'Available', 'Audio']);
-          }
-        });
-        
-        // Then, add all video files using question_order matching
-        sortedAnswers.forEach((answer) => {
-          const questionOrder = answer.question_order || 0;
-          const question = reportData.questions?.find(q => (q.question_order || 0) === questionOrder);
-          const parameter = question?.parameter_name || question?.parameter_key || 'N/A';
-          
-          // Only add if we have a valid parameter and video URL
-          if (answer.question_video_url && parameter !== 'N/A') {
-            mediaSheet.addRow(['Question Video', questionOrder + 1, parameter, answer.question_video_url, 'Available', 'Video']);
-          }
-        });
-      }
-      
-      // 5. SCORE ANALYSIS SHEET
-      if (reportData.answers && reportData.answers.length > 0) {
-        const analysisSheet = workbook.addWorksheet('Score Analysis');
-        
-        // Add headers with styling
-        const analysisHeaderRow = analysisSheet.addRow(['Q', 'PARAMETER', 'SCORE', 'PERFORMANCE', 'NOTES']);
-        analysisHeaderRow.font = { bold: true, size: 12 };
-        analysisHeaderRow.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFE0E0E0' }
-        };
-        
-        // Use the same overall score that's displayed in the Overview sheet
-        const overallScore = reportData.interview?.overall_score;
-        const averageScore = overallScore ? parseFloat(overallScore) : 0;
-        
-        // Add data rows - only for valid questions using question_order matching
-        // Sort answers by question_order to ensure proper order
-        const sortedAnswers = [...reportData.answers].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
-        
-        sortedAnswers.forEach((answer) => {
-          const questionOrder = answer.question_order || 0;
-          const question = reportData.questions?.find(q => (q.question_order || 0) === questionOrder);
-          const parameter = question?.parameter_name || question?.parameter_key || 'N/A';
-          const score = answer.score || 0;
-          
-          // Only add if we have a valid parameter (not N/A)
-          if (parameter !== 'N/A') {
-            let performance = 'Needs Improvement';
-            if (score >= 8) performance = 'Excellent';
-            else if (score >= 6) performance = 'Good';
-            else if (score >= 4) performance = 'Fair';
-            
-            const notes = score >= 8 ? 'Strong performance' : 
-                         score >= 6 ? 'Good performance' : 
-                         score >= 4 ? 'Room for improvement' : 'Needs significant improvement';
-            
-            analysisSheet.addRow([questionOrder + 1, parameter, score, performance, notes]);
-          }
-        });
-        
-        // Add summary row with consistent formatting
-        const displayAverage = averageScore ? parseFloat(averageScore.toString()).toFixed(1) : 'N/A';
-        analysisSheet.addRow(['', 'AVERAGE', displayAverage, '', '']);
-      }
       
       // Auto-size columns for all sheets
       workbook.worksheets.forEach(worksheet => {

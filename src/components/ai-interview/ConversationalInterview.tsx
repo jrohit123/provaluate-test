@@ -76,6 +76,45 @@ import {
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
+// Fetch conversational phrase from backend
+const fetchInterviewPhrase = async (
+  phraseType: 'welcome' | 'transition' | 'completion' | 'question_intro',
+  candidateName: string,
+  position: string,
+  questionIndex?: number,
+  totalQuestions?: number
+): Promise<string> => {
+  try {
+    const response = await apiCall(API_CONFIG.ENDPOINTS.GENERATE_INTERVIEW_PHRASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phrase_type: phraseType,
+        candidate_name: candidateName,
+        position,
+        ...(questionIndex != null && { question_index: questionIndex }),
+        ...(totalQuestions != null && { total_questions: totalQuestions }),
+      }),
+    }, 10000);
+    if (response.ok) {
+      const data = await response.json();
+      return data.phrase || '';
+    }
+  } catch (e) {
+    console.warn('Phrase fetch failed, using fallback:', e);
+  }
+  return '';
+};
+
+// Fallback phrases when API fails
+const FALLBACK_PHRASES = {
+  welcome: (name: string, pos: string) =>
+    `Hello ${name}! Welcome to your ${pos} interview. I'm excited to learn more about you. Let's begin with our first question.`,
+  transition: () => "Let's move to the next question.",
+  completion: (name: string, pos: string) =>
+    `Thank you, ${name}! You've successfully completed your ${pos} interview. We appreciate your time. Our team will review and get back to you soon. Good luck!`,
+};
+
 // Add transcription validation function
 const isCorruptedTranscription = (transcript) => {
   if (!transcript || transcript.trim().length === 0) {
@@ -199,9 +238,11 @@ const ConversationalInterview = () => {
   
   // AI Assistant states
   const [aiSpeaking, setAiSpeaking] = useState(false);
+  const [aiTTSLoading, setAiTTSLoading] = useState(false);
   const [aiAudioEnabled, setAiAudioEnabled] = useState(true);
   const [isInterviewInitialized, setIsInterviewInitialized] = useState(false);
   const [aiMessage, setAiMessage] = useState('');
+  const [aiPlaceholder, setAiPlaceholder] = useState<'welcome' | 'generating_first' | 'generating_next' | ''>('');
   const [isWelcomeMessage, setIsWelcomeMessage] = useState(false);
   const [spokenQuestions, setSpokenQuestions] = useState(new Set());
   const [spokenFeedback, setSpokenFeedback] = useState(new Set());
@@ -228,7 +269,8 @@ const ConversationalInterview = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioWorkletNodeRef = useRef<AudioWorkletNode | null>(null);
   const audioWorkletStreamRef = useRef<MediaStream | null>(null);
-  const speakQueueRef = useRef<SpeechSynthesisUtterance[]>([]);
+  const speakQueueRef = useRef<{ text: string; onEnd?: () => void; onAudioStart?: () => void }[]>([]);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const handleSubmitAnswerRef = useRef<(() => Promise<void>) | null>(null);
   const stopQuestionRecordingRef = useRef<(() => void) | null>(null);
   const lastInterviewWarningRef = useRef<number | null>(null);
@@ -239,10 +281,12 @@ const ConversationalInterview = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const hasSpokenWelcomeRef = useRef(false);
   const hasSpokenFirstQuestionRef = useRef(false);
+  const firstQuestionRef = useRef<{ question?: string; question_text?: string } | null>(null);
   const hasSpokenCompletionRef = useRef(false);
   const hasInitializedRef = useRef(false);
   const finishInterviewRef = useRef<(() => Promise<void>) | null>(null);
   const speakWithAIRef = useRef<((text: string) => void) | null>(null);
+  const ttsFallbackToastShownRef = useRef(false);
 
   const terminateInterview = useCallback(async (reason) => {
     // Use consistent toast ID to prevent duplicate messages
@@ -1043,60 +1087,90 @@ const ConversationalInterview = () => {
          setHasRequestedCameraPermissions(true);
         // Initialize audio worklet
         await initializeAudio();
-         // Start welcome message after camera is ready
+         // Start welcome message after camera is ready (minimal delay for stability)
          setTimeout(() => {
            if (!hasSpokenWelcomeRef.current) {
              console.log('🎤 Starting welcome message and requesting fullscreen...');
              requestFullscreen();
-             const welcomeMessage = `Hello ${interviewData.candidateName}! Welcome to your ${interviewData.position} interview. I'm excited to meet you today and learn more about your experience and skills. This is a great opportunity to showcase your talents, so take a deep breath and remember - you've got this! I'll be your AI interviewer today, and I'm here to make this experience as comfortable as possible for you. All the best for your interview! Let's begin with our first question.`;
+             setAiPlaceholder('welcome');
+             const welcomeMessage = FALLBACK_PHRASES.welcome(
+               interviewData.candidateName || 'there',
+               interviewData.position || 'this role'
+             );
              if (aiAudioEnabled && 'speechSynthesis' in window) {
-               console.log('🎤 Setting aiSpeaking to true and aiMessage to welcome message');
+               console.log('🎤 Starting welcome message (question text only in display)');
                const pattern = createSpeechPattern(welcomeMessage);
                setSpeechPattern(pattern);
                setPatternIndex(0);
-               setAiSpeaking(true);
-               setAiMessage(welcomeMessage);
-               const utterance = new SpeechSynthesisUtterance(welcomeMessage);
-               utterance.rate = 0.9;
-               utterance.pitch = 1.0;
-               utterance.volume = 0.8;
-               utterance.onend = () => {
-                 console.log('🎤 Welcome message finished, starting first question...');
-                 setAiSpeaking(false);
-                 setAiMessage('');
-                 hasSpokenWelcomeRef.current = true;
-                 setIsInterviewTimerActive(true);
-                 setTimeout(() => {
-                   if (currentQuestion && (currentQuestion.question || currentQuestion.question_text)) {
-                     const questionText = currentQuestion.question || currentQuestion.question_text;
+               speakWithAI(welcomeMessage, {
+                 onAudioStart: () => setAiPlaceholder(''),
+                 onEnd: () => {
+                   console.log('🎤 Welcome message finished, starting first question...');
+                   hasSpokenWelcomeRef.current = true;
+                   setIsInterviewTimerActive(true);
+                   const firstQ = firstQuestionRef.current;
+                   if (firstQ && (firstQ.question || firstQ.question_text)) {
+                     const questionText = firstQ.question || firstQ.question_text;
                      const questionMessage = `Question 1: ${questionText}`;
-                     console.log('📝 FIRST: Displaying question and keeping it visible:', questionMessage);
-                     setAiMessage(questionMessage);
+                     console.log('📝 FIRST: Speaking question, will show text when audio starts');
+                     setAiPlaceholder('generating_first');
                      setIsWelcomeMessage(false);
                      hasSpokenFirstQuestionRef.current = true;
-                     setTimeout(() => {
-                       console.log('🎤 THEN: Speaking question after display');
-                       speakWithAI(questionMessage);
-                     }, 500);
+                     speakWithAI(questionMessage, {
+                       onAudioStart: () => {
+                         setAiMessage(questionText);
+                         setAiPlaceholder('');
+                       }
+                     });
+                   } else {
+                     apiCall(API_CONFIG.ENDPOINTS.GENERATE_QUESTION, {
+                       method: 'POST',
+                       headers: { 'Content-Type': 'application/json' },
+                       body: JSON.stringify({
+                         interview_id: interviewData.interviewId,
+                         current_question_index: 0
+                       })
+                     }, API_CONFIG.TIMEOUTS.GENERATE_QUESTION)
+                       .then(async (r) => {
+                         if (!r.ok || !r) return;
+                         const data = await r.json();
+                         if (data.completed) {
+                           if (finishInterviewRef.current) finishInterviewRef.current();
+                           return;
+                         }
+                         const q = data.question;
+                         const questionText = (typeof q === 'string' ? q : q?.question_text || q?.question) || '';
+                         if (!questionText) return;
+                         setCurrentQuestion(typeof q === 'object' ? q : { question_text: questionText });
+                         setCurrentQuestionMaxTime(((data.max_time || 3) * 60));
+                         setQuestionTimerSeconds((data.max_time || 3) * 60);
+                         setIsWelcomeMessage(false);
+                         hasSpokenFirstQuestionRef.current = true;
+                         setAiPlaceholder('generating_first');
+                         speakWithAI(`Question 1: ${questionText}`, {
+                           onAudioStart: () => {
+                             setAiMessage(questionText);
+                             setAiPlaceholder('');
+                           }
+                         });
+                       })
+                       .catch((e) => {
+                         console.warn('Failed to fetch first question:', e);
+                         toast.error('Could not load first question. Please refresh and try again.');
+                       });
                    }
-                 }, 1000);
-               };
-               utterance.onerror = (error) => {
-                 console.error('❌ Error speaking welcome message:', error);
-                 setAiSpeaking(false);
-                 hasSpokenWelcomeRef.current = true;
-                 setIsInterviewTimerActive(true);
-               };
-               speechSynthesis.speak(utterance);
+                 },
+               });
              } else {
                console.log('🎤 Speech synthesis unavailable or disabled, skipping audio welcome');
                setAiSpeaking(false);
                setAiMessage('');
+               setAiPlaceholder('');
                hasSpokenWelcomeRef.current = true;
                setIsInterviewTimerActive(true);
              }
            }
-         }, 1000);
+         }, 100);
          // Log state for debugging
          logSpokenState();
        } catch (error) {
@@ -1117,106 +1191,128 @@ const ConversationalInterview = () => {
       hasSpokenWelcomeRef.current = false;
       hasSpokenFirstQuestionRef.current = false;
       hasSpokenCompletionRef.current = false;
-      // Reset spoken tracking
+      firstQuestionRef.current = null;
+      ttsFallbackToastShownRef.current = false;
+      setAiPlaceholder('');
       setSpokenQuestions(new Set());
       setSpokenFeedback(new Set());
     };
   }, [interviewData.interviewId]); // Simplified - functions defined below
 
-  // AI Text-to-Speech
+  // AI Text-to-Speech: OpenAI TTS with Web Speech API fallback
   const speakWithAI = useCallback(
-    (text: string) => {
-      if (!text) {
-        return;
-      }
-
-      console.log('🎤 speakWithAI called with text:', text);
-      console.log('🎤 aiAudioEnabled:', aiAudioEnabled);
+    (text: string, options?: { onEnd?: () => void; onAudioStart?: () => void }) => {
+      if (!text) return;
 
       if (!aiAudioEnabled) {
         console.log('❌ AI audio is disabled, not speaking');
         return;
       }
 
-      if (!('speechSynthesis' in window)) {
+      const hasSpeechSynthesis = 'speechSynthesis' in window;
+      if (!hasSpeechSynthesis) {
         console.log('❌ Speech synthesis not available');
         setAiSpeaking(false);
         setQuestionFinishedSpeaking(false);
         return;
       }
 
-      const isQuestion = /question/i.test(text);
-      const isWelcome = /(welcome|hello)/i.test(text);
-      const isCompletion = /(thank you|completed|appreciate)/i.test(text);
-
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.9;
-      utterance.pitch = 1.0;
-      utterance.volume = 0.8;
-
-      utterance.onstart = () => {
-        console.log(
-          '🎤 Speech started for:',
-          text.slice(0, 50) + (text.length > 50 ? '...' : '')
-        );
-        setAiSpeaking(true);
-        if (isQuestion) {
-          setQuestionFinishedSpeaking(false);
-        }
-      };
-
-      utterance.onend = () => {
-        console.log(
-          '🎤 Speech ended for:',
-          text.slice(0, 50) + (text.length > 50 ? '...' : '')
-        );
-        setAiSpeaking(false);
-
-        if (isQuestion && !isWelcome && !isCompletion) {
-          console.log('🎯 Question finished speaking — countdown can start');
-          setQuestionFinishedSpeaking(true);
-        } else {
-          setQuestionFinishedSpeaking(false);
-        }
-
-        const queue = speakQueueRef.current;
-        queue.shift();
-        if (queue.length > 0) {
-          window.speechSynthesis.speak(queue[0]);
-        }
-      };
-
-      utterance.onerror = (event) => {
-        console.error('❌ Speech synthesis error:', event);
-        setAiSpeaking(false);
-        setQuestionFinishedSpeaking(false);
-
-        const queue = speakQueueRef.current;
-        queue.shift();
-        if (queue.length > 0) {
-          window.speechSynthesis.speak(queue[0]);
-        }
-
-        if (socketRef.current && socketRef.current.connected) {
-          socketRef.current.emit('ai_stopped_speaking', {
-            interview_id: interviewData.interviewId
-          });
-          console.log('📡 Emitted ai_stopped_speaking event (error case)');
-        }
-      };
-
       const queue = speakQueueRef.current;
-      queue.push(utterance);
+      queue.push({ text, onEnd: options?.onEnd, onAudioStart: options?.onAudioStart });
 
-      if (queue.length === 1) {
-        window.speechSynthesis.speak(utterance);
-        console.log(
-          '🗣️ Speech synthesis started for:',
-          text.slice(0, 50) + (text.length > 50 ? '...' : '')
-        );
-      } else {
-        console.log('🗂️ Queued speech synthesis item. Queue length:', queue.length);
-      }
+      const processNext = () => {
+        const item = queue[0];
+        if (!item) return;
+
+        const isQuestion = /question/i.test(item.text);
+        const isWelcome = /(welcome|hello)/i.test(item.text);
+        const isCompletion = /(thank you|completed|appreciate)/i.test(item.text);
+
+        const handlePlaybackEnd = () => {
+          item.onEnd?.();
+          queue.shift();
+          setAiSpeaking(false);
+          setAiTTSLoading(false);
+          if (isQuestion && !isWelcome && !isCompletion) {
+            setQuestionFinishedSpeaking(true);
+          } else {
+            setQuestionFinishedSpeaking(false);
+          }
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('ai_stopped_speaking', { interview_id: interviewData.interviewId });
+          }
+          if (queue.length > 0) processNext();
+        };
+
+        setAiTTSLoading(true);
+        if (isQuestion) setQuestionFinishedSpeaking(false);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUTS.TTS || 15000);
+
+        fetch(buildApiUrl(API_CONFIG.ENDPOINTS.TTS), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: item.text }),
+          signal: controller.signal,
+        })
+          .then((r) => {
+            clearTimeout(timeoutId);
+            if (!r.ok) throw new Error('TTS failed');
+            return r.blob();
+          })
+          .then((blob) => {
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            currentAudioRef.current = audio;
+            audio.onended = () => {
+              currentAudioRef.current = null;
+              URL.revokeObjectURL(url);
+              handlePlaybackEnd();
+            };
+            audio.onerror = () => {
+              currentAudioRef.current = null;
+              URL.revokeObjectURL(url);
+              handlePlaybackEnd();
+            };
+            audio.onplaying = () => {
+              setAiTTSLoading(false);
+              setAiSpeaking(true);
+              item.onAudioStart?.();
+            };
+            return audio.play();
+          })
+          .catch(() => {
+            clearTimeout(timeoutId);
+            if (!hasSpeechSynthesis) {
+              if (!ttsFallbackToastShownRef.current) {
+                ttsFallbackToastShownRef.current = true;
+                toast.error('Audio playback unavailable', { id: 'tts-error', duration: 3000 });
+              }
+              setAiPlaceholder('');
+              handlePlaybackEnd();
+              return;
+            }
+            if (!ttsFallbackToastShownRef.current) {
+              ttsFallbackToastShownRef.current = true;
+              toast('Using fallback voice', { id: 'tts-fallback', duration: 2000 });
+            }
+            const utterance = new SpeechSynthesisUtterance(item.text);
+            utterance.rate = 0.9;
+            utterance.pitch = 1.0;
+            utterance.volume = 0.8;
+            utterance.onstart = () => {
+              setAiTTSLoading(false);
+              setAiSpeaking(true);
+              item.onAudioStart?.();
+            };
+            utterance.onend = handlePlaybackEnd;
+            utterance.onerror = handlePlaybackEnd;
+            window.speechSynthesis.speak(utterance);
+          });
+      };
+
+      if (queue.length === 1) processNext();
     },
     [aiAudioEnabled, interviewData.interviewId]
   );
@@ -1258,47 +1354,19 @@ const ConversationalInterview = () => {
       if (response.ok) {
         const result = await response.json();
         
-        // Simple completion message for candidates (no scores)
-        const completionMessage = `Thank you, ${interviewData.candidateName}! You have successfully completed your ${interviewData.position} interview. We appreciate your time and thoughtful responses today. Our team will review your interview and get back to you soon. Good luck with your application!`;
+        const completionMessage = FALLBACK_PHRASES.completion(
+          interviewData.candidateName || 'there',
+          interviewData.position || 'this interview'
+        );
         
-        // Only speak completion message once
-        if (!hasSpokenCompletionRef.current) {
-          console.log('🎤 Speaking completion message:', completionMessage);
-          try {
-            if (speakWithAIRef.current) {
-              speakWithAIRef.current(completionMessage);
-            } else {
-              console.log('⚠️ speakWithAIRef not ready, using direct call');
-              speakWithAI(completionMessage);
-            }
-          } catch (speechError) {
-            console.error('❌ Error speaking completion message:', speechError);
-            // Fallback: just show the message without speaking
+        let hasNavigated = false;
+        const navigateToCompletion = () => {
+          if (hasNavigated) return;
+          hasNavigated = true;
+          if (completionTimerRef.current) {
+            clearTimeout(completionTimerRef.current);
+            completionTimerRef.current = null;
           }
-          hasSpokenCompletionRef.current = true;
-          
-          // Wait for completion message to finish before navigating
-          const completionTimer = setTimeout(() => {
-            console.log('🏁 Navigating to completion page after completion message...');
-            toast.success(INTERVIEW_CONSTANTS.SUCCESS.INTERVIEW_COMPLETED, { id: 'interview-completed' });
-            
-            // Reset initialization flag for next interview
-            hasInitializedRef.current = false;
-            
-            // Navigate to simple completion page (no scores)
-            navigate('/candidate-completion', {
-              state: {
-                interviewId: interviewData.interviewId,
-                candidateName: interviewData.candidateName,
-                position: interviewData.position
-              }
-            });
-          }, INTERVIEW_CONSTANTS.TIMEOUTS.COMPLETION_NAVIGATION);
-          
-          // Store timer reference for cleanup
-          completionTimerRef.current = completionTimer;
-                  } else {
-                      // If already spoken, navigate immediately (no scores shown to candidate)
           toast.success(INTERVIEW_CONSTANTS.SUCCESS.INTERVIEW_COMPLETED, { id: 'interview-completed' });
           hasInitializedRef.current = false;
           navigate('/candidate-completion', {
@@ -1308,6 +1376,34 @@ const ConversationalInterview = () => {
               position: interviewData.position
             }
           });
+        };
+        
+        if (!hasSpokenCompletionRef.current) {
+          console.log('🎤 Speaking completion message:', completionMessage);
+          hasSpokenCompletionRef.current = true;
+          const safetyTimer = setTimeout(() => {
+            console.log('🏁 Completion safety timeout, navigating...');
+            navigateToCompletion();
+          }, 15000);
+          completionTimerRef.current = safetyTimer as unknown as NodeJS.Timeout;
+          try {
+            const speak = speakWithAIRef.current || speakWithAI;
+            speak(completionMessage, {
+              onEnd: () => {
+                clearTimeout(completionTimerRef.current as NodeJS.Timeout);
+                completionTimerRef.current = null;
+                console.log('🏁 Completion message finished, navigating...');
+                navigateToCompletion();
+              }
+            });
+          } catch (speechError) {
+            console.error('❌ Error speaking completion message:', speechError);
+            clearTimeout(completionTimerRef.current as NodeJS.Timeout);
+            completionTimerRef.current = null;
+            navigateToCompletion();
+          }
+        } else {
+          navigateToCompletion();
         }
       }
     } catch (error) {
@@ -1317,9 +1413,8 @@ const ConversationalInterview = () => {
      }, [interviewData.interviewId, navigate, interviewData.candidateName, interviewData.position, speakWithAI, isRecording]);
 
   const generateNextQuestion = useCallback(async () => {
-    // Prevent multiple calls if already generating or AI is speaking
-    if (isGeneratingQuestion || aiSpeaking) {
-      console.log('⚠️ Already generating question or AI is speaking, skipping');
+    if (isGeneratingQuestion) {
+      console.log('⚠️ Already generating question, skipping');
       return;
     }
     
@@ -1467,8 +1562,8 @@ const ConversationalInterview = () => {
         console.log('🎤 Question ID:', questionId, 'Already spoken:', spokenQuestions.has(questionId));
         console.log('🎤 Clean question text:', cleanQuestionText);
         
-        // Set transition message first
-        setAiMessage("Let's move to the next question...");
+        // Use conversational transition phrase from API or fallback (do not display - question text only)
+        const transitionPhrase = data.transition_phrase || FALLBACK_PHRASES.transition();
         
         // Only speak if this question hasn't been spoken before and we have valid text
         if (!spokenQuestions.has(questionId) && cleanQuestionText && cleanQuestionText !== 'Question data unavailable') {
@@ -1478,23 +1573,25 @@ const ConversationalInterview = () => {
           // Set question finished speaking to false initially
           setQuestionFinishedSpeaking(false);
           
-          // First speak transition message, then show question and speak it
-          setTimeout(() => {
-            console.log('🎤 Speaking transition message...');
-            speakWithAI("Let's move to the next question...");
-            
-            // After transition message, show question and speak it
-            setTimeout(() => {
-              console.log('🎤 Showing question and speaking:', questionMessage);
-              setAiMessage(questionMessage);
-              speakWithAI(questionMessage);
+          // Speak transition immediately, then show and speak question when transition ends
+          console.log('🎤 Speaking transition message...');
+          speakWithAI(transitionPhrase, {
+            onEnd: () => {
+              console.log('🎤 Transition finished, speaking question (text when audio starts)');
+              setAiPlaceholder('generating_next');
               setSpokenQuestions(prev => {
                 const newSet = new Set([...prev, questionId]);
                 console.log('📝 Updated spoken questions:', Array.from(newSet));
                 return newSet;
               });
-            }, 2000); // 2 seconds after transition message
-          }, 500); // 500ms delay to ensure smooth transition
+              speakWithAI(questionMessage, {
+                onAudioStart: () => {
+                  setAiMessage(cleanQuestionText);
+                  setAiPlaceholder('');
+                }
+              });
+            },
+          });
         } else {
           console.log('⚠️ Question already spoken or invalid, skipping speech');
           // If question already spoken, set finished speaking to true
@@ -1531,7 +1628,7 @@ const ConversationalInterview = () => {
     } finally {
       setIsGeneratingQuestion(false);
     }
-  }, [interviewData.interviewId, currentQuestionIndex, aiSpeaking, isGeneratingQuestion]);
+  }, [interviewData.interviewId, currentQuestionIndex, isGeneratingQuestion]);
 
      const handleSubmitAnswer = useCallback(async () => {
        console.log('🔍 Submit button clicked!');
@@ -2291,6 +2388,7 @@ const ConversationalInterview = () => {
         
         // Set current question from interview data or first question
         const firstQuestion = interviewData.currentQuestion || flattenedData.questions?.[0];
+        firstQuestionRef.current = firstQuestion;
         console.log('🎯 Setting current question:', firstQuestion);
         console.log('🎯 Interview data currentQuestion:', interviewData.currentQuestion);
         console.log('🎯 Data questions:', flattenedData.questions);
@@ -2446,7 +2544,7 @@ const ConversationalInterview = () => {
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
-    if (aiSpeaking && !aiMessage?.includes('Question') && speechPattern.length > 0) {
+    if (aiSpeaking && speechPattern.length > 0) {
       interval = setInterval(() => {
         setWaveformHeights(prev => {
           const newHeights = [...prev];
@@ -3040,7 +3138,13 @@ const ConversationalInterview = () => {
   const toggleAIAudio = () => {
     setAiAudioEnabled(!aiAudioEnabled);
     if (aiAudioEnabled) {
-      speechSynthesis.cancel(); // Stop current speech
+      speechSynthesis.cancel();
+      setAiTTSLoading(false);
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.currentTime = 0;
+        currentAudioRef.current = null;
+      }
     }
     toast.success(`AI audio ${aiAudioEnabled ? 'disabled' : 'enabled'}`);
   };
@@ -3123,7 +3227,25 @@ const ConversationalInterview = () => {
                 {aiAudioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
               </button>
               <div className="w-full min-h-0 flex-1 flex items-center justify-center px-2 py-2 overflow-hidden">
-                {aiSpeaking && !aiMessage?.includes('Question') ? (
+                {aiPlaceholder ? (
+                  <div className="w-full h-full min-h-0 flex items-center justify-center overflow-y-auto overflow-x-hidden">
+                    <div className="w-full max-w-full bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 my-auto">
+                      <p className="text-black font-medium leading-relaxed break-words text-base sm:text-lg text-center">
+                        {aiPlaceholder === 'welcome' && 'Welcome to Provaluate interview platform. Have a great interview!'}
+                        {aiPlaceholder === 'generating_first' && 'Generating your first question...'}
+                        {aiPlaceholder === 'generating_next' && 'Generating your next question...'}
+                      </p>
+                    </div>
+                  </div>
+                ) : aiSpeaking && aiMessage ? (
+                  <div className="text-center w-full h-full min-h-0 flex items-center justify-center overflow-y-auto overflow-x-hidden">
+                    <div className="inline-block text-left bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 w-full max-w-full my-auto">
+                      <p className="text-gray-900 font-medium leading-relaxed break-words text-base sm:text-lg">
+                        {aiMessage}
+                      </p>
+                    </div>
+                  </div>
+                ) : aiSpeaking && !aiMessage ? (
                   <div className="text-center w-full">
                     <div className="flex items-end justify-center gap-1 mb-4 h-20">
                       {[...Array(15)].map((_, i) => (
@@ -3136,19 +3258,15 @@ const ConversationalInterview = () => {
                     </div>
                     <div className="text-blue-700 text-base sm:text-lg font-medium mt-4">AI is speaking...</div>
                   </div>
-                ) : (
+                ) : aiMessage ? (
                   <div className="text-center w-full h-full min-h-0 flex items-center justify-center overflow-y-auto overflow-x-hidden">
-                    {!isWelcomeMessage && (
-                      <div className="inline-block text-left bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 w-full max-w-full my-auto">
-                        <p
-                          className="text-gray-900 font-medium leading-relaxed break-words text-base sm:text-lg"
-                        >
-                          {aiMessage}
-                        </p>
-                      </div>
-                    )}
+                    <div className="inline-block text-left bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 w-full max-w-full my-auto">
+                      <p className="text-gray-900 font-medium leading-relaxed break-words text-base sm:text-lg">
+                        {aiMessage}
+                      </p>
+                    </div>
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
@@ -3274,7 +3392,7 @@ const ConversationalInterview = () => {
                  {/* Reserved space for question timer - flex-shrink-0; smaller on mobile so buttons stay visible */}
          <div className="min-h-[60px] sm:min-h-[120px] mb-1 flex-shrink-0 flex items-center justify-center">
            {isRecording && isQuestionTimerActive && questionTimeRemaining > 0 && (
-             <div className="w-full max-w-2xl mx-auto">
+             <div className="w-full max-w-[88%] sm:max-w-2xl mx-auto">
                <div className="flex items-center justify-between mb-2">
                  <div className="flex items-center gap-2">
                    <Clock className="w-4 h-4 text-sky-500" />
