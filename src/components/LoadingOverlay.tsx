@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type MessageCategory = 'progress' | 'motivational' | 'process' | 'onboarding' | 'cv-screening';
@@ -17,6 +17,8 @@ interface LoadingOverlayProps {
   messagesCategory?: MessageCategory;
   /** Whether to show step numbers (e.g., "Step 1 of 3") in messages */
   showStepNumbers?: boolean;
+  /** Called when user closes the overlay (processing continues in background) */
+  onDismiss?: () => void;
 }
 
 const MESSAGE_CATALOG: Record<MessageCategory, string[]> = {
@@ -54,6 +56,7 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
   contextKey,
   messagesCategory = 'progress',
   showStepNumbers = true,
+  onDismiss,
 }) => {
   const [index, setIndex] = useState(0);
 
@@ -100,7 +103,17 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
-      <div className="max-w-md w-[90%] rounded-2xl bg-white shadow-2xl border border-slate-200 p-6 space-y-4 animate-in fade-in-0 zoom-in-95">
+      <div className="max-w-md w-[90%] rounded-2xl bg-white shadow-2xl border border-slate-200 p-6 space-y-4 animate-in fade-in-0 zoom-in-95 relative">
+        {onDismiss && (
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="absolute top-4 right-4 p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
         <div className="flex items-center gap-3">
           <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50">
             <Loader2 className="h-6 w-6 text-indigo-600 animate-spin" />

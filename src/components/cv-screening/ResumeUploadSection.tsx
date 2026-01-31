@@ -204,8 +204,17 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
     reason: string;
   } | null>(null);
 
+  const [userDismissedProcessingOverlay, setUserDismissedProcessingOverlay] = useState(false);
+
   const isProcessingOverlayVisible =
     processingState.status === 'processing' || isWaitingForAssessments;
+
+  // Reset dismissed state when processing finishes (so overlay shows again next run)
+  useEffect(() => {
+    if (!isProcessingOverlayVisible) {
+      setUserDismissedProcessingOverlay(false);
+    }
+  }, [isProcessingOverlayVisible]);
 
   // Track completion of a full CV screening run
   useEffect(() => {
@@ -2566,11 +2575,12 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
 
       {/* Global processing overlay for long-running evaluation */}
       <LoadingOverlay
-        isOpen={isProcessingOverlayVisible}
+        isOpen={isProcessingOverlayVisible && !userDismissedProcessingOverlay}
         contextKey="cv-screening"
         messagesCategory="cv-screening"
         title="Analyzing resumes against your job criteria…"
         subtitle="We’re parsing profiles, aligning them to your JD, and computing match scores."
+        onDismiss={() => setUserDismissedProcessingOverlay(true)}
       />
 
       {/* Scorecard Dialog */}
