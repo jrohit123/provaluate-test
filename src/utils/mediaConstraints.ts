@@ -1,11 +1,10 @@
 /**
  * Adaptive video constraints for camera/getUserMedia.
- * Prefers ideal/max over strict dimensions so phones that can't do 1280×720
- * still get a usable stream. On small viewports or when preferMobile is true,
- * requests lower resolution (e.g. 640×480) for reliability.
+ * Lower resolution (640×480 desktop) keeps file size small for interview recordings
+ * and faster uploads. Mobile uses same 640×480.
  */
 const MOBILE_BREAKPOINT = 768;
-const DESKTOP_IDEAL = { width: 1280, height: 720 };
+const DESKTOP_IDEAL = { width: 640, height: 480 };
 const MOBILE_IDEAL = { width: 640, height: 480 };
 
 export type AdaptiveVideoOptions = {

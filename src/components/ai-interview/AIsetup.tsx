@@ -782,8 +782,8 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
     // Add 2 minutes buffer
     calculatedDuration += 2;
     
-    // Ensure duration is within reasonable bounds (5-120 minutes)
-    const finalDuration = Math.max(5, Math.min(120, calculatedDuration));
+    // Ensure duration is within reasonable bounds (5-120 minutes) and round to whole minutes
+    const finalDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
     
     console.log('🔄 Duration calculation summary:', {
       parameters: Object.keys(parameters).length,
@@ -838,7 +838,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
     // Add 2 minutes buffer
     calculatedDuration += 2;
     
-    const finalDuration = Math.max(5, Math.min(120, calculatedDuration));
+    const finalDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
     // FIXED: Replace duration instead of adding to it
     setFormData(prev => ({ ...prev, duration: finalDuration, totalQuestions: questions }));
   };
@@ -1288,11 +1288,11 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
         calculatedDuration += avgQuestions * totalTimePerQuestion;
       });
       calculatedDuration += 2; // Add buffer
-      baseDuration = Math.max(5, Math.min(120, calculatedDuration));
+      baseDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
     }
     
-    // Total duration = base duration + personalized questions duration
-    const totalDuration = baseDuration + personalizedDuration;
+    // Total duration = base duration + personalized questions duration (whole minutes)
+    const totalDuration = Math.round(baseDuration + personalizedDuration);
     
     // Calculate total questions (technical + personalized) - use same logic as calculateDuration
     let technicalQuestions = 0;
@@ -1350,14 +1350,14 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
         body: JSON.stringify({
           title: `${roleName} Interview Configuration`,
           description: `Interview configuration for ${roleName} position`,
-          duration: formData.duration,
+          duration: formData.duration != null ? Math.round(Number(formData.duration)) : formData.duration,
           difficulty: 'medium', // Default difficulty
           position: roleName,
           skills: [], // Could be extracted from job description
           custom_questions: [], // No custom questions in this component
           personalized_questions_enabled: formData.personalizedQuestionsEnabled,
           personalized_questions: formData.personalizedQuestions,
-          total_duration: formData.duration + (formData.personalizedQuestionsEnabled ? 
+          total_duration: (formData.duration != null ? Math.round(Number(formData.duration)) : 0) + (formData.personalizedQuestionsEnabled ?
             formData.personalizedQuestions.reduce((total, q) => total + q.timeLimit, 0) : 0),
           job_description: formData.jobDescription,
           interview_type: formData.interviewType,
@@ -1694,7 +1694,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
               </div>
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
                 <div className="text-blue-600 font-medium text-xs sm:text-sm">Duration</div>
-                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.duration || 'Calculating...'} min</div>
+                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.duration != null ? Math.round(Number(formData.duration)) : 'Calculating...'} min</div>
                 <div className="text-xs text-blue-600">Auto-calculated</div>
               </div>
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
@@ -1721,7 +1721,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                     id="duration"
                     type="number"
                     name="duration"
-                    value={formData.duration}
+                    value={formData.duration != null ? Math.round(Number(formData.duration)) : ''}
                     onChange={handleInputChange}
                     min="5"
                     max="120"
@@ -1729,14 +1729,14 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                     className="text-sm sm:text-base"
                   />
                   <div className="text-xs sm:text-sm text-gray-500 min-w-fit">
-                    {formData.duration ? `${formData.duration} min` : 'Calculating...'}
+                    {formData.duration != null ? `${Math.round(Number(formData.duration))} min` : 'Calculating...'}
                   </div>
                 </div>
                 <p className="text-xs text-gray-500">
                   Duration includes answer time + 30 seconds reading time per question + 2 min buffer. You can edit this value manually.
                 </p>
                 <div className="text-xs text-blue-600 font-medium">
-                  💡 Formula: Sum of (questions × (answer time + 0.5 min reading)) for each parameter + 2 min buffer = {formData.duration || 'Calculating...'} min
+                  💡 Formula: Sum of (questions × (answer time + 0.5 min reading)) for each parameter + 2 min buffer = {formData.duration != null ? Math.round(Number(formData.duration)) : 'Calculating...'} min
                 </div>
               </div>
 

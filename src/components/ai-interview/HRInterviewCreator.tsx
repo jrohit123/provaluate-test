@@ -470,8 +470,8 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
     // Add 2 minutes buffer
     calculatedDuration += 2;
     
-    // Ensure duration is within reasonable bounds (5-120 minutes)
-    const finalDuration = Math.max(5, Math.min(120, calculatedDuration));
+    // Ensure duration is within reasonable bounds (5-120 minutes) and round to whole minutes
+    const finalDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
     
     setFormData(prev => ({ 
       ...prev, 
@@ -501,7 +501,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
         calculatedDuration += avgQuestions * totalTimePerQuestion;
       });
       calculatedDuration += 2; // Add buffer
-      baseDuration = Math.max(5, Math.min(120, calculatedDuration));
+      baseDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
     }
     
     // Calculate total questions (technical + personalized) - use same logic as AIsetup
@@ -536,7 +536,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
     
     setFormData(prev => ({
       ...prev,
-      duration: totalDuration,
+      duration: Math.round(totalDuration),
       totalQuestions: totalQuestions
     }));
   };
@@ -575,7 +575,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
     
     setFormData(prev => ({ 
       ...prev, 
-      duration: Math.round(finalDuration * 10) / 10, // Round to 1 decimal place
+      duration: Math.round(finalDuration), // Whole minutes only (match AIsetup)
       totalQuestions: structuredQuestions.length
     }));
   };
@@ -988,7 +988,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
             candidate_name: candidate.name,
             candidate_email: candidate.email,
             position: formData.position,
-            duration_minutes: formData.duration,
+            duration_minutes: formData.duration != null ? Math.round(Number(formData.duration)) : 30,
             total_questions: formData.totalQuestions,
             custom_instructions: formData.customInstructions,
             interview_type: formData.interviewType,
@@ -1274,7 +1274,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
                 <div className="text-xs text-blue-500">Based on parameters</div>
               </div>
               <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200 text-center">
-                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.duration || 'Calculating...'} min</div>
+                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.duration != null ? Math.round(Number(formData.duration)) : 'Calculating...'} min</div>
                 <div className="text-xs sm:text-sm text-blue-600 font-medium">Duration</div>
                 <div className="text-xs text-blue-500">Auto-calculated</div>
               </div>
@@ -1472,7 +1472,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
                 <div className="text-xs text-green-500">Pre-defined questions</div>
               </div>
               <div className="bg-green-50 rounded-lg p-4 border border-green-200 text-center">
-                <div className="text-2xl font-bold text-green-800">{formData.duration || 'Calculating...'} min</div>
+                <div className="text-2xl font-bold text-green-800">{formData.duration != null ? Math.round(Number(formData.duration)) : 'Calculating...'} min</div>
                 <div className="text-sm text-green-600 font-medium">Duration</div>
                 <div className="text-xs text-green-500">Auto-calculated</div>
               </div>

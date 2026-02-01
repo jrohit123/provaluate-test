@@ -509,6 +509,7 @@ const CandidateInterview = () => {
                 <li>Stay on this browser tab; switching tabs can trigger warnings and may end the interview.</li>
                 <li>You will be recorded (video and audio). After the AI asks each question, click &quot;Start Recording&quot;, answer clearly, then submit your answer.</li>
                 <li>Your speech is transcribed live. You can edit the transcript in the on-screen box or open &quot;Full Transcript - Review & Edit&quot; to correct text before submitting each answer.</li>
+                <li>In some questions you will be asked to speak and write. In such cases, <strong>speak first</strong> and record your answer, then <strong>write your query or answer</strong> in the separate text box below the transcription box. First speak, then write.</li>
                 <li>Find a quiet environment and speak clearly for the best transcription and evaluation.</li>
               </ul>
             </section>
