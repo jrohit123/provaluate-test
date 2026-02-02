@@ -628,6 +628,15 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
       });
       return;
     }
+
+    const totalWeight = Object.values(customParameters).reduce((acc, p) => acc + (Number(p?.weight) || 0), 0);
+    if (Math.abs(totalWeight - 100) > 0.01) {
+      toast({
+        title: "Invalid total weight",
+        description: `Total weight must equal 100%. Current total: ${totalWeight}%. Adjust parameter weights so they sum to exactly 100.`,
+      });
+      return;
+    }
     
     setIsSavingParameters(true);
     try {
@@ -656,9 +665,10 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
       }
     } catch (error) {
       console.error('Error saving parameters:', error);
+      const message = error instanceof Error ? error.message : 'Failed to save parameters';
       toast({
         title: "Save Failed",
-        description: "Failed to save parameters",
+        description: message,
       });
     } finally {
       setIsSavingParameters(false);

@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import StructuredInterviewSetup from './StructuredInterviewSetup';
@@ -56,6 +57,8 @@ interface CustomParameter {
   max_time: number;
   level: 'Easy' | 'Regular' | 'Expert';
   scoring_criteria: string[];
+  /** When set, overrides keyword-based detection for written-answer (e.g. SQL/code) scenarios. */
+  requires_written_answer?: boolean;
 }
 
 
@@ -91,6 +94,8 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
   const [isExpandDialogOpen, setIsExpandDialogOpen] = useState(false);
   const [loadedPositions, setLoadedPositions] = useState<Set<string>>(new Set());
   const [expandedParameters, setExpandedParameters] = useState<Set<string>>(new Set());
+  /** Per-parameter max_time before "Requires written answer" was checked; restored when unchecked */
+  const [writtenAnswerPrevMaxTime, setWrittenAnswerPrevMaxTime] = useState<Record<string, number>>({});
 
   // Load job descriptions from both CV screening and AI interview tables
   const loadJobDescriptions = async () => {
@@ -633,7 +638,8 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
             acc[key] = {
               ...customParams[key],
               max_time: customParams[key].max_time || 3, // Default to 3 minutes if not set
-              level: customParams[key].level || 'Regular' // Default to Regular if not set
+              level: customParams[key].level || 'Regular', // Default to Regular if not set
+              requires_written_answer: customParams[key].requires_written_answer
             };
             return acc;
           }, {} as CustomParameters);
@@ -942,7 +948,8 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
             level: existingParam?.level || aiParam.level || 'Regular',
             min_questions: existingParam?.min_questions || (aiParam.min_questions && aiParam.min_questions >= 1 && aiParam.min_questions <= 8 ? aiParam.min_questions : 2),
             max_questions: existingParam?.max_questions || (aiParam.max_questions && aiParam.max_questions >= 1 && aiParam.max_questions <= 8 ? aiParam.max_questions : 5),
-            weight: existingParam?.weight || (aiParam.weight && aiParam.weight >= 10 && aiParam.weight <= 40 ? aiParam.weight : 25)
+            weight: existingParam?.weight || (aiParam.weight && aiParam.weight >= 10 && aiParam.weight <= 40 ? aiParam.weight : 25),
+            requires_written_answer: existingParam?.requires_written_answer ?? aiParam?.requires_written_answer
           };
           
           console.log(`🔄 Parameter ${key} settings:`, {
@@ -1118,6 +1125,12 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
       toast.error('Please configure parameters before saving', { id: 'params-configure-required' });
       return;
     }
+
+    const totalWeight = Object.values(customParameters).reduce((acc, p) => acc + (Number(p?.weight) || 0), 0);
+    if (Math.abs(totalWeight - 100) > 0.01) {
+      toast.error(`Total weight must equal 100%. Current total: ${totalWeight}%. Adjust parameter weights so they sum to exactly 100.`, { id: 'params-weight-invalid' });
+      return;
+    }
     
     setIsSavingParameters(true);
     try {
@@ -1202,6 +1215,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
           max_questions: 5,
           max_time: 3,
           level: 'Regular' as 'Easy' | 'Regular' | 'Expert',
+          requires_written_answer: undefined,
           scoring_criteria: [
             'Excellent (9-10): Demonstrates exceptional understanding and application',
             'Good (7-8): Shows strong competency with minor areas for improvement',
@@ -1217,8 +1231,8 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
     });
   };
 
-  const updateParameter = (key: string, field: keyof CustomParameter, value: string | number | string[]) => {
-    let processedValue: string | number | string[] = value;
+  const updateParameter = (key: string, field: keyof CustomParameter, value: string | number | string[] | boolean) => {
+    let processedValue: string | number | string[] | boolean = value;
     if (field === 'weight' || field === 'min_questions' || field === 'max_questions') {
       const numValue = parseInt(value.toString());
       processedValue = isNaN(numValue) ? 0 : numValue;
@@ -1812,7 +1826,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
               {Object.keys(customParameters).length > 0 && !parametersSaved && (
                 <Button
                   onClick={saveParameters}
-                  disabled={isSavingParameters}
+                  disabled={isSavingParameters || Math.abs(calculateTotalWeightage() - 100) > 0.01}
                   className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
                 >
                   {isSavingParameters ? (
@@ -2087,6 +2101,40 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                                   <SelectItem value="Expert">Expert</SelectItem>
                                 </SelectContent>
                               </Select>
+                            </div>
+                            <div className="flex items-center space-x-2 pt-2">
+                              <Checkbox
+                                id={`${key}-requires-written`}
+                                checked={param.requires_written_answer === true}
+                                onCheckedChange={(checked) => {
+                                  updateParameter(key, 'requires_written_answer', checked === true);
+                                  const currentMax = typeof param.max_time === 'number' ? param.max_time : (parseInt(String(param.max_time), 10) || 3);
+                                  if (checked === true) {
+                                    // Remember current max_time so we can restore it when unchecking
+                                    setWrittenAnswerPrevMaxTime(prev => ({ ...prev, [key]: currentMax }));
+                                    // When enabling written answer, auto-increase max_time (5–6 min by complexity)
+                                    const suggested = param.level === 'Expert' ? 6 : 5;
+                                    if (currentMax < suggested) {
+                                      updateParameter(key, 'max_time', suggested);
+                                    }
+                                  } else {
+                                    // When unchecking, revert to the max_time that was there before we checked
+                                    const restoreMax = writtenAnswerPrevMaxTime[key] ?? 3;
+                                    updateParameter(key, 'max_time', restoreMax);
+                                    setWrittenAnswerPrevMaxTime(prev => {
+                                      const next = { ...prev };
+                                      delete next[key];
+                                      return next;
+                                    });
+                                  }
+                                }}
+                              />
+                              <Label
+                                htmlFor={`${key}-requires-written`}
+                                className="text-sm font-normal cursor-pointer"
+                              >
+                                Requires written answer (e.g. SQL/code)
+                              </Label>
                             </div>
                           </div>
                           

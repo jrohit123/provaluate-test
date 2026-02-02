@@ -275,6 +275,10 @@ const ConversationalInterview = () => {
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const handleSubmitAnswerRef = useRef<(() => Promise<void>) | null>(null);
   const stopQuestionRecordingRef = useRef<(() => void) | null>(null);
+  /** When true, submit runs from timer expiry; submit whatever transcript + written answer we have (don't block on empty written box) */
+  const forceSubmitOnTimerExpiryRef = useRef(false);
+  /** When true, do not reset question timer (user stopped recording on written question; timer must keep counting down) */
+  const writtenQuestionTimerLockedRef = useRef(false);
   const lastInterviewWarningRef = useRef<number | null>(null);
   const lastQuestionWarningRef = useRef<number | null>(null);
   const cameraWarningShownRef = useRef(false);
@@ -995,33 +999,30 @@ const ConversationalInterview = () => {
     setIsQuestionTimerActive(false);
     setQuestionTimerSeconds(0);
 
-    // CRITICAL FIX: Stop recording first, then auto-submit
-    if (!isSubmitting && !answerSubmitted && isRecording) {
+    if (isSubmitting || answerSubmitted) return;
+
+    // Stop recording first if still recording, then auto-submit (transcript + any written answer)
+    if (isRecording) {
       console.log('🔄 Question time expired - stopping recording and auto-submitting');
-
-      // Stop recording first
-      if (stopQuestionRecordingRef.current) {
-        stopQuestionRecordingRef.current();
-      }
-
-      // Wait for recording to properly stop and blobs to be captured
+      forceSubmitOnTimerExpiryRef.current = true;
+      if (stopQuestionRecordingRef.current) stopQuestionRecordingRef.current();
       setTimeout(() => {
-        console.log('🔄 Auto-submitting answer after recording stopped');
-        if (handleSubmitAnswerRef.current) {
-          handleSubmitAnswerRef.current();
-        }
+        if (handleSubmitAnswerRef.current) handleSubmitAnswerRef.current();
       }, 1500);
-
-    } else if (!isRecording && audioBlob) {
-      // If recording already stopped but not submitted, just submit
-      console.log('🔄 Recording already stopped, auto-submitting existing answer');
-      if (handleSubmitAnswerRef.current) {
-        handleSubmitAnswerRef.current();
-      }
-    } else {
-      console.log('⏰ Timer expired but no valid recording state to submit');
+      return;
     }
-  }, [isSubmitting, answerSubmitted, isRecording, audioBlob]);
+
+    // Recording already stopped: submit whatever we have (transcript + written answer in box)
+    // For written questions this runs when timer expires while user is typing in the box
+    if (!isRecording && (audioBlob || currentQuestion?.requires_written_answer)) {
+      console.log('🔄 Timer expired while writing or after recording - submitting transcript + written answer');
+      forceSubmitOnTimerExpiryRef.current = true;
+      if (handleSubmitAnswerRef.current) handleSubmitAnswerRef.current();
+      return;
+    }
+
+    console.log('⏰ Timer expired but no valid state to submit');
+  }, [isSubmitting, answerSubmitted, isRecording, audioBlob, currentQuestion?.requires_written_answer]);
 
   const interviewTimeRemaining = useCountdownTimer(
     interviewTimerSeconds,
@@ -1071,6 +1072,7 @@ const ConversationalInterview = () => {
     setRecordingCountdown(0);
     setAnswerTimer(0);
     setIsAnswerTimerActive(false);
+    writtenQuestionTimerLockedRef.current = false;
     // Reset answer submitted state for new interview
     setAnswerSubmitted(false);
     setSubmissionStatus('idle');
@@ -1535,7 +1537,8 @@ const ConversationalInterview = () => {
         setQuestionVideoDuration(0);
         
         console.log('🔄 Reset all states for new question');
-        
+        writtenQuestionTimerLockedRef.current = false; // Allow timer to be set for the new question
+
         // Store timer values but don't start timer yet - wait for recording to start
         console.log('🔍 API response data:', data);
         if (data.max_time) {
@@ -1665,6 +1668,9 @@ const ConversationalInterview = () => {
          console.log('⚠️ Already submitting, ignoring duplicate click');
          return;
        }
+
+       const isForceSubmitOnTimerExpiry = forceSubmitOnTimerExpiryRef.current;
+       if (isForceSubmitOnTimerExpiry) forceSubmitOnTimerExpiryRef.current = false;
        
        // Check for corrupted transcription
        if (transcript && isCorruptedTranscription(transcript)) {
@@ -1686,15 +1692,19 @@ const ConversationalInterview = () => {
          }
        }
        
-      // Require transcript from Web Speech API
+      // Require transcript from Web Speech API (unless timer expired—then submit whatever we have)
       if (!cleanedTranscript || !cleanedTranscript.trim()) {
-        toast.error('No speech captured. Please speak your answer before submitting.');
-        return;
+        if (isForceSubmitOnTimerExpiry) {
+          cleanedTranscript = '';
+        } else {
+          toast.error('No speech captured. Please speak your answer before submitting.');
+          return;
+        }
       }
 
-      // When question requires a written answer (e.g. SQL/code), require it before submit
+      // When question requires a written answer (e.g. SQL/code), require it before submit (unless timer expired—then submit whatever is in the box)
       const requiresWritten = currentQuestion?.requires_written_answer === true;
-      if (requiresWritten && (!writtenAnswer || !writtenAnswer.trim())) {
+      if (requiresWritten && (!writtenAnswer || !writtenAnswer.trim()) && !isForceSubmitOnTimerExpiry) {
         toast.error('This question requires a written answer (e.g. SQL or code). Please write your answer in the box below, then submit.');
         return;
       }
@@ -1826,7 +1836,7 @@ const ConversationalInterview = () => {
                  question_id: questionId,
                  question_order: currentQuestionIndex,
                  transcript: finalTranscript, // Use final transcript
-                 ...(writtenAnswer?.trim() && { written_answer: writtenAnswer.trim() }),
+                 ...(currentQuestion?.requires_written_answer === true ? { written_answer: (writtenAnswer || '').trim() } : (writtenAnswer?.trim() ? { written_answer: writtenAnswer.trim() } : {})),
                  audio_data: audioDataBase64, // Send audio for storage (not for transcription)
                  skip_transcription: true,
                  question_video_url: questionVideoUrl
@@ -2257,10 +2267,13 @@ const ConversationalInterview = () => {
         return;
       }
       
-      // Start timer for current question
-      if (currentQuestionMaxTime > 0) {
+      // Start timer for current question (skip if timer is locked — e.g. written question, user already stopped)
+      if (currentQuestionMaxTime > 0 && !writtenQuestionTimerLockedRef.current) {
         console.log('⏰ Starting timer for current question:', currentQuestionMaxTime, 'seconds');
         setQuestionTimerSeconds(currentQuestionMaxTime);
+        setIsQuestionTimerActive(true);
+      } else if (currentQuestionMaxTime > 0 && writtenQuestionTimerLockedRef.current) {
+        // Timer already running for written question; just ensure active
         setIsQuestionTimerActive(true);
       } else {
         // Initialize timer if not set
@@ -2639,21 +2652,15 @@ const ConversationalInterview = () => {
     };
   }, [aiSpeaking, aiMessage, speechPattern, patternIndex]);
 
-  // Start timer when recording begins
+  // Start timer when recording begins (only once; do not reset when timer is already running or when user stopped to write)
   useEffect(() => {
+    if (writtenQuestionTimerLockedRef.current) return; // Never reset timer after user stopped to write (written question)
     if (isRecording && currentQuestionMaxTime > 0 && !isQuestionTimerActive) {
       console.log('⏰ Recording started, starting question timer');
-      console.log('⏰ Timer values - maxTime:', currentQuestionMaxTime, 'remaining:', questionTimeRemaining);
-      
-      // CRITICAL FIX: Ensure timer starts with fresh values
-      if (questionTimeRemaining !== currentQuestionMaxTime) {
-        console.log('⏰ Resetting timer to max time before starting');
-        setQuestionTimerSeconds(currentQuestionMaxTime);
-      }
-      
+      setQuestionTimerSeconds(currentQuestionMaxTime);
       setIsQuestionTimerActive(true);
     }
-  }, [isRecording, currentQuestionMaxTime, isQuestionTimerActive, questionTimeRemaining]);
+  }, [isRecording, currentQuestionMaxTime, isQuestionTimerActive]);
 
   // Refs for cleanup
   const recordingDelayTimeoutRef = useRef<number | null>(null);
@@ -2661,17 +2668,22 @@ const ConversationalInterview = () => {
 
   // Lint-safe effect: starts countdown only after AI fully finished speaking
   useEffect(() => {
-    // Only run when questionFinishedSpeaking flips to true AND aiSpeaking is false
-    if (questionFinishedSpeaking && !aiSpeaking && !isRecording && !isSubmitting) {
+    // Written question and user already stopped to write (timer already running): do not reset timer or restart countdown
+    if (currentQuestion?.requires_written_answer === true && !isRecording && isQuestionTimerActive) {
+      writtenQuestionTimerLockedRef.current = true;
+      return;
+    }
+    // Only run when question just finished speaking and we're about to start recording (timer not yet active).
+    if (questionFinishedSpeaking && !aiSpeaking && !isRecording && !isSubmitting && !isQuestionTimerActive) {
       // Small stabilization delay to avoid React batching/race issues
       recordingDelayTimeoutRef.current = window.setTimeout(() => {
+        if (writtenQuestionTimerLockedRef.current) return; // User already stopped to write — do not reset timer
         console.log('✅ AI finished speaking (stable) — starting 3s countdown');
 
-        // Start the per-question timer once (if you want it to start immediately)
+        // Do NOT start the question timer here — start it only when recording actually begins,
+        // so "1 min remaining" and timer don't appear before the user can answer.
         if (currentQuestionMaxTime > 0) {
           setQuestionTimerSeconds(currentQuestionMaxTime);
-          setIsQuestionTimerActive(true);
-          console.log('⏰ Question timer set to', currentQuestionMaxTime);
         }
 
         // Initialize visual countdown
@@ -2720,7 +2732,9 @@ const ConversationalInterview = () => {
     aiSpeaking,
     isRecording,
     isSubmitting,
+    isQuestionTimerActive,
     currentQuestionMaxTime,
+    currentQuestion?.requires_written_answer,
     startRecordingRef
   ]);
 
@@ -3070,14 +3084,18 @@ const ConversationalInterview = () => {
   }, []);
 
   const stopQuestionRecording = () => {
-    // Stop the question timer immediately when recording stops
-    console.log('⏰ Stopping question timer - recording stopped manually');
-    setIsQuestionTimerActive(false);
-    
-    // CRITICAL FIX: Reset timer values to prevent carryover to next question
-    console.log('⏰ Resetting timer values for next question');
-    setQuestionTimerSeconds(0); // Reset to 0 so next question starts fresh
-    
+    // For written-answer questions, keep the timer running so the user sees time remaining while typing
+    const isWrittenQuestion = currentQuestion?.requires_written_answer === true;
+    if (!isWrittenQuestion) {
+      console.log('⏰ Stopping question timer - recording stopped manually');
+      setIsQuestionTimerActive(false);
+      setQuestionTimerSeconds(0);
+      writtenQuestionTimerLockedRef.current = false;
+    } else {
+      console.log('⏰ Written question: keeping timer running so user can see time while writing');
+      writtenQuestionTimerLockedRef.current = true; // Block any effect from resetting timer to full
+    }
+
     if (!mediaRecorder && !videoRecorder) {
       setIsRecording(false);
       setIsVideoRecording(false);
@@ -3293,7 +3311,7 @@ const ConversationalInterview = () => {
               <div className="w-full min-h-0 flex-1 flex items-center justify-center px-2 py-2 overflow-hidden">
                 {aiPlaceholder ? (
                   <div className="w-full h-full min-h-0 flex items-center justify-center overflow-y-auto overflow-x-hidden">
-                    <div className="w-full max-w-full bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 my-auto">
+                    <div className="w-full max-w-full bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 my-auto max-h-[22vh] sm:max-h-[38vh] overflow-y-auto overflow-x-hidden">
                       <p className="text-black font-medium leading-relaxed break-words text-base sm:text-lg text-center">
                         {aiPlaceholder === 'welcome' && 'Welcome to Provaluate interview platform. Have a great interview!'}
                         {aiPlaceholder === 'generating_first' && `Generating your first question${'.'.repeat(loadingDots + 1)}`}
@@ -3303,7 +3321,7 @@ const ConversationalInterview = () => {
                   </div>
                 ) : aiSpeaking && aiMessage ? (
                   <div className="text-center w-full h-full min-h-0 flex items-center justify-center overflow-y-auto overflow-x-hidden">
-                    <div className="inline-block text-left bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 w-full max-w-full my-auto">
+                    <div className="inline-block text-left bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 w-full max-w-full my-auto max-h-[22vh] sm:max-h-[38vh] overflow-y-auto overflow-x-hidden">
                       <p className="text-gray-900 font-medium leading-relaxed break-words text-base sm:text-lg">
                         {aiMessage}
                       </p>
@@ -3324,7 +3342,7 @@ const ConversationalInterview = () => {
                   </div>
                 ) : aiMessage ? (
                   <div className="text-center w-full h-full min-h-0 flex items-center justify-center overflow-y-auto overflow-x-hidden">
-                    <div className="inline-block text-left bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 w-full max-w-full my-auto">
+                    <div className="inline-block text-left bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 w-full max-w-full my-auto max-h-[22vh] sm:max-h-[38vh] overflow-y-auto overflow-x-hidden">
                       <p className="text-gray-900 font-medium leading-relaxed break-words text-base sm:text-lg">
                         {aiMessage}
                       </p>
@@ -3479,7 +3497,7 @@ const ConversationalInterview = () => {
 
                  {/* Reserved space for question timer - flex-shrink-0; smaller on mobile so buttons stay visible */}
          <div className="min-h-[60px] sm:min-h-[120px] mb-1 flex-shrink-0 flex items-center justify-center">
-           {isRecording && isQuestionTimerActive && questionTimeRemaining > 0 && (
+           {!answerSubmitted && isQuestionTimerActive && questionTimeRemaining > 0 && (isRecording || currentQuestion?.requires_written_answer) && (
              <div className="w-full max-w-[88%] sm:max-w-2xl mx-auto">
                <div className="flex items-center justify-between mb-2">
                  <div className="flex items-center gap-2">

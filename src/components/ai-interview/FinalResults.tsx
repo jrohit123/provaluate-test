@@ -1545,7 +1545,7 @@ const FinalResults = () => {
                <div className="text-xl sm:text-3xl font-bold text-[#1e5da8]">
                  {interview.completed_at && interview.started_at 
                    ? `${Math.round((new Date(interview.completed_at).getTime() - new Date(interview.started_at).getTime()) / 60000)} min` 
-                   : `${interview.duration_minutes || 30} min`
+                   : `${Math.round(Number(interview.duration_minutes) || 30)} min`
                  }
                </div>
                <div className="text-xs sm:text-sm text-gray-600">Duration</div>
@@ -1915,7 +1915,7 @@ const FinalResults = () => {
                 }`}>
                   <li>• Candidate's facial expressions and body language</li>
                   <li>• Complete audio from all questions</li>
-                  <li>• Full session duration: {reportData.interview.duration_minutes || 30} minutes</li>
+                  <li>• Full session duration: {Math.round(Number(reportData.interview.duration_minutes) || 30)} minutes</li>
                   <li>• Professional assessment context</li>
                   {reportData.answers && reportData.answers.some(answer => answer.question_video_url) && (
                     <li>• Individual question videos are also available above for easier review</li>

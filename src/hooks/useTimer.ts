@@ -10,6 +10,9 @@ export function useTimer(initialSeconds: number, active: boolean, options: Timer
   const [seconds, setSeconds] = useState(initialSeconds);
   const startRef = useRef<number | null>(null);
   const previousInitial = useRef(initialSeconds);
+  // Keep latest onEnd in a ref so we don't reset the timer when only the callback reference changes (e.g. parent re-render when isRecording changes)
+  const onEndRef = useRef(onEnd);
+  onEndRef.current = onEnd;
 
   useEffect(() => {
     // Reset timer when initialSeconds changes
@@ -41,9 +44,7 @@ export function useTimer(initialSeconds: number, active: boolean, options: Timer
       if (remaining > 0) {
         frame = requestAnimationFrame(tick);
       } else {
-        if (onEnd) {
-          onEnd();
-        }
+        onEndRef.current?.();
       }
     };
 
@@ -52,7 +53,8 @@ export function useTimer(initialSeconds: number, active: boolean, options: Timer
     return () => {
       cancelAnimationFrame(frame);
     };
-  }, [active, initialSeconds, onEnd]);
+  }, [active, initialSeconds]);
+  // Intentionally omit onEnd from deps: we use onEndRef so the timer does NOT restart when only the parent's callback reference changes (e.g. when isRecording changes on "Stop recording" for written questions).
 
   return seconds;
 }

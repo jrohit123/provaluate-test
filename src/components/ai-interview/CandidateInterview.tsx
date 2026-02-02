@@ -231,15 +231,16 @@ const CandidateInterview = () => {
     }
   };
 
-  // Attach stream once video element is rendered
+  // Attach stream once video element is rendered (and re-attach after Retake when new stream is ready)
   useEffect(() => {
-    if (cameraReady && streamRef.current && videoRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-      videoRef.current.play().catch(err => {
-        console.error('Video play error:', err);
-      });
-    }
-  }, [cameraReady]);
+    if (!cameraReady || !streamRef.current || !videoRef.current) return;
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    video.srcObject = stream;
+    video.play().catch(err => {
+      console.error('Video play error:', err);
+    });
+  }, [cameraReady, photoCaptured]);
 
   // Capture photo from video stream
   const capturePhoto = async (): Promise<string | null> => {
@@ -332,20 +333,24 @@ const CandidateInterview = () => {
     setIsCapturingPhoto(false);
   }, [interviewData?.id]);
 
-  // Handle retake photo
+  // Handle retake photo: stop current stream, reset state, so init effect requests a new stream and attach effect re-attaches it
   const handleRetakePhoto = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setCameraReady(false);
     setPhotoCaptured(false);
     setCapturedPhoto(null);
   };
 
-  // Initialize camera when interview data loads
+  // Initialize camera when interview data loads (and re-initialize when Retake is clicked)
   useEffect(() => {
     if (interviewData && !photoCaptured) {
       initializeCamera();
     }
-    
+
     return () => {
-      // Cleanup stream
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
@@ -472,7 +477,7 @@ const CandidateInterview = () => {
             <span className="text-gray-300" aria-hidden>|</span>
             <span className="flex items-center gap-1.5">
               <Clock className="w-4 h-4 text-gray-500" />
-              {interviewData.duration_minutes} minutes
+              {Math.round(Number(interviewData.duration_minutes) || 30)} minutes
             </span>
           </div>
         </section>
