@@ -11,7 +11,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
 import { useCurrentStep, useNavigateToStep, WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
-import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 interface Candidate {
   id: string;
@@ -883,75 +883,247 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     }
   };
 
-  const handleExportReport = () => {
-    try {
-      // Create a new workbook
-      const wb = XLSX.utils.book_new();
-      
-      // Use displayCandidates (filtered/sorted) for export
-      const candidatesToExport = selectedCandidateData ? candidates : displayCandidates;
-      
-      // Prepare data for the main summary sheet
-      const summaryData = candidatesToExport.map(candidate => ({
-        'Candidate Name': candidate.name,
-        'Overall Score (%)': candidate.overallScore,
-        'Assessed at': formatDateForExport(candidate.createdAt || ''),
-        'Recommendation': cleanTextForExport(candidate.recommendation),
-        'Summary': cleanTextForExport(candidate.detailedAssessment)
-      }));
+  const handleExportReport = async () => {
+  try {
+    const XLSX = await import('xlsx-js-style');
+    
+    const candidatesToExport = selectedCandidateData ? candidates : displayCandidates;
+    
+    // Prepare data for summary sheet
+    const summaryData = await Promise.all(
+      candidatesToExport.map(async (candidate) => {
+        let candidateEmail = '';
+        try {
+          if (candidate.resumeUrl) {
+            const { data } = await supabase
+              .from('resumes')
+              .select('evaluation_scores')
+              .eq('cv_file', candidate.resumeUrl)
+              .single();
+            
+            if (data && data.evaluation_scores) {
+              const evalData = typeof data.evaluation_scores === 'string' 
+                ? JSON.parse(data.evaluation_scores) 
+                : data.evaluation_scores;
+              candidateEmail = evalData?.analysis_result?.properties?.email || '';
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching email:', error);
+        }
 
-      // Create summary worksheet
-      const summaryWS = XLSX.utils.json_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(wb, summaryWS, 'Candidate Summary');
+        return [
+          candidate.name,
+          candidateEmail,
+          candidate.overallScore.toString(),
+          formatDateForExport(candidate.createdAt || ''),
+          cleanTextForExport(candidate.recommendation || ''),
+          cleanTextForExport(candidate.detailedAssessment || '')
+        ];
+      })
+    );
 
-      // Prepare detailed scoring data
-      const detailedData: any[] = [];
-      candidatesToExport.forEach(candidate => {
-        candidate.scores.forEach(score => {
-          detailedData.push({
-            'Candidate Name': candidate.name,
-            'Overall Score (%)': candidate.overallScore,
-            'Parameter': score.parameter,
-            'Score (out of 10)': score.score,
-            'Weightage (%)': score.weightage,
-            'Weighted Score': (score.score * score.weightage) / 10
-          });
+    // Add header row
+    summaryData.unshift([
+      'Candidate Name',
+      'Email',
+      'Overall Score (%)',
+      'Assessed at',
+      'Recommendation',
+      'Summary'
+    ]);
+
+    // Create worksheet
+    const ws = XLSX.utils.aoa_to_sheet(summaryData);
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 25 },  // Candidate Name
+      { wch: 25 },  // Email
+      { wch: 18 },  // Score
+      { wch: 20 },  // Date
+      { wch: 30 },  // Recommendation ← CHANGED from 60 to 30
+      { wch: 80 }   // Summary
+    ];
+
+    // Calculate row heights based on content
+    const rowHeights = [];
+    summaryData.forEach((row, idx) => {
+      let maxHeight = 20; // minimum height
+      
+      row.forEach((cell, colIdx) => {
+        const cellText = cell?.toString() || '';
+        const colWidth = ws['!cols'][colIdx].wch;
+        
+        // Estimate lines needed
+        const charsPerLine = colWidth * 1.2; // Excel character formula
+        const lines = cellText.split('\n');
+        let totalLines = 0;
+        
+        lines.forEach(line => {
+          totalLines += Math.max(1, Math.ceil(line.length / charsPerLine));
         });
+        
+        // Calculate height (1 line ≈ 15-20 pixels)
+        const cellHeight = totalLines * 18;
+        maxHeight = Math.max(maxHeight, cellHeight);
       });
-
-      // Create detailed scoring worksheet
-      const detailedWS = XLSX.utils.json_to_sheet(detailedData);
-      XLSX.utils.book_append_sheet(wb, detailedWS, 'Detailed Scoring');
-
-      // Generate filename with current date and filter info
-      const currentDate = new Date().toISOString().split('T')[0];
-      let filename = `Match_Scorecard_Report_${currentDate}`;
       
-      // Add filter/sort info only when not in single candidate mode
-      if (!selectedCandidateData) {
-        const filterSuffix = recommendationFilter !== 'all' ? `_${recommendationFilter.replace(/\s+/g, '_')}` : '';
-        const sortSuffix = `_sorted_${sortOrder}`;
-        filename += `${filterSuffix}${sortSuffix}`;
+      rowHeights.push({ hpx: maxHeight });
+    });
+
+    // Set row heights
+    ws['!rows'] = rowHeights;
+
+    // Style cells
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cellAddress]) continue;
+
+        // Header row styling
+        if (R === 0) {
+          ws[cellAddress].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" }, sz: 12 },
+            fill: { fgColor: { rgb: "4472C4" } },
+            alignment: { vertical: "center", horizontal: "center", wrapText: true },
+            border: {
+              top: { style: "thin", color: { rgb: "000000" } },
+              bottom: { style: "thin", color: { rgb: "000000" } },
+              left: { style: "thin", color: { rgb: "000000" } },
+              right: { style: "thin", color: { rgb: "000000" } }
+            }
+          };
+        } else {
+          // Data row styling
+          ws[cellAddress].s = {
+            font: { sz: 11 },
+            alignment: { 
+              vertical: "top", 
+              horizontal: C === 2 ? "center" : "left", 
+              wrapText: true 
+            },
+            border: {
+              top: { style: "thin", color: { rgb: "000000" } },
+              bottom: { style: "thin", color: { rgb: "000000" } },
+              left: { style: "thin", color: { rgb: "000000" } },
+              right: { style: "thin", color: { rgb: "000000" } }
+            }
+          };
+          
+          // Alternate row colors
+          if (R % 2 === 0) {
+            ws[cellAddress].s.fill = { fgColor: { rgb: "F2F2F2" } };
+          }
+        }
       }
-      
-      filename += '.xlsx';
-
-      // Download the file
-      XLSX.writeFile(wb, filename);
-
-      toast({
-        title: "Export Successful",
-        description: `Report exported as ${filename}`,
-      });
-    } catch (error) {
-      console.error('Export error:', error);
-      toast({
-        title: "Export Failed",
-        description: "There was an error exporting the report.",
-        variant: "destructive"
-      });
     }
-  };
+
+    // Create detailed scoring sheet
+    const detailedData = [['Candidate Name', 'Overall Score (%)', 'Parameter', 'Score (out of 10)', 'Weightage (%)', 'Weighted Score']];
+    
+    candidatesToExport.forEach(candidate => {
+      candidate.scores.forEach(score => {
+        detailedData.push([
+          candidate.name,
+          candidate.overallScore.toString(),
+          score.parameter,
+          score.score.toString(),
+          score.weightage.toString(),
+          parseFloat(((score.score * score.weightage) / 10).toFixed(2)).toString()
+        ]);
+      });
+    });
+
+    const ws2 = XLSX.utils.aoa_to_sheet(detailedData);
+    ws2['!cols'] = [
+      { wch: 25 },
+      { wch: 18 },
+      { wch: 35 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 18 }
+    ];
+
+    // Style detailed sheet cells
+    const detailedRange = XLSX.utils.decode_range(ws2['!ref']);
+    for (let R = detailedRange.s.r; R <= detailedRange.e.r; ++R) {
+      for (let C = detailedRange.s.c; C <= detailedRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws2[cellAddress]) continue;
+
+        // Header row styling
+        if (R === 0) {
+          ws2[cellAddress].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" }, sz: 12 },
+            fill: { fgColor: { rgb: "4472C4" } },
+            alignment: { vertical: "center", horizontal: "center", wrapText: true },
+            border: {
+              top: { style: "thin", color: { rgb: "000000" } },
+              bottom: { style: "thin", color: { rgb: "000000" } },
+              left: { style: "thin", color: { rgb: "000000" } },
+              right: { style: "thin", color: { rgb: "000000" } }
+            }
+          };
+        } else {
+          // Data row styling
+          ws2[cellAddress].s = {
+            font: { sz: 11 },
+            alignment: { 
+              vertical: "top", 
+              horizontal: C === 1 || C === 2 || C === 4 || C === 5 ? "center" : "left", 
+              wrapText: true 
+            },
+            border: {
+              top: { style: "thin", color: { rgb: "000000" } },
+              bottom: { style: "thin", color: { rgb: "000000" } },
+              left: { style: "thin", color: { rgb: "000000" } },
+              right: { style: "thin", color: { rgb: "000000" } }
+            }
+          };
+          
+          // Alternate row colors
+          if (R % 2 === 0) {
+            ws2[cellAddress].s.fill = { fgColor: { rgb: "F2F2F2" } };
+          }
+        }
+      }
+    }
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Candidate Summary');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Detailed Scoring');
+
+    // Generate filename
+    const currentDate = new Date().toISOString().split('T')[0];
+    let filename = `Match_Scorecard_Report_${currentDate}`;
+    
+    if (!selectedCandidateData) {
+      const filterSuffix = recommendationFilter !== 'all' ? `_${recommendationFilter.replace(/\s+/g, '_')}` : '';
+      const sortSuffix = `_sorted_${sortOrder}`;
+      filename += `${filterSuffix}${sortSuffix}`;
+    }
+    
+    filename += '.xlsx';
+
+    // Write file
+    XLSX.writeFile(wb, filename);
+
+    toast({
+      title: "Export Successful",
+      description: `Report exported as ${filename}`,
+    });
+  } catch (error) {
+    console.error('Export error:', error);
+    toast({
+      title: "Export Failed",
+      description: "There was an error exporting the report.",
+      variant: "destructive"
+    });
+  }
+};
 
   const handleSortToggle = () => {
     const newSortOrder = sortOrder === 'desc' ? 'asc' : 'desc';
@@ -1006,7 +1178,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                 <span className="text-sm text-gray-600 font-medium whitespace-nowrap">Job:</span>
               </div>
               <Select value={selectedJobDescriptionId} onValueChange={handleJobDescriptionSelect}>
-                <SelectTrigger className="w-full lg:w-[200px] h-11 sm:h-10">
+                <SelectTrigger className="w-full lg:w-auto lg:min-w-[200px] h-11 sm:h-10">
                   <SelectValue placeholder="Select job..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -1031,7 +1203,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                 <span className="text-sm text-gray-600 font-medium whitespace-nowrap">Criteria:</span>
               </div>
               <Select value={selectedCriteriaGridId} onValueChange={handleCriteriaGridSelect}>
-                <SelectTrigger className="w-full lg:w-[200px] h-11 sm:h-10">
+                <SelectTrigger className="w-full lg:w-auto lg:min-w-[200px] h-11 sm:h-10">
                   <SelectValue placeholder="Select criteria..." />
                 </SelectTrigger>
                 <SelectContent>

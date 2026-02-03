@@ -29,6 +29,7 @@ const FinalResults = () => {
 
   const [playingVideo, setPlayingVideo] = useState(null);
   const [playingAudio, setPlayingAudio] = useState(null);
+  const [showingWrittenAnswer, setShowingWrittenAnswer] = useState(null);
 
   const playVideo = (videoUrl) => {
     if (videoUrl) {
@@ -48,6 +49,16 @@ const FinalResults = () => {
 
   const closeAudio = () => {
     setPlayingAudio(null);
+  };
+
+  const showWrittenAnswer = (writtenAnswer) => {
+    if (writtenAnswer) {
+      setShowingWrittenAnswer(writtenAnswer);
+    }
+  };
+
+  const closeWrittenAnswer = () => {
+    setShowingWrittenAnswer(null);
   };
 
   // Toggle question expansion
@@ -151,7 +162,8 @@ const FinalResults = () => {
               score: answer.score,
               feedback: answer.feedback, // This is the REAL AI feedback
               parameter_key: answer.parameter_key,
-              parameter_name: answer.parameter_name
+              parameter_name: answer.parameter_name,
+              written_answer: answer.written_answer // Add written answer
             });
           });
           
@@ -194,7 +206,8 @@ const FinalResults = () => {
                     score: answer.score,
                     feedback: answer.feedback,
                     parameter_key: answer.parameter_key,
-                    parameter_name: answer.parameter_name
+                    parameter_name: answer.parameter_name,
+                    written_answer: answer.written_answer
                   });
                 });
               } else {
@@ -218,7 +231,8 @@ const FinalResults = () => {
                     score: answer.score,
                     feedback: answer.feedback,
                     parameter_key: answer.parameter_key,
-                    parameter_name: answer.parameter_name
+                    parameter_name: answer.parameter_name,
+                    written_answer: answer.written_answer
                   });
                 });
               }
@@ -246,7 +260,8 @@ const FinalResults = () => {
                 score: answer.score,
                 feedback: answer.feedback,
                 parameter_key: answer.parameter_key,
-                parameter_name: answer.parameter_name
+                parameter_name: answer.parameter_name,
+                written_answer: answer.written_answer
               });
             });
           }
@@ -318,6 +333,7 @@ const FinalResults = () => {
                let realScore = correspondingAnswer?.score;
                let realAudioUrl = correspondingAnswer?.audio_url || questionData.audio_url;
                let realVideoUrl = correspondingAnswer?.question_video_url;
+               let realWrittenAnswer = correspondingAnswer?.written_answer;
 
                // Fallback to interview.parameter_scores.individual_question_scores matched by question_order
                if (data.interview?.parameter_scores) {
@@ -362,7 +378,8 @@ const FinalResults = () => {
                    score: realScore,
                    feedback: realFeedback,
                    audio_url: realAudioUrl,
-                   question_video_url: realVideoUrl
+                   question_video_url: realVideoUrl,
+                   written_answer: realWrittenAnswer
                  }
                };
              });
@@ -825,94 +842,98 @@ const FinalResults = () => {
     if (!reportData) return;
 
     try {
-      // Create workbook with ExcelJS
+      // Import ExcelJS dynamically
+      const ExcelJS = (await import('exceljs')).default;
       const workbook = new ExcelJS.Workbook();
       
-      // 1. OVERVIEW SHEET
+      // ============================================
+      // CREATE OVERVIEW SHEET
+      // ============================================
       const overviewSheet = workbook.addWorksheet('Overview');
       
-      
-      // Add headers with styling
-      const headerRow = overviewSheet.addRow(['FIELD', 'VALUES']);
-      headerRow.font = { bold: true, size: 12 };
-      headerRow.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFE0E0E0' }
-      };
+      // Define columns with proper widths
+      overviewSheet.columns = [
+        { header: 'FIELD', key: 'field', width: 25 },
+        { header: 'VALUE', key: 'value', width: 40 }
+      ];
       
       // Add data rows
       overviewSheet.addRow(['Candidate Name', reportData.interview?.candidate_name || 'N/A']);
       overviewSheet.addRow(['Position Applied', reportData.interview?.position || 'N/A']);
-      
-      // Use the same overall score that the UI displays
-      const overallScore = reportData.interview?.overall_score;
-      const displayScore = overallScore ? parseFloat(overallScore).toFixed(1) : 'N/A';
-      
-      overviewSheet.addRow(['Overall Score', displayScore]);
-      overviewSheet.addRow(['Total Questions', reportData.questions?.length || 0]);
-      // Remove Interview Type row - not needed
+      overviewSheet.addRow(['Overall Score', (parseFloat(reportData.interview?.overall_score) || 0).toString()]);
+      overviewSheet.addRow(['Total Questions', (reportData.questions?.length || 0).toString()]);
       overviewSheet.addRow(['Assessment Date', new Date().toLocaleDateString()]);
       overviewSheet.addRow(['Report generated time', new Date().toLocaleTimeString()]);
       overviewSheet.addRow(['Performance Level', getScoreLabel(reportData.interview?.overall_score || 0)]);
       
-      // 2. PARAMETERS SHEET
-      if (reportData.parameters && reportData.parameters.length > 0) {
-        const parameterSheet = workbook.addWorksheet('Parameters');
-        
-        
-        // Add headers with styling
-        const paramHeaderRow = parameterSheet.addRow(['PARAMETER NAME', 'SCORE', 'QUESTIONS', 'WEIGHT', 'PERFORMANCE']);
-        paramHeaderRow.font = { bold: true, size: 12 };
-        paramHeaderRow.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFE0E0E0' }
-        };
-        
-        // Calculate actual question counts for each parameter
-        const parameterQuestionCounts = {};
-        if (reportData.questions) {
-          reportData.questions.forEach(question => {
-            const paramKey = question.parameter_key || question.parameter_name;
-            if (paramKey) {
-              parameterQuestionCounts[paramKey] = (parameterQuestionCounts[paramKey] || 0) + 1;
+      // Style header row
+      const overviewHeaderRow = overviewSheet.getRow(1);
+      overviewHeaderRow.height = 30;
+      overviewHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+      overviewHeaderRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      overviewHeaderRow.eachCell((cell) => {
+        if (cell.value && cell.value.toString().trim() !== '') {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF4472C4' }
+          };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FF000000' } },
+            left: { style: 'thin', color: { argb: 'FF000000' } },
+            bottom: { style: 'thin', color: { argb: 'FF000000' } },
+            right: { style: 'thin', color: { argb: 'FF000000' } }
+          };
+        }
+      });
+      
+      // Style data rows
+      overviewSheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) {
+          row.height = 25;
+          row.eachCell({ includeEmpty: false }, (cell) => {
+            if (cell.value && cell.value.toString().trim() !== '') {
+              cell.border = {
+                top: { style: 'thin', color: { argb: 'FF000000' } },
+                left: { style: 'thin', color: { argb: 'FF000000' } },
+                bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                right: { style: 'thin', color: { argb: 'FF000000' } }
+              };
+              cell.font = { size: 11 };
+              
+              // Alternate row colors
+              if (rowNumber % 2 === 0) {
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FFF2F2F2' }
+                };
+              }
+              
+              cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
             }
           });
         }
-        
-        // Add data rows
-        reportData.parameters.forEach((param) => {
-          const paramName = param.name || param.parameter_name || 'Unknown Parameter';
-          const score = param.score || param.averageScore || 'N/A';
-          const paramKey = param.key || param.parameter_key || param.parameter_name;
-          const questionCount = parameterQuestionCounts[paramKey] || 0;
-          const weight = param.weight ? param.weight : 'N/A';
-          
-          let performance = 'Needs Improvement';
-          if (score >= 8) performance = 'Excellent';
-          else if (score >= 6) performance = 'Good';
-          else if (score >= 4) performance = 'Fair';
-          
-          parameterSheet.addRow([paramName, score, questionCount, weight, performance]);
-        });
-      }
+      });
       
-      // 3. QUESTIONS & ANSWERS SHEET
+      // ============================================
+      // CREATE QUESTIONS & ANSWERS SHEET
+      // ============================================
       if (reportData.questions && reportData.answers) {
         const qaSheet = workbook.addWorksheet('Questions & Answers');
         
-        // Add headers with styling
-        const qaHeaderRow = qaSheet.addRow(['Q', 'PARAMETER', 'QUESTION', 'ANSWER', 'SCORE', 'AI FEEDBACK']);
-        qaHeaderRow.font = { bold: true, size: 12 };
-        qaHeaderRow.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFE0E0E0' }
-        };
+        // Define columns with proper widths
+        qaSheet.columns = [
+          { header: 'Q NO', key: 'q', width: 8 },
+          { header: 'PARAMETER', key: 'parameter', width: 25 },
+          { header: 'QUESTION', key: 'question', width: 50 },
+          { header: 'ANSWER', key: 'answer', width: 60 },
+          { header: 'WRITTEN ANSWER', key: 'written_answer', width: 50 },
+          { header: 'SCORE', key: 'score', width: 10 },
+          { header: 'AI FEEDBACK', key: 'feedback', width: 80 }
+        ];
         
         // Add data rows - match questions with answers properly using question_order
-        // Sort questions by question_order to ensure proper order
         const sortedQuestions = [...reportData.questions].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
         
         sortedQuestions.forEach((question) => {
@@ -926,44 +947,121 @@ const FinalResults = () => {
           if (questionText !== 'N/A' && parameter !== 'N/A') {
             if (answer) {
               const transcript = answer.transcript || answer.answer || 'No transcript available';
+              const writtenAnswer = answer.written_answer || 'No written answer';
               const score = answer.score || 'N/A';
               const feedback = answer.feedback || 'No feedback available';
               
-              qaSheet.addRow([questionOrder + 1, parameter, questionText, transcript, score, feedback]);
+              qaSheet.addRow([questionOrder + 1, parameter, questionText, transcript, writtenAnswer, score, feedback]);
             } else {
               // Handle case where answer is missing but question exists
-              qaSheet.addRow([questionOrder + 1, parameter, questionText, 'No answer recorded', 'N/A', 'No feedback available']);
+              qaSheet.addRow([questionOrder + 1, parameter, questionText, 'No answer recorded', 'No written answer', 'N/A', 'No feedback available']);
             }
+          }
+        });
+        
+        // Style header row
+        const qaHeaderRow = qaSheet.getRow(1);
+        qaHeaderRow.height = 30;
+        qaHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+        qaHeaderRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+        qaHeaderRow.eachCell((cell) => {
+          if (cell.value && cell.value.toString().trim() !== '') {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FF4472C4' }
+            };
+            cell.border = {
+              top: { style: 'thin', color: { argb: 'FF000000' } },
+              left: { style: 'thin', color: { argb: 'FF000000' } },
+              bottom: { style: 'thin', color: { argb: 'FF000000' } },
+              right: { style: 'thin', color: { argb: 'FF000000' } }
+            };
+          }
+        });
+        
+        // Style data rows with dynamic height calculation
+        qaSheet.eachRow((row, rowNumber) => {
+          if (rowNumber > 1) {
+            // Calculate height based on content length
+            const questionCell = row.getCell(3);
+            const answerCell = row.getCell(4);
+            const writtenAnswerCell = row.getCell(5);
+            const feedbackCell = row.getCell(7);
+            
+            const questionText = questionCell.value?.toString() || '';
+            const answerText = answerCell.value?.toString() || '';
+            const writtenAnswerText = writtenAnswerCell.value?.toString() || '';
+            const feedbackText = feedbackCell.value?.toString() || '';
+            
+            // Estimate lines needed (approximate characters per line)
+            const questionLines = Math.ceil(questionText.length / 50);
+            const answerLines = Math.ceil(answerText.length / 60);
+            const writtenAnswerLines = Math.ceil(writtenAnswerText.length / 60);
+            const feedbackLines = Math.ceil(feedbackText.length / 70);
+            
+            const maxLines = Math.max(questionLines, answerLines, writtenAnswerLines, feedbackLines);
+            row.height = Math.max(100, maxLines * 15);
+            
+            // Apply styling to each cell
+            row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+              if (cell.value && cell.value.toString().trim() !== '') {
+                cell.border = {
+                  top: { style: 'thin', color: { argb: 'FF000000' } },
+                  left: { style: 'thin', color: { argb: 'FF000000' } },
+                  bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                  right: { style: 'thin', color: { argb: 'FF000000' } }
+                };
+                cell.font = { size: 11 };
+                
+                // Alternate row colors
+                if (rowNumber % 2 === 0) {
+                  cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFF2F2F2' }
+                  };
+                }
+                
+                // Top align all columns for better readability with long text
+                cell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
+                
+                // Center align Q and Score columns
+                if (colNumber === 1 || colNumber === 6) {
+                  cell.alignment = { vertical: 'top', horizontal: 'center', wrapText: true };
+                }
+              }
+            });
           }
         });
       }
       
+      // Freeze header rows for all sheets
+      overviewSheet.views = [{ state: 'frozen', ySplit: 1 }];
+      if (workbook.getWorksheet('Questions & Answers')) {
+        workbook.getWorksheet('Questions & Answers').views = [{ 
+          state: 'frozen', 
+          ySplit: 1,
+          zoomScale: 73 // Set zoom to 73%
+        }];
+      }
       
-      // Auto-size columns for all sheets
-      workbook.worksheets.forEach(worksheet => {
-        worksheet.columns.forEach(column => {
-          let maxLength = 0;
-          column.eachCell({ includeEmpty: true }, (cell) => {
-            const columnLength = cell.value ? cell.value.toString().length : 10;
-            if (columnLength > maxLength) {
-              maxLength = columnLength;
-            }
-          });
-          column.width = Math.min(maxLength + 2, 50);
-        });
-      });
+      // Generate filename
+      const currentDate = new Date().toISOString().split('T')[0];
+      const candidateName = (reportData.interview?.candidate_name || 'Candidate').replace(/[^a-zA-Z0-9]/g, '_');
+      const filename = `Interview_Report_${candidateName}_${currentDate}.xlsx`;
       
-      // Save the Excel file
+      // Generate and download file
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Interview_Report_${reportData.interview?.candidate_name || 'Candidate'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.download = filename;
       link.click();
       window.URL.revokeObjectURL(url);
       
-      toast.success('Comprehensive Excel report downloaded successfully!', { id: 'excel-download-success' });
+      toast.success('Professional Excel report downloaded successfully!', { id: 'excel-download-success' });
     } catch (error) {
       console.error('Error downloading Excel:', error);
       toast.error('Failed to download Excel. Please try again.', { id: 'excel-download-error' });
@@ -984,7 +1082,7 @@ const FinalResults = () => {
     }
   };
 
-  const getScoreColor = () => 'text-[#1e5da8]';
+  const getScoreColor = (score) => 'text-[#1e5da8]';
 
   const getScoreLabel = (score) => {
     if (score >= 8) return 'Excellent';
@@ -993,7 +1091,7 @@ const FinalResults = () => {
     return 'Needs Improvement';
   };
 
-  const getScoreClass = () => 'bg-[#1e5da8]';
+  const getScoreClass = (score) => 'bg-[#1e5da8]';
 
   if (loading) {
     return (
@@ -1089,7 +1187,7 @@ const FinalResults = () => {
             console.log('Logo image failed to load');
             resolve(false);
           };
-          logoImg.src = '/assets/Logo-transparent_bg.png';
+          logoImg.src = '/Logo_Transparent_BG.png';
         });
       } catch (error) {
         console.log('Logo not found, continuing without logo');
@@ -1269,164 +1367,171 @@ const FinalResults = () => {
       // Prepare table data
       const tableData: any[][] = [];
       
-      // Debug logging
-      console.log('🔍 PDF Generation Debug:');
+      // Debug logging - Enhanced to track feedback data
+      console.log('🔍 PDF Generation Debug - Enhanced Version:');
       console.log('🔍 Parameters object:', parameters);
       console.log('🔍 Parameters keys:', Object.keys(parameters || {}));
       console.log('🔍 Interview data:', interview);
       console.log('🔍 Parameter scores:', interview.parameter_scores);
+      console.log('🔍 Report data answers:', reportData.answers?.length);
+      console.log('🔍 Report data questions:', reportData.questions?.length);
       
-      // Check if we have parameters data (from our converted structure)
-      if (parameters && Object.keys(parameters).length > 0) {
-        // Iterate through each parameter
-        Object.entries(parameters).forEach(([paramKey, paramData]: [string, any]) => {
-          // Process each question and answer for this parameter
-          if (paramData.questions && Array.isArray(paramData.questions)) {
-            paramData.questions.forEach((questionData: any) => {
-              // Format feedback with bullet points
-              const formatFeedback = (feedback: string) => {
-                if (!feedback) return 'No feedback available';
-                
-                // Split by periods and create bullet points
-                const sentences = feedback.split('.').filter(sentence => sentence.trim().length > 0);
-                return sentences.map(sentence => `• ${sentence.trim()}`).join('\n');
-              };
-              
-              const rowData = [
-                paramData.name || paramKey,
-                questionData.question.question_text || 'N/A',
-                questionData.answer.transcript || 'No answer provided',
-                formatFeedback(questionData.answer.feedback),
-                questionData.answer.score || 'N/A'
-              ];
-              console.log('🔍 Adding row to PDF table:', rowData);
-              tableData.push(rowData);
+      // Debug feedback availability in different data structures
+      if (reportData.answers && reportData.answers.length > 0) {
+        console.log('🔍 Sample feedback from answers array:');
+        reportData.answers.forEach((answer, index) => {
+          console.log(`  Answer ${index}: feedback="${answer.feedback?.substring(0, 100) || 'No feedback'}..."`);
+        });
+      }
+      
+      if (interview.parameter_scores) {
+        const parameterScores = typeof interview.parameter_scores === 'string' 
+          ? JSON.parse(interview.parameter_scores) 
+          : interview.parameter_scores;
+        console.log('🔍 Parameter scores structure:');
+        Object.entries(parameterScores).forEach(([paramKey, paramData]: [string, any]) => {
+          console.log(`  ${paramKey}: ${paramData.individual_question_scores?.length || 0} individual scores`);
+          if (paramData.individual_question_scores) {
+            paramData.individual_question_scores.forEach((qs: any, idx: number) => {
+              console.log(`    Q${idx}: feedback="${qs.feedback?.substring(0, 100) || 'No feedback'}..."`);
             });
           }
         });
       }
-      // Fallback: Check if we have parameter_scores data (from interview_parameter_scores table)
-      else if (interview.parameter_scores) {
-        // Parse parameter_scores JSON data
-        const parameterScores = typeof interview.parameter_scores === 'string' 
-          ? JSON.parse(interview.parameter_scores) 
-          : interview.parameter_scores;
+      
+      // Use the same logic as Excel export to avoid duplicates
+      if (reportData.questions && reportData.answers && reportData.questions.length > 0) {
+        console.log('🔍 Using questions and answers arrays for PDF (primary path - same as Excel)');
         
-        // Iterate through each parameter
-        Object.entries(parameterScores).forEach(([paramKey, paramData]: [string, any]) => {
-          const individualScores = paramData.individual_question_scores || [];
+        // Sort questions by question_order to ensure proper ordering (same as Excel)
+        const sortedQuestions = [...reportData.questions].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
+        
+        sortedQuestions.forEach((question: any) => {
+          const questionOrder = question.question_order || 0;
+          const answer = reportData.answers.find((ans: any) => (ans.question_order || 0) === questionOrder);
           
-          // Process each question and answer for this parameter
-          individualScores.forEach((questionData: any) => {
-            // Format feedback with bullet points
-            const formatFeedback = (feedback: string) => {
-              if (!feedback) return 'No feedback available';
-              
-              // Split by periods and create bullet points
-              const sentences = feedback.split('.').filter(sentence => sentence.trim().length > 0);
-              return sentences.map(sentence => `• ${sentence.trim()}`).join('\n');
-            };
-            
-            tableData.push([
-              paramData.parameter_name || paramKey,
-              questionData.question_text || 'N/A',
-              questionData.transcript || 'No answer provided',
-              formatFeedback(questionData.feedback),
-              questionData.score || 'N/A'
-            ]);
-          });
-        });
-      } else {
-        // Fallback: Use questions and answers arrays directly from API (for terminated/incomplete interviews)
-        if (reportData.questions && reportData.answers && reportData.questions.length > 0) {
-          console.log('🔍 Using questions and answers arrays for PDF (terminated/incomplete interview)');
+          const questionText = question.question_text || question.question || 'N/A';
+          const parameter = question.parameter_name || question.parameter_key || 'N/A';
           
-          // Sort by question_order to ensure proper ordering
-          const sortedQuestions = [...reportData.questions].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
-          const sortedAnswers = [...reportData.answers].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
-          
-          sortedQuestions.forEach((question: any) => {
-            const answer = sortedAnswers.find((ans: any) => 
-              (ans.question_order || 0) === (question.question_order || 0)
-            );
-            
+          // Only add if we have a valid question (not N/A) - same logic as Excel
+          if (questionText !== 'N/A' && parameter !== 'N/A') {
             if (answer) {
-              // Format feedback with bullet points
-              const formatFeedback = (feedback: string) => {
-                if (!feedback) return 'No feedback available';
+              // Enhanced feedback extraction with multiple fallbacks
+              const getFeedback = (question: any, answer: any) => {
+                // Try multiple possible locations for feedback
+                let feedback = null;
                 
-                // Split by periods and create bullet points
-                const sentences = feedback.split('.').filter(sentence => sentence.trim().length > 0);
-                return sentences.map(sentence => `• ${sentence.trim()}`).join('\n');
+                // Method 1: Direct feedback from answer
+                if (answer.feedback) {
+                  feedback = answer.feedback;
+                }
+                
+                // Method 2: Feedback from parameter scores data
+                if (!feedback && interview.parameter_scores) {
+                  const parameterScores = typeof interview.parameter_scores === 'string' 
+                    ? JSON.parse(interview.parameter_scores) 
+                    : interview.parameter_scores;
+                  
+                  const paramKey = question.parameter_key || question.parameter_name;
+                  if (paramKey && parameterScores[paramKey]) {
+                    const paramScoreData = parameterScores[paramKey];
+                    if (paramScoreData.individual_question_scores) {
+                      const questionScore = paramScoreData.individual_question_scores.find((qs: any) => 
+                        qs.question_text === question.question_text ||
+                        qs.question_order === question.question_order
+                      );
+                      if (questionScore && questionScore.feedback) {
+                        feedback = questionScore.feedback;
+                      }
+                    }
+                  }
+                }
+                
+                // Method 3: Construct meaningful feedback if nothing found
+                if (!feedback) {
+                  const score = answer.score || 'N/A';
+                  const paramName = question.parameter_name || question.parameter_key || 'General';
+                  feedback = `Assessment for ${paramName}: Performance evaluated with score ${score}/10. ${score >= 7 ? 'Good performance demonstrated.' : score >= 5 ? 'Satisfactory performance with room for improvement.' : 'Performance needs significant improvement.'}`;
+                }
+                
+                return feedback;
               };
               
+              const formatFeedback = (feedback: string) => {
+                if (!feedback || feedback === 'No feedback available') return 'No feedback available';
+                
+                // Clean up the feedback text but preserve the complete content
+                let cleanedFeedback = feedback.trim();
+                
+                // Only remove obvious formatting issues, don't filter content
+                cleanedFeedback = cleanedFeedback.replace(/^•\s*/gm, '').replace(/^\d+\.\s*/gm, '');
+                
+                // If the feedback already contains bullet points, keep them structured
+                if (cleanedFeedback.includes('•') || cleanedFeedback.match(/^\d+\./gm)) {
+                  return cleanedFeedback;
+                }
+                
+                // For regular paragraph-style feedback, just return it as-is with proper spacing
+                // Don't split into bullets - preserve the original detailed feedback
+                return cleanedFeedback;
+              };
+              
+              const feedback = getFeedback(question, answer);
+              const formattedFeedback = formatFeedback(feedback);
+              console.log(`🔍 Feedback for question ${questionOrder}:`, feedback?.substring(0, 100) + '...');
+              console.log(`🔍 Formatted feedback for question ${questionOrder}:`, formattedFeedback?.substring(0, 200) + '...');
+              
               tableData.push([
-                question.parameter_name || question.parameter_key || 'General',
-                question.question_text || `Question ${(question.question_order || 0) + 1}`,
-                answer.transcript || 'No answer provided',
-                formatFeedback(answer.feedback || 'Assessment pending'),
+                parameter,
+                questionText,
+                answer.transcript || answer.answer || 'No transcript available',
+                answer.written_answer || 'No written answer',
+                formattedFeedback,
                 answer.score || 'N/A'
               ]);
-            }
-          });
-        } else {
-          // Fallback to old data structure if parameter_scores doesn't exist
-          Object.entries(parameters).forEach(([paramKey, paramData]: [string, any]) => {
-            const questions = paramData.questions || [];
-            const answers = paramData.answers || [];
-            
-            if (questions.length > 0) {
-              questions.forEach((question: any, questionIndex: number) => {
-                const answer = answers.find((ans: any) => 
-                  ans.question_order === question.question_order || 
-                  answers.indexOf(ans) === questionIndex
-                ) || answers[questionIndex] || {};
-                
-                tableData.push([
-                  paramData.name || paramKey,
-                  question.question_text || 'N/A',
-                  answer.transcript || 'No answer provided',
-                  answer.feedback || 'No feedback available',
-                  answer.score || answer.parameter_score || 'N/A'
-                ]);
-              });
             } else {
-              const parameterAnswer = answers[0] || {};
+              // Handle case where answer is missing but question exists (same as Excel)
               tableData.push([
-                paramData.name || paramKey,
-                'Parameter-based assessment',
-                parameterAnswer.transcript || 'No answer provided',
-                parameterAnswer.feedback || paramData.feedback || 'No feedback available',
-                parameterAnswer.score || parameterAnswer.parameter_score || paramData.score || 'N/A'
+                parameter,
+                questionText,
+                'No answer recorded',
+                'No written answer',
+                'No feedback available',
+                'N/A'
               ]);
             }
-          });
-        }
+          }
+        });
       }
       
       // Add table with proper column widths
       autoTable(doc, {
-        head: [['Parameter', 'Questions', 'Answers', 'AI Feedback', 'Scores']],
+        head: [['Parameter', 'Questions', 'Answers', 'Written Answer', 'AI Feedback', 'Scores']],
         body: tableData,
         startY: tableStartY, // Use calculated startY (85 normally, 92 if termination reason shown)
         styles: {
           fontSize: 7,
           cellPadding: 2,
           overflow: 'linebreak',
-          halign: 'left'
+          halign: 'left',
+          lineColor: [0, 0, 0], // Black borders
+          lineWidth: 0.1
         },
         headStyles: {
-          fillColor: [59, 130, 246], // Blue color
+          fillColor: [68, 114, 196], // Same blue as Excel (FF4472C4)
           textColor: 255,
           fontStyle: 'bold',
-          fontSize: 8
+          fontSize: 8,
+          lineColor: [0, 0, 0], // Black borders
+          lineWidth: 0.2 // Thicker borders for header
         },
         columnStyles: {
-          0: { cellWidth: 30 }, // Parameter - larger
-          1: { cellWidth: 40 }, // Questions - larger
-          2: { cellWidth: 40 }, // Answers - larger
-          3: { cellWidth: 40 }, // AI Feedback - larger
-          4: { cellWidth: 18 }  // Scores - larger
+          0: { cellWidth: 25 }, // Parameter - slightly smaller
+          1: { cellWidth: 35 }, // Questions - slightly smaller  
+          2: { cellWidth: 35 }, // Answers - slightly smaller
+          3: { cellWidth: 35 }, // Written Answer - new column
+          4: { cellWidth: 35 }, // AI Feedback - slightly smaller
+          5: { cellWidth: 15 }  // Scores - slightly smaller
         },
         margin: { left: 15, right: 15 },
         pageBreak: 'auto',
@@ -1834,6 +1939,16 @@ const FinalResults = () => {
                                         Play Video
                                       </button>
                                     )}
+
+                                    {answer.written_answer && (
+                                      <button
+                                        onClick={() => showWrittenAnswer(answer.written_answer)}
+                                        className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 sm:px-5 py-2.5 rounded-lg text-sm sm:text-base font-medium transition-colors touch-manipulation bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white"
+                                      >
+                                        <FileText className="h-4 w-4 flex-shrink-0" />
+                                        Show Written Answer
+                                      </button>
+                                    )}
                                   </div>
 
                                   {/* AI Feedback - Only for scored parameters */}
@@ -1989,6 +2104,37 @@ const FinalResults = () => {
                 </audio>
                 <div className="mt-3 sm:mt-4 text-xs sm:text-sm text-gray-500">
                   Use the controls above to play, pause, and seek through the audio
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Written Answer Modal */}
+      {showingWrittenAnswer && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden transition-colors duration-300 bg-white shadow-xl flex flex-col">
+            <div className="flex items-center justify-between gap-2 p-3 sm:p-4 flex-shrink-0 min-w-0">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">Written Answer</h3>
+              <button
+                onClick={closeWrittenAnswer}
+                className="flex-shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-colors text-gray-500 hover:text-gray-900 touch-manipulation"
+                aria-label="Close written answer"
+              >
+                <XCircle className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="p-3 sm:p-6 overflow-auto min-h-0 flex-1">
+              <div className="rounded-lg p-4 sm:p-6 transition-colors duration-300 bg-white border border-gray-200">
+                <textarea
+                  value={showingWrittenAnswer}
+                  readOnly
+                  className="w-full h-64 sm:h-96 p-3 sm:p-4 text-sm sm:text-base text-gray-800 bg-white rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  placeholder="No written answer available..."
+                />
+                <div className="mt-3 sm:mt-4 text-xs sm:text-sm text-gray-500 text-center">
+                  This is the exact written answer submitted by the candidate during the interview
                 </div>
               </div>
             </div>

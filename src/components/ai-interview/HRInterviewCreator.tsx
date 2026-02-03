@@ -17,7 +17,8 @@ import {
   Loader2,
   Link,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Upload
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -243,6 +244,108 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
         ...prev,
         candidates: prev.candidates.filter((_, i) => i !== index)
       }));
+    }
+  };
+
+  // Import candidates from Excel/CSV
+  const handleImportCandidates = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const data = await file.arrayBuffer();
+      
+      // Dynamic import of XLSX library
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(data, { type: 'array' });
+      
+      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+        throw new Error('No sheets found in workbook');
+      }
+      
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      
+      console.log('Import data parsed:', jsonData);
+      
+      if (jsonData.length < 2) {
+        toast({
+          title: "Invalid File",
+          description: "File must contain at least a header row and one data row",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const headers = jsonData[0] as string[];
+      console.log('Headers found:', headers);
+      
+      const nameColIndex = headers.findIndex(h => 
+        h?.toString().toLowerCase().includes('name') || 
+        h?.toString().toLowerCase().includes('candidate')
+      );
+      const emailColIndex = headers.findIndex(h => 
+        h?.toString().toLowerCase().includes('email') || 
+        h?.toString().toLowerCase().includes('mail')
+      );
+
+      console.log('Column indices - Name:', nameColIndex, 'Email:', emailColIndex);
+
+      if (nameColIndex === -1) {
+        toast({
+          title: "Missing Name Column",
+          description: "File must contain a 'Candidate Name' or 'Name' column. Found columns: " + headers.join(', '),
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const importedCandidates: Candidate[] = [];
+      
+      for (let i = 1; i < jsonData.length; i++) {
+        const row = jsonData[i] as any[];
+        const name = row[nameColIndex]?.toString().trim();
+        const email = emailColIndex !== -1 ? row[emailColIndex]?.toString().trim() || '' : '';
+        
+        if (name && name !== 'Unknown Candidate') {
+          importedCandidates.push({ name, email });
+        }
+      }
+
+      console.log('Imported candidates:', importedCandidates);
+
+      if (importedCandidates.length === 0) {
+        toast({
+          title: "No Valid Data",
+          description: "No valid candidate data found in file",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        candidates: importedCandidates
+      }));
+
+      toast({
+        title: "Import Successful",
+        description: `Imported ${importedCandidates.length} candidates successfully`,
+      });
+
+    } catch (error) {
+      console.error('Error importing file:', error);
+      toast({
+        title: "Import Failed",
+        description: `Failed to parse the file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive"
+      });
+    }
+
+    // Reset file input
+    if (event.target) {
+      event.target.value = '';
     }
   };
 
@@ -1152,16 +1255,35 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <Label className="text-sm sm:text-base font-semibold">Candidates *</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addCandidate}
-                  className="flex items-center gap-2 w-full sm:w-auto"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Candidate
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={handleImportCandidates}
+                    className="hidden"
+                    id="import-candidates-file"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => document.getElementById('import-candidates-file')?.click()}
+                    className="flex items-center gap-2 w-full sm:w-auto"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Import Candidates
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addCandidate}
+                    className="flex items-center gap-2 w-full sm:w-auto"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Candidate
+                  </Button>
+                </div>
               </div>
               
               {formData.candidates.map((candidate, index) => (

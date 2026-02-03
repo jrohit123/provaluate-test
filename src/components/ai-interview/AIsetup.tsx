@@ -1510,7 +1510,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                     setFormData(prev => ({ ...prev, interviewMode: value }))
                   }
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full h-14">
                     <SelectValue placeholder="Select interview mode..." />
                   </SelectTrigger>
                   <SelectContent>

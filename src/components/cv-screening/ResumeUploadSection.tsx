@@ -1816,7 +1816,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
   const hasResumesToAnalyze = hasNewlyUploadedResumes || hasExistingAssessments; // Enable button if there are new uploads OR existing assessments
 
   // Export assessment reports to Excel
-  const handleExportReport = () => {
+  const handleExportReport = async () => {
     if (assessmentReports.length === 0) {
       toast({
         title: "No Data to Export",
@@ -1845,51 +1845,77 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
       // Prepare data for Excel export - one row per candidate
       const exportData: any[] = [];
 
-      assessmentReports.forEach((report) => {
-        const candidateName = report.candidate_name || 'Unknown';
-        const summary = report.summary || '';
-        const recommendation = report.recommendation || '';
-        
-        // Create a single row for this candidate
-        const candidateRow: any = {
-          'Candidate Name': candidateName
-        };
-
-        // Add parameter scores as individual columns
-        if (report.scores && Array.isArray(report.scores)) {
-          // Create a map of parameter -> score for quick lookup
-          const scoreMap: { [key: string]: number } = {};
-          report.scores.forEach((score: any) => {
-            if (score.parameter && score.score !== undefined) {
-              scoreMap[score.parameter] = score.score;
+      // Process all reports with email extraction
+      const processedReports = await Promise.all(
+        assessmentReports.map(async (report) => {
+          const candidateName = report.candidate_name || 'Unknown';
+          const summary = report.summary || '';
+          const recommendation = report.recommendation || '';
+          
+          // Extract email from evaluation_scores
+          let candidateEmail = '';
+          try {
+            if (report.resume_url) {
+              const { data } = await supabase
+                .from('resumes')
+                .select('evaluation_scores')
+                .eq('cv_file', report.resume_url)
+                .single();
+              
+              if (data && data.evaluation_scores) {
+                const evalData = typeof data.evaluation_scores === 'string' 
+                  ? JSON.parse(data.evaluation_scores) 
+                  : data.evaluation_scores;
+                candidateEmail = evalData?.analysis_result?.properties?.email || '';
+              }
             }
-          });
+          } catch (error) {
+            console.error('Error fetching email:', error);
+          }
+          
+          // Create a single row for this candidate
+          const candidateRow: any = {
+            'Candidate Name': candidateName,
+            'Email': candidateEmail
+          };
 
-          // Add each parameter as a column
-          parameterColumns.forEach((parameter) => {
-            candidateRow[parameter] = scoreMap[parameter] || 0;
-          });
-        } else {
-          // If no scores, set all parameters to 0
-          parameterColumns.forEach((parameter) => {
-            candidateRow[parameter] = 0;
-          });
-        }
+          // Add parameter scores as individual columns
+          if (report.scores && Array.isArray(report.scores)) {
+            // Create a map of parameter -> score for quick lookup
+            const scoreMap: { [key: string]: number } = {};
+            report.scores.forEach((score: any) => {
+              if (score.parameter && score.score !== undefined) {
+                scoreMap[score.parameter] = score.score;
+              }
+            });
 
-        // Add summary and recommendation at the end
-        candidateRow['Summary'] = summary;
-        candidateRow['Recommendation'] = recommendation;
+            // Add each parameter as a column
+            parameterColumns.forEach((parameter) => {
+              candidateRow[parameter] = scoreMap[parameter] || 0;
+            });
+          } else {
+            // If no scores, set all parameters to 0
+            parameterColumns.forEach((parameter) => {
+              candidateRow[parameter] = 0;
+            });
+          }
 
-        exportData.push(candidateRow);
-      });
+          // Add summary and recommendation at the end
+          candidateRow['Summary'] = summary;
+          candidateRow['Recommendation'] = recommendation;
+
+          return candidateRow;
+        })
+      );
 
       // Create workbook and worksheet
       const workbook = XLSX.utils.book_new();
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const worksheet = XLSX.utils.json_to_sheet(processedReports);
 
       // Set column widths for better readability
       const columnWidths = [
         { wch: 20 }, // Candidate Name
+        { wch: 25 }, // Email
         ...parameterColumns.map(() => ({ wch: 15 })), // Parameter columns
         { wch: 40 }, // Summary
         { wch: 40 }  // Recommendation
