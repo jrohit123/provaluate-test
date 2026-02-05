@@ -273,6 +273,7 @@ const ConversationalInterview = () => {
   const audioWorkletStreamRef = useRef<MediaStream | null>(null);
   const speakQueueRef = useRef<{ text: string; onEnd?: () => void; onAudioStart?: () => void }[]>([]);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const isTerminatedRef = useRef(false);
   const handleSubmitAnswerRef = useRef<(() => Promise<void>) | null>(null);
   const stopQuestionRecordingRef = useRef<(() => void) | null>(null);
   /** When true, submit runs from timer expiry; submit whatever transcript + written answer we have (don't block on empty written box) */
@@ -297,7 +298,21 @@ const ConversationalInterview = () => {
   const terminateInterview = useCallback(async (reason) => {
     // Use consistent toast ID to prevent duplicate messages
     const terminationToastId = 'interview-terminated';
-    
+
+    // Stop all TTS/speech immediately so voice does not keep speaking after termination
+    isTerminatedRef.current = true;
+    speakQueueRef.current.length = 0;
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
+      currentAudioRef.current = null;
+    }
+    setAiTTSLoading(false);
+    setAiSpeaking(false);
+
     try {
       console.log('🚫 Terminating interview due to:', reason);
       const response = await apiCall(`${API_CONFIG.ENDPOINTS.TERMINATE_INTERVIEW}/${interviewData.interviewId}`, {
@@ -1268,6 +1283,9 @@ const ConversationalInterview = () => {
             return r.blob();
           })
           .then((blob) => {
+            if (isTerminatedRef.current) {
+              return;
+            }
             const url = URL.createObjectURL(blob);
             const audio = new Audio(url);
             currentAudioRef.current = audio;
@@ -1286,6 +1304,12 @@ const ConversationalInterview = () => {
               setAiSpeaking(true);
               item.onAudioStart?.();
             };
+            if (isTerminatedRef.current) {
+              currentAudioRef.current = null;
+              URL.revokeObjectURL(url);
+              handlePlaybackEnd();
+              return;
+            }
             return audio.play();
           })
           .catch(() => {
