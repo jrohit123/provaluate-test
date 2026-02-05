@@ -304,10 +304,10 @@ const Login = () => {
                 <span className="hidden sm:inline">Pricing</span>
                 <span className="sm:hidden">Pricing</span>
               </a>
-              <a href="/impact" className="text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
+              {/* <a href="/impact" className="text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
                 <span className="hidden sm:inline">Impact</span>
                 <span className="sm:hidden">Impact</span>
-              </a>
+              </a> */}
               <a href="mailto:sales@aitamate.com?&subject=Provaluate&body=Hi,%0D%0A%0D%0AI'm facing an issue with ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors">
                 <Mail className="h-6 w-6 sm:h-8 sm:w-8" />
               </a>

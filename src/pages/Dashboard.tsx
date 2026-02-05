@@ -425,6 +425,19 @@ const Dashboard = () => {
               </div>
             </footer>
           </main>
+          <footer className="bg-white border-t px-4 sm:px-6 py-3 sm:py-4 text-center text-xs sm:text-sm text-muted-foreground">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-0 sm:space-x-2">
+              <span>© ProValuate 2025</span>
+              <span className="hidden sm:inline">|</span>
+              <a href="#" className="text-indigo-600 hover:text-indigo-800 transition-colors">Privacy Policy</a>
+              <span className="hidden sm:inline">|</span>
+              <a href="#" className="text-indigo-600 hover:text-indigo-800 transition-colors">Terms</a>
+              <span className="hidden sm:inline">|</span>
+              <a href="mailto:sales@aitamate.com?&subject=ProValuate&body=Hi,%0D%0A%0D%0AI'd like to know more about ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors">Contact</a>
+              <span className="hidden sm:inline">|</span>
+              <span>Powered by <a href="http://aitamate.com" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-700">aitamate</a></span>
+            </div>
+          </footer>
         </div>
       </div>
     </SidebarProvider>
