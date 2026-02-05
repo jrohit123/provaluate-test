@@ -56,7 +56,7 @@ export const SessionTimeoutDialog = ({
 
   return (
     <AlertDialog open={isOpen} onOpenChange={(open) => !open}>
-      <AlertDialogContent className="border-2 border-yellow-200 bg-white">
+      <AlertDialogContent className="border-2 border-yellow-200 bg-white mx-4 max-h-[90vh] overflow-y-auto">
         <AlertDialogHeader>
           <div className="flex items-center gap-3">
             <div className="bg-yellow-100 p-2 rounded-full">
@@ -88,16 +88,16 @@ export const SessionTimeoutDialog = ({
           </div>
         </AlertDialogDescription>
 
-        <div className="flex gap-3 mt-6">
+        <div className="flex flex-col sm:flex-row gap-3 mt-6">
           <AlertDialogCancel
             onClick={onLogout}
-            className="bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
+            className="bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 h-11 sm:h-10 min-h-[44px]"
           >
             Logout Now
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={onContinue}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
+            className="bg-blue-600 hover:bg-blue-700 text-white h-11 sm:h-10 min-h-[44px]"
           >
             Continue Session
           </AlertDialogAction>

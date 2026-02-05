@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Users, Clock, CheckCircle, Shield, Mail, FileText, BarChart, UserPlus, LogIn } from "lucide-react";
 import { SessionManager } from '@/utils/sessionManager';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const PYTHON_API_BASE = import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com';
 
@@ -26,6 +27,7 @@ const Login = () => {
   const [resetLoading, setResetLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   // Remove useAuth import and usage, use Supabase directly
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -265,10 +267,13 @@ const Login = () => {
           // no-op
         }
 
-      toast({
-        title: "Welcome!",
-        description: "You've been logged in successfully.",
-      });
+      // Show toast only on desktop
+      if (!isMobile) {
+        toast({
+          title: "Welcome!",
+          description: "You've been logged in successfully.",
+        });
+      }
 
       navigate('/dashboard?section=main-dashboard');
     } catch (error: any) {
@@ -390,7 +395,7 @@ const Login = () => {
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           required
-                          className="h-10 sm:h-11 text-sm sm:text-base"
+                          className="h-10 sm:h-11 text-base"
                           disabled={isLoading}
                         />
                       </div>
@@ -401,13 +406,13 @@ const Login = () => {
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           required
-                          className="h-10 sm:h-11 text-sm sm:text-base"
+                          className="h-10 sm:h-11 text-base"
                           disabled={isLoading}
                         />
                       </div>
                       <Button 
                         type="submit" 
-                        className="w-full h-10 sm:h-11 bg-indigo-600 hover:bg-indigo-700 text-sm sm:text-base"
+                        className="w-full h-10 sm:h-11 bg-indigo-600 hover:bg-indigo-700 text-base"
                         disabled={isLoading}
                       >
                         {isLoading 
@@ -437,10 +442,10 @@ const Login = () => {
                       value={resetEmail}
                       onChange={(e) => setResetEmail(e.target.value)}
                       required
-                      className="h-10 sm:h-11 text-sm sm:text-base"
+                      className="h-10 sm:h-11 text-base"
                       disabled={resetLoading}
                     />
-                    <Button type="submit" className="w-full h-10 sm:h-11 bg-indigo-600 hover:bg-indigo-700 text-sm sm:text-base" disabled={resetLoading}>
+                    <Button type="submit" className="w-full h-10 sm:h-11 bg-indigo-600 hover:bg-indigo-700 text-base" disabled={resetLoading}>
                       {resetLoading ? 'Sending...' : 'Send Password Reset Email'}
                     </Button>
                     <button
@@ -546,6 +551,17 @@ const Login = () => {
           </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="bg-white border-t py-4">
+        <div className="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs sm:text-sm text-muted-foreground">
+          <Link to="/privacy" className="text-indigo-600 hover:text-indigo-800 font-medium">Privacy Policy</Link>
+          <span className="hidden sm:inline">|</span>
+          <Link to="/terms" className="text-indigo-600 hover:text-indigo-800 font-medium">Terms</Link>
+          <span className="hidden sm:inline">|</span>
+          <a href="mailto:sales@aitamate.com?subject=ProValuate%20Contact" className="text-indigo-600 hover:text-indigo-800">Contact</a>
+        </div>
+      </footer>
     </div>
   );
 };

@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, Plus, Trash2, Download, Save, Grid, Briefcase, AlertCircle } from 'lucide-react';
+import { Upload, Plus, Trash2, Download, Save, Grid, Briefcase, AlertCircle, ArrowRight } from 'lucide-react';
+import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
+import { useCurrentStep, useNavigateToStep, WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,10 +27,16 @@ interface SavedCriteriaGrid {
   created_at: string;
 }
 
-export const EvaluationCriteriaSection = () => {
+interface EvaluationCriteriaSectionProps {
+  onSectionReady?: () => void;
+}
+
+export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteriaSectionProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { currentJobDescription, currentEvaluationCriteria, setCurrentEvaluationCriteria } = useSession();
+  const currentStep = useCurrentStep();
+  const navigateToStep = useNavigateToStep();
   const [criteriaData, setCriteriaData] = useState<CriteriaItem[]>([]);  // Start empty - will be populated when grid is selected
   
   const [savedGrids, setSavedGrids] = useState<SavedCriteriaGrid[]>([]);
@@ -56,6 +64,12 @@ export const EvaluationCriteriaSection = () => {
       loadSavedGrids();
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const t = setTimeout(() => onSectionReady?.(), 600);
+    return () => clearTimeout(t);
+  }, [user?.id, onSectionReady]);
 
   // Sync selectedJobDescriptionId from SessionContext when it changes
   useEffect(() => {
@@ -492,41 +506,52 @@ export const EvaluationCriteriaSection = () => {
   const selectedJD = jobDescriptions.find(jd => jd.jd_id === selectedJobDescriptionId);
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-      {/* Show selected JD banner */}
-      {selectedJD ? (
-        <Card className="bg-blue-50 border-blue-200 animate-fade-in">
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-blue-600 flex-shrink-0" />
-              <span className="text-xs sm:text-sm font-medium text-blue-800 break-words">
-                Creating criteria for: <strong>{selectedJD.title}</strong>
-              </span>
-            </div>
-            <p className="text-xs text-blue-600 mt-1">
-              This criteria will be associated with the selected job description. To create a default criteria that works for all JDs, include "Default" in the name.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="bg-yellow-50 border-yellow-200 animate-fade-in">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-yellow-600" />
-              <span className="text-sm font-medium text-yellow-800">
-                No job description selected
-              </span>
-            </div>
-            <p className="text-xs text-yellow-700 mt-1">
-              Please select a job description in the Job Upload section first. Criteria saved without a JD selection will be treated as default (works for all JDs).
-            </p>
-          </CardContent>
-        </Card>
-      )}
+    <div className="min-h-screen">
+      {/* Mobile Navigation Progress Bar */}
+      <div className="lg:hidden">
+        <CompactStepProgress
+          current={currentStep}
+          total={WORKFLOW_STEPS.length}
+          steps={WORKFLOW_STEPS}
+          onStepClick={navigateToStep}
+        />
+      </div>
+      
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+        {/* Show selected JD banner */}
+        {selectedJD ? (
+          <Card className="bg-blue-50 border-blue-200 animate-fade-in">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                <span className="text-xs sm:text-sm font-medium text-blue-800 break-words">
+                  Creating criteria for: <strong>{selectedJD.title}</strong>
+                </span>
+              </div>
+              <p className="text-xs text-blue-600 mt-1">
+                This criteria will be associated with the selected job description. To create a default criteria that works for all JDs, include "Default" in the name.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="bg-yellow-50 border-yellow-200 animate-fade-in">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-yellow-600" />
+                <span className="text-sm font-medium text-yellow-800">
+                  No job description selected
+                </span>
+              </div>
+              <p className="text-xs text-yellow-700 mt-1">
+                Please select a job description in the Job Upload section first. Criteria saved without a JD selection will be treated as default (works for all JDs).
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
-      <div className="grid lg:grid-cols-1 gap-6">
+        <div className="grid lg:grid-cols-1 gap-6">
         {/* Evaluation Criteria - Now editable and with Select for Session button */}
-        <Card className="animate-fade-in">
+        <Card className="animate-fade-in" data-tour="evaluation-criteria-area">
           <CardHeader>
             <CardTitle className="flex items-center justify-between gap-2 text-lg sm:text-xl">
               <div className="flex items-center gap-2">
@@ -542,11 +567,11 @@ export const EvaluationCriteriaSection = () => {
           </CardHeader>
           
           <CardContent className="space-y-4">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <span className="text-xs sm:text-sm font-medium text-primary-700">Select a saved grid:</span>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+            <span className="text-sm font-medium text-primary-700 whitespace-nowrap">Select saved criteria:</span>
             <Select value={selectedGridId} onValueChange={handleGridSelect}>
-              <SelectTrigger className="w-full sm:w-[200px]">
-                <SelectValue placeholder="Load saved grid..." />
+              <SelectTrigger className="w-full sm:w-[200px] h-11 sm:h-10">
+                <SelectValue placeholder="Choose evaluation criteria..." />
               </SelectTrigger>
               <SelectContent>
                 {savedGrids.map(grid => (
@@ -557,37 +582,94 @@ export const EvaluationCriteriaSection = () => {
               </SelectContent>
             </Select>
           </div>
-            <div className="flex items-center gap-2 sm:gap-4 my-4 sm:my-6 text-xs sm:text-sm font-medium text-[#1e5da8]">
+          
+          <div className="flex items-center gap-2 sm:gap-4 my-4 sm:my-6 text-xs sm:text-sm font-medium text-[#1e5da8]">
               <span className="flex-1 h-px bg-[#1e5da8]/30" />
               <span className="whitespace-nowrap">OR Create new</span>
               <span className="flex-1 h-px bg-[#1e5da8]/30" />
             </div>
-            <div className="overflow-x-auto border border-primary-100 rounded-lg -mx-2 sm:mx-0">
-              <table className="w-full table-auto min-w-[600px]">
+            {/* Mobile Card Layout */}
+            <div className="block md:hidden space-y-3">
+              {criteriaData.map((criteria) => (
+                <Card key={criteria.id} className="border border-primary-100">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-primary-800 uppercase tracking-wide">
+                        Parameter To Assess
+                      </label>
+                      <Input
+                        value={criteria.parameter}
+                        onChange={(e) => updateCriteria(criteria.id, 'parameter', e.target.value)}
+                        className="font-medium text-base bg-transparent border border-primary-100 focus:bg-white focus:border-primary-300 h-10"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-primary-800 uppercase tracking-wide">
+                        Weightage
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          value={criteria.weightage}
+                          onChange={(e) => updateCriteria(criteria.id, 'weightage', parseInt(e.target.value) || 0)}
+                          className="w-24 h-10 text-base text-center bg-primary-50 border border-primary-200"
+                          min="0"
+                          max="100"
+                        />
+                        <span className="text-sm font-semibold text-primary-800">%</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteCriteria(criteria.id)}
+                          className="h-10 w-10 p-0 hover:bg-red-100 hover:text-red-600 ml-auto"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-primary-800 uppercase tracking-wide">
+                        How To Assess? (Prompt to AI)
+                      </label>
+                      <Input
+                        value={criteria.notes}
+                        onChange={(e) => updateCriteria(criteria.id, 'notes', e.target.value)}
+                        className="text-base text-muted-foreground bg-transparent border border-primary-100 focus:bg-white focus:border-primary-300 h-10"
+                        placeholder="Add description..."
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Desktop Table Layout */}
+            <div className="hidden md:block overflow-x-auto border border-primary-100 rounded-lg relative">
+              <table className="w-full table-auto">
                 <thead className="bg-primary-50 text-left">
                   <tr className="text-xs font-semibold text-primary-800 uppercase tracking-wide">
-                    <th className="px-2 sm:px-4 py-2 sm:py-3 w-[25%]">Parameters To Assess</th>
-                    <th className="px-2 sm:px-4 py-2 sm:py-3 w-[20%]">Weightage</th>
-                    <th className="px-2 sm:px-4 py-2 sm:py-3">How To Assess? (Prompt to AI)</th>
+                    <th className="px-4 py-3 w-[25%]">Parameters To Assess</th>
+                    <th className="px-4 py-3 w-[20%]">Weightage</th>
+                    <th className="px-4 py-3">How To Assess? (Prompt to AI)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-primary-100 bg-white">
                   {criteriaData.map((criteria) => (
                     <tr key={criteria.id} className="align-top">
-                      <td className="px-2 sm:px-4 py-2 sm:py-3">
+                      <td className="px-4 py-3">
                         <Input
                           value={criteria.parameter}
                           onChange={(e) => updateCriteria(criteria.id, 'parameter', e.target.value)}
-                          className="font-medium text-sm bg-transparent border border-primary-100 focus:bg-white focus:border-primary-300"
+                          className="font-medium text-base bg-transparent border border-primary-100 focus:bg-white focus:border-primary-300"
                         />
                       </td>
-                      <td className="px-2 sm:px-4 py-2 sm:py-3">
-                        <div className="flex items-center gap-1 sm:gap-2">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
                           <Input
                             type="number"
                             value={criteria.weightage}
                             onChange={(e) => updateCriteria(criteria.id, 'weightage', parseInt(e.target.value) || 0)}
-                            className="w-16 sm:w-20 h-8 sm:h-9 text-xs sm:text-sm text-center bg-primary-50 border border-primary-200"
+                            className="w-20 h-9 text-base text-center bg-primary-50 border border-primary-200"
                             min="0"
                             max="100"
                           />
@@ -596,13 +678,13 @@ export const EvaluationCriteriaSection = () => {
                             variant="ghost"
                             size="sm"
                             onClick={() => deleteCriteria(criteria.id)}
-                            className="h-7 w-7 sm:h-8 sm:w-8 p-0 hover:bg-red-100 hover:text-red-600"
+                            className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
                           >
-                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </td>
-                      <td className="px-2 sm:px-4 py-2 sm:py-3">
+                      <td className="px-4 py-3">
                         <Input
                           value={criteria.notes}
                           onChange={(e) => updateCriteria(criteria.id, 'notes', e.target.value)}
@@ -619,13 +701,13 @@ export const EvaluationCriteriaSection = () => {
             <Button
               variant="outline"
               onClick={addCriteria}
-              className="w-full border-dashed"
+              className="w-full border-dashed h-11 sm:h-10"
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Parameter
             </Button>
 
-            <div className="flex items-center justify-between p-3 bg-gray-100 rounded-lg">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 sm:p-3 bg-gray-100 rounded-lg">
               <span className="font-medium text-sm">Total Weightage:</span>
               <span className={`font-bold text-sm ${isValidTotal ? 'text-green-600' : 'text-red-600'}`}>
                 {totalPercentage}%
@@ -644,23 +726,25 @@ export const EvaluationCriteriaSection = () => {
                 variant="default"
                 size="sm"
                 onClick={handleDownloadTemplate}
-                className="flex items-center gap-1 text-xs bg-primary-600 hover:bg-primary-700 text-gray-200 hover:text-white"
+                className="flex items-center justify-center gap-2 text-sm sm:text-xs bg-primary-600 hover:bg-primary-700 text-gray-200 hover:text-white h-11 sm:h-9 w-full sm:w-auto"
               >
-                <Download className="w-3 h-3" />
+                <Download className="w-4 h-4 sm:w-3 sm:h-3" />
                 Download Excel Template
               </Button>
             
             <div 
-              className="border-2 border-dashed border-accent-200 rounded-lg p-3 sm:p-4 text-center hover:border-accent-400 transition-colors cursor-pointer"
+              className="border-2 border-dashed border-accent-200 rounded-lg p-4 sm:p-6 text-center hover:border-accent-400 transition-colors cursor-pointer min-h-[120px] sm:min-h-[100px] flex flex-col items-center justify-center"
               onClick={handleCriteriaClick}
               onDrop={handleCriteriaDrop}
               onDragOver={handleCriteriaDragOver}
             >
-              <Upload className="w-5 h-5 sm:w-6 sm:h-6 text-accent-500 mx-auto mb-2" />
-              <p className="text-xs sm:text-sm text-muted-foreground">
+              <Upload className="w-6 h-6 sm:w-6 sm:h-6 text-accent-500 mx-auto mb-2" />
+              <p className="text-sm sm:text-sm text-muted-foreground">
                 Upload Excel/CSV criteria file
               </p>
-              
+              <p className="text-xs text-muted-foreground/70 mt-1">
+                Tap to browse or drag & drop
+              </p>
             </div>
             
             <input
@@ -674,22 +758,23 @@ export const EvaluationCriteriaSection = () => {
             
             <div className="flex flex-col sm:flex-row gap-2">
               <Input
-                placeholder="Grid Name"
+                placeholder="Name your criteria (e.g., 'Software Engineer Evaluation')"
                 value={gridName}
                 onChange={(e) => setGridName(e.target.value)}
-                className="flex-1"
+                className="flex-1 h-11 sm:h-10 text-base"
               />
               <Button 
                 onClick={handleSaveCriteria} 
-                className="whitespace-nowrap w-full sm:w-auto"
+                className="whitespace-nowrap w-full sm:w-auto h-11 sm:h-10"
                 disabled={!gridName || !isValidTotal || isLoading}
               >
                 <Save className="w-4 h-4 mr-2" />
-                Save as New
+                Save Criteria
               </Button>
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
     </div>
   );

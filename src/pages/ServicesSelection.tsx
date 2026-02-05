@@ -69,7 +69,7 @@ const ServicesSelection = () => {
                 </div>
               </div>
               
-              <Link to="/cv-screening/job-upload">
+              <Link to="/dashboard?section=job-upload">
                 <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg font-semibold">
                   Start CV Screening
                   <ArrowRight className="ml-2 h-5 w-5" />

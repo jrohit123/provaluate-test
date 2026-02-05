@@ -17,7 +17,8 @@ import {
   Loader2,
   Link,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Upload
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,12 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
+import { useInterviewCurrentStep, useInterviewNavigateToStep, INTERVIEW_WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
+
+interface HRInterviewCreatorProps {
+  onSectionReady?: () => void;
+}
 
 interface Candidate {
   name: string;
@@ -64,10 +71,12 @@ interface CustomParameters {
   [key: string]: CustomParameter;
 }
 
-const HRInterviewCreator = () => {
+const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+  const interviewCurrentStep = useInterviewCurrentStep();
+  const interviewNavigateToStep = useInterviewNavigateToStep();
   
   const [formData, setFormData] = useState<FormData>({
     candidates: [{ name: '', email: '' }],
@@ -235,6 +244,108 @@ const HRInterviewCreator = () => {
         ...prev,
         candidates: prev.candidates.filter((_, i) => i !== index)
       }));
+    }
+  };
+
+  // Import candidates from Excel/CSV
+  const handleImportCandidates = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const data = await file.arrayBuffer();
+      
+      // Dynamic import of XLSX library
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(data, { type: 'array' });
+      
+      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+        throw new Error('No sheets found in workbook');
+      }
+      
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      
+      console.log('Import data parsed:', jsonData);
+      
+      if (jsonData.length < 2) {
+        toast({
+          title: "Invalid File",
+          description: "File must contain at least a header row and one data row",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const headers = jsonData[0] as string[];
+      console.log('Headers found:', headers);
+      
+      const nameColIndex = headers.findIndex(h => 
+        h?.toString().toLowerCase().includes('name') || 
+        h?.toString().toLowerCase().includes('candidate')
+      );
+      const emailColIndex = headers.findIndex(h => 
+        h?.toString().toLowerCase().includes('email') || 
+        h?.toString().toLowerCase().includes('mail')
+      );
+
+      console.log('Column indices - Name:', nameColIndex, 'Email:', emailColIndex);
+
+      if (nameColIndex === -1) {
+        toast({
+          title: "Missing Name Column",
+          description: "File must contain a 'Candidate Name' or 'Name' column. Found columns: " + headers.join(', '),
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const importedCandidates: Candidate[] = [];
+      
+      for (let i = 1; i < jsonData.length; i++) {
+        const row = jsonData[i] as any[];
+        const name = row[nameColIndex]?.toString().trim();
+        const email = emailColIndex !== -1 ? row[emailColIndex]?.toString().trim() || '' : '';
+        
+        if (name && name !== 'Unknown Candidate') {
+          importedCandidates.push({ name, email });
+        }
+      }
+
+      console.log('Imported candidates:', importedCandidates);
+
+      if (importedCandidates.length === 0) {
+        toast({
+          title: "No Valid Data",
+          description: "No valid candidate data found in file",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        candidates: importedCandidates
+      }));
+
+      toast({
+        title: "Import Successful",
+        description: `Imported ${importedCandidates.length} candidates successfully`,
+      });
+
+    } catch (error) {
+      console.error('Error importing file:', error);
+      toast({
+        title: "Import Failed",
+        description: `Failed to parse the file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive"
+      });
+    }
+
+    // Reset file input
+    if (event.target) {
+      event.target.value = '';
     }
   };
 
@@ -462,8 +573,8 @@ const HRInterviewCreator = () => {
     // Add 2 minutes buffer
     calculatedDuration += 2;
     
-    // Ensure duration is within reasonable bounds (5-120 minutes)
-    const finalDuration = Math.max(5, Math.min(120, calculatedDuration));
+    // Ensure duration is within reasonable bounds (5-120 minutes) and round to whole minutes
+    const finalDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
     
     setFormData(prev => ({ 
       ...prev, 
@@ -493,7 +604,7 @@ const HRInterviewCreator = () => {
         calculatedDuration += avgQuestions * totalTimePerQuestion;
       });
       calculatedDuration += 2; // Add buffer
-      baseDuration = Math.max(5, Math.min(120, calculatedDuration));
+      baseDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
     }
     
     // Calculate total questions (technical + personalized) - use same logic as AIsetup
@@ -528,7 +639,7 @@ const HRInterviewCreator = () => {
     
     setFormData(prev => ({
       ...prev,
-      duration: totalDuration,
+      duration: Math.round(totalDuration),
       totalQuestions: totalQuestions
     }));
   };
@@ -567,7 +678,7 @@ const HRInterviewCreator = () => {
     
     setFormData(prev => ({ 
       ...prev, 
-      duration: Math.round(finalDuration * 10) / 10, // Round to 1 decimal place
+      duration: Math.round(finalDuration), // Whole minutes only (match AIsetup)
       totalQuestions: structuredQuestions.length
     }));
   };
@@ -620,6 +731,15 @@ const HRInterviewCreator = () => {
       });
       return;
     }
+
+    const totalWeight = Object.values(customParameters).reduce((acc, p) => acc + (Number(p?.weight) || 0), 0);
+    if (Math.abs(totalWeight - 100) > 0.01) {
+      toast({
+        title: "Invalid total weight",
+        description: `Total weight must equal 100%. Current total: ${totalWeight}%. Adjust parameter weights so they sum to exactly 100.`,
+      });
+      return;
+    }
     
     setIsSavingParameters(true);
     try {
@@ -648,9 +768,10 @@ const HRInterviewCreator = () => {
       }
     } catch (error) {
       console.error('Error saving parameters:', error);
+      const message = error instanceof Error ? error.message : 'Failed to save parameters';
       toast({
         title: "Save Failed",
-        description: "Failed to save parameters",
+        description: message,
       });
     } finally {
       setIsSavingParameters(false);
@@ -980,7 +1101,7 @@ const HRInterviewCreator = () => {
             candidate_name: candidate.name,
             candidate_email: candidate.email,
             position: formData.position,
-            duration_minutes: formData.duration,
+            duration_minutes: formData.duration != null ? Math.round(Number(formData.duration)) : 30,
             total_questions: formData.totalQuestions,
             custom_instructions: formData.customInstructions,
             interview_type: formData.interviewType,
@@ -1099,7 +1220,21 @@ const HRInterviewCreator = () => {
     });
   };
 
+  useEffect(() => {
+    const t = setTimeout(() => onSectionReady?.(), 500);
+    return () => clearTimeout(t);
+  }, [onSectionReady]);
+
   return (
+    <div className="min-h-screen">
+      <div className="lg:hidden">
+        <CompactStepProgress
+          current={interviewCurrentStep}
+          total={INTERVIEW_WORKFLOW_STEPS.length}
+          steps={INTERVIEW_WORKFLOW_STEPS}
+          onStepClick={interviewNavigateToStep}
+        />
+      </div>
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       <div className="mb-4 sm:mb-6">
         <h2 className="text-xl sm:text-2xl font-bold text-primary-800 mb-2">Final Overview</h2>
@@ -1107,7 +1242,7 @@ const HRInterviewCreator = () => {
       </div>
 
       {/* Interview Configuration Section */}
-      <Card className="animate-fade-in">
+      <Card className="animate-fade-in" data-tour="ai-interview-area">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
@@ -1120,16 +1255,35 @@ const HRInterviewCreator = () => {
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <Label className="text-sm sm:text-base font-semibold">Candidates *</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addCandidate}
-                  className="flex items-center gap-2 w-full sm:w-auto"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Candidate
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={handleImportCandidates}
+                    className="hidden"
+                    id="import-candidates-file"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => document.getElementById('import-candidates-file')?.click()}
+                    className="flex items-center gap-2 w-full sm:w-auto"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Import Candidates
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addCandidate}
+                    className="flex items-center gap-2 w-full sm:w-auto"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Candidate
+                  </Button>
+                </div>
               </div>
               
               {formData.candidates.map((candidate, index) => (
@@ -1252,7 +1406,7 @@ const HRInterviewCreator = () => {
                 <div className="text-xs text-blue-500">Based on parameters</div>
               </div>
               <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200 text-center">
-                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.duration || 'Calculating...'} min</div>
+                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.duration != null ? Math.round(Number(formData.duration)) : 'Calculating...'} min</div>
                 <div className="text-xs sm:text-sm text-blue-600 font-medium">Duration</div>
                 <div className="text-xs text-blue-500">Auto-calculated</div>
               </div>
@@ -1450,7 +1604,7 @@ const HRInterviewCreator = () => {
                 <div className="text-xs text-green-500">Pre-defined questions</div>
               </div>
               <div className="bg-green-50 rounded-lg p-4 border border-green-200 text-center">
-                <div className="text-2xl font-bold text-green-800">{formData.duration || 'Calculating...'} min</div>
+                <div className="text-2xl font-bold text-green-800">{formData.duration != null ? Math.round(Number(formData.duration)) : 'Calculating...'} min</div>
                 <div className="text-sm text-green-600 font-medium">Duration</div>
                 <div className="text-xs text-green-500">Auto-calculated</div>
               </div>
@@ -1727,6 +1881,7 @@ const HRInterviewCreator = () => {
           </CardContent>
         </Card>
       )}
+    </div>
     </div>
   );
 };

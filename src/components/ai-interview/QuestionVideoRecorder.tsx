@@ -3,6 +3,8 @@ import { Camera, Video, VideoOff, Loader2, CheckCircle, AlertCircle, Play, Pause
 import RecordRTC from 'recordrtc';
 import toast from 'react-hot-toast';
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
+import { getAdaptiveVideoConstraints } from '@/utils/mediaConstraints';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const QuestionVideoRecorder = ({ 
   interviewId, 
@@ -26,16 +28,20 @@ const QuestionVideoRecorder = ({
   const videoStreamRef = useRef(null);
   const durationIntervalRef = useRef(null);
   const startTimeRef = useRef(null);
+  const isMobile = useIsMobile();
 
-  // Initialize video stream
+  // Initialize video stream (adaptive constraints for mobile)
   useEffect(() => {
     const initializeVideo = async () => {
       try {
+        const videoConstraints = getAdaptiveVideoConstraints({
+          preferMobile: isMobile,
+          preferFrontCamera: isMobile,
+        });
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: 1280,
-            height: 720,
-            frameRate: 24
+            ...videoConstraints,
+            frameRate: isMobile ? { ideal: 15, max: 24 } : { ideal: 24 },
           },
           audio: {
             echoCancellation: true,
@@ -68,7 +74,7 @@ const QuestionVideoRecorder = ({
         videoStreamRef.current.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [isMobile]);
 
   // Start recording individual question video
   const startRecording = useCallback(async () => {
@@ -80,16 +86,17 @@ const QuestionVideoRecorder = ({
     try {
       console.log('🎥 Starting question video recording...');
       
-      // Create video recorder for individual question
+      // Create video recorder for individual question (lower bitrate on mobile)
+      const videoBitsPerSecond = isMobile ? 300000 : 400000;
       const recorder = new RecordRTC(videoStreamRef.current, {
         type: 'video',
         mimeType: 'video/webm',
         recorderType: RecordRTC.MediaStreamRecorder,
-        quality: 3,                    // Medium quality for smaller files
-        frameRate: 15,                 // 15fps for smaller files
+        quality: isMobile ? 2 : 3,
+        frameRate: 15,
         disableLogs: false,
-        videoBitsPerSecond: 400000,    // 400 Kbps for smaller files
-        timeSlice: 10000,              // 10-second chunks
+        videoBitsPerSecond,
+        timeSlice: 10000,
         ondataavailable: function(blob) {
           console.log('🎥 Video chunk available:', blob.type, blob.size);
         }

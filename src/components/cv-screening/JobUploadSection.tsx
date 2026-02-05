@@ -4,21 +4,25 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, FileText, Edit, RefreshCw, Loader2, Type, FileUp, Settings } from 'lucide-react';
+import { Upload, FileText, Edit, RefreshCw, Loader2, Type, FileUp, Settings, Wrench, ArrowRight } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { DatabaseService } from '@/integrations/supabase/db';
 import { useAuth } from '@/hooks/use-auth';
 import { useSession } from '@/contexts/SessionContext';
 import { UsageTrackingService } from '@/services/usageTrackingService';
+import { useSearchParams } from 'react-router-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { RichTextEditor, extractPlainText, extractHighlightedText } from './RichTextEditor';
 import { API_CONFIG, apiCall } from '@/constants/api';
+import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
+import { useCurrentStep, useNavigateToStep, WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.js`;
 
 interface ResolvedJD {
@@ -46,9 +50,17 @@ const BACKEND_URLS = {
 
 // Legacy webhook URL (kept for compatibility)
 //const JD_WEBHOOK_URL = "https://automations.aitamate.com/webhook/61646fe6-09c4-4276-aeb0-3fd7bb6b367e";
-export const JobUploadSection = () => {
+interface JobUploadSectionProps {
+  onSectionReady?: () => void;
+}
+
+export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
   const { user, loading, error } = useAuth();
   const { currentJobDescription, setCurrentJobDescription } = useSession();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { toast } = useToast();
+  const currentStep = useCurrentStep();
+  const navigateToStep = useNavigateToStep();
   const [jobTitle, setJobTitle] = useState('');
   const [jobDescriptions, setJobDescriptions] = useState<any[]>([]);
   const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => {
@@ -60,7 +72,6 @@ export const JobUploadSection = () => {
   });
   const [selectedJDContent, setSelectedJDContent] = useState<string>('');
   const [selectedJDFileType, setSelectedJDFileType] = useState<string>('');
-  const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const jobTitleInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -79,6 +90,7 @@ export const JobUploadSection = () => {
     remainingJDs: number;
   } | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [disableConfirmJd, setDisableConfirmJd] = useState<{ jdId: string; title: string } | null>(null);
   const [isManageSectionExpanded, setIsManageSectionExpanded] = useState(false);
   const [editorContent, setEditorContent] = useState<string>('');
   const [inputMode, setInputMode] = useState<'file' | 'editor'>('file');
@@ -279,6 +291,12 @@ export const JobUploadSection = () => {
     }
   }, [user, loading, error]);
 
+  useEffect(() => {
+    if (!user || loading) return;
+    const t = setTimeout(() => onSectionReady?.(), 600);
+    return () => clearTimeout(t);
+  }, [user, loading, onSectionReady]);
+
   // Sync selectedJobDescriptionId from SessionContext when it changes
   useEffect(() => {
     if (currentJobDescription) {
@@ -366,7 +384,7 @@ export const JobUploadSection = () => {
     try {
       const { data, error } = await supabase
         .from('job_descriptions')
-        .select('jd_id, title, jd_file, created_at, status, description')
+        .select('jd_id, title, jd_file, created_at, updated_at, status, description, post_on_career_page')
         .eq('company_id', user.profile.company_id)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -413,6 +431,7 @@ export const JobUploadSection = () => {
     }
     
     setUpdatingStatus(jdId);
+    setDisableConfirmJd(null); // close confirm dialog if open
     
     try {
       const { error } = await supabase
@@ -439,6 +458,18 @@ export const JobUploadSection = () => {
     } finally {
       setUpdatingStatus(null);
     }
+  };
+
+  const handleDisableJDToggle = (jd: { jd_id: string; title: string | null; status?: string; post_on_career_page?: boolean | null }) => {
+    const isActive = jd.status === 'active';
+    if (isActive) {
+      // Disabling: show warning if posted on career page
+      if (jd.post_on_career_page) {
+        setDisableConfirmJd({ jdId: jd.jd_id, title: jd.title || 'Untitled' });
+        return;
+      }
+    }
+    toggleJDStatus(jd.jd_id, jd.status || 'active');
   };
 
   const loadResolvedJD = async (jdId: string) => {
@@ -974,8 +1005,6 @@ export const JobUploadSection = () => {
     }
   };
 
-
-
   // When a JD is selected from dropdown, automatically set in session
   const handleJDSelect = async (jdId: string) => {
     setSelectedJobDescriptionId(jdId);
@@ -1016,11 +1045,46 @@ export const JobUploadSection = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-      
+    <div className="min-h-screen">
+      {/* Confirm disable JD when posted on career page */}
+      <AlertDialog open={!!disableConfirmJd} onOpenChange={(open) => !open && setDisableConfirmJd(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Disable this job description?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This JD has been posted on the career page already. So are you sure you want to disable it? Some CVs have been or might have been assessed. Disabling will remove it from your public career page.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDisableConfirmJd(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (disableConfirmJd) {
+                  toggleJDStatus(disableConfirmJd.jdId, 'active');
+                }
+                setDisableConfirmJd(null);
+              }}
+            >
+              Yes, I&apos;m sure
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
+      {/* Mobile Navigation Progress Bar */}
+      <div className="lg:hidden">
+        <CompactStepProgress
+          current={currentStep}
+          total={WORKFLOW_STEPS.length}
+          steps={WORKFLOW_STEPS}
+          onStepClick={navigateToStep}
+        />
+      </div>
+      
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Job Description Upload */}
-      <Card className="animate-fade-in">
+      <Card className="animate-fade-in" data-tour="job-upload-area">
           <CardHeader className="relative">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
               <div className="flex-1 min-w-0">
@@ -1057,11 +1121,11 @@ export const JobUploadSection = () => {
                       <Button
                         variant="default"
                         size="sm"
-                        className="w-full sm:w-auto"
+                        className="w-full sm:w-auto text-xs sm:text-sm h-9 sm:h-10"
                       >
                         <Settings className="w-4 h-4 mr-1.5 sm:mr-2" />
                         <span className="hidden sm:inline">Manage Job Descriptions</span>
-                        <span className="sm:hidden">Manage Job Descriptions</span>
+                        <span className="sm:hidden">Manage Jobs</span>
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -1148,7 +1212,7 @@ export const JobUploadSection = () => {
                                 </span>
                                 <Switch
                                   checked={isActive}
-                                  onCheckedChange={() => !isDisabled && toggleJDStatus(jd.jd_id, jd.status || 'active')}
+                                  onCheckedChange={() => !isDisabled && handleDisableJDToggle(jd)}
                                   disabled={isDisabled}
                                   className={`${isDisabled ? 'opacity-50' : ''} ${
                                     isActive ? 'data-[state=checked]:bg-green-500' : ''
@@ -1220,7 +1284,7 @@ export const JobUploadSection = () => {
                 placeholder="Job Title (e.g., Senior Software Engineer)"
                 value={jobTitle}
                 onChange={(e) => setJobTitle(e.target.value)}
-                className="mb-0 text-sm"
+                className="mb-0 text-base"
                 ref={jobTitleInputRef}
               />
             </div>
@@ -1411,16 +1475,19 @@ export const JobUploadSection = () => {
             <div className="space-y-2">
               <Button 
                 onClick={handleProcessJobDescription} 
-                className="w-full"
+                className="w-full h-10 sm:h-11 text-base"
                 disabled={processingStatus === 'processing' || (jdLimitInfo && !jdLimitInfo.canCreateJD)}
               >
                 {processingStatus === 'processing' ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Processing Job Description...
+                    <span className="text-xs sm:text-sm">Processing...</span>
                   </>
                 ) : (
-                  'Process Job Description'
+                  <>
+                    <span className="sm:hidden">Process Job</span>
+                    <span className="hidden sm:inline">Process Job Description</span>
+                  </>
                 )}
               </Button>
               
@@ -1522,5 +1589,6 @@ export const JobUploadSection = () => {
           </div>
         )}
       </div>
+    </div>
   );
 };

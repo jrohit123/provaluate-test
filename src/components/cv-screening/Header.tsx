@@ -6,11 +6,13 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { SessionManager } from '@/utils/sessionManager';
 import { supabase } from '@/integrations/supabase/client';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export const Header = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+  const isMobile = useIsMobile();
 
   /**
    * Delete a cookie by name
@@ -49,10 +51,14 @@ export const Header = () => {
       // no-op
     }
 
-    toast({
-      title: "Logged out successfully",
-      description: "You've been logged out of your account.",
-    });
+    // Show toast only on desktop
+    if (!isMobile) {
+      toast({
+        title: "Logged out successfully",
+        description: "You've been logged out of your account.",
+      });
+    }
+
     navigate('/login');
   };
 
@@ -63,22 +69,33 @@ export const Header = () => {
     ? `Welcome back, ${firstName}${companyName ? ` (${companyName})` : ''}`
     : 'Welcome back, Recruiter';
 
+  // Truncate greeting on very small screens
+  const truncatedGreeting = greeting.length > 30 
+    ? `${greeting.substring(0, 27)}...` 
+    : greeting;
+
   return (
     <header className="bg-[#1e5da8] border-b px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 sm:gap-4">
       <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-        <SidebarTrigger className="text-white flex-shrink-0" />
+        <SidebarTrigger className="text-white flex-shrink-0" data-tour="sidebar-trigger" />
         <div className="min-w-0">
           <h1 className="text-base sm:text-xl font-semibold text-white truncate">ProValuate</h1>
           <p className="text-xs sm:text-sm text-white hidden sm:block">Smart Candidate Evaluation Platform</p>
         </div>
       </div>
       <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-        <div className="text-xs sm:text-sm text-white hidden sm:block">
+        <div className="text-xs sm:text-sm text-white hidden md:block truncate max-w-[200px]">
           {greeting}
         </div>
-        <Button variant="outline" onClick={handleLogout} className="text-xs sm:text-sm px-2 sm:px-4 h-8 sm:h-10">
-          <span className="hidden sm:inline">Logout</span>
-          <span className="sm:hidden">Logout</span>
+        <div className="text-xs text-white md:hidden truncate max-w-[120px]" title={greeting}>
+          {truncatedGreeting}
+        </div>
+        <Button 
+          variant="outline" 
+          onClick={handleLogout} 
+          className="text-xs sm:text-sm px-3 sm:px-4 h-10 min-h-[44px] flex-shrink-0"
+        >
+          <span>Logout</span>
         </Button>
       </div>
     </header>

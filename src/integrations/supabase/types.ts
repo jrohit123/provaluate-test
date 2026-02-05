@@ -24,6 +24,10 @@ export interface Database {
           razorpay_subscription_id: string | null
           created_at: string
           updated_at: string
+          career_slug: string | null
+          career_logo_url: string | null
+          career_vision: string | null
+          career_page_enabled: boolean | null
         }
         Insert: {
           company_id?: string
@@ -39,6 +43,10 @@ export interface Database {
           razorpay_subscription_id?: string | null
           created_at?: string
           updated_at?: string
+          career_slug?: string | null
+          career_logo_url?: string | null
+          career_vision?: string | null
+          career_page_enabled?: boolean | null
         }
         Update: {
           company_id?: string
@@ -54,6 +62,10 @@ export interface Database {
           razorpay_subscription_id?: string | null
           created_at?: string
           updated_at?: string
+          career_slug?: string | null
+          career_logo_url?: string | null
+          career_vision?: string | null
+          career_page_enabled?: boolean | null
         }
       }
       users: {
@@ -97,6 +109,8 @@ export interface Database {
           description: string | null
           jd_file: string | null
           criteria_id: string | null
+          default_criteria_id: string | null
+          post_on_career_page: boolean | null
           status: string | null
           created_at: string
           updated_at: string
@@ -109,6 +123,8 @@ export interface Database {
           description?: string | null
           jd_file?: string | null
           criteria_id?: string | null
+          default_criteria_id?: string | null
+          post_on_career_page?: boolean | null
           status?: string | null
           created_at?: string
           updated_at?: string
@@ -121,6 +137,8 @@ export interface Database {
           description?: string | null
           jd_file?: string | null
           criteria_id?: string | null
+          default_criteria_id?: string | null
+          post_on_career_page?: boolean | null
           status?: string | null
           created_at?: string
           updated_at?: string

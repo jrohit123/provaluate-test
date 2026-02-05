@@ -68,6 +68,8 @@ export interface CustomParameter {
   scoring_criteria: string[];
   assigned_questions?: number;
   level?: 'Easy' | 'Regular' | 'Expert';
+  /** When true/false, overrides keyword-based detection for written-answer (e.g. SQL/code) scenarios. */
+  requires_written_answer?: boolean;
 }
 
 export interface CustomParameters {

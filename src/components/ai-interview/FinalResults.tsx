@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, 
+  ArrowLeft,
   Download, 
   Share2, 
   BarChart3, 
@@ -11,14 +11,26 @@ import {
   FileSpreadsheet,
   ChevronDown,
   ChevronUp,
-  Sun,
-  Moon,
   Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import toast from 'react-hot-toast';
 import ExcelJS from 'exceljs';
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
+
+/** Format a date as "2nd Feb 2026", "4th Apr 2026" (ordinal day + short month + year). Returns 'N/A' if date is missing or invalid. */
+function formatOrdinalDate(date: Date | string | null | undefined): string {
+  if (date == null) return 'N/A';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return 'N/A';
+  const day = d.getDate();
+  const suffix = (day % 10 === 1 && day !== 11) ? 'st'
+    : (day % 10 === 2 && day !== 12) ? 'nd'
+    : (day % 10 === 3 && day !== 13) ? 'rd' : 'th';
+  const month = d.toLocaleDateString('en-GB', { month: 'short' });
+  const year = d.getFullYear();
+  return `${day}${suffix} ${month} ${year}`;
+}
 
 const FinalResults = () => {
   const { interviewId } = useParams();
@@ -28,22 +40,10 @@ const FinalResults = () => {
   const [selectedParameter, setSelectedParameter] = useState(null);
   const [expandedQuestions, setExpandedQuestions] = useState(new Set());
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const saved = localStorage.getItem('finalResultsTheme');
-    return saved ? saved === 'dark' : true; // Default to dark mode
-  });
-
-  // Theme toggle function
-  const toggleTheme = () => {
-    const newTheme = !isDarkMode;
-    setIsDarkMode(newTheme);
-    localStorage.setItem('finalResultsTheme', newTheme ? 'dark' : 'light');
-  };
-
-  // Audio and video playback functions
 
   const [playingVideo, setPlayingVideo] = useState(null);
   const [playingAudio, setPlayingAudio] = useState(null);
+  const [showingWrittenAnswer, setShowingWrittenAnswer] = useState(null);
 
   const playVideo = (videoUrl) => {
     if (videoUrl) {
@@ -63,6 +63,16 @@ const FinalResults = () => {
 
   const closeAudio = () => {
     setPlayingAudio(null);
+  };
+
+  const showWrittenAnswer = (writtenAnswer) => {
+    if (writtenAnswer) {
+      setShowingWrittenAnswer(writtenAnswer);
+    }
+  };
+
+  const closeWrittenAnswer = () => {
+    setShowingWrittenAnswer(null);
   };
 
   // Toggle question expansion
@@ -166,7 +176,8 @@ const FinalResults = () => {
               score: answer.score,
               feedback: answer.feedback, // This is the REAL AI feedback
               parameter_key: answer.parameter_key,
-              parameter_name: answer.parameter_name
+              parameter_name: answer.parameter_name,
+              written_answer: answer.written_answer // Add written answer
             });
           });
           
@@ -209,7 +220,8 @@ const FinalResults = () => {
                     score: answer.score,
                     feedback: answer.feedback,
                     parameter_key: answer.parameter_key,
-                    parameter_name: answer.parameter_name
+                    parameter_name: answer.parameter_name,
+                    written_answer: answer.written_answer
                   });
                 });
               } else {
@@ -233,7 +245,8 @@ const FinalResults = () => {
                     score: answer.score,
                     feedback: answer.feedback,
                     parameter_key: answer.parameter_key,
-                    parameter_name: answer.parameter_name
+                    parameter_name: answer.parameter_name,
+                    written_answer: answer.written_answer
                   });
                 });
               }
@@ -261,7 +274,8 @@ const FinalResults = () => {
                 score: answer.score,
                 feedback: answer.feedback,
                 parameter_key: answer.parameter_key,
-                parameter_name: answer.parameter_name
+                parameter_name: answer.parameter_name,
+                written_answer: answer.written_answer
               });
             });
           }
@@ -333,6 +347,7 @@ const FinalResults = () => {
                let realScore = correspondingAnswer?.score;
                let realAudioUrl = correspondingAnswer?.audio_url || questionData.audio_url;
                let realVideoUrl = correspondingAnswer?.question_video_url;
+               let realWrittenAnswer = correspondingAnswer?.written_answer;
 
                // Fallback to interview.parameter_scores.individual_question_scores matched by question_order
                if (data.interview?.parameter_scores) {
@@ -377,7 +392,8 @@ const FinalResults = () => {
                    score: realScore,
                    feedback: realFeedback,
                    audio_url: realAudioUrl,
-                   question_video_url: realVideoUrl
+                   question_video_url: realVideoUrl,
+                   written_answer: realWrittenAnswer
                  }
                };
              });
@@ -457,8 +473,8 @@ const FinalResults = () => {
       // Remove Interview Type from text report - not needed
       reportContent += `OVERALL SCORE: ${reportData.interview?.overall_score || 'N/A'}/10\n`;
       reportContent += `TOTAL QUESTIONS: ${reportData.questions?.length || 0}\n`;
-      reportContent += `ASSESSMENT DATE: ${new Date().toLocaleDateString()}\n`;
-      reportContent += `REPORT GENERATED: ${new Date().toLocaleString()}\n\n`;
+      reportContent += `ASSESSMENT DATE: ${formatOrdinalDate(reportData.interview?.created_at)}\n`;
+      reportContent += `REPORT GENERATED: ${formatOrdinalDate(new Date())}\n\n`;
       
       // Parameter scores summary
       if (reportData.parameters && reportData.parameters.length > 0) {
@@ -607,7 +623,7 @@ const FinalResults = () => {
       // Right column
       doc.text(`Overall Score: ${reportData.interview?.overall_score || 'N/A'}/10`, 110, yPosition);
       doc.text(`Total Questions: ${reportData.questions?.length || 0}`, 110, yPosition + 8);
-      doc.text(`Date: ${new Date().toLocaleDateString()}`, 110, yPosition + 16);
+      doc.text(`Date: ${formatOrdinalDate(reportData.interview?.created_at)}`, 110, yPosition + 16);
       
       yPosition += 45;
       
@@ -822,7 +838,7 @@ const FinalResults = () => {
       doc.setFontSize(10);
       doc.setFont('helvetica', 'italic');
       doc.text('Generated by AI Interview System', 105, yPosition + 10, { align: 'center' });
-      doc.text(`Report ID: ${interviewId} | ${new Date().toLocaleString()}`, 105, yPosition + 20, { align: 'center' });
+      doc.text(`Report ID: ${interviewId} | ${formatOrdinalDate(reportData.interview?.created_at)}`, 105, yPosition + 20, { align: 'center' });
       
       // Save the PDF
       const filename = `Interview_Report_${reportData.interview?.candidate_name || 'Candidate'}_${new Date().toISOString().split('T')[0]}.pdf`;
@@ -840,96 +856,101 @@ const FinalResults = () => {
     if (!reportData) return;
 
     try {
-      // Create workbook with ExcelJS
+      // Import ExcelJS dynamically
+      const ExcelJS = (await import('exceljs')).default;
       const workbook = new ExcelJS.Workbook();
       
-      // 1. OVERVIEW SHEET
+      // ============================================
+      // CREATE OVERVIEW SHEET
+      // ============================================
       const overviewSheet = workbook.addWorksheet('Overview');
       
-      
-      // Add headers with styling
-      const headerRow = overviewSheet.addRow(['FIELD', 'VALUES', 'STATUS']);
-      headerRow.font = { bold: true, size: 12 };
-      headerRow.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFE0E0E0' }
-      };
+      // Define columns with proper widths
+      overviewSheet.columns = [
+        { header: 'FIELD', key: 'field', width: 25 },
+        { header: 'VALUE', key: 'value', width: 40 }
+      ];
       
       // Add data rows
-      overviewSheet.addRow(['Candidate Name', reportData.interview?.candidate_name || 'N/A', 'Available']);
-      overviewSheet.addRow(['Position Applied', reportData.interview?.position || 'N/A', 'Available']);
+      overviewSheet.addRow(['Candidate Name', reportData.interview?.candidate_name || 'N/A']);
+      overviewSheet.addRow(['Position Applied', reportData.interview?.position || 'N/A']);
+      overviewSheet.addRow(['Overall Score', (parseFloat(reportData.interview?.overall_score) || 0).toString()]);
+      overviewSheet.addRow(['Total Questions', (reportData.questions?.length || 0).toString()]);
+      overviewSheet.addRow(['Assessment Date', formatOrdinalDate(reportData.interview?.created_at)]);
+      overviewSheet.addRow(['Report generated time', new Date().toLocaleTimeString()]);
+      overviewSheet.addRow(['Performance Level', getScoreLabel(reportData.interview?.overall_score || 0)]);
+      if (reportData.interview?.status === 'terminated' && reportData.interview?.termination_reason) {
+        overviewSheet.addRow(['Termination Reason', reportData.interview.termination_reason]);
+      }
       
-      // Use the same overall score that the UI displays
-      const overallScore = reportData.interview?.overall_score;
-      const displayScore = overallScore ? parseFloat(overallScore).toFixed(1) : 'N/A';
+      // Style header row
+      const overviewHeaderRow = overviewSheet.getRow(1);
+      overviewHeaderRow.height = 30;
+      overviewHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+      overviewHeaderRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      overviewHeaderRow.eachCell((cell) => {
+        if (cell.value && cell.value.toString().trim() !== '') {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF4472C4' }
+          };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FF000000' } },
+            left: { style: 'thin', color: { argb: 'FF000000' } },
+            bottom: { style: 'thin', color: { argb: 'FF000000' } },
+            right: { style: 'thin', color: { argb: 'FF000000' } }
+          };
+        }
+      });
       
-      overviewSheet.addRow(['Overall Score', displayScore, 'Available']);
-      overviewSheet.addRow(['Total Questions', reportData.questions?.length || 0, 'Available']);
-      // Remove Interview Type row - not needed
-      overviewSheet.addRow(['Assessment Date', new Date().toLocaleDateString(), 'Available']);
-      overviewSheet.addRow(['Report Generated', new Date().toLocaleTimeString(), 'Available']);
-      overviewSheet.addRow(['Performance Level', getScoreLabel(reportData.interview?.overall_score || 0), 'Available']);
-      overviewSheet.addRow(['Audio Files', reportData.answers?.filter(a => a.audio_url).length || 0, 'Available']);
-      overviewSheet.addRow(['Video Files', reportData.answers?.filter(a => a.question_video_url).length || 0, 'Available']);
-      
-      // 2. PARAMETERS SHEET
-      if (reportData.parameters && reportData.parameters.length > 0) {
-        const parameterSheet = workbook.addWorksheet('Parameters');
-        
-        
-        // Add headers with styling
-        const paramHeaderRow = parameterSheet.addRow(['PARAMETER NAME', 'SCORE', 'QUESTIONS', 'WEIGHT', 'PERFORMANCE']);
-        paramHeaderRow.font = { bold: true, size: 12 };
-        paramHeaderRow.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFE0E0E0' }
-        };
-        
-        // Calculate actual question counts for each parameter
-        const parameterQuestionCounts = {};
-        if (reportData.questions) {
-          reportData.questions.forEach(question => {
-            const paramKey = question.parameter_key || question.parameter_name;
-            if (paramKey) {
-              parameterQuestionCounts[paramKey] = (parameterQuestionCounts[paramKey] || 0) + 1;
+      // Style data rows
+      overviewSheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) {
+          row.height = 25;
+          row.eachCell({ includeEmpty: false }, (cell) => {
+            if (cell.value && cell.value.toString().trim() !== '') {
+              cell.border = {
+                top: { style: 'thin', color: { argb: 'FF000000' } },
+                left: { style: 'thin', color: { argb: 'FF000000' } },
+                bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                right: { style: 'thin', color: { argb: 'FF000000' } }
+              };
+              cell.font = { size: 11 };
+              
+              // Alternate row colors
+              if (rowNumber % 2 === 0) {
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FFF2F2F2' }
+                };
+              }
+              
+              cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
             }
           });
         }
-        
-        // Add data rows
-        reportData.parameters.forEach((param) => {
-          const paramName = param.name || param.parameter_name || 'Unknown Parameter';
-          const score = param.score || param.averageScore || 'N/A';
-          const paramKey = param.key || param.parameter_key || param.parameter_name;
-          const questionCount = parameterQuestionCounts[paramKey] || 0;
-          const weight = param.weight ? param.weight : 'N/A';
-          
-          let performance = 'Needs Improvement';
-          if (score >= 8) performance = 'Excellent';
-          else if (score >= 6) performance = 'Good';
-          else if (score >= 4) performance = 'Fair';
-          
-          parameterSheet.addRow([paramName, score, questionCount, weight, performance]);
-        });
-      }
+      });
       
-      // 3. QUESTIONS & ANSWERS SHEET
+      // ============================================
+      // CREATE QUESTIONS & ANSWERS SHEET
+      // ============================================
       if (reportData.questions && reportData.answers) {
         const qaSheet = workbook.addWorksheet('Questions & Answers');
         
-        // Add headers with styling
-        const qaHeaderRow = qaSheet.addRow(['Q', 'PARAMETER', 'QUESTION', 'ANSWER', 'SCORE', 'AI FEEDBACK']);
-        qaHeaderRow.font = { bold: true, size: 12 };
-        qaHeaderRow.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFE0E0E0' }
-        };
+        // Define columns with proper widths
+        qaSheet.columns = [
+          { header: 'Q NO', key: 'q', width: 8 },
+          { header: 'PARAMETER', key: 'parameter', width: 25 },
+          { header: 'QUESTION', key: 'question', width: 50 },
+          { header: 'ANSWER', key: 'answer', width: 60 },
+          { header: 'WRITTEN ANSWER', key: 'written_answer', width: 50 },
+          { header: 'SCORE', key: 'score', width: 10 },
+          { header: 'AI FEEDBACK', key: 'feedback', width: 80 }
+        ];
         
         // Add data rows - match questions with answers properly using question_order
-        // Sort questions by question_order to ensure proper order
         const sortedQuestions = [...reportData.questions].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
         
         sortedQuestions.forEach((question) => {
@@ -943,132 +964,121 @@ const FinalResults = () => {
           if (questionText !== 'N/A' && parameter !== 'N/A') {
             if (answer) {
               const transcript = answer.transcript || answer.answer || 'No transcript available';
+              const writtenAnswer = answer.written_answer || 'No written answer';
               const score = answer.score || 'N/A';
               const feedback = answer.feedback || 'No feedback available';
               
-              qaSheet.addRow([questionOrder + 1, parameter, questionText, transcript, score, feedback]);
+              qaSheet.addRow([questionOrder + 1, parameter, questionText, transcript, writtenAnswer, score, feedback]);
             } else {
               // Handle case where answer is missing but question exists
-              qaSheet.addRow([questionOrder + 1, parameter, questionText, 'No answer recorded', 'N/A', 'No feedback available']);
+              qaSheet.addRow([questionOrder + 1, parameter, questionText, 'No answer recorded', 'No written answer', 'N/A', 'No feedback available']);
             }
           }
         });
-      }
-      
-      // 4. MEDIA FILES SHEET
-      const mediaSheet = workbook.addWorksheet('Media Files');
-      
-      // Add headers with styling
-      const mediaHeaderRow = mediaSheet.addRow(['MEDIA TYPE', 'QUESTION', 'PARAMETER', 'URL', 'STATUS', 'FILE TYPE']);
-      mediaHeaderRow.font = { bold: true, size: 12 };
-      mediaHeaderRow.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFE0E0E0' }
-      };
-      
-      // Add data rows - Group all audio files first, then all video files
-      if (reportData.answers) {
-        // Sort answers by question_order to ensure proper order
-        const sortedAnswers = [...reportData.answers].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
         
-        // First, add all audio files using question_order matching
-        sortedAnswers.forEach((answer) => {
-          const questionOrder = answer.question_order || 0;
-          const question = reportData.questions?.find(q => (q.question_order || 0) === questionOrder);
-          const parameter = question?.parameter_name || question?.parameter_key || 'N/A';
-          
-          // Only add if we have a valid parameter and audio URL
-          if (answer.audio_url && parameter !== 'N/A') {
-            mediaSheet.addRow(['Audio Recording', questionOrder + 1, parameter, answer.audio_url, 'Available', 'Audio']);
+        // Style header row
+        const qaHeaderRow = qaSheet.getRow(1);
+        qaHeaderRow.height = 30;
+        qaHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+        qaHeaderRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+        qaHeaderRow.eachCell((cell) => {
+          if (cell.value && cell.value.toString().trim() !== '') {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FF4472C4' }
+            };
+            cell.border = {
+              top: { style: 'thin', color: { argb: 'FF000000' } },
+              left: { style: 'thin', color: { argb: 'FF000000' } },
+              bottom: { style: 'thin', color: { argb: 'FF000000' } },
+              right: { style: 'thin', color: { argb: 'FF000000' } }
+            };
           }
         });
         
-        // Then, add all video files using question_order matching
-        sortedAnswers.forEach((answer) => {
-          const questionOrder = answer.question_order || 0;
-          const question = reportData.questions?.find(q => (q.question_order || 0) === questionOrder);
-          const parameter = question?.parameter_name || question?.parameter_key || 'N/A';
-          
-          // Only add if we have a valid parameter and video URL
-          if (answer.question_video_url && parameter !== 'N/A') {
-            mediaSheet.addRow(['Question Video', questionOrder + 1, parameter, answer.question_video_url, 'Available', 'Video']);
-          }
-        });
-      }
-      
-      // 5. SCORE ANALYSIS SHEET
-      if (reportData.answers && reportData.answers.length > 0) {
-        const analysisSheet = workbook.addWorksheet('Score Analysis');
-        
-        // Add headers with styling
-        const analysisHeaderRow = analysisSheet.addRow(['Q', 'PARAMETER', 'SCORE', 'PERFORMANCE', 'NOTES']);
-        analysisHeaderRow.font = { bold: true, size: 12 };
-        analysisHeaderRow.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFE0E0E0' }
-        };
-        
-        // Use the same overall score that's displayed in the Overview sheet
-        const overallScore = reportData.interview?.overall_score;
-        const averageScore = overallScore ? parseFloat(overallScore) : 0;
-        
-        // Add data rows - only for valid questions using question_order matching
-        // Sort answers by question_order to ensure proper order
-        const sortedAnswers = [...reportData.answers].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
-        
-        sortedAnswers.forEach((answer) => {
-          const questionOrder = answer.question_order || 0;
-          const question = reportData.questions?.find(q => (q.question_order || 0) === questionOrder);
-          const parameter = question?.parameter_name || question?.parameter_key || 'N/A';
-          const score = answer.score || 0;
-          
-          // Only add if we have a valid parameter (not N/A)
-          if (parameter !== 'N/A') {
-            let performance = 'Needs Improvement';
-            if (score >= 8) performance = 'Excellent';
-            else if (score >= 6) performance = 'Good';
-            else if (score >= 4) performance = 'Fair';
+        // Style data rows with dynamic height calculation
+        qaSheet.eachRow((row, rowNumber) => {
+          if (rowNumber > 1) {
+            // Calculate height based on content length
+            const questionCell = row.getCell(3);
+            const answerCell = row.getCell(4);
+            const writtenAnswerCell = row.getCell(5);
+            const feedbackCell = row.getCell(7);
             
-            const notes = score >= 8 ? 'Strong performance' : 
-                         score >= 6 ? 'Good performance' : 
-                         score >= 4 ? 'Room for improvement' : 'Needs significant improvement';
+            const questionText = questionCell.value?.toString() || '';
+            const answerText = answerCell.value?.toString() || '';
+            const writtenAnswerText = writtenAnswerCell.value?.toString() || '';
+            const feedbackText = feedbackCell.value?.toString() || '';
             
-            analysisSheet.addRow([questionOrder + 1, parameter, score, performance, notes]);
+            // Estimate lines needed (approximate characters per line)
+            const questionLines = Math.ceil(questionText.length / 50);
+            const answerLines = Math.ceil(answerText.length / 60);
+            const writtenAnswerLines = Math.ceil(writtenAnswerText.length / 60);
+            const feedbackLines = Math.ceil(feedbackText.length / 70);
+            
+            const maxLines = Math.max(questionLines, answerLines, writtenAnswerLines, feedbackLines);
+            row.height = Math.max(100, maxLines * 15);
+            
+            // Apply styling to each cell
+            row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+              if (cell.value && cell.value.toString().trim() !== '') {
+                cell.border = {
+                  top: { style: 'thin', color: { argb: 'FF000000' } },
+                  left: { style: 'thin', color: { argb: 'FF000000' } },
+                  bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                  right: { style: 'thin', color: { argb: 'FF000000' } }
+                };
+                cell.font = { size: 11 };
+                
+                // Alternate row colors
+                if (rowNumber % 2 === 0) {
+                  cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFF2F2F2' }
+                  };
+                }
+                
+                // Top align all columns for better readability with long text
+                cell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
+                
+                // Center align Q and Score columns
+                if (colNumber === 1 || colNumber === 6) {
+                  cell.alignment = { vertical: 'top', horizontal: 'center', wrapText: true };
+                }
+              }
+            });
           }
         });
-        
-        // Add summary row with consistent formatting
-        const displayAverage = averageScore ? parseFloat(averageScore.toString()).toFixed(1) : 'N/A';
-        analysisSheet.addRow(['', 'AVERAGE', displayAverage, '', '']);
       }
       
-      // Auto-size columns for all sheets
-      workbook.worksheets.forEach(worksheet => {
-        worksheet.columns.forEach(column => {
-          let maxLength = 0;
-          column.eachCell({ includeEmpty: true }, (cell) => {
-            const columnLength = cell.value ? cell.value.toString().length : 10;
-            if (columnLength > maxLength) {
-              maxLength = columnLength;
-            }
-          });
-          column.width = Math.min(maxLength + 2, 50);
-        });
-      });
+      // Freeze header rows for all sheets
+      overviewSheet.views = [{ state: 'frozen', ySplit: 1 }];
+      if (workbook.getWorksheet('Questions & Answers')) {
+        workbook.getWorksheet('Questions & Answers').views = [{ 
+          state: 'frozen', 
+          ySplit: 1,
+          zoomScale: 73 // Set zoom to 73%
+        }];
+      }
       
-      // Save the Excel file
+      // Generate filename
+      const currentDate = new Date().toISOString().split('T')[0];
+      const candidateName = (reportData.interview?.candidate_name || 'Candidate').replace(/[^a-zA-Z0-9]/g, '_');
+      const filename = `Interview_Report_${candidateName}_${currentDate}.xlsx`;
+      
+      // Generate and download file
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Interview_Report_${reportData.interview?.candidate_name || 'Candidate'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.download = filename;
       link.click();
       window.URL.revokeObjectURL(url);
       
-      toast.success('Comprehensive Excel report downloaded successfully!', { id: 'excel-download-success' });
+      toast.success('Professional Excel report downloaded successfully!', { id: 'excel-download-success' });
     } catch (error) {
       console.error('Error downloading Excel:', error);
       toast.error('Failed to download Excel. Please try again.', { id: 'excel-download-error' });
@@ -1089,12 +1099,7 @@ const FinalResults = () => {
     }
   };
 
-  const getScoreColor = (score) => {
-    if (score >= 8) return isDarkMode ? 'text-green-400' : 'text-green-600';
-    if (score >= 6) return isDarkMode ? 'text-yellow-400' : 'text-yellow-600';
-    if (score >= 4) return isDarkMode ? 'text-orange-400' : 'text-red-400';
-    return isDarkMode ? 'text-red-400' : 'text-red-400';
-  };
+  const getScoreColor = (score) => 'text-[#1e5da8]';
 
   const getScoreLabel = (score) => {
     if (score >= 8) return 'Excellent';
@@ -1103,23 +1108,25 @@ const FinalResults = () => {
     return 'Needs Improvement';
   };
 
-  const getScoreClass = (score) => {
-    if (score >= 8) return isDarkMode ? 'bg-green-500' : 'bg-green-600';
-    if (score >= 6) return isDarkMode ? 'bg-yellow-500' : 'bg-yellow-600';
-    if (score >= 4) return isDarkMode ? 'bg-orange-500' : 'bg-red-400';
-    return isDarkMode ? 'bg-red-500' : 'bg-red-500';
-  };
+  const getScoreClass = (score) => 'bg-[#1e5da8]';
 
   if (loading) {
     return (
-      <div className={`min-h-screen flex items-center justify-center transition-colors duration-300 ${
-        isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-      }`}>
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p className={`mt-4 ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-600'
-          }`}>Loading final results...</p>
+      <div className="min-h-screen bg-white flex flex-col overflow-x-hidden">
+        <header className="flex-shrink-0 bg-sky-100 border-b border-sky-200">
+          <div className="w-full pl-0 pr-2 sm:pr-6 py-2 sm:py-3 lg:py-4">
+            <img
+              src="/Logo_Transparent_BG.png"
+              alt="ProValuate"
+              className="h-8 sm:h-10 lg:h-12 w-auto object-contain"
+            />
+          </div>
+        </header>
+        <div className="flex-1 flex items-center justify-center p-3 sm:p-6">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-[#1e5da8] mx-auto mb-3 sm:mb-4" />
+            <p className="text-sm sm:text-lg text-gray-600">Loading final results...</p>
+          </div>
         </div>
       </div>
     );
@@ -1127,25 +1134,28 @@ const FinalResults = () => {
 
   if (!reportData) {
     return (
-      <div className={`min-h-screen flex items-center justify-center transition-colors duration-300 ${
-        isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-      }`}>
-        <div className="text-center">
-          <XCircle className={`h-12 w-12 mx-auto mb-4 ${
-            isDarkMode ? 'text-red-500' : 'text-red-400'
-          }`} />
-          <h2 className={`text-xl font-semibold mb-2 ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>Results Not Found</h2>
-          <p className={`mb-4 ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-600'
-          }`}>The interview results could not be loaded.</p>
-          <button
-            onClick={() => navigate('/dashboard', { state: { activeSection: 'interview-dashboard' } })}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-          >
-            Go to Dashboard
-          </button>
+      <div className="min-h-screen bg-white flex flex-col overflow-x-hidden">
+        <header className="flex-shrink-0 bg-sky-100 border-b border-sky-200">
+          <div className="w-full pl-0 pr-2 sm:pr-6 py-2 sm:py-3 lg:py-4">
+            <img
+              src="/Logo_Transparent_BG.png"
+              alt="ProValuate"
+              className="h-8 sm:h-10 lg:h-12 w-auto object-contain"
+            />
+          </div>
+        </header>
+        <div className="flex-1 flex items-center justify-center px-3 sm:px-6 py-4 sm:py-6">
+          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-8 max-w-md w-full text-center mx-2 sm:mx-0">
+            <XCircle className="w-12 h-12 sm:w-16 sm:h-16 text-red-500 mx-auto mb-3 sm:mb-4 flex-shrink-0" />
+            <h2 className="text-lg sm:text-2xl font-bold text-gray-800 mb-2 break-words">Results Not Found</h2>
+            <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6 break-words">The interview results could not be loaded.</p>
+            <button
+              onClick={() => navigate('/dashboard', { state: { activeSection: 'interview-dashboard' } })}
+              className="min-h-[44px] px-4 sm:px-6 py-3 rounded-lg bg-[#1e5da8] text-white text-sm sm:text-base font-medium hover:bg-[#1e5da8]/90 transition-colors touch-manipulation w-full sm:w-auto"
+            >
+              Go to Dashboard
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1194,7 +1204,7 @@ const FinalResults = () => {
             console.log('Logo image failed to load');
             resolve(false);
           };
-          logoImg.src = '/assets/Logo-transparent_bg.png';
+          logoImg.src = '/Logo_Transparent_BG.png';
         });
       } catch (error) {
         console.log('Logo not found, continuing without logo');
@@ -1206,7 +1216,7 @@ const FinalResults = () => {
       doc.text(`Email: ${interview.candidate_email || 'N/A'}`, 20, 52);
       doc.text(`Position: ${interview.position}`, 20, 59);
       doc.text(`Overall Score: ${interview.overall_score || 'N/A'}`, 20, 66);
-      doc.text(`Interview Date: ${new Date(interview.created_at).toLocaleDateString()}`, 20, 73);
+      doc.text(`Interview Date: ${formatOrdinalDate(interview.created_at)}`, 20, 73);
       
       // Add termination reason only if interview is terminated (below interview date, not in table)
       let tableStartY = 85; // Default table start position
@@ -1374,164 +1384,171 @@ const FinalResults = () => {
       // Prepare table data
       const tableData: any[][] = [];
       
-      // Debug logging
-      console.log('🔍 PDF Generation Debug:');
+      // Debug logging - Enhanced to track feedback data
+      console.log('🔍 PDF Generation Debug - Enhanced Version:');
       console.log('🔍 Parameters object:', parameters);
       console.log('🔍 Parameters keys:', Object.keys(parameters || {}));
       console.log('🔍 Interview data:', interview);
       console.log('🔍 Parameter scores:', interview.parameter_scores);
+      console.log('🔍 Report data answers:', reportData.answers?.length);
+      console.log('🔍 Report data questions:', reportData.questions?.length);
       
-      // Check if we have parameters data (from our converted structure)
-      if (parameters && Object.keys(parameters).length > 0) {
-        // Iterate through each parameter
-        Object.entries(parameters).forEach(([paramKey, paramData]: [string, any]) => {
-          // Process each question and answer for this parameter
-          if (paramData.questions && Array.isArray(paramData.questions)) {
-            paramData.questions.forEach((questionData: any) => {
-              // Format feedback with bullet points
-              const formatFeedback = (feedback: string) => {
-                if (!feedback) return 'No feedback available';
-                
-                // Split by periods and create bullet points
-                const sentences = feedback.split('.').filter(sentence => sentence.trim().length > 0);
-                return sentences.map(sentence => `• ${sentence.trim()}`).join('\n');
-              };
-              
-              const rowData = [
-                paramData.name || paramKey,
-                questionData.question.question_text || 'N/A',
-                questionData.answer.transcript || 'No answer provided',
-                formatFeedback(questionData.answer.feedback),
-                questionData.answer.score || 'N/A'
-              ];
-              console.log('🔍 Adding row to PDF table:', rowData);
-              tableData.push(rowData);
+      // Debug feedback availability in different data structures
+      if (reportData.answers && reportData.answers.length > 0) {
+        console.log('🔍 Sample feedback from answers array:');
+        reportData.answers.forEach((answer, index) => {
+          console.log(`  Answer ${index}: feedback="${answer.feedback?.substring(0, 100) || 'No feedback'}..."`);
+        });
+      }
+      
+      if (interview.parameter_scores) {
+        const parameterScores = typeof interview.parameter_scores === 'string' 
+          ? JSON.parse(interview.parameter_scores) 
+          : interview.parameter_scores;
+        console.log('🔍 Parameter scores structure:');
+        Object.entries(parameterScores).forEach(([paramKey, paramData]: [string, any]) => {
+          console.log(`  ${paramKey}: ${paramData.individual_question_scores?.length || 0} individual scores`);
+          if (paramData.individual_question_scores) {
+            paramData.individual_question_scores.forEach((qs: any, idx: number) => {
+              console.log(`    Q${idx}: feedback="${qs.feedback?.substring(0, 100) || 'No feedback'}..."`);
             });
           }
         });
       }
-      // Fallback: Check if we have parameter_scores data (from interview_parameter_scores table)
-      else if (interview.parameter_scores) {
-        // Parse parameter_scores JSON data
-        const parameterScores = typeof interview.parameter_scores === 'string' 
-          ? JSON.parse(interview.parameter_scores) 
-          : interview.parameter_scores;
+      
+      // Use the same logic as Excel export to avoid duplicates
+      if (reportData.questions && reportData.answers && reportData.questions.length > 0) {
+        console.log('🔍 Using questions and answers arrays for PDF (primary path - same as Excel)');
         
-        // Iterate through each parameter
-        Object.entries(parameterScores).forEach(([paramKey, paramData]: [string, any]) => {
-          const individualScores = paramData.individual_question_scores || [];
+        // Sort questions by question_order to ensure proper ordering (same as Excel)
+        const sortedQuestions = [...reportData.questions].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
+        
+        sortedQuestions.forEach((question: any) => {
+          const questionOrder = question.question_order || 0;
+          const answer = reportData.answers.find((ans: any) => (ans.question_order || 0) === questionOrder);
           
-          // Process each question and answer for this parameter
-          individualScores.forEach((questionData: any) => {
-            // Format feedback with bullet points
-            const formatFeedback = (feedback: string) => {
-              if (!feedback) return 'No feedback available';
-              
-              // Split by periods and create bullet points
-              const sentences = feedback.split('.').filter(sentence => sentence.trim().length > 0);
-              return sentences.map(sentence => `• ${sentence.trim()}`).join('\n');
-            };
-            
-            tableData.push([
-              paramData.parameter_name || paramKey,
-              questionData.question_text || 'N/A',
-              questionData.transcript || 'No answer provided',
-              formatFeedback(questionData.feedback),
-              questionData.score || 'N/A'
-            ]);
-          });
-        });
-      } else {
-        // Fallback: Use questions and answers arrays directly from API (for terminated/incomplete interviews)
-        if (reportData.questions && reportData.answers && reportData.questions.length > 0) {
-          console.log('🔍 Using questions and answers arrays for PDF (terminated/incomplete interview)');
+          const questionText = question.question_text || question.question || 'N/A';
+          const parameter = question.parameter_name || question.parameter_key || 'N/A';
           
-          // Sort by question_order to ensure proper ordering
-          const sortedQuestions = [...reportData.questions].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
-          const sortedAnswers = [...reportData.answers].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
-          
-          sortedQuestions.forEach((question: any) => {
-            const answer = sortedAnswers.find((ans: any) => 
-              (ans.question_order || 0) === (question.question_order || 0)
-            );
-            
+          // Only add if we have a valid question (not N/A) - same logic as Excel
+          if (questionText !== 'N/A' && parameter !== 'N/A') {
             if (answer) {
-              // Format feedback with bullet points
-              const formatFeedback = (feedback: string) => {
-                if (!feedback) return 'No feedback available';
+              // Enhanced feedback extraction with multiple fallbacks
+              const getFeedback = (question: any, answer: any) => {
+                // Try multiple possible locations for feedback
+                let feedback = null;
                 
-                // Split by periods and create bullet points
-                const sentences = feedback.split('.').filter(sentence => sentence.trim().length > 0);
-                return sentences.map(sentence => `• ${sentence.trim()}`).join('\n');
+                // Method 1: Direct feedback from answer
+                if (answer.feedback) {
+                  feedback = answer.feedback;
+                }
+                
+                // Method 2: Feedback from parameter scores data
+                if (!feedback && interview.parameter_scores) {
+                  const parameterScores = typeof interview.parameter_scores === 'string' 
+                    ? JSON.parse(interview.parameter_scores) 
+                    : interview.parameter_scores;
+                  
+                  const paramKey = question.parameter_key || question.parameter_name;
+                  if (paramKey && parameterScores[paramKey]) {
+                    const paramScoreData = parameterScores[paramKey];
+                    if (paramScoreData.individual_question_scores) {
+                      const questionScore = paramScoreData.individual_question_scores.find((qs: any) => 
+                        qs.question_text === question.question_text ||
+                        qs.question_order === question.question_order
+                      );
+                      if (questionScore && questionScore.feedback) {
+                        feedback = questionScore.feedback;
+                      }
+                    }
+                  }
+                }
+                
+                // Method 3: Construct meaningful feedback if nothing found
+                if (!feedback) {
+                  const score = answer.score || 'N/A';
+                  const paramName = question.parameter_name || question.parameter_key || 'General';
+                  feedback = `Assessment for ${paramName}: Performance evaluated with score ${score}/10. ${score >= 7 ? 'Good performance demonstrated.' : score >= 5 ? 'Satisfactory performance with room for improvement.' : 'Performance needs significant improvement.'}`;
+                }
+                
+                return feedback;
               };
               
+              const formatFeedback = (feedback: string) => {
+                if (!feedback || feedback === 'No feedback available') return 'No feedback available';
+                
+                // Clean up the feedback text but preserve the complete content
+                let cleanedFeedback = feedback.trim();
+                
+                // Only remove obvious formatting issues, don't filter content
+                cleanedFeedback = cleanedFeedback.replace(/^•\s*/gm, '').replace(/^\d+\.\s*/gm, '');
+                
+                // If the feedback already contains bullet points, keep them structured
+                if (cleanedFeedback.includes('•') || cleanedFeedback.match(/^\d+\./gm)) {
+                  return cleanedFeedback;
+                }
+                
+                // For regular paragraph-style feedback, just return it as-is with proper spacing
+                // Don't split into bullets - preserve the original detailed feedback
+                return cleanedFeedback;
+              };
+              
+              const feedback = getFeedback(question, answer);
+              const formattedFeedback = formatFeedback(feedback);
+              console.log(`🔍 Feedback for question ${questionOrder}:`, feedback?.substring(0, 100) + '...');
+              console.log(`🔍 Formatted feedback for question ${questionOrder}:`, formattedFeedback?.substring(0, 200) + '...');
+              
               tableData.push([
-                question.parameter_name || question.parameter_key || 'General',
-                question.question_text || `Question ${(question.question_order || 0) + 1}`,
-                answer.transcript || 'No answer provided',
-                formatFeedback(answer.feedback || 'Assessment pending'),
+                parameter,
+                questionText,
+                answer.transcript || answer.answer || 'No transcript available',
+                answer.written_answer || 'No written answer',
+                formattedFeedback,
                 answer.score || 'N/A'
               ]);
-            }
-          });
-        } else {
-          // Fallback to old data structure if parameter_scores doesn't exist
-          Object.entries(parameters).forEach(([paramKey, paramData]: [string, any]) => {
-            const questions = paramData.questions || [];
-            const answers = paramData.answers || [];
-            
-            if (questions.length > 0) {
-              questions.forEach((question: any, questionIndex: number) => {
-                const answer = answers.find((ans: any) => 
-                  ans.question_order === question.question_order || 
-                  answers.indexOf(ans) === questionIndex
-                ) || answers[questionIndex] || {};
-                
-                tableData.push([
-                  paramData.name || paramKey,
-                  question.question_text || 'N/A',
-                  answer.transcript || 'No answer provided',
-                  answer.feedback || 'No feedback available',
-                  answer.score || answer.parameter_score || 'N/A'
-                ]);
-              });
             } else {
-              const parameterAnswer = answers[0] || {};
+              // Handle case where answer is missing but question exists (same as Excel)
               tableData.push([
-                paramData.name || paramKey,
-                'Parameter-based assessment',
-                parameterAnswer.transcript || 'No answer provided',
-                parameterAnswer.feedback || paramData.feedback || 'No feedback available',
-                parameterAnswer.score || parameterAnswer.parameter_score || paramData.score || 'N/A'
+                parameter,
+                questionText,
+                'No answer recorded',
+                'No written answer',
+                'No feedback available',
+                'N/A'
               ]);
             }
-          });
-        }
+          }
+        });
       }
       
       // Add table with proper column widths
       autoTable(doc, {
-        head: [['Parameter', 'Questions', 'Answers', 'AI Feedback', 'Scores']],
+        head: [['Parameter', 'Questions', 'Answers', 'Written Answer', 'AI Feedback', 'Scores']],
         body: tableData,
         startY: tableStartY, // Use calculated startY (85 normally, 92 if termination reason shown)
         styles: {
           fontSize: 7,
           cellPadding: 2,
           overflow: 'linebreak',
-          halign: 'left'
+          halign: 'left',
+          lineColor: [0, 0, 0], // Black borders
+          lineWidth: 0.1
         },
         headStyles: {
-          fillColor: [59, 130, 246], // Blue color
+          fillColor: [68, 114, 196], // Same blue as Excel (FF4472C4)
           textColor: 255,
           fontStyle: 'bold',
-          fontSize: 8
+          fontSize: 8,
+          lineColor: [0, 0, 0], // Black borders
+          lineWidth: 0.2 // Thicker borders for header
         },
         columnStyles: {
-          0: { cellWidth: 30 }, // Parameter - larger
-          1: { cellWidth: 40 }, // Questions - larger
-          2: { cellWidth: 40 }, // Answers - larger
-          3: { cellWidth: 40 }, // AI Feedback - larger
-          4: { cellWidth: 18 }  // Scores - larger
+          0: { cellWidth: 25 }, // Parameter - slightly smaller
+          1: { cellWidth: 35 }, // Questions - slightly smaller  
+          2: { cellWidth: 35 }, // Answers - slightly smaller
+          3: { cellWidth: 35 }, // Written Answer - new column
+          4: { cellWidth: 35 }, // AI Feedback - slightly smaller
+          5: { cellWidth: 15 }  // Scores - slightly smaller
         },
         margin: { left: 15, right: 15 },
         pageBreak: 'auto',
@@ -1567,136 +1584,93 @@ const FinalResults = () => {
   };
 
   return (
-    <div className={`min-h-screen w-full h-full transition-colors duration-300 ${
-      isDarkMode 
-        ? 'bg-gray-900 text-white' 
-        : 'bg-gray-50 text-gray-900'
-    }`}>
-      {/* Header */}
-      <div className={`w-full transition-colors duration-300 ${
-        isDarkMode ? 'bg-gray-800' : 'bg-white border-b border-gray-200'
-      }`}>
-        <div className="py-3 sm:py-4 px-3 sm:px-4">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            <div className="flex items-center space-x-2 sm:space-x-4">
-              <button
-                onClick={() => navigate('/dashboard', { state: { activeSection: 'interview-dashboard' } })}
-                className={`flex items-center space-x-2 transition-colors text-sm sm:text-base ${
-                  isDarkMode 
-                    ? 'text-gray-300 hover:text-white' 
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="hidden sm:inline">Back to Dashboard</span>
-                <span className="sm:hidden">Back</span>
-              </button>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 sm:space-x-4">
-              <button
-                onClick={toggleTheme}
-                className={`flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 rounded-lg transition-colors text-xs sm:text-sm ${
-                  isDarkMode 
-                    ? 'bg-gray-700 hover:bg-gray-600 text-white' 
-                    : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200'
-                }`}
-                title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-              >
-                {isDarkMode ? <Sun className="h-3 w-3 sm:h-4 sm:w-4" /> : <Moon className="h-3 w-3 sm:h-4 sm:w-4" />}
-                <span className="hidden sm:inline">{isDarkMode ? 'Light' : 'Dark'}</span>
-              </button>
-              <button
-                onClick={generatePDFReport}
-                disabled={isGeneratingPDF}
-                className={`flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 rounded-lg transition-colors text-xs sm:text-sm ${
-                  isDarkMode 
-                    ? 'bg-red-600 hover:bg-red-700 text-white' 
-                    : 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200'
-                } ${isGeneratingPDF ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title="Download comprehensive PDF report with all questions, answers, scores, feedback, and media files"
-              >
-                {isGeneratingPDF ? (
-                  <>
-                    <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
-                    <span className="hidden sm:inline">Generating PDF...</span>
-                    <span className="sm:hidden">PDF...</span>
-                  </>
-                ) : (
-                  <>
-                    <FileText className="h-3 w-3 sm:h-4 sm:w-4" />
-                    <span className="hidden sm:inline">Download PDF Report</span>
-                    <span className="sm:hidden">PDF</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                onClick={downloadExcel}
-                className={`flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 rounded-lg transition-colors text-xs sm:text-sm ${
-                  isDarkMode 
-                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
-                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
-                }`}
-                title="Download comprehensive Excel report with multiple sheets including overview, parameters, questions, answers, media files, and score analysis"
-              >
-                <FileSpreadsheet className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Excel Report</span>
-                <span className="sm:hidden">Excel</span>
-              </button>
-              <button
-                onClick={shareReport}
-                className={`flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 rounded-lg transition-colors text-xs sm:text-sm ${
-                  isDarkMode 
-                    ? 'bg-gray-700 hover:bg-gray-600 text-white' 
-                    : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200'
-                }`}
-              >
-                <Share2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Share</span>
-              </button>
-            </div>
+    <div className="min-h-screen w-full flex flex-col overflow-x-hidden bg-white text-gray-900">
+      {/* Header - same as CandidateInterview/CandidateCompletion: sky-100 + ProValuate logo */}
+      <header className="flex-shrink-0 bg-sky-100 border-b border-sky-200">
+        <div className="w-full pl-0 pr-2 sm:pr-6 py-2 sm:py-3 lg:py-4 flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
+          <img
+            src="/Logo_Transparent_BG.png"
+            alt="ProValuate"
+            className="h-8 sm:h-10 lg:h-12 w-auto object-contain flex-shrink-0 order-first max-h-10 sm:max-h-none"
+          />
+          <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-3 ml-auto min-w-0">
+            <button
+              onClick={generatePDFReport}
+              disabled={isGeneratingPDF}
+              className={`inline-flex items-center gap-1 sm:gap-2 min-h-[44px] px-2 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-base font-medium transition-colors touch-manipulation bg-[#1e5da8] text-white hover:bg-[#1e5da8]/90 flex-shrink-0 ${isGeneratingPDF ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title="Download comprehensive PDF report with all questions, answers, scores, feedback, and media files"
+            >
+              {isGeneratingPDF ? (
+                <>
+                  <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin flex-shrink-0" />
+                  <span className="hidden sm:inline">Generating PDF...</span>
+                  <span className="sm:hidden">PDF...</span>
+                </>
+              ) : (
+                <>
+                  <FileText className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                  <span className="hidden sm:inline">Download PDF Report</span>
+                  <span className="sm:hidden">PDF</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={downloadExcel}
+              className="inline-flex items-center gap-1 sm:gap-2 min-h-[44px] px-2 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-base font-medium transition-colors touch-manipulation bg-[#1e5da8] text-white hover:bg-[#1e5da8]/90 flex-shrink-0"
+              title="Download comprehensive Excel report"
+            >
+              <FileSpreadsheet className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Excel Report</span>
+              <span className="sm:hidden">Excel</span>
+            </button>
+            <button
+              onClick={shareReport}
+              className="inline-flex items-center gap-1 sm:gap-2 min-h-[44px] px-2 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-base font-medium transition-colors touch-manipulation bg-[#1e5da8] text-white hover:bg-[#1e5da8]/90 flex-shrink-0"
+            >
+              <Share2 className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Share</span>
+            </button>
+            <button
+              onClick={() => navigate('/dashboard', { state: { activeSection: 'interview-dashboard' } })}
+              className="inline-flex items-center gap-1 sm:gap-2 min-h-[44px] px-2 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-base font-medium transition-colors touch-manipulation bg-[#1e5da8] text-white hover:bg-[#1e5da8]/90 flex-shrink-0"
+              aria-label="Back to Dashboard"
+            >
+              <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Back to Dashboard</span>
+              <span className="sm:hidden">Back</span>
+            </button>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Main Content */}
-      <div className="py-4 sm:py-8 px-3 sm:px-4 w-full">
+      {/* Main Content - full width as old setup */}
+      <div className="flex-1 w-full min-w-0 py-4 sm:py-8 px-3 sm:px-4 overflow-x-hidden">
         {/* Interview Overview */}
-        <div className={`rounded-lg p-4 sm:p-6 mb-6 sm:mb-8 transition-colors duration-300 ${
-          isDarkMode ? 'bg-gray-800' : 'bg-white border border-gray-200 shadow-sm'
-        }`}>
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            <div className="text-center">
-              <div className={`text-2xl sm:text-3xl font-bold ${
-                isDarkMode ? 'text-blue-400' : 'text-blue-600'
-              }`}>{interview?.overall_score?.toFixed(1) || 'N/A'}/10</div>
-              <div className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Overall Score</div>
+        <div className="rounded-lg p-3 sm:p-6 mb-4 sm:mb-8 bg-white border border-gray-200 shadow-sm">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+            <div className="text-center min-w-0">
+              <div className="text-xl sm:text-3xl font-bold text-[#1e5da8] break-words">{interview?.overall_score?.toFixed(1) || 'N/A'}/10</div>
+              <div className="text-xs sm:text-sm text-gray-600">Overall Score</div>
               <div className={`text-xs mt-1 px-2 py-1 rounded-full text-white ${getScoreClass(interview?.overall_score || 0)}`}>
                 {getScoreLabel(interview?.overall_score || 0)}
               </div>
             </div>
-            <div className="text-center">
-              <div className={`text-2xl sm:text-3xl font-bold ${
-                isDarkMode ? 'text-green-400' : 'text-green-600'
-              }`}>{parameterCount}</div>
-              <div className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Parameters</div>
+            <div className="text-center min-w-0">
+              <div className="text-xl sm:text-3xl font-bold text-[#1e5da8]">{parameterCount}</div>
+              <div className="text-xs sm:text-sm text-gray-600">Parameters</div>
             </div>
-            <div className="text-center">
-              <div className={`text-2xl sm:text-3xl font-bold ${
-                isDarkMode ? 'text-yellow-400' : 'text-yellow-600'
-              }`}>{interview?.total_questions || 0}</div>
-              <div className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Questions</div>
+            <div className="text-center min-w-0">
+              <div className="text-xl sm:text-3xl font-bold text-[#1e5da8]">{interview?.total_questions || 0}</div>
+              <div className="text-xs sm:text-sm text-gray-600">Questions</div>
             </div>
-             <div className="text-center">
-               <div className={`text-2xl sm:text-3xl font-bold ${
-                 isDarkMode ? 'text-purple-400' : 'text-purple-600'
-               }`}>
+             <div className="text-center min-w-0">
+               <div className="text-xl sm:text-3xl font-bold text-[#1e5da8]">
                  {interview.completed_at && interview.started_at 
                    ? `${Math.round((new Date(interview.completed_at).getTime() - new Date(interview.started_at).getTime()) / 60000)} min` 
-                   : `${interview.duration_minutes || 30} min`
+                   : `${Math.round(Number(interview.duration_minutes) || 30)} min`
                  }
                </div>
-               <div className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Duration</div>
+               <div className="text-xs sm:text-sm text-gray-600">Duration</div>
              </div>
           </div>
         </div>
@@ -1704,13 +1678,9 @@ const FinalResults = () => {
 
         {/* Unified Assessment Dashboard */}
         {reportData?.questions && reportData.questions.length > 0 && (
-          <div className={`rounded-lg p-4 sm:p-6 transition-colors duration-300 ${
-            isDarkMode ? 'bg-gray-800' : 'bg-white border border-gray-200 shadow-sm'
-          }`}>
-            <h2 className={`text-xl sm:text-2xl font-bold mb-6 sm:mb-8 flex items-center ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
-              <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3" />
+          <div className="rounded-lg p-3 sm:p-6 bg-white border border-gray-200 shadow-sm">
+            <h2 className="text-lg sm:text-2xl font-bold mb-4 sm:mb-8 flex items-center break-words text-gray-900">
+              <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3 flex-shrink-0" />
               Assessment Dashboard
             </h2>
             
@@ -1720,7 +1690,7 @@ const FinalResults = () => {
               if (!reportData.questions || !reportData.answers) {
                 return (
                   <div className={`text-center py-12 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    'text-gray-500'
                   }`}>
                     <Award className="w-16 h-16 mx-auto mb-4 opacity-50" />
                     <p className="text-lg">Loading assessment data...</p>
@@ -1776,7 +1746,7 @@ const FinalResults = () => {
               if (Object.keys(parameters).length === 0) {
                 return (
                   <div className={`text-center py-12 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    'text-gray-500'
                   }`}>
                     <Award className="w-16 h-16 mx-auto mb-4 opacity-50" />
                     <p className="text-lg">No assessment data available</p>
@@ -1788,38 +1758,32 @@ const FinalResults = () => {
               return (
                 <div className="space-y-6">
                   {/* Enhanced Parameter Tabs with Performance Metrics */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 mb-4 sm:mb-8">
                     {Object.entries(parameters).map(([paramKey, param]: [string, any]) => (
                       <button
                         key={paramKey}
                         onClick={() => setSelectedParameter(paramKey)}
-                        className={`p-4 sm:p-6 rounded-xl transition-all duration-200 text-left ${
+                        className={`p-3 sm:p-6 rounded-xl transition-all duration-200 text-left min-w-0 ${
                           selectedParameter === paramKey
-                            ? isDarkMode 
-                              ? 'bg-blue-600 text-white shadow-lg transform scale-105'
-                              : 'bg-blue-50 text-blue-900 border-2 border-blue-200 shadow-lg transform scale-105'
-                            : isDarkMode 
-                              ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white hover:scale-102'
-                              : 'bg-white text-gray-800 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 hover:scale-102 shadow-sm hover:shadow-md'
+                            ? 'bg-blue-50 text-blue-900 border-2 border-blue-200 shadow-lg transform scale-105'
+                            : 'bg-white text-gray-800 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 hover:scale-102 shadow-sm hover:shadow-md'
                         }`}
                       >
                           <div className="space-y-3 sm:space-y-4">
-                            <div className="flex items-center justify-between">
-                              <h4 className="font-bold text-base sm:text-lg leading-tight">{param.name}</h4>
+                            <div className="flex items-center justify-between gap-2 min-w-0">
+                              <h4 className="font-bold text-sm sm:text-lg leading-tight break-words">{param.name}</h4>
                             {param.isPersonal ? (
                               <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                                selectedParameter === paramKey && !isDarkMode
-                                  ? 'bg-blue-200 text-blue-800'
-                                  : isDarkMode
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-blue-100 text-blue-700 border border-blue-200'
+                                selectedParameter === paramKey
+                                  ? 'bg-[#1e5da8]/20 text-[#1e5da8]'
+                                  : 'bg-sky-100 text-[#1e5da8] border border-sky-200'
                               }`}>
                                 Review Only
                               </div>
                             ) : (
                               <div className={`text-2xl sm:text-3xl font-bold ${
                                 selectedParameter === paramKey 
-                                  ? isDarkMode ? 'text-white' : 'text-blue-700'
+                                  ? 'text-[#1e5da8]'
                                   : getScoreColor(param.averageScore)
                               }`}>
                                 {param.averageScore}/10
@@ -1846,12 +1810,12 @@ const FinalResults = () => {
                             {/* Performance Bar - Only for scored parameters */}
                             {!param.isPersonal ? (
                               <div className={`w-full rounded-full h-3 ${
-                                isDarkMode ? 'bg-gray-600' : 'bg-gray-300'
+                                'bg-gray-300'
                               }`}>
                                 <div 
                                   className={`h-3 rounded-full transition-all duration-300 ${
                                     selectedParameter === paramKey 
-                                      ? isDarkMode ? 'bg-white' : 'bg-blue-600'
+                                      ? 'bg-[#1e5da8]'
                                       : getScoreClass(param.averageScore)
                                   }`}
                                   style={{ width: `${param.averageScore * 10}%` }}
@@ -1870,38 +1834,30 @@ const FinalResults = () => {
                   {/* Questions for Selected Parameter */}
                   {selectedParameter && parameters[selectedParameter] && (
             <div className="space-y-6">
-                      <div className={`rounded-xl p-4 sm:p-6 mb-4 sm:mb-6 transition-colors duration-300 ${
-                        isDarkMode ? 'bg-gray-700' : 'bg-gray-50 border border-gray-200 shadow-sm'
-                      }`}>
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                          <div>
-                            <h3 className={`text-xl sm:text-2xl font-bold ${
-                              isDarkMode ? 'text-white' : 'text-gray-900'
-                            }`}>
+                      <div className="rounded-xl p-3 sm:p-6 mb-4 sm:mb-6 transition-colors duration-300 bg-gray-50 border border-gray-200 shadow-sm">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 min-w-0">
+                          <div className="min-w-0 flex-1">
+                            <h3 className="text-lg sm:text-2xl font-bold text-gray-900 break-words">
                               {parameters[selectedParameter].name}
                             </h3>
-                            <p className={`text-sm sm:text-lg mt-2 sm:mt-3 leading-relaxed ${
-                              isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                            }`}>
+                            <p className="text-xs sm:text-lg mt-2 sm:mt-3 leading-relaxed text-gray-600 break-words">
                               {parameters[selectedParameter].isPersonal 
                                 ? 'These questions are for review only - no scoring applied'
                                 : 'Detailed questions and feedback for this assessment area'
                               }
                             </p>
                           </div>
-                          <div className="text-left sm:text-right">
+                          <div className="text-left sm:text-right flex-shrink-0 min-w-0">
                             {parameters[selectedParameter].isPersonal ? (
-                              <div className="bg-blue-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-sm sm:text-lg font-medium">
+                              <div className="bg-[#1e5da8] text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-lg font-medium">
                                 Review Only
                               </div>
                             ) : (
-                              <div className={`text-3xl sm:text-4xl font-bold ${getScoreColor(parameters[selectedParameter].averageScore)}`}>
+                              <div className={`text-2xl sm:text-4xl font-bold ${getScoreColor(parameters[selectedParameter].averageScore)}`}>
                                 {parameters[selectedParameter].averageScore}/10
                               </div>
                             )}
-                            <div className={`text-sm sm:text-lg font-medium ${
-                              isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                            }`}>
+                            <div className="text-xs sm:text-lg font-medium text-gray-600">
                               {parameters[selectedParameter].questionCount} questions
                             </div>
                           </div>
@@ -1914,22 +1870,18 @@ const FinalResults = () => {
                         
                         return (
                           <div key={index} className={`rounded-xl overflow-hidden transition-colors duration-300 ${
-                            isDarkMode ? 'bg-gray-700' : 'bg-white border border-gray-200 shadow-sm'
+                            'bg-white border border-gray-200 shadow-sm'
                           }`}>
                             {/* Question Header - Always Visible */}
                             <div 
-                              className={`p-4 sm:p-6 cursor-pointer transition-colors ${
-                                isDarkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-50'
-                              }`}
+                              className="p-3 sm:p-6 cursor-pointer transition-colors hover:bg-gray-50 touch-manipulation"
                               onClick={() => toggleQuestion(questionId)}
                             >
-                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
-                                <div className="flex items-center gap-3 sm:gap-4">
-                                  <h4 className={`text-base sm:text-xl font-bold ${
-                                    isDarkMode ? 'text-white' : 'text-gray-900'
-                                  }`}>Question {index + 1}</h4>
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 min-w-0">
+                                <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-wrap">
+                                  <h4 className="text-sm sm:text-xl font-bold text-gray-900">Question {index + 1}</h4>
                                   {parameters[selectedParameter].isPersonal ? (
-                                    <div className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+                                    <div className="bg-[#1e5da8] text-white px-3 py-1 rounded-full text-sm font-medium">
                                       Review Only
                                     </div>
                                   ) : (
@@ -1940,27 +1892,25 @@ const FinalResults = () => {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <span className={`text-xs sm:text-sm ${
-                                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                    'text-gray-500'
                                   }`}>
                                     {isExpanded ? 'Collapse' : 'Expand'}
                                   </span>
                                   {isExpanded ? (
                                     <ChevronUp className={`h-5 w-5 ${
-                                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                      'text-gray-500'
                                     }`} />
                                   ) : (
                                     <ChevronDown className={`h-5 w-5 ${
-                                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                      'text-gray-500'
                                     }`} />
                                   )}
                                 </div>
                               </div>
                               
                               {/* Question Preview - Always Visible */}
-                              <div className="mt-3">
-                                <p className={`text-sm leading-relaxed ${
-                                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                                }`}>
+                              <div className="mt-3 min-w-0">
+                                <p className="text-xs sm:text-sm leading-relaxed text-gray-600 break-words">
                                   {question.question_text.length > 100 
                                     ? `${question.question_text.substring(0, 100)}...` 
                                     : question.question_text
@@ -1971,36 +1921,26 @@ const FinalResults = () => {
                             
                             {/* Expandable Content */}
                             {isExpanded && (
-                              <div className={`px-4 sm:px-6 pb-4 sm:pb-6 border-t ${
-                                isDarkMode ? 'border-gray-600' : 'border-gray-200'
-                              }`}>
-                                <div className="pt-4 sm:pt-6 space-y-4 sm:space-y-6">
+                              <div className="px-3 sm:px-6 pb-3 sm:pb-6 border-t border-gray-200">
+                                <div className="pt-3 sm:pt-6 space-y-3 sm:space-y-6">
                                   {/* Full Question */}
-                                  <div>
-                                    <h5 className={`font-bold mb-3 text-lg ${
-                                      isDarkMode ? 'text-white' : 'text-gray-900'
-                                    }`}>Question:</h5>
-                                    <p className={`text-lg leading-relaxed ${
-                                      isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                                    }`}>{question.question_text}</p>
+                                  <div className="min-w-0">
+                                    <h5 className="font-bold mb-2 sm:mb-3 text-base sm:text-lg text-gray-900">Question:</h5>
+                                    <p className="text-sm sm:text-lg leading-relaxed text-gray-700 break-words">{question.question_text}</p>
                                   </div>
 
                                   {/* Answer */}
-                                  <div>
-                                    <h5 className={`font-bold mb-3 text-lg ${
-                                      isDarkMode ? 'text-white' : 'text-gray-900'
-                                    }`}>Answer:</h5>
-                                    <p className={`text-lg leading-relaxed ${
-                                      isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                                    }`}>{answer.transcript || 'No transcript available'}</p>
+                                  <div className="min-w-0">
+                                    <h5 className="font-bold mb-2 sm:mb-3 text-base sm:text-lg text-gray-900">Answer:</h5>
+                                    <p className="text-sm sm:text-lg leading-relaxed text-gray-700 break-words">{answer.transcript || 'No transcript available'}</p>
                                   </div>
 
                                   {/* Audio/Video Buttons */}
-                                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                                  <div className="flex flex-wrap gap-2 sm:gap-4">
                                     {answer.audio_url && (
                                       <button
                                         onClick={() => playAudio(answer.audio_url)}
-                                        className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm sm:text-base"
+                                        className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white rounded-lg transition-colors text-sm sm:text-base touch-manipulation"
                                       >
                                         <Download className="h-4 w-4" />
                                         Play Audio
@@ -2010,10 +1950,20 @@ const FinalResults = () => {
                                     {answer.question_video_url && (
                                       <button
                                         onClick={() => playVideo(answer.question_video_url)}
-                                        className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm sm:text-base"
+                                        className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 sm:px-5 py-2.5 rounded-lg text-sm sm:text-base font-medium transition-colors touch-manipulation bg-[#1e5da8] text-white hover:bg-[#1e5da8]/90"
                                       >
-                                        <Download className="h-4 w-4" />
+                                        <Download className="h-4 w-4 flex-shrink-0" />
                                         Play Video
+                                      </button>
+                                    )}
+
+                                    {answer.written_answer && (
+                                      <button
+                                        onClick={() => showWrittenAnswer(answer.written_answer)}
+                                        className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 sm:px-5 py-2.5 rounded-lg text-sm sm:text-base font-medium transition-colors touch-manipulation bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white"
+                                      >
+                                        <FileText className="h-4 w-4 flex-shrink-0" />
+                                        Show Written Answer
                                       </button>
                                     )}
                                   </div>
@@ -2021,22 +1971,14 @@ const FinalResults = () => {
                                   {/* AI Feedback - Only for scored parameters */}
                                   {!parameters[selectedParameter].isPersonal && (
                                     answer.feedback ? (
-                                      <div>
-                                        <h5 className={`font-bold mb-3 text-lg ${
-                                          isDarkMode ? 'text-white' : 'text-gray-900'
-                                        }`}>AI Feedback:</h5>
-                                        <p className={`text-lg leading-relaxed ${
-                                          isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                                        }`}>{answer.feedback}</p>
+                                      <div className="min-w-0">
+                                        <h5 className="font-bold mb-2 sm:mb-3 text-base sm:text-lg text-gray-900">AI Feedback:</h5>
+                                        <p className="text-sm sm:text-lg leading-relaxed text-gray-700 break-words">{answer.feedback}</p>
                                       </div>
                                     ) : (
-                                      <div>
-                                        <h5 className={`font-bold mb-3 text-lg ${
-                                          isDarkMode ? 'text-white' : 'text-gray-900'
-                                        }`}>AI Feedback:</h5>
-                                        <p className={`italic text-lg ${
-                                          isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                                        }`}>Feedback analysis pending - will be available soon</p>
+                                      <div className="min-w-0">
+                                        <h5 className="font-bold mb-2 sm:mb-3 text-base sm:text-lg text-gray-900">AI Feedback:</h5>
+                                        <p className="italic text-sm sm:text-lg text-gray-500 break-words">Feedback analysis pending - will be available soon</p>
                                       </div>
                                     )
                                   )}
@@ -2051,12 +1993,10 @@ const FinalResults = () => {
 
                   {/* No Parameter Selected Message */}
                   {!selectedParameter && (
-                    <div className={`text-center py-16 ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                    }`}>
-                      <BarChart3 className="w-20 h-20 mx-auto mb-6 opacity-50" />
-                      <p className="text-xl font-medium">Select a parameter above to view detailed questions and feedback</p>
-                      <p className="text-lg mt-3 leading-relaxed">Each parameter card shows performance metrics and clicking reveals detailed questions, answers, audio, videos, and AI feedback</p>
+                    <div className="text-center py-8 sm:py-16 text-gray-500 px-2">
+                      <BarChart3 className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 sm:mb-6 opacity-50" />
+                      <p className="text-base sm:text-xl font-medium break-words">Select a parameter above to view detailed questions and feedback</p>
+                      <p className="text-sm sm:text-lg mt-2 sm:mt-3 leading-relaxed break-words">Each parameter card shows performance metrics and clicking reveals detailed questions, answers, audio, videos, and AI feedback</p>
                       </div>
                     )}
                   </div>
@@ -2069,59 +2009,45 @@ const FinalResults = () => {
 
         {/* Complete Session Video */}
         {reportData.interview?.session_video_url && (
-          <div className={`rounded-lg p-6 mb-6 transition-colors duration-300 ${
-            isDarkMode ? 'bg-gray-800' : 'bg-white border border-gray-200 shadow-sm'
-          }`}>
-            <h3 className={`text-xl font-semibold mb-4 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>Complete Session Video</h3>
-            <div className={`rounded-lg p-4 transition-colors duration-300 ${
-              isDarkMode ? 'bg-gray-700' : 'bg-gray-50 border border-gray-200'
-            }`}>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h4 className={`font-medium ${
-                    isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>🎥 Full Interview Session</h4>
-                  <p className={`text-sm ${
-                    isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                  }`}>
+          <div className="rounded-lg p-4 sm:p-6 mb-4 sm:mb-6 transition-colors duration-300 bg-white border border-gray-200 shadow-sm">
+            <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-gray-900">Complete Session Video</h3>
+            <div className="rounded-lg p-3 sm:p-4 transition-colors duration-300 bg-gray-50 border border-gray-200">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                <div className="min-w-0">
+                  <h4 className="font-medium text-gray-900">🎥 Full Interview Session</h4>
+                  <p className="text-xs sm:text-sm text-gray-600">
                     Complete video recording from start to finish
                   </p>
-                  <p className={`text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`}>
+                  <p className="text-xs sm:text-sm text-gray-500 break-words">
                     Size: {reportData.interview.session_video_size ? `${(reportData.interview.session_video_size / 1024 / 1024).toFixed(1)} MB` : 'Unknown'} | Format: WebM
                   </p>
                 </div>
-                <div className="flex space-x-2">
+                <div className="flex flex-wrap gap-2 sm:flex-shrink-0">
                   <button
                     onClick={() => playVideo(reportData.interview.session_video_url)}
-                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition-colors"
+                    className="min-h-[44px] px-4 py-2 rounded-lg bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white text-sm sm:text-base font-medium transition-colors touch-manipulation flex-1 sm:flex-none"
                   >
                     Play Full Video
                   </button>
                   <a
                     href={reportData.interview.session_video_url}
                     download
-                    className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition-colors"
+                    className="inline-flex items-center justify-center min-h-[44px] px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm sm:text-base font-medium transition-colors touch-manipulation flex-1 sm:flex-none"
                   >
                     Download Video
                   </a>
                 </div>
               </div>
-              <div className={`rounded p-3 transition-colors duration-300 ${
-                isDarkMode ? 'bg-gray-600' : 'bg-gray-100 border border-gray-300'
-              }`}>
+              <div className="rounded p-3 transition-colors duration-300 bg-gray-100 border border-gray-300">
                 <h5 className={`font-medium mb-2 ${
-                  isDarkMode ? 'text-white' : 'text-gray-900'
+                  'text-gray-900'
                 }`}>📹 This video contains the complete interview session including:</h5>
                 <ul className={`text-sm space-y-1 ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                  'text-gray-600'
                 }`}>
                   <li>• Candidate's facial expressions and body language</li>
                   <li>• Complete audio from all questions</li>
-                  <li>• Full session duration: {reportData.interview.duration_minutes || 30} minutes</li>
+                  <li>• Full session duration: {Math.round(Number(reportData.interview.duration_minutes) || 30)} minutes</li>
                   <li>• Professional assessment context</li>
                   {reportData.answers && reportData.answers.some(answer => answer.question_video_url) && (
                     <li>• Individual question videos are also available above for easier review</li>
@@ -2135,24 +2061,19 @@ const FinalResults = () => {
 
       {/* Video Modal */}
       {playingVideo && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-          <div className={`rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden transition-colors duration-300 ${
-            isDarkMode ? 'bg-gray-800' : 'bg-white shadow-xl'
-          }`}>
-            <div className="flex items-center justify-between p-4">
-              <h3 className={`text-lg font-semibold ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Question Video Player</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden transition-colors duration-300 bg-white shadow-xl flex flex-col">
+            <div className="flex items-center justify-between gap-2 p-3 sm:p-4 flex-shrink-0 min-w-0">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">Question Video Player</h3>
               <button
                 onClick={closeVideo}
-                className={`transition-colors ${
-                  isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'
-                }`}
+                className="flex-shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-colors text-gray-500 hover:text-gray-900 touch-manipulation"
+                aria-label="Close video"
               >
                 <XCircle className="h-6 w-6" />
               </button>
             </div>
-            <div className="p-4">
+            <div className="p-2 sm:p-4 min-h-0 flex-1 overflow-auto">
               <video
                 controls
                 autoPlay
@@ -2169,37 +2090,26 @@ const FinalResults = () => {
 
       {/* Audio Modal */}
       {playingAudio && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-          <div className={`rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden transition-colors duration-300 ${
-            isDarkMode ? 'bg-gray-800' : 'bg-white shadow-xl'
-          }`}>
-            <div className="flex items-center justify-between p-4">
-              <h3 className={`text-lg font-semibold ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Question Audio Player</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden transition-colors duration-300 bg-white shadow-xl flex flex-col">
+            <div className="flex items-center justify-between gap-2 p-3 sm:p-4 flex-shrink-0 min-w-0">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">Question Audio Player</h3>
               <button
                 onClick={closeAudio}
-                className={`transition-colors ${
-                  isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'
-                }`}
+                className="flex-shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-colors text-gray-500 hover:text-gray-900 touch-manipulation"
+                aria-label="Close audio"
               >
                 <XCircle className="h-6 w-6" />
               </button>
             </div>
-            <div className="p-6">
-              <div className={`rounded-lg p-6 text-center transition-colors duration-300 ${
-                isDarkMode ? 'bg-gray-700' : 'bg-gray-50 border border-gray-200'
-              }`}>
-                <div className="mb-6">
-                  <div className="w-24 h-24 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Download className="h-12 w-12 text-white" />
+            <div className="p-3 sm:p-6 overflow-auto min-h-0">
+              <div className="rounded-lg p-4 sm:p-6 text-center transition-colors duration-300 bg-gray-50 border border-gray-200">
+                <div className="mb-4 sm:mb-6">
+                  <div className="w-16 h-16 sm:w-24 sm:h-24 bg-[#1e5da8] rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                    <Download className="h-8 w-8 sm:h-12 sm:w-12 text-white" />
                   </div>
-                  <h4 className={`text-xl font-semibold mb-2 ${
-                    isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>Audio Recording</h4>
-                  <p className={`${
-                    isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                  }`}>Question answer audio playback</p>
+                  <h4 className="text-lg sm:text-xl font-semibold mb-2 text-gray-900">Audio Recording</h4>
+                  <p className="text-sm sm:text-base text-gray-600">Question answer audio playback</p>
                 </div>
                 <audio
                   controls
@@ -2209,10 +2119,39 @@ const FinalResults = () => {
                 >
                   Your browser does not support the audio element.
                 </audio>
-                <div className={`mt-4 text-sm ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`}>
+                <div className="mt-3 sm:mt-4 text-xs sm:text-sm text-gray-500">
                   Use the controls above to play, pause, and seek through the audio
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Written Answer Modal */}
+      {showingWrittenAnswer && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden transition-colors duration-300 bg-white shadow-xl flex flex-col">
+            <div className="flex items-center justify-between gap-2 p-3 sm:p-4 flex-shrink-0 min-w-0">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">Written Answer</h3>
+              <button
+                onClick={closeWrittenAnswer}
+                className="flex-shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-colors text-gray-500 hover:text-gray-900 touch-manipulation"
+                aria-label="Close written answer"
+              >
+                <XCircle className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="p-3 sm:p-6 overflow-auto min-h-0 flex-1">
+              <div className="rounded-lg p-4 sm:p-6 transition-colors duration-300 bg-white border border-gray-200">
+                <textarea
+                  value={showingWrittenAnswer}
+                  readOnly
+                  className="w-full h-64 sm:h-96 p-3 sm:p-4 text-sm sm:text-base text-gray-800 bg-white rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  placeholder="No written answer available..."
+                />
+                <div className="mt-3 sm:mt-4 text-xs sm:text-sm text-gray-500 text-center">
+                  This is the exact written answer submitted by the candidate during the interview
                 </div>
               </div>
             </div>

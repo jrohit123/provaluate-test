@@ -41,6 +41,10 @@ export const API_CONFIG = {
     
     // Email
     SEND_INTERVIEW_EMAIL: '/api/send-interview-email',
+
+    // TTS and Conversational Phrases
+    TTS: '/api/tts',
+    GENERATE_INTERVIEW_PHRASE: '/api/generate-interview-phrase',
   },
   TIMEOUTS: {
     DEFAULT: 300000, // 30 seconds
@@ -50,6 +54,7 @@ export const API_CONFIG = {
     FILE_READER: 15000, // 15 seconds (increased for large audio files)
     HEARTBEAT: 30000, // 30 seconds
     AUDIO_PROCESSING: 120000, // 2 minutes for audio transcription
+    TTS: 15000, // 15 seconds for TTS generation
   },
   RETRY: {
     MAX_ATTEMPTS: 3,

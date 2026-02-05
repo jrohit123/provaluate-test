@@ -9,6 +9,7 @@ import './App.css';
 import { useSessionTimeout } from '@/hooks/use-session-timeout';
 import { SessionTimeoutDialog } from '@/components/session/SessionTimeoutDialog';
 import { SessionManager } from '@/utils/sessionManager';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Import existing pages
 import Login from "./pages/Login";
@@ -19,6 +20,8 @@ import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/Onboarding";
 import Pricing from "./pages/Pricing";
 import Impact from "./pages/Impact";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 
 // Import AI Interview components (now TypeScript)
 import InterviewDashboard from "./components/ai-interview/InterviewDashboard";
@@ -28,9 +31,10 @@ import CandidateInterview from "./components/ai-interview/CandidateInterview";
 import FinalResults from "./components/ai-interview/FinalResults";
 import ConversationalInterview from "./components/ai-interview/ConversationalInterview";
 import CandidateCompletion from "./components/ai-interview/CandidateCompletion";
-
+import CompanyCareerPage from "./pages/CompanyCareerPage";
 
 import { supabase } from "@/integrations/supabase/client";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { InterviewProvider } from "@/contexts/InterviewContext";
 import { SessionProvider } from "@/contexts/SessionContext";
 import './App.css';
@@ -132,20 +136,57 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+// Toast component that adapts to mobile
+const AdaptiveToaster = () => {
+  const isMobile = useIsMobile();
+  
+  return (
+    <HotToaster 
+      position={isMobile ? "top-center" : "top-right"}
+      toastOptions={{
+        duration: 4000,
+        style: {
+          background: '#1f2937',
+          color: '#fff',
+          border: '1px solid #374151',
+          maxWidth: isMobile ? '90%' : '400px',
+        },
+        success: {
+          icon: '',
+          iconTheme: {
+            primary: '#10b981',
+            secondary: '#fff',
+          },
+        },
+        error: {
+          icon: '',
+          iconTheme: {
+            primary: '#ef4444',
+            secondary: '#fff',
+          },
+        },
+      }}
+    />
+  );
+};
+
 const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <BrowserRouter>
-          <InterviewProvider>
-            <SessionProvider>
-              <Routes>
+          <AuthProvider>
+            <InterviewProvider>
+              <SessionProvider>
+                <Routes>
             {/* Authentication Routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/impact" element={<Impact />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
             
             {/* Services Selection Page - Protected */}
             <Route path="/services" element={
@@ -175,39 +216,20 @@ const App = () => {
             <Route path="/ai-interview/final-results/:interviewId" element={<FinalResults />} />
             <Route path="/final-results/:interviewId" element={<FinalResults />} />
             
+            {/* Public career page - no auth */}
+            <Route path="/careers/:companySlug" element={<CompanyCareerPage />} />
+            
             {/* Default route - redirect to login */}
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<NotFound />} />
-            </Routes>
-            </SessionProvider>
-          </InterviewProvider>
-          
-          {/* Toast Providers */}
-          <Toaster />
-          <Sonner />
-          <HotToaster 
-            position="top-right"
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: '#1f2937',
-                color: '#fff',
-                border: '1px solid #374151',
-              },
-              success: {
-                iconTheme: {
-                  primary: '#10b981',
-                  secondary: '#fff',
-                },
-              },
-              error: {
-                iconTheme: {
-                  primary: '#ef4444',
-                  secondary: '#fff',
-                },
-              },
-            }}
-          />
+                </Routes>
+                {/* Toast Providers */}
+                <Toaster />
+                <Sonner />
+                <AdaptiveToaster />
+              </SessionProvider>
+            </InterviewProvider>
+          </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>

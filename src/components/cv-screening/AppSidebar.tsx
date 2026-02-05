@@ -1,4 +1,4 @@
-import { Upload, FileText, BarChart3, User, Lightbulb, Settings, Users, Monitor, Wrench, Cog, ChevronDown, ChevronRight, Search, Video, CheckCircle } from 'lucide-react';
+import { Upload, FileText, BarChart3, User, Lightbulb, Settings, Users, Monitor, Wrench, Cog, ChevronDown, ChevronRight, Search, Video, CheckCircle, Globe } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -9,14 +9,16 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ActiveSection } from '@/pages/Dashboard';
+import { TOUR_OPEN_SIDEBAR_EVENT } from '@/constants/tour';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { Card, CardContent } from '@/components/ui/card';
-import { useState } from 'react';
 
 interface AppSidebarProps {
   activeSection: ActiveSection;
@@ -89,10 +91,19 @@ const settingsItem = {
   description: 'Configure preferences'
 };
 
+// Career Portal (below Settings)
+const careerPortalItem = {
+  title: 'Career Portal',
+  icon: Globe,
+  section: 'career-portal' as ActiveSection,
+  description: 'Configure career page and which JDs are visible to candidates'
+};
+
 export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { currentJobDescription, currentEvaluationCriteria, isSessionComplete } = useSession();
+  const { isMobile, setOpenMobile } = useSidebar();
   
   // State for collapsible sections
   const [isCvScreeningOpen, setIsCvScreeningOpen] = useState(true);
@@ -101,10 +112,21 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
   // Check if user can access settings
   const canAccessSettings = user?.profile?.role === 'admin' || user?.profile?.role === 'superadmin';
 
+  useEffect(() => {
+    const openForTour = () => setOpenMobile(true);
+    window.addEventListener(TOUR_OPEN_SIDEBAR_EVENT, openForTour);
+    return () => window.removeEventListener(TOUR_OPEN_SIDEBAR_EVENT, openForTour);
+  }, [setOpenMobile]);
+
   // Handle section change with URL navigation
   const handleSectionChange = (section: ActiveSection) => {
     onSectionChange(section);
     navigate(`/dashboard?section=${section}`);
+    
+    // Close mobile sidebar after navigation
+    if (isMobile) {
+      setOpenMobile(false);
+    }
   };
 
   // Get completion status and tooltip for CV Screening items
@@ -140,7 +162,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
   };
 
   return (
-    <Sidebar className="border-r bg-white">
+    <Sidebar className="border-r bg-white" data-tour="sidebar">
       <SidebarContent className="space-y-0">
         {/* Main Dashboard - Always visible */}
         <SidebarGroup>
@@ -152,6 +174,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                   isActive={activeSection === mainDashboardItem.section}
                   className="group relative"
                   tooltip={mainDashboardItem.title}
+                  data-tour={`section-${mainDashboardItem.section}`}
                 >
                   <mainDashboardItem.icon className="w-4 h-4" />
                   <span className="font-medium">{mainDashboardItem.title}</span>
@@ -190,6 +213,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                         isActive={activeSection === item.section}
                           className="group relative ml-4 w-full flex items-center"
                         tooltip={item.title}
+                        data-tour={`section-${item.section}`}
                       >
                           <div className="flex items-center gap-2 min-w-0">
                             <item.icon className="w-4 h-4 flex-shrink-0" />
@@ -234,6 +258,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                         isActive={activeSection === item.section}
                         className="group relative ml-4"
                         tooltip={item.title}
+                        data-tour={`section-${item.section}`}
                       >
                         <item.icon className="w-4 h-4" />
                         <span className="font-medium">{item.title}</span>
@@ -257,6 +282,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                     isActive={activeSection === settingsItem.section}
                     className="group relative"
                     tooltip={settingsItem.title}
+                    data-tour="section-settings"
                   >
                     <settingsItem.icon className="w-4 h-4" />
                     <span className="font-bold text-[#1A56DB]">{settingsItem.title}</span>
@@ -266,10 +292,30 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
             </SidebarGroupContent>
           </SidebarGroup>
         )}
+
+        {/* Career Portal - Below Settings */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => handleSectionChange(careerPortalItem.section)}
+                  isActive={activeSection === careerPortalItem.section}
+                  className="group relative"
+                  tooltip={careerPortalItem.title}
+                  data-tour="section-career-portal"
+                >
+                  <careerPortalItem.icon className="w-4 h-4" />
+                  <span className="font-bold text-[#1A56DB]">{careerPortalItem.title}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
       
       <SidebarFooter className="p-4">
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4" data-tour="session-panel">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-blue-900">Current Session</h3>

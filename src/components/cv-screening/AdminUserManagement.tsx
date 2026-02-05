@@ -9,7 +9,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { UsageTrackingService } from '@/services/usageTrackingService';
 
-export default function AdminUserManagement() {
+interface AdminUserManagementProps {
+  onSectionReady?: () => void;
+}
+
+export default function AdminUserManagement({ onSectionReady }: AdminUserManagementProps) {
   // All hooks must be called unconditionally
   const { user } = useAuth();
   const { toast } = useToast();
@@ -89,6 +93,12 @@ export default function AdminUserManagement() {
     if (!isAdmin) return; // Only fetch if admin
     loadCompanyData();
   }, [user?.profile?.company_id, isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin || loading) return;
+    const t = setTimeout(() => onSectionReady?.(), 400);
+    return () => clearTimeout(t);
+  }, [isAdmin, loading, onSectionReady]);
 
   const maxUsers = plan?.max_users ?? null;
   const slotsLeft = maxUsers !== null ? maxUsers - users.length : null;
@@ -1203,7 +1213,7 @@ export default function AdminUserManagement() {
   if (!isAdmin) return null;
 
   return (
-    <Card className="mb-8">
+    <Card className="mb-8" data-tour="settings-user-management">
       <CardHeader>
         <CardTitle className="text-lg sm:text-xl">User Management</CardTitle>
         <div className="text-xs sm:text-sm text-muted-foreground mt-1">
@@ -1573,7 +1583,7 @@ export default function AdminUserManagement() {
           </Dialog>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto relative">
           <table className="min-w-full text-xs sm:text-sm border">
             <thead>
               <tr className="bg-gray-100">

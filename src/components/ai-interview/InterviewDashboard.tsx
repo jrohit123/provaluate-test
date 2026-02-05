@@ -8,6 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
 import { useAuth } from '@/hooks/use-auth';
+import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
+import { useInterviewCurrentStep, useInterviewNavigateToStep, INTERVIEW_WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
 import { 
   Search, 
   Users, 
@@ -50,10 +52,13 @@ interface Interview {
 
 interface InterviewDashboardProps {
   onSectionChange?: (section: string) => void;
+  onSectionReady?: () => void;
 }
 
-const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange }) => {
+const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange, onSectionReady }) => {
   const { user } = useAuth();
+  const interviewCurrentStep = useInterviewCurrentStep();
+  const interviewNavigateToStep = useInterviewNavigateToStep();
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -72,6 +77,13 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
   useEffect(() => {
     fetchInterviews();
   }, [user?.profile?.company_id]);
+
+  // Signal section ready on mount so the tour can start immediately (like AIsetup / HRInterviewCreator).
+  // Do not wait for fetchInterviews() — tour targets are in the DOM as soon as the section renders.
+  useEffect(() => {
+    const t = setTimeout(() => onSectionReady?.(), 400);
+    return () => clearTimeout(t);
+  }, [onSectionReady]);
 
   const fetchInterviews = async () => {
     if (!user?.profile?.company_id) {
@@ -346,6 +358,15 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
 
   try {
     return (
+      <div className="min-h-screen">
+      <div className="lg:hidden">
+        <CompactStepProgress
+          current={interviewCurrentStep}
+          total={INTERVIEW_WORKFLOW_STEPS.length}
+          steps={INTERVIEW_WORKFLOW_STEPS}
+          onStepClick={interviewNavigateToStep}
+        />
+      </div>
       <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="mb-4 sm:mb-6">
@@ -353,6 +374,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
         <p className="text-sm sm:text-base text-muted-foreground">Monitor and manage all interview sessions</p>
       </div>
 
+      <div data-tour="interview-dashboard-stats" className="space-y-4">
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between mb-4 sm:mb-6 gap-3">
         <div></div>
         <Button 
@@ -419,9 +441,10 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
           </CardContent>
         </Card>
       </div>
+      </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+      <div data-tour="interview-dashboard-filters" className="flex flex-col sm:flex-row gap-3 sm:gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
           <Input
@@ -448,7 +471,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
       </div>
 
       {/* Table */}
-      <Card className="animate-fade-in">
+      <Card className="animate-fade-in" data-tour="interview-dashboard-area">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="w-5 h-5 text-primary-600" />
@@ -599,7 +622,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                                     value={localComments[interview.id] || interview.hr_comments || ''}
                                     onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
                                     placeholder="Enter your comments..."
-                                    className="w-full p-3 sm:p-4 border border-gray-300 rounded-md text-sm sm:text-base resize-none focus:outline-none focus:border-gray-300"
+                                    className="w-full p-3 sm:p-4 border border-gray-300 rounded-md text-sm sm:text-base resize-none focus:outline-none focus:border-gray-300 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
                                     rows={15}
                                   />
                                 </div>
@@ -645,7 +668,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                             value={localComments[interview.id] || interview.hr_comments || ''}
                             onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
                             placeholder="Enter your comments..."
-                            className="w-full p-2 pr-8 border border-gray-300 rounded-md text-xs resize-none focus:outline-none focus:border-gray-300"
+                            className="w-full p-2 pr-8 border border-gray-300 rounded-md text-xs resize-none focus:outline-none focus:border-gray-300 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
                             rows={2}
                           />
                           <Dialog open={expandDialogStates[interview.id] || false} onOpenChange={(open) => setExpandDialogStates(prev => ({...prev, [interview.id]: open}))}>
@@ -669,7 +692,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                                   value={localComments[interview.id] || interview.hr_comments || ''}
                                   onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
                                   placeholder="Enter your comments..."
-                                  className="w-full p-3 sm:p-4 border border-gray-300 rounded-md text-sm sm:text-base resize-none focus:outline-none focus:border-gray-300"
+                                  className="w-full p-3 sm:p-4 border border-gray-300 rounded-md text-sm sm:text-base resize-none focus:outline-none focus:border-gray-300 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
                                   rows={15}
                                 />
                               </div>
@@ -871,7 +894,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                               value={localComments[interview.id] || interview.hr_comments || ''}
                               onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
                               placeholder="Enter your comments..."
-                              className="w-full p-2 pr-8 border border-gray-300 rounded-md text-sm resize-none focus:outline-none focus:border-gray-300"
+                              className="w-full p-2 pr-8 border border-gray-300 rounded-md text-sm resize-none focus:outline-none focus:border-gray-300 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
                               rows={2}
                             />
                             <Dialog open={expandDialogStates[interview.id] || false} onOpenChange={(open) => setExpandDialogStates(prev => ({...prev, [interview.id]: open}))}>
@@ -895,7 +918,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                                     value={localComments[interview.id] || interview.hr_comments || ''}
                                     onChange={(e) => handleCommentsChange(interview.id, e.target.value)}
                                     placeholder="Enter your comments..."
-                                    className="w-full p-3 sm:p-4 border border-gray-300 rounded-md text-sm sm:text-base resize-none focus:outline-none focus:border-gray-300"
+                                    className="w-full p-3 sm:p-4 border border-gray-300 rounded-md text-sm sm:text-base resize-none focus:outline-none focus:border-gray-300 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
                                     rows={15}
                                   />
                                 </div>
@@ -1000,6 +1023,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
           )}
         </CardContent>
       </Card>
+    </div>
     </div>
   );
   } catch (error) {

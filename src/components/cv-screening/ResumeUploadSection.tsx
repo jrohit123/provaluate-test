@@ -2,8 +2,10 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Upload, FileText, User, CheckCircle, Play, Briefcase, Grid, Loader2, Download, X, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Upload, FileText, User, CheckCircle, Play, Briefcase, Grid, Loader2, Download, X, RefreshCw, AlertTriangle, ArrowRight, BarChart3 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
+import { useCurrentStep, useNavigateToStep, WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { UsageTrackingService, CompanyUsageInfo } from '@/services/usageTrackingService';
@@ -17,6 +19,8 @@ import { useSearchParams } from 'react-router-dom'; // ✅ ADD: Import useSearch
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { LoadingOverlay } from '@/components/LoadingOverlay';
+import { UiAnalyticsService } from '@/services/uiAnalyticsService';
 
 interface ResumeData {
   id: string;
@@ -148,7 +152,11 @@ const getMatchStatus = (score: number) => {
   return { status: 'nomatch', text: 'No Match', className: 'bg-orange-100 text-orange-700' };
 };
 
-export const ResumeUploadSection = () => {
+interface ResumeUploadSectionProps {
+  onSectionReady?: () => void;
+}
+
+export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps) => {
   const [resumes, setResumes] = useState<ResumeData[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<SelectedFileData[]>([]); // Add state for selected files with status
   const [newlyUploadedIds, setNewlyUploadedIds] = useState<Set<string>>(new Set()); // Track newly uploaded resumes
@@ -167,7 +175,9 @@ export const ResumeUploadSection = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const { setCurrentJobDescription, setCurrentEvaluationCriteria, isSessionComplete } = useSession();
-  const [searchParams] = useSearchParams(); // ✅ ADD: Get search params
+  const [searchParams, setSearchParams] = useSearchParams(); // ✅ ADD: Get search params
+  const currentStep = useCurrentStep();
+  const navigateToStep = useNavigateToStep();
   const [processingState, setProcessingState] = useState<ProcessingState>({
     status: 'idle',
     message: ''
@@ -177,6 +187,13 @@ export const ResumeUploadSection = () => {
   const [expectedResumeCount, setExpectedResumeCount] = useState<number>(0);
   const [lastProgressCount, setLastProgressCount] = useState<number>(0);
   const [initialReportCount, setInitialReportCount] = useState<number>(0);
+
+  // Check if analysis is complete (has completed reports)
+  const hasCompletedReports = assessmentReports.some(report => 
+    report.final_match !== null && 
+    report.final_match !== undefined
+  );
+
   const [processingCompleted, setProcessingCompleted] = useState<boolean>(false);
   const [companyUsageInfo, setCompanyUsageInfo] = useState<CompanyUsageInfo | null>(null);
   const [showRechargeDialog, setShowRechargeDialog] = useState(false);
@@ -186,6 +203,31 @@ export const ResumeUploadSection = () => {
     criteriaName: string;
     reason: string;
   } | null>(null);
+
+  const [userDismissedProcessingOverlay, setUserDismissedProcessingOverlay] = useState(false);
+
+  const isProcessingOverlayVisible =
+    processingState.status === 'processing' || isWaitingForAssessments;
+
+  // Reset dismissed state when processing finishes (so overlay shows again next run)
+  useEffect(() => {
+    if (!isProcessingOverlayVisible) {
+      setUserDismissedProcessingOverlay(false);
+    }
+  }, [isProcessingOverlayVisible]);
+
+  // Track completion of a full CV screening run
+  useEffect(() => {
+    if (processingCompleted) {
+      UiAnalyticsService.track({
+        name: 'cv_screening_completed',
+        area: 'cv_screening_resume_upload',
+        metadata: {
+          resumeCount: resumes.length,
+        },
+      });
+    }
+  }, [processingCompleted, resumes.length]);
 
   // ✅ ADD: Read directly from URL params on mount (before Dashboard's useEffect runs)
   // This ensures we pick up JD and criteria immediately when opening from extension
@@ -614,6 +656,12 @@ export const ResumeUploadSection = () => {
       setInitialReportCount(0);
     }
   }, [user?.profile?.company_id, loadResumes, loadJobDescriptions, loadCriteriaGrids]);
+
+  useEffect(() => {
+    if (!user) return;
+    const t = setTimeout(() => onSectionReady?.(), 700);
+    return () => clearTimeout(t);
+  }, [user, onSectionReady]);
 
   // Check company's CV processing limits
   const checkCompanyUsageLimits = async () => {
@@ -1768,7 +1816,7 @@ export const ResumeUploadSection = () => {
   const hasResumesToAnalyze = hasNewlyUploadedResumes || hasExistingAssessments; // Enable button if there are new uploads OR existing assessments
 
   // Export assessment reports to Excel
-  const handleExportReport = () => {
+  const handleExportReport = async () => {
     if (assessmentReports.length === 0) {
       toast({
         title: "No Data to Export",
@@ -1797,51 +1845,77 @@ export const ResumeUploadSection = () => {
       // Prepare data for Excel export - one row per candidate
       const exportData: any[] = [];
 
-      assessmentReports.forEach((report) => {
-        const candidateName = report.candidate_name || 'Unknown';
-        const summary = report.summary || '';
-        const recommendation = report.recommendation || '';
-        
-        // Create a single row for this candidate
-        const candidateRow: any = {
-          'Candidate Name': candidateName
-        };
-
-        // Add parameter scores as individual columns
-        if (report.scores && Array.isArray(report.scores)) {
-          // Create a map of parameter -> score for quick lookup
-          const scoreMap: { [key: string]: number } = {};
-          report.scores.forEach((score: any) => {
-            if (score.parameter && score.score !== undefined) {
-              scoreMap[score.parameter] = score.score;
+      // Process all reports with email extraction
+      const processedReports = await Promise.all(
+        assessmentReports.map(async (report) => {
+          const candidateName = report.candidate_name || 'Unknown';
+          const summary = report.summary || '';
+          const recommendation = report.recommendation || '';
+          
+          // Extract email from evaluation_scores
+          let candidateEmail = '';
+          try {
+            if (report.resume_url) {
+              const { data } = await supabase
+                .from('resumes')
+                .select('evaluation_scores')
+                .eq('cv_file', report.resume_url)
+                .single();
+              
+              if (data && data.evaluation_scores) {
+                const evalData = typeof data.evaluation_scores === 'string' 
+                  ? JSON.parse(data.evaluation_scores) 
+                  : data.evaluation_scores;
+                candidateEmail = evalData?.analysis_result?.properties?.email || '';
+              }
             }
-          });
+          } catch (error) {
+            console.error('Error fetching email:', error);
+          }
+          
+          // Create a single row for this candidate
+          const candidateRow: any = {
+            'Candidate Name': candidateName,
+            'Email': candidateEmail
+          };
 
-          // Add each parameter as a column
-          parameterColumns.forEach((parameter) => {
-            candidateRow[parameter] = scoreMap[parameter] || 0;
-          });
-        } else {
-          // If no scores, set all parameters to 0
-          parameterColumns.forEach((parameter) => {
-            candidateRow[parameter] = 0;
-          });
-        }
+          // Add parameter scores as individual columns
+          if (report.scores && Array.isArray(report.scores)) {
+            // Create a map of parameter -> score for quick lookup
+            const scoreMap: { [key: string]: number } = {};
+            report.scores.forEach((score: any) => {
+              if (score.parameter && score.score !== undefined) {
+                scoreMap[score.parameter] = score.score;
+              }
+            });
 
-        // Add summary and recommendation at the end
-        candidateRow['Summary'] = summary;
-        candidateRow['Recommendation'] = recommendation;
+            // Add each parameter as a column
+            parameterColumns.forEach((parameter) => {
+              candidateRow[parameter] = scoreMap[parameter] || 0;
+            });
+          } else {
+            // If no scores, set all parameters to 0
+            parameterColumns.forEach((parameter) => {
+              candidateRow[parameter] = 0;
+            });
+          }
 
-        exportData.push(candidateRow);
-      });
+          // Add summary and recommendation at the end
+          candidateRow['Summary'] = summary;
+          candidateRow['Recommendation'] = recommendation;
+
+          return candidateRow;
+        })
+      );
 
       // Create workbook and worksheet
       const workbook = XLSX.utils.book_new();
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const worksheet = XLSX.utils.json_to_sheet(processedReports);
 
       // Set column widths for better readability
       const columnWidths = [
         { wch: 20 }, // Candidate Name
+        { wch: 25 }, // Email
         ...parameterColumns.map(() => ({ wch: 15 })), // Parameter columns
         { wch: 40 }, // Summary
         { wch: 40 }  // Recommendation
@@ -1982,7 +2056,18 @@ export const ResumeUploadSection = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+    <div className="min-h-screen">
+      {/* Mobile Navigation Progress Bar */}
+      <div className="lg:hidden">
+        <CompactStepProgress
+          current={currentStep}
+          total={WORKFLOW_STEPS.length}
+          steps={WORKFLOW_STEPS}
+          onStepClick={navigateToStep}
+        />
+      </div>
+      
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Trial Expiration Warning */}
       <TrialExpirationWarning />
 
@@ -2003,7 +2088,7 @@ export const ResumeUploadSection = () => {
       )}
 
       {/* Top Row: Job Description Selection, Criteria Selection, and Provaluate Button */}
-      <Card className="animate-fade-in mb-6">
+      <Card className="animate-fade-in mb-6" data-tour="resume-upload-area">
         <CardContent className="p-4 sm:p-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 items-start">
             <div className="mb-4 sm:mb-6">
@@ -2514,6 +2599,16 @@ export const ResumeUploadSection = () => {
       )}
       </div>
 
+      {/* Global processing overlay for long-running evaluation */}
+      <LoadingOverlay
+        isOpen={isProcessingOverlayVisible && !userDismissedProcessingOverlay}
+        contextKey="cv-screening"
+        messagesCategory="cv-screening"
+        title="Analyzing resumes against your job criteria…"
+        subtitle="We’re parsing profiles, aligning them to your JD, and computing match scores."
+        onDismiss={() => setUserDismissedProcessingOverlay(true)}
+      />
+
       {/* Scorecard Dialog */}
       <Dialog open={showScorecard} onOpenChange={setShowScorecard}>
         <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[95vh] sm:h-[80vh] overflow-y-auto p-3 sm:p-6" aria-describedby="dialog-description">
@@ -2584,6 +2679,7 @@ export const ResumeUploadSection = () => {
         disabled={companyUsageInfo && !companyUsageInfo.canProcessCV}
         className="hidden"
       />
+      </div>
     </div>
   );
 };

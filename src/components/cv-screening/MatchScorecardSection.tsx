@@ -9,7 +9,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import * as XLSX from 'xlsx';
+import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
+import { useCurrentStep, useNavigateToStep, WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
+import { saveAs } from 'file-saver';
 
 interface Candidate {
   id: string;
@@ -33,9 +35,10 @@ interface MatchScorecardSectionProps {
   selectedCandidateId?: string;
   selectedCandidateData?: any;
   onClose?: () => void;
+  onSectionReady?: () => void;
 }
 
-export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, selectedCandidateData, onClose }: MatchScorecardSectionProps) => {
+export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, selectedCandidateData, onClose, onSectionReady }: MatchScorecardSectionProps) => {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [filteredCandidates, setFilteredCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +49,8 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
   const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => sessionStorage.getItem('selectedJDId') || '');
   const [criteriaGrids, setCriteriaGrids] = useState<any[]>([]);
   const [selectedCriteriaGridId, setSelectedCriteriaGridId] = useState<string>(() => sessionStorage.getItem('selectedCriteriaGridId') || '');
+  const currentStep = useCurrentStep();
+  const navigateToStep = useNavigateToStep();
 
   // Keep local state in sync with sessionStorage resets (e.g., on login/logout)
   useEffect(() => {
@@ -619,6 +624,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
       fetchAssessmentReports();
     } else {
       console.log('No company_id, not fetching reports');
+      setLoading(false);
     }
   }, [user?.profile?.company_id, user?.company?.company_id, fetchAssessmentReports, selectedCandidateData]);
 
@@ -643,6 +649,12 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     
     setFilteredCandidates(filtered);
   }, [candidates, sortOrder, recommendationFilter]);
+
+  useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(() => onSectionReady?.(), 400);
+    return () => clearTimeout(t);
+  }, [loading, onSectionReady]);
 
   // Load job descriptions and criteria grids when component mounts
   useEffect(() => {
@@ -871,75 +883,247 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     }
   };
 
-  const handleExportReport = () => {
-    try {
-      // Create a new workbook
-      const wb = XLSX.utils.book_new();
-      
-      // Use displayCandidates (filtered/sorted) for export
-      const candidatesToExport = selectedCandidateData ? candidates : displayCandidates;
-      
-      // Prepare data for the main summary sheet
-      const summaryData = candidatesToExport.map(candidate => ({
-        'Candidate Name': candidate.name,
-        'Overall Score (%)': candidate.overallScore,
-        'Assessed at': formatDateForExport(candidate.createdAt || ''),
-        'Recommendation': cleanTextForExport(candidate.recommendation),
-        'Summary': cleanTextForExport(candidate.detailedAssessment)
-      }));
+  const handleExportReport = async () => {
+  try {
+    const XLSX = await import('xlsx-js-style');
+    
+    const candidatesToExport = selectedCandidateData ? candidates : displayCandidates;
+    
+    // Prepare data for summary sheet
+    const summaryData = await Promise.all(
+      candidatesToExport.map(async (candidate) => {
+        let candidateEmail = '';
+        try {
+          if (candidate.resumeUrl) {
+            const { data } = await supabase
+              .from('resumes')
+              .select('evaluation_scores')
+              .eq('cv_file', candidate.resumeUrl)
+              .single();
+            
+            if (data && data.evaluation_scores) {
+              const evalData = typeof data.evaluation_scores === 'string' 
+                ? JSON.parse(data.evaluation_scores) 
+                : data.evaluation_scores;
+              candidateEmail = evalData?.analysis_result?.properties?.email || '';
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching email:', error);
+        }
 
-      // Create summary worksheet
-      const summaryWS = XLSX.utils.json_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(wb, summaryWS, 'Candidate Summary');
+        return [
+          candidate.name,
+          candidateEmail,
+          candidate.overallScore.toString(),
+          formatDateForExport(candidate.createdAt || ''),
+          cleanTextForExport(candidate.recommendation || ''),
+          cleanTextForExport(candidate.detailedAssessment || '')
+        ];
+      })
+    );
 
-      // Prepare detailed scoring data
-      const detailedData: any[] = [];
-      candidatesToExport.forEach(candidate => {
-        candidate.scores.forEach(score => {
-          detailedData.push({
-            'Candidate Name': candidate.name,
-            'Overall Score (%)': candidate.overallScore,
-            'Parameter': score.parameter,
-            'Score (out of 10)': score.score,
-            'Weightage (%)': score.weightage,
-            'Weighted Score': (score.score * score.weightage) / 10
-          });
+    // Add header row
+    summaryData.unshift([
+      'Candidate Name',
+      'Email',
+      'Overall Score (%)',
+      'Assessed at',
+      'Recommendation',
+      'Summary'
+    ]);
+
+    // Create worksheet
+    const ws = XLSX.utils.aoa_to_sheet(summaryData);
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 25 },  // Candidate Name
+      { wch: 25 },  // Email
+      { wch: 18 },  // Score
+      { wch: 20 },  // Date
+      { wch: 30 },  // Recommendation ← CHANGED from 60 to 30
+      { wch: 80 }   // Summary
+    ];
+
+    // Calculate row heights based on content
+    const rowHeights = [];
+    summaryData.forEach((row, idx) => {
+      let maxHeight = 20; // minimum height
+      
+      row.forEach((cell, colIdx) => {
+        const cellText = cell?.toString() || '';
+        const colWidth = ws['!cols'][colIdx].wch;
+        
+        // Estimate lines needed
+        const charsPerLine = colWidth * 1.2; // Excel character formula
+        const lines = cellText.split('\n');
+        let totalLines = 0;
+        
+        lines.forEach(line => {
+          totalLines += Math.max(1, Math.ceil(line.length / charsPerLine));
         });
+        
+        // Calculate height (1 line ≈ 15-20 pixels)
+        const cellHeight = totalLines * 18;
+        maxHeight = Math.max(maxHeight, cellHeight);
       });
-
-      // Create detailed scoring worksheet
-      const detailedWS = XLSX.utils.json_to_sheet(detailedData);
-      XLSX.utils.book_append_sheet(wb, detailedWS, 'Detailed Scoring');
-
-      // Generate filename with current date and filter info
-      const currentDate = new Date().toISOString().split('T')[0];
-      let filename = `Match_Scorecard_Report_${currentDate}`;
       
-      // Add filter/sort info only when not in single candidate mode
-      if (!selectedCandidateData) {
-        const filterSuffix = recommendationFilter !== 'all' ? `_${recommendationFilter.replace(/\s+/g, '_')}` : '';
-        const sortSuffix = `_sorted_${sortOrder}`;
-        filename += `${filterSuffix}${sortSuffix}`;
+      rowHeights.push({ hpx: maxHeight });
+    });
+
+    // Set row heights
+    ws['!rows'] = rowHeights;
+
+    // Style cells
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cellAddress]) continue;
+
+        // Header row styling
+        if (R === 0) {
+          ws[cellAddress].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" }, sz: 12 },
+            fill: { fgColor: { rgb: "4472C4" } },
+            alignment: { vertical: "center", horizontal: "center", wrapText: true },
+            border: {
+              top: { style: "thin", color: { rgb: "000000" } },
+              bottom: { style: "thin", color: { rgb: "000000" } },
+              left: { style: "thin", color: { rgb: "000000" } },
+              right: { style: "thin", color: { rgb: "000000" } }
+            }
+          };
+        } else {
+          // Data row styling
+          ws[cellAddress].s = {
+            font: { sz: 11 },
+            alignment: { 
+              vertical: "top", 
+              horizontal: C === 2 ? "center" : "left", 
+              wrapText: true 
+            },
+            border: {
+              top: { style: "thin", color: { rgb: "000000" } },
+              bottom: { style: "thin", color: { rgb: "000000" } },
+              left: { style: "thin", color: { rgb: "000000" } },
+              right: { style: "thin", color: { rgb: "000000" } }
+            }
+          };
+          
+          // Alternate row colors
+          if (R % 2 === 0) {
+            ws[cellAddress].s.fill = { fgColor: { rgb: "F2F2F2" } };
+          }
+        }
       }
-      
-      filename += '.xlsx';
-
-      // Download the file
-      XLSX.writeFile(wb, filename);
-
-      toast({
-        title: "Export Successful",
-        description: `Report exported as ${filename}`,
-      });
-    } catch (error) {
-      console.error('Export error:', error);
-      toast({
-        title: "Export Failed",
-        description: "There was an error exporting the report.",
-        variant: "destructive"
-      });
     }
-  };
+
+    // Create detailed scoring sheet
+    const detailedData = [['Candidate Name', 'Overall Score (%)', 'Parameter', 'Score (out of 10)', 'Weightage (%)', 'Weighted Score']];
+    
+    candidatesToExport.forEach(candidate => {
+      candidate.scores.forEach(score => {
+        detailedData.push([
+          candidate.name,
+          candidate.overallScore.toString(),
+          score.parameter,
+          score.score.toString(),
+          score.weightage.toString(),
+          parseFloat(((score.score * score.weightage) / 10).toFixed(2)).toString()
+        ]);
+      });
+    });
+
+    const ws2 = XLSX.utils.aoa_to_sheet(detailedData);
+    ws2['!cols'] = [
+      { wch: 25 },
+      { wch: 18 },
+      { wch: 35 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 18 }
+    ];
+
+    // Style detailed sheet cells
+    const detailedRange = XLSX.utils.decode_range(ws2['!ref']);
+    for (let R = detailedRange.s.r; R <= detailedRange.e.r; ++R) {
+      for (let C = detailedRange.s.c; C <= detailedRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws2[cellAddress]) continue;
+
+        // Header row styling
+        if (R === 0) {
+          ws2[cellAddress].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" }, sz: 12 },
+            fill: { fgColor: { rgb: "4472C4" } },
+            alignment: { vertical: "center", horizontal: "center", wrapText: true },
+            border: {
+              top: { style: "thin", color: { rgb: "000000" } },
+              bottom: { style: "thin", color: { rgb: "000000" } },
+              left: { style: "thin", color: { rgb: "000000" } },
+              right: { style: "thin", color: { rgb: "000000" } }
+            }
+          };
+        } else {
+          // Data row styling
+          ws2[cellAddress].s = {
+            font: { sz: 11 },
+            alignment: { 
+              vertical: "top", 
+              horizontal: C === 1 || C === 2 || C === 4 || C === 5 ? "center" : "left", 
+              wrapText: true 
+            },
+            border: {
+              top: { style: "thin", color: { rgb: "000000" } },
+              bottom: { style: "thin", color: { rgb: "000000" } },
+              left: { style: "thin", color: { rgb: "000000" } },
+              right: { style: "thin", color: { rgb: "000000" } }
+            }
+          };
+          
+          // Alternate row colors
+          if (R % 2 === 0) {
+            ws2[cellAddress].s.fill = { fgColor: { rgb: "F2F2F2" } };
+          }
+        }
+      }
+    }
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Candidate Summary');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Detailed Scoring');
+
+    // Generate filename
+    const currentDate = new Date().toISOString().split('T')[0];
+    let filename = `Match_Scorecard_Report_${currentDate}`;
+    
+    if (!selectedCandidateData) {
+      const filterSuffix = recommendationFilter !== 'all' ? `_${recommendationFilter.replace(/\s+/g, '_')}` : '';
+      const sortSuffix = `_sorted_${sortOrder}`;
+      filename += `${filterSuffix}${sortSuffix}`;
+    }
+    
+    filename += '.xlsx';
+
+    // Write file
+    XLSX.writeFile(wb, filename);
+
+    toast({
+      title: "Export Successful",
+      description: `Report exported as ${filename}`,
+    });
+  } catch (error) {
+    console.error('Export error:', error);
+    toast({
+      title: "Export Failed",
+      description: "There was an error exporting the report.",
+      variant: "destructive"
+    });
+  }
+};
 
   const handleSortToggle = () => {
     const newSortOrder = sortOrder === 'desc' ? 'asc' : 'desc';
@@ -970,104 +1154,124 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
   const displayCandidates = filteredCandidates;
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+    <div className="min-h-screen">
+      {/* Mobile Navigation Progress Bar */}
+      <div className="lg:hidden">
+        <CompactStepProgress
+          current={currentStep}
+          total={WORKFLOW_STEPS.length}
+          steps={WORKFLOW_STEPS}
+          onStepClick={navigateToStep}
+        />
+      </div>
+      
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6" data-tour="match-scorecard-area">
       {/* Job Description and Criteria Grid Selection - Only Visible in Multi-Candidate Mode */}
       {!selectedCandidateData && (
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-center flex-wrap mb-4 sm:mb-6">
-          {/* Job Description Selection */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-primary-600 flex-shrink-0" />
-              <span className="text-xs sm:text-sm text-gray-600 font-medium">Job:</span>
-            </div>
-            <Select value={selectedJobDescriptionId} onValueChange={handleJobDescriptionSelect}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="Select job description..." />
-              </SelectTrigger>
-              <SelectContent>
-                {jobDescriptions.map(jd => (
-                  <SelectItem key={jd.jd_id} value={jd.jd_id}>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{jd.title}</span>
-                      <span className="text-xs text-muted-foreground">
-                        Created: {new Date(jd.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedJobDescriptionId && (
-              <CheckCircle className="w-4 h-4 text-green-600" />
-            )}
-          </div>
-
-          {/* Evaluation Criteria Selection */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Grid className="w-4 h-4 text-primary-600 flex-shrink-0" />
-              <span className="text-xs sm:text-sm text-gray-600 font-medium">Criteria:</span>
-            </div>
-            <Select value={selectedCriteriaGridId} onValueChange={handleCriteriaGridSelect}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="Select criteria..." />
-              </SelectTrigger>
-              <SelectContent>
-                {criteriaGrids.map(grid => (
-                  <SelectItem key={grid.id} value={grid.id}>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{grid.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {grid.criteriaCount} parameters
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-                </Select>
-                {selectedCriteriaGridId && (
-                  <CheckCircle className="w-4 h-4 text-green-600" />
-                )}
+        <div className="mb-4 sm:mb-6">
+          {/* Single Row Layout for Desktop, Stacked for Mobile */}
+          <div className="flex flex-col lg:flex-row gap-3 lg:items-end">
+            {/* Job Description Selection */}
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-2 flex-1 lg:flex-initial lg:min-w-[200px]">
+              <div className="flex items-center gap-2 lg:flex-shrink-0">
+                <Briefcase className="w-4 h-4 text-primary-600 flex-shrink-0" />
+                <span className="text-sm text-gray-600 font-medium whitespace-nowrap">Job:</span>
               </div>
-
-          {/* Recommendation Filter */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              <span className="text-xs sm:text-sm text-gray-600 font-medium">Filter:</span>
+              <Select value={selectedJobDescriptionId} onValueChange={handleJobDescriptionSelect}>
+                <SelectTrigger className="w-full lg:w-auto lg:min-w-[200px] h-11 sm:h-10">
+                  <SelectValue placeholder="Select job..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {jobDescriptions.map(jd => (
+                    <SelectItem key={jd.jd_id} value={jd.jd_id}>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{jd.title}</span>
+                        <span className="text-xs text-muted-foreground">
+                          Created: {new Date(jd.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={recommendationFilter} onValueChange={handleRecommendationFilter}>
-              <SelectTrigger className="w-full sm:w-44">
-                <SelectValue placeholder="Filter by recommendation" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Recommendations</SelectItem>
-                {getAvailableRecommendations().map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+
+            {/* Evaluation Criteria Selection */}
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-2 flex-1 lg:flex-initial lg:min-w-[200px]">
+              <div className="flex items-center gap-2 lg:flex-shrink-0">
+                <Grid className="w-4 h-4 text-primary-600 flex-shrink-0" />
+                <span className="text-sm text-gray-600 font-medium whitespace-nowrap">Criteria:</span>
+              </div>
+              <Select value={selectedCriteriaGridId} onValueChange={handleCriteriaGridSelect}>
+                <SelectTrigger className="w-full lg:w-auto lg:min-w-[200px] h-11 sm:h-10">
+                  <SelectValue placeholder="Select criteria..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {criteriaGrids.map(grid => (
+                    <SelectItem key={grid.id} value={grid.id}>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{grid.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {grid.criteriaCount} parameters
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Recommendation Filter */}
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-2 flex-1 lg:flex-initial lg:min-w-[150px]">
+              <div className="flex items-center gap-2 lg:flex-shrink-0">
+                <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-sm text-gray-600 font-medium whitespace-nowrap">Filter:</span>
+              </div>
+              <Select value={recommendationFilter} onValueChange={handleRecommendationFilter}>
+                <SelectTrigger className="w-full lg:w-[150px] h-11 sm:h-10">
+                  <SelectValue placeholder="All..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Recommendations</SelectItem>
+                  {getAvailableRecommendations().map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Sort Button */}
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-2 lg:flex-shrink-0">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleSortToggle} 
+                className="w-full lg:w-auto h-11 sm:h-10"
+              >
+                {sortOrder === 'desc' ? (
+                  <ArrowDown className="w-4 h-4 mr-2" />
+                ) : (
+                  <ArrowUp className="w-4 h-4 mr-2" />
+                )}
+                <span>Sort {sortOrder === 'desc' ? 'High-Low' : 'Low-High'}</span>
+              </Button>
+            </div>
+            
+            {/* Export Button */}
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-2 lg:flex-shrink-0">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleExportReport} 
+                className="w-full lg:w-auto h-11 sm:h-10"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                <span>Export Report</span>
+              </Button>
+            </div>
           </div>
-          
-          {/* Sort Button */}
-          <Button variant="outline" size="sm" onClick={handleSortToggle} className="w-full sm:w-auto">
-            {sortOrder === 'desc' ? (
-              <ArrowDown className="w-4 h-4 mr-2" />
-            ) : (
-              <ArrowUp className="w-4 h-4 mr-2" />
-            )}
-            <span className="hidden sm:inline">Sort {sortOrder === 'desc' ? 'High→Low' : 'Low→High'}</span>
-            <span className="sm:hidden">Sort</span>
-          </Button>
-          
-          {/* Export Button */}
-          <Button variant="outline" size="sm" onClick={handleExportReport} className="w-full sm:w-auto">
-            <Download className="w-4 h-4 mr-2" />
-            <span className="hidden sm:inline">Export Report</span>
-            <span className="sm:hidden">Export</span>
-          </Button>
         </div>
       )}
 
@@ -1222,6 +1426,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
         ))}
         </div>
       )}
+      </div>
     </div>
   );
 };

@@ -49,6 +49,8 @@ declare global {
 }
 import { useTimer } from '@/hooks/useTimer';
 import { useCountdownTimer } from '@/hooks/useCountdownTimer';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { getAdaptiveVideoConstraints } from '@/utils/mediaConstraints';
 import { API_CONFIG, buildApiUrl, apiCall } from '@/constants/api';
 import { INTERVIEW_CONSTANTS } from '@/constants/interview';
 import { supabase } from '@/integrations/supabase/client';
@@ -61,12 +63,10 @@ import {
   Send,
   Clock,
   User,
-  Bot,
   Volume2,
   VolumeX,
   AlertTriangle,
   Camera,
-  CheckCircle,
   X,
   ChevronUp,
   ChevronDown,
@@ -75,6 +75,45 @@ import {
   Maximize2
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+
+// Fetch conversational phrase from backend
+const fetchInterviewPhrase = async (
+  phraseType: 'welcome' | 'transition' | 'completion' | 'question_intro',
+  candidateName: string,
+  position: string,
+  questionIndex?: number,
+  totalQuestions?: number
+): Promise<string> => {
+  try {
+    const response = await apiCall(API_CONFIG.ENDPOINTS.GENERATE_INTERVIEW_PHRASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phrase_type: phraseType,
+        candidate_name: candidateName,
+        position,
+        ...(questionIndex != null && { question_index: questionIndex }),
+        ...(totalQuestions != null && { total_questions: totalQuestions }),
+      }),
+    }, 10000);
+    if (response.ok) {
+      const data = await response.json();
+      return data.phrase || '';
+    }
+  } catch (e) {
+    console.warn('Phrase fetch failed, using fallback:', e);
+  }
+  return '';
+};
+
+// Fallback phrases when API fails
+const FALLBACK_PHRASES = {
+  welcome: (name: string, pos: string) =>
+    `Hello ${name}! Welcome to your ${pos} interview. I'm excited to learn more about you. Let's begin with our first question.`,
+  transition: () => "Let's move to the next question.",
+  completion: (name: string, pos: string) =>
+    `Thank you, ${name}! You've successfully completed your ${pos} interview. We appreciate your time. Our team will review and get back to you soon. Good luck!`,
+};
 
 // Add transcription validation function
 const isCorruptedTranscription = (transcript) => {
@@ -162,6 +201,7 @@ const createSpeechPattern = (text: string) => {
 const ConversationalInterview = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const interviewData = useMemo(() => location.state || {}, [location.state]);
   
   // State management
@@ -194,14 +234,16 @@ const ConversationalInterview = () => {
   const videoChunksRef = useRef([]);
   const completionTimerRef = useRef(null);
   const [isCreatingInterview] = useState(false);
-  const [screenStream, setScreenStream] = useState(null);
-  const [screenPermissionGranted, setScreenPermissionGranted] = useState(false);
+  const [cameraPermissionGranted, setCameraPermissionGranted] = useState(false);
   
   // AI Assistant states
   const [aiSpeaking, setAiSpeaking] = useState(false);
+  const [aiTTSLoading, setAiTTSLoading] = useState(false);
   const [aiAudioEnabled, setAiAudioEnabled] = useState(true);
   const [isInterviewInitialized, setIsInterviewInitialized] = useState(false);
   const [aiMessage, setAiMessage] = useState('');
+  const [aiPlaceholder, setAiPlaceholder] = useState<'welcome' | 'generating_first' | 'generating_next' | ''>('');
+  const [loadingDots, setLoadingDots] = useState(0); // 0→1 dot, 1→2 dots, 2→3 dots (cycles)
   const [isWelcomeMessage, setIsWelcomeMessage] = useState(false);
   const [spokenQuestions, setSpokenQuestions] = useState(new Set());
   const [spokenFeedback, setSpokenFeedback] = useState(new Set());
@@ -209,7 +251,7 @@ const ConversationalInterview = () => {
   const [recordingCountdown, setRecordingCountdown] = useState(0);
   const [answerTimer, setAnswerTimer] = useState(0);
   const [isAnswerTimerActive, setIsAnswerTimerActive] = useState(false);
-  const [hasRequestedScreenPermissions, setHasRequestedScreenPermissions] = useState(false);
+  const [hasRequestedCameraPermissions, setHasRequestedCameraPermissions] = useState(false);
   const [answerSubmitted, setAnswerSubmitted] = useState(false);
   const [waveformHeights, setWaveformHeights] = useState<number[]>([]);
   const [speechPattern, setSpeechPattern] = useState<number[]>([]);
@@ -217,6 +259,7 @@ const ConversationalInterview = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenAttempts, setFullscreenAttempts] = useState(0);
   const [isTranscriptDialogOpen, setIsTranscriptDialogOpen] = useState(false);
+  const [writtenAnswer, setWrittenAnswer] = useState(''); // For questions that require SQL/code/calculation in a separate box
   const transcriptTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Per-question timer states
@@ -228,9 +271,15 @@ const ConversationalInterview = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioWorkletNodeRef = useRef<AudioWorkletNode | null>(null);
   const audioWorkletStreamRef = useRef<MediaStream | null>(null);
-  const speakQueueRef = useRef<SpeechSynthesisUtterance[]>([]);
+  const speakQueueRef = useRef<{ text: string; onEnd?: () => void; onAudioStart?: () => void }[]>([]);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const isTerminatedRef = useRef(false);
   const handleSubmitAnswerRef = useRef<(() => Promise<void>) | null>(null);
   const stopQuestionRecordingRef = useRef<(() => void) | null>(null);
+  /** When true, submit runs from timer expiry; submit whatever transcript + written answer we have (don't block on empty written box) */
+  const forceSubmitOnTimerExpiryRef = useRef(false);
+  /** When true, do not reset question timer (user stopped recording on written question; timer must keep counting down) */
+  const writtenQuestionTimerLockedRef = useRef(false);
   const lastInterviewWarningRef = useRef<number | null>(null);
   const lastQuestionWarningRef = useRef<number | null>(null);
   const cameraWarningShownRef = useRef(false);
@@ -239,15 +288,31 @@ const ConversationalInterview = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const hasSpokenWelcomeRef = useRef(false);
   const hasSpokenFirstQuestionRef = useRef(false);
+  const firstQuestionRef = useRef<{ question?: string; question_text?: string } | null>(null);
   const hasSpokenCompletionRef = useRef(false);
   const hasInitializedRef = useRef(false);
   const finishInterviewRef = useRef<(() => Promise<void>) | null>(null);
   const speakWithAIRef = useRef<((text: string) => void) | null>(null);
+  const ttsFallbackToastShownRef = useRef(false);
 
   const terminateInterview = useCallback(async (reason) => {
     // Use consistent toast ID to prevent duplicate messages
     const terminationToastId = 'interview-terminated';
-    
+
+    // Stop all TTS/speech immediately so voice does not keep speaking after termination
+    isTerminatedRef.current = true;
+    speakQueueRef.current.length = 0;
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
+      currentAudioRef.current = null;
+    }
+    setAiTTSLoading(false);
+    setAiSpeaking(false);
+
     try {
       console.log('🚫 Terminating interview due to:', reason);
       const response = await apiCall(`${API_CONFIG.ENDPOINTS.TERMINATE_INTERVIEW}/${interviewData.interviewId}`, {
@@ -303,14 +368,9 @@ const ConversationalInterview = () => {
 
     // Show only one warning message per tab switch
     if (currentCount <= MAX_TAB_CHANGES) {
-      toast('⚠️ Warning: Stay on this tab during the interview!', {
-        id: 'tab-switch-warning', // Use ID to prevent duplicate toasts
-        icon: '⚠️',
+      toast('Warning: Stay on this tab during the interview!', {
+        id: 'tab-switch-warning',
         duration: 3000,
-        style: {
-          background: '#fbbf24',
-          color: '#92400e',
-        },
       });
     } else if (currentCount > MAX_TAB_CHANGES) {
       console.log('🚫 Too many tab changes, terminating interview');
@@ -925,12 +985,9 @@ const ConversationalInterview = () => {
       videoStreamRef.current.getTracks().forEach(track => track.stop());
       videoStreamRef.current = null;
     }
-    if (screenStream) {
-      screenStream.getTracks().forEach(track => track.stop());
-      setScreenStream(null);
-    }
+    // Camera stream cleanup is handled by videoStreamRef
 
-    toast.success('⏰ Interview time completed! Finishing interview...', { id: 'interview-time-completed', duration: 1500 });
+    toast.success('Interview time completed! Finishing interview...', { id: 'interview-time-completed', duration: 1500 });
 
     // CRITICAL FIX: Immediate finalization with minimal delay
     setTimeout(() => {
@@ -950,40 +1007,37 @@ const ConversationalInterview = () => {
       finalizeInterview();
     }, 500);
 
-  }, [isRecording, isVideoRecording, navigate, screenStream, stopWebSpeech]);
+  }, [isRecording, isVideoRecording, navigate, stopWebSpeech]);
 
   const handleQuestionTimerEnd = useCallback(() => {
     console.log('⏰ Question timer expired, auto-advancing...');
     setIsQuestionTimerActive(false);
     setQuestionTimerSeconds(0);
 
-    // CRITICAL FIX: Stop recording first, then auto-submit
-    if (!isSubmitting && !answerSubmitted && isRecording) {
+    if (isSubmitting || answerSubmitted) return;
+
+    // Stop recording first if still recording, then auto-submit (transcript + any written answer)
+    if (isRecording) {
       console.log('🔄 Question time expired - stopping recording and auto-submitting');
-
-      // Stop recording first
-      if (stopQuestionRecordingRef.current) {
-        stopQuestionRecordingRef.current();
-      }
-
-      // Wait for recording to properly stop and blobs to be captured
+      forceSubmitOnTimerExpiryRef.current = true;
+      if (stopQuestionRecordingRef.current) stopQuestionRecordingRef.current();
       setTimeout(() => {
-        console.log('🔄 Auto-submitting answer after recording stopped');
-        if (handleSubmitAnswerRef.current) {
-          handleSubmitAnswerRef.current();
-        }
+        if (handleSubmitAnswerRef.current) handleSubmitAnswerRef.current();
       }, 1500);
-
-    } else if (!isRecording && audioBlob) {
-      // If recording already stopped but not submitted, just submit
-      console.log('🔄 Recording already stopped, auto-submitting existing answer');
-      if (handleSubmitAnswerRef.current) {
-        handleSubmitAnswerRef.current();
-      }
-    } else {
-      console.log('⏰ Timer expired but no valid recording state to submit');
+      return;
     }
-  }, [isSubmitting, answerSubmitted, isRecording, audioBlob]);
+
+    // Recording already stopped: submit whatever we have (transcript + written answer in box)
+    // For written questions this runs when timer expires while user is typing in the box
+    if (!isRecording && (audioBlob || currentQuestion?.requires_written_answer)) {
+      console.log('🔄 Timer expired while writing or after recording - submitting transcript + written answer');
+      forceSubmitOnTimerExpiryRef.current = true;
+      if (handleSubmitAnswerRef.current) handleSubmitAnswerRef.current();
+      return;
+    }
+
+    console.log('⏰ Timer expired but no valid state to submit');
+  }, [isSubmitting, answerSubmitted, isRecording, audioBlob, currentQuestion?.requires_written_answer]);
 
   const interviewTimeRemaining = useCountdownTimer(
     interviewTimerSeconds,
@@ -1033,24 +1087,109 @@ const ConversationalInterview = () => {
     setRecordingCountdown(0);
     setAnswerTimer(0);
     setIsAnswerTimerActive(false);
+    writtenQuestionTimerLockedRef.current = false;
     // Reset answer submitted state for new interview
     setAnswerSubmitted(false);
     setSubmissionStatus('idle');
-    // Reset screen permissions flag for new interview
-    setHasRequestedScreenPermissions(false);
+    // Reset camera permissions flag for new interview
+    setHasRequestedCameraPermissions(false);
     
          // Use a more robust initialization approach
      const initializeInterview = async () => {
        try {
          // Load interview data first
          await loadInterviewData();
-         // Initialize camera
+         // Initialize camera (this will request camera permissions)
+         console.log('🎥 Initializing camera before interview starts...');
          await initializeCamera();
+         setCameraPermissionGranted(true);
+         setHasRequestedCameraPermissions(true);
         // Initialize audio worklet
         await initializeAudio();
-         // Request screen permissions immediately - before welcome message
-         console.log('🖥️ Requesting screen permissions before interview starts...');
-         await requestScreenPermissions();
+         // Start welcome message after camera is ready (minimal delay for stability)
+         setTimeout(() => {
+           if (!hasSpokenWelcomeRef.current) {
+             console.log('🎤 Starting welcome message and requesting fullscreen...');
+             requestFullscreen();
+             setAiPlaceholder('welcome');
+             const welcomeMessage = FALLBACK_PHRASES.welcome(
+               interviewData.candidateName || 'there',
+               interviewData.position || 'this role'
+             );
+             if (aiAudioEnabled && 'speechSynthesis' in window) {
+               console.log('🎤 Starting welcome message (question text only in display)');
+               const pattern = createSpeechPattern(welcomeMessage);
+               setSpeechPattern(pattern);
+               setPatternIndex(0);
+               speakWithAI(welcomeMessage, {
+                 onAudioStart: () => setAiPlaceholder(''),
+                 onEnd: () => {
+                   console.log('🎤 Welcome message finished, starting first question...');
+                   hasSpokenWelcomeRef.current = true;
+                   setIsInterviewTimerActive(true);
+                   const firstQ = firstQuestionRef.current;
+                   if (firstQ && (firstQ.question || firstQ.question_text)) {
+                     const questionText = firstQ.question || firstQ.question_text;
+                     const questionMessage = `Question 1: ${questionText}`;
+                     console.log('📝 FIRST: Speaking question, will show text when audio starts');
+                     setAiPlaceholder('generating_first');
+                     setIsWelcomeMessage(false);
+                     hasSpokenFirstQuestionRef.current = true;
+                     speakWithAI(questionMessage, {
+                       onAudioStart: () => {
+                         setAiMessage(questionText);
+                         setAiPlaceholder('');
+                       }
+                     });
+                   } else {
+                     apiCall(API_CONFIG.ENDPOINTS.GENERATE_QUESTION, {
+                       method: 'POST',
+                       headers: { 'Content-Type': 'application/json' },
+                       body: JSON.stringify({
+                         interview_id: interviewData.interviewId,
+                         current_question_index: 0
+                       })
+                     }, API_CONFIG.TIMEOUTS.GENERATE_QUESTION)
+                       .then(async (r) => {
+                         if (!r.ok || !r) return;
+                         const data = await r.json();
+                         if (data.completed) {
+                           if (finishInterviewRef.current) finishInterviewRef.current();
+                           return;
+                         }
+                         const q = data.question;
+                         const questionText = (typeof q === 'string' ? q : q?.question_text || q?.question) || '';
+                         if (!questionText) return;
+                         setCurrentQuestion(typeof q === 'object' ? q : { question_text: questionText });
+                         setCurrentQuestionMaxTime(((data.max_time || 3) * 60));
+                         setQuestionTimerSeconds((data.max_time || 3) * 60);
+                         setIsWelcomeMessage(false);
+                         hasSpokenFirstQuestionRef.current = true;
+                         setAiPlaceholder('generating_first');
+                         speakWithAI(`Question 1: ${questionText}`, {
+                           onAudioStart: () => {
+                             setAiMessage(questionText);
+                             setAiPlaceholder('');
+                           }
+                         });
+                       })
+                       .catch((e) => {
+                         console.warn('Failed to fetch first question:', e);
+                         toast.error('Could not load first question. Please refresh and try again.');
+                       });
+                   }
+                 },
+               });
+             } else {
+               console.log('🎤 Speech synthesis unavailable or disabled, skipping audio welcome');
+               setAiSpeaking(false);
+               setAiMessage('');
+               setAiPlaceholder('');
+               hasSpokenWelcomeRef.current = true;
+               setIsInterviewTimerActive(true);
+             }
+           }
+         }, 100);
          // Log state for debugging
          logSpokenState();
        } catch (error) {
@@ -1071,106 +1210,139 @@ const ConversationalInterview = () => {
       hasSpokenWelcomeRef.current = false;
       hasSpokenFirstQuestionRef.current = false;
       hasSpokenCompletionRef.current = false;
-      // Reset spoken tracking
+      firstQuestionRef.current = null;
+      ttsFallbackToastShownRef.current = false;
+      setAiPlaceholder('');
       setSpokenQuestions(new Set());
       setSpokenFeedback(new Set());
     };
   }, [interviewData.interviewId]); // Simplified - functions defined below
 
-  // AI Text-to-Speech
+  // AI Text-to-Speech: OpenAI TTS with Web Speech API fallback
   const speakWithAI = useCallback(
-    (text: string) => {
-      if (!text) {
-        return;
-      }
-
-      console.log('🎤 speakWithAI called with text:', text);
-      console.log('🎤 aiAudioEnabled:', aiAudioEnabled);
+    (text: string, options?: { onEnd?: () => void; onAudioStart?: () => void }) => {
+      if (!text) return;
 
       if (!aiAudioEnabled) {
         console.log('❌ AI audio is disabled, not speaking');
         return;
       }
 
-      if (!('speechSynthesis' in window)) {
+      const hasSpeechSynthesis = 'speechSynthesis' in window;
+      if (!hasSpeechSynthesis) {
         console.log('❌ Speech synthesis not available');
         setAiSpeaking(false);
         setQuestionFinishedSpeaking(false);
         return;
       }
 
-      const isQuestion = /question/i.test(text);
-      const isWelcome = /(welcome|hello)/i.test(text);
-      const isCompletion = /(thank you|completed|appreciate)/i.test(text);
-
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.9;
-      utterance.pitch = 1.0;
-      utterance.volume = 0.8;
-
-      utterance.onstart = () => {
-        console.log(
-          '🎤 Speech started for:',
-          text.slice(0, 50) + (text.length > 50 ? '...' : '')
-        );
-        setAiSpeaking(true);
-        if (isQuestion) {
-          setQuestionFinishedSpeaking(false);
-        }
-      };
-
-      utterance.onend = () => {
-        console.log(
-          '🎤 Speech ended for:',
-          text.slice(0, 50) + (text.length > 50 ? '...' : '')
-        );
-        setAiSpeaking(false);
-
-        if (isQuestion && !isWelcome && !isCompletion) {
-          console.log('🎯 Question finished speaking — countdown can start');
-          setQuestionFinishedSpeaking(true);
-        } else {
-          setQuestionFinishedSpeaking(false);
-        }
-
-        const queue = speakQueueRef.current;
-        queue.shift();
-        if (queue.length > 0) {
-          window.speechSynthesis.speak(queue[0]);
-        }
-      };
-
-      utterance.onerror = (event) => {
-        console.error('❌ Speech synthesis error:', event);
-        setAiSpeaking(false);
-        setQuestionFinishedSpeaking(false);
-
-        const queue = speakQueueRef.current;
-        queue.shift();
-        if (queue.length > 0) {
-          window.speechSynthesis.speak(queue[0]);
-        }
-
-        if (socketRef.current && socketRef.current.connected) {
-          socketRef.current.emit('ai_stopped_speaking', {
-            interview_id: interviewData.interviewId
-          });
-          console.log('📡 Emitted ai_stopped_speaking event (error case)');
-        }
-      };
-
       const queue = speakQueueRef.current;
-      queue.push(utterance);
+      queue.push({ text, onEnd: options?.onEnd, onAudioStart: options?.onAudioStart });
 
-      if (queue.length === 1) {
-        window.speechSynthesis.speak(utterance);
-        console.log(
-          '🗣️ Speech synthesis started for:',
-          text.slice(0, 50) + (text.length > 50 ? '...' : '')
-        );
-      } else {
-        console.log('🗂️ Queued speech synthesis item. Queue length:', queue.length);
-      }
+      const processNext = () => {
+        const item = queue[0];
+        if (!item) return;
+
+        const isQuestion = /question/i.test(item.text);
+        const isWelcome = /(welcome|hello)/i.test(item.text);
+        const isCompletion = /(thank you|completed|appreciate)/i.test(item.text);
+
+        const handlePlaybackEnd = () => {
+          item.onEnd?.();
+          queue.shift();
+          setAiSpeaking(false);
+          setAiTTSLoading(false);
+          // Only set questionFinishedSpeaking when the *actual question* (e.g. "Question 2: ...") finished, not the transition phrase (e.g. "Let's move to the next question")
+          const isActualQuestionMessage = /^Question\s+\d+:/i.test((item.text || '').trim());
+          if (isActualQuestionMessage && !isWelcome && !isCompletion) {
+            setQuestionFinishedSpeaking(true);
+          } else {
+            setQuestionFinishedSpeaking(false);
+          }
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('ai_stopped_speaking', { interview_id: interviewData.interviewId });
+          }
+          if (queue.length > 0) processNext();
+        };
+
+        setAiTTSLoading(true);
+        if (isQuestion) setQuestionFinishedSpeaking(false);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUTS.TTS || 15000);
+
+        fetch(buildApiUrl(API_CONFIG.ENDPOINTS.TTS), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: item.text }),
+          signal: controller.signal,
+        })
+          .then((r) => {
+            clearTimeout(timeoutId);
+            if (!r.ok) throw new Error('TTS failed');
+            return r.blob();
+          })
+          .then((blob) => {
+            if (isTerminatedRef.current) {
+              return;
+            }
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            currentAudioRef.current = audio;
+            audio.onended = () => {
+              currentAudioRef.current = null;
+              URL.revokeObjectURL(url);
+              handlePlaybackEnd();
+            };
+            audio.onerror = () => {
+              currentAudioRef.current = null;
+              URL.revokeObjectURL(url);
+              handlePlaybackEnd();
+            };
+            audio.onplaying = () => {
+              setAiTTSLoading(false);
+              setAiSpeaking(true);
+              item.onAudioStart?.();
+            };
+            if (isTerminatedRef.current) {
+              currentAudioRef.current = null;
+              URL.revokeObjectURL(url);
+              handlePlaybackEnd();
+              return;
+            }
+            return audio.play();
+          })
+          .catch(() => {
+            clearTimeout(timeoutId);
+            if (!hasSpeechSynthesis) {
+              if (!ttsFallbackToastShownRef.current) {
+                ttsFallbackToastShownRef.current = true;
+                toast.error('Audio playback unavailable', { id: 'tts-error', duration: 3000 });
+              }
+              setAiPlaceholder('');
+              handlePlaybackEnd();
+              return;
+            }
+            if (!ttsFallbackToastShownRef.current) {
+              ttsFallbackToastShownRef.current = true;
+              toast('Using fallback voice', { id: 'tts-fallback', duration: 2000 });
+            }
+            const utterance = new SpeechSynthesisUtterance(item.text);
+            utterance.rate = 0.9;
+            utterance.pitch = 1.0;
+            utterance.volume = 0.8;
+            utterance.onstart = () => {
+              setAiTTSLoading(false);
+              setAiSpeaking(true);
+              item.onAudioStart?.();
+            };
+            utterance.onend = handlePlaybackEnd;
+            utterance.onerror = handlePlaybackEnd;
+            window.speechSynthesis.speak(utterance);
+          });
+      };
+
+      if (queue.length === 1) processNext();
     },
     [aiAudioEnabled, interviewData.interviewId]
   );
@@ -1199,8 +1371,8 @@ const ConversationalInterview = () => {
       setRecordingCountdown(0);
       setAnswerTimer(0);
       setIsAnswerTimerActive(false);
-      // Reset screen permissions flag
-      setHasRequestedScreenPermissions(false);
+      // Reset camera permissions flag
+      setHasRequestedCameraPermissions(false);
       
       const response = await apiCall(`${API_CONFIG.ENDPOINTS.FINISH_INTERVIEW}/${interviewData.interviewId}`, {
         method: 'POST',
@@ -1211,48 +1383,27 @@ const ConversationalInterview = () => {
 
       if (response.ok) {
         const result = await response.json();
+        const totalQuestions = result.total_questions ?? currentQuestionIndex + 1;
+        const completionPhrase = await fetchInterviewPhrase(
+          'completion',
+          interviewData.candidateName || 'there',
+          interviewData.position || 'this interview',
+          currentQuestionIndex + 1,
+          totalQuestions
+        );
+        const completionMessage = completionPhrase || FALLBACK_PHRASES.completion(
+          interviewData.candidateName || 'there',
+          interviewData.position || 'this interview'
+        );
         
-        // Simple completion message for candidates (no scores)
-        const completionMessage = `Thank you, ${interviewData.candidateName}! You have successfully completed your ${interviewData.position} interview. We appreciate your time and thoughtful responses today. Our team will review your interview and get back to you soon. Good luck with your application!`;
-        
-        // Only speak completion message once
-        if (!hasSpokenCompletionRef.current) {
-          console.log('🎤 Speaking completion message:', completionMessage);
-          try {
-            if (speakWithAIRef.current) {
-              speakWithAIRef.current(completionMessage);
-            } else {
-              console.log('⚠️ speakWithAIRef not ready, using direct call');
-              speakWithAI(completionMessage);
-            }
-          } catch (speechError) {
-            console.error('❌ Error speaking completion message:', speechError);
-            // Fallback: just show the message without speaking
+        let hasNavigated = false;
+        const navigateToCompletion = () => {
+          if (hasNavigated) return;
+          hasNavigated = true;
+          if (completionTimerRef.current) {
+            clearTimeout(completionTimerRef.current);
+            completionTimerRef.current = null;
           }
-          hasSpokenCompletionRef.current = true;
-          
-          // Wait for completion message to finish before navigating
-          const completionTimer = setTimeout(() => {
-            console.log('🏁 Navigating to completion page after completion message...');
-            toast.success(INTERVIEW_CONSTANTS.SUCCESS.INTERVIEW_COMPLETED, { id: 'interview-completed' });
-            
-            // Reset initialization flag for next interview
-            hasInitializedRef.current = false;
-            
-            // Navigate to simple completion page (no scores)
-            navigate('/candidate-completion', {
-              state: {
-                interviewId: interviewData.interviewId,
-                candidateName: interviewData.candidateName,
-                position: interviewData.position
-              }
-            });
-          }, INTERVIEW_CONSTANTS.TIMEOUTS.COMPLETION_NAVIGATION);
-          
-          // Store timer reference for cleanup
-          completionTimerRef.current = completionTimer;
-                  } else {
-                      // If already spoken, navigate immediately (no scores shown to candidate)
           toast.success(INTERVIEW_CONSTANTS.SUCCESS.INTERVIEW_COMPLETED, { id: 'interview-completed' });
           hasInitializedRef.current = false;
           navigate('/candidate-completion', {
@@ -1262,25 +1413,52 @@ const ConversationalInterview = () => {
               position: interviewData.position
             }
           });
+        };
+        
+        if (!hasSpokenCompletionRef.current) {
+          console.log('🎤 Speaking completion message:', completionMessage);
+          hasSpokenCompletionRef.current = true;
+          const safetyTimer = setTimeout(() => {
+            console.log('🏁 Completion safety timeout, navigating...');
+            navigateToCompletion();
+          }, 15000);
+          completionTimerRef.current = safetyTimer as unknown as NodeJS.Timeout;
+          try {
+            const speak = speakWithAIRef.current || speakWithAI;
+            speak(completionMessage, {
+              onEnd: () => {
+                clearTimeout(completionTimerRef.current as NodeJS.Timeout);
+                completionTimerRef.current = null;
+                console.log('🏁 Completion message finished, navigating...');
+                navigateToCompletion();
+              }
+            });
+          } catch (speechError) {
+            console.error('❌ Error speaking completion message:', speechError);
+            clearTimeout(completionTimerRef.current as NodeJS.Timeout);
+            completionTimerRef.current = null;
+            navigateToCompletion();
+          }
+        } else {
+          navigateToCompletion();
         }
       }
     } catch (error) {
       console.error('Error finishing interview:', error);
       toast.error('Failed to finish interview', { id: 'finish-interview-error' });
     }
-     }, [interviewData.interviewId, navigate, interviewData.candidateName, interviewData.position, speakWithAI, isRecording]);
+     }, [interviewData.interviewId, navigate, interviewData.candidateName, interviewData.position, speakWithAI, isRecording, currentQuestionIndex]);
 
-  const generateNextQuestion = useCallback(async () => {
-    // Prevent multiple calls if already generating or AI is speaking
-    if (isGeneratingQuestion || aiSpeaking) {
-      console.log('⚠️ Already generating question or AI is speaking, skipping');
+  const generateNextQuestion = useCallback(async (simplifyQuestion = false) => {
+    if (isGeneratingQuestion) {
+      console.log('⚠️ Already generating question, skipping');
       return;
     }
     
     setIsGeneratingQuestion(true);
     
     try {
-      console.log('🔄 Generating next question for index:', currentQuestionIndex + 1);
+      console.log('🔄 Generating next question for index:', currentQuestionIndex + 1, simplifyQuestion ? '(simpler question)' : '');
       console.log('🔍 Interview ID:', interviewData.interviewId);
       console.log('🔍 Current question index:', currentQuestionIndex);
       
@@ -1289,7 +1467,8 @@ const ConversationalInterview = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           interview_id: interviewData.interviewId,
-          current_question_index: currentQuestionIndex + 1
+          current_question_index: currentQuestionIndex + 1,
+          ...(simplifyQuestion && { simplify_question: true })
         })
       }, API_CONFIG.TIMEOUTS.GENERATE_QUESTION);
 
@@ -1318,9 +1497,13 @@ const ConversationalInterview = () => {
         const newQuestionIndex = currentQuestionIndex + 1;
         dispatch(interviewActions.setQuestionIndex(newQuestionIndex));
         setCurrentQuestion(data.question);
+        // Show "Loading next question..." until new question text is spoken; hide old question and input boxes
+        setAiPlaceholder('generating_next');
+        setAiMessage('');
 
         // CRITICAL FIX: Reset transcript and transcription accumulator before next question starts
         setTranscript('');
+        setWrittenAnswer(''); // Reset written-answer box for new question
         accumulatedTranscriptRef.current = ''; // CRITICAL: Wipe the "memory" for the new question
         stopWebSpeech();
         
@@ -1378,7 +1561,8 @@ const ConversationalInterview = () => {
         setQuestionVideoDuration(0);
         
         console.log('🔄 Reset all states for new question');
-        
+        writtenQuestionTimerLockedRef.current = false; // Allow timer to be set for the new question
+
         // Store timer values but don't start timer yet - wait for recording to start
         console.log('🔍 API response data:', data);
         if (data.max_time) {
@@ -1395,7 +1579,7 @@ const ConversationalInterview = () => {
           console.log('🔍 Available data keys:', Object.keys(data));
         }
         
-        // Keep screen permissions state - don't reset this
+        // Keep camera permissions state - don't reset this
         
         // Clean up question text and speak the question (only if not already spoken)
         let cleanQuestionText = '';
@@ -1421,8 +1605,8 @@ const ConversationalInterview = () => {
         console.log('🎤 Question ID:', questionId, 'Already spoken:', spokenQuestions.has(questionId));
         console.log('🎤 Clean question text:', cleanQuestionText);
         
-        // Set transition message first
-        setAiMessage("Let's move to the next question...");
+        // Use conversational transition phrase from API or fallback (do not display - question text only)
+        const transitionPhrase = data.transition_phrase || FALLBACK_PHRASES.transition();
         
         // Only speak if this question hasn't been spoken before and we have valid text
         if (!spokenQuestions.has(questionId) && cleanQuestionText && cleanQuestionText !== 'Question data unavailable') {
@@ -1432,23 +1616,25 @@ const ConversationalInterview = () => {
           // Set question finished speaking to false initially
           setQuestionFinishedSpeaking(false);
           
-          // First speak transition message, then show question and speak it
-          setTimeout(() => {
-            console.log('🎤 Speaking transition message...');
-            speakWithAI("Let's move to the next question...");
-            
-            // After transition message, show question and speak it
-            setTimeout(() => {
-              console.log('🎤 Showing question and speaking:', questionMessage);
-              setAiMessage(questionMessage);
-              speakWithAI(questionMessage);
+          // Speak transition immediately, then show and speak question when transition ends
+          console.log('🎤 Speaking transition message...');
+          speakWithAI(transitionPhrase, {
+            onEnd: () => {
+              console.log('🎤 Transition finished, speaking question (text when audio starts)');
+              setAiPlaceholder('generating_next');
               setSpokenQuestions(prev => {
                 const newSet = new Set([...prev, questionId]);
                 console.log('📝 Updated spoken questions:', Array.from(newSet));
                 return newSet;
               });
-            }, 2000); // 2 seconds after transition message
-          }, 500); // 500ms delay to ensure smooth transition
+              speakWithAI(questionMessage, {
+                onAudioStart: () => {
+                  setAiMessage(cleanQuestionText);
+                  setAiPlaceholder('');
+                }
+              });
+            },
+          });
         } else {
           console.log('⚠️ Question already spoken or invalid, skipping speech');
           // If question already spoken, set finished speaking to true
@@ -1485,7 +1671,7 @@ const ConversationalInterview = () => {
     } finally {
       setIsGeneratingQuestion(false);
     }
-  }, [interviewData.interviewId, currentQuestionIndex, aiSpeaking, isGeneratingQuestion]);
+  }, [interviewData.interviewId, currentQuestionIndex, isGeneratingQuestion]);
 
      const handleSubmitAnswer = useCallback(async () => {
        console.log('🔍 Submit button clicked!');
@@ -1506,6 +1692,9 @@ const ConversationalInterview = () => {
          console.log('⚠️ Already submitting, ignoring duplicate click');
          return;
        }
+
+       const isForceSubmitOnTimerExpiry = forceSubmitOnTimerExpiryRef.current;
+       if (isForceSubmitOnTimerExpiry) forceSubmitOnTimerExpiryRef.current = false;
        
        // Check for corrupted transcription
        if (transcript && isCorruptedTranscription(transcript)) {
@@ -1527,9 +1716,20 @@ const ConversationalInterview = () => {
          }
        }
        
-      // Require transcript from Web Speech API
+      // Require transcript from Web Speech API (unless timer expired—then submit whatever we have)
       if (!cleanedTranscript || !cleanedTranscript.trim()) {
-        toast.error('No speech captured. Please speak your answer before submitting.');
+        if (isForceSubmitOnTimerExpiry) {
+          cleanedTranscript = '';
+        } else {
+          toast.error('No speech captured. Please speak your answer before submitting.');
+          return;
+        }
+      }
+
+      // When question requires a written answer (e.g. SQL/code), require it before submit (unless timer expired—then submit whatever is in the box)
+      const requiresWritten = currentQuestion?.requires_written_answer === true;
+      if (requiresWritten && (!writtenAnswer || !writtenAnswer.trim()) && !isForceSubmitOnTimerExpiry) {
+        toast.error('This question requires a written answer (e.g. SQL or code). Please write your answer in the box below, then submit.');
         return;
       }
 
@@ -1659,10 +1859,11 @@ const ConversationalInterview = () => {
                  interview_id: interviewData.interviewId,
                  question_id: questionId,
                  question_order: currentQuestionIndex,
-                transcript: finalTranscript, // Use final transcript
-                audio_data: audioDataBase64, // Send audio for storage (not for transcription)
-                skip_transcription: true,
-                question_video_url: questionVideoUrl
+                 transcript: finalTranscript, // Use final transcript
+                 ...(currentQuestion?.requires_written_answer === true ? { written_answer: (writtenAnswer || '').trim() } : (writtenAnswer?.trim() ? { written_answer: writtenAnswer.trim() } : {})),
+                 audio_data: audioDataBase64, // Send audio for storage (not for transcription)
+                 skip_transcription: true,
+                 question_video_url: questionVideoUrl
                }),
                signal: answerController.signal
              });
@@ -1685,29 +1886,53 @@ const ConversationalInterview = () => {
                  return;
                }
                
+               // "I don't know" flow: speak TTS phrase then generate simpler question (same timer)
+               if (result.suggest_simpler && result.tts_phrase) {
+                 console.log('🎤 Suggest simpler: speaking TTS phrase then generating simpler question');
+                 setQuestionVideoBlob(null);
+                 setQuestionVideoDuration(0);
+                 setAnswerSubmitted(true);
+                 setSubmissionStatus('submitted');
+                 dispatch(interviewActions.setSubmitting(false));
+                 // Show "Loading next question..." and hide old question + input boxes until new question is displayed
+                 setAiPlaceholder('generating_next');
+                 setAiMessage('');
+                 speakWithAI(result.tts_phrase, {
+                   onEnd: async () => {
+                     await generateNextQuestion(true);
+                     setTimeout(() => {
+                       setAnswerSubmitted(false);
+                       setSubmissionStatus('idle');
+                       dispatch(interviewActions.setSubmitting(false));
+                     }, 1000);
+                   }
+                 });
+                 return;
+               }
+               
                // Conversation history removed to reduce complexity
                
                // Reset question video after successful submission
                setQuestionVideoBlob(null);
                setQuestionVideoDuration(0);
                
-               // Set answer submitted state briefly for visual feedback
+               // Set answer submitted state so button shows "Submitted" before toast
                console.log('✅ Setting answerSubmitted to true');
                setAnswerSubmitted(true);
                setSubmissionStatus('submitted');
-               
-               // Show brief success toast for user feedback
-               toast.success('✅ Answer submitted successfully!', {
-                 id: 'answer-submitted',
-                 duration: 2000,
-                 style: {
-                   background: '#10B981',
-                   color: 'white',
-                   fontSize: '14px',
-                   fontWeight: '500'
-                 }
-               });
-               
+               dispatch(interviewActions.setSubmitting(false));
+
+               // Show toast after button has updated to "Submitted" (defer so user sees "Submitted" first)
+               setTimeout(() => {
+                 toast.success('Answer submitted successfully!', {
+                   id: 'answer-submitted',
+                   duration: 2000,
+                 });
+               }, 0);
+
+               // Show "Loading next question..." and hide question + input boxes until new question is displayed
+               setAiPlaceholder('generating_next');
+               setAiMessage('');
                // Generate next question immediately (no delays for smooth transition)
                console.log('🔄 Generating next question immediately...');
                await generateNextQuestion();
@@ -1777,7 +2002,7 @@ const ConversationalInterview = () => {
          dispatch(interviewActions.setSubmitting(false));
          setSubmissionStatus('idle');
        }
-     }, [transcript, audioBlob, isVideoOn, currentQuestion, currentQuestionIndex, interviewData.interviewId, spokenFeedback, generateNextQuestion, interviewData.candidateName, isSubmitting, questionVideoBlob]);
+     }, [transcript, audioBlob, isVideoOn, currentQuestion, currentQuestionIndex, interviewData.interviewId, spokenFeedback, generateNextQuestion, interviewData.candidateName, isSubmitting, questionVideoBlob, speakWithAI, writtenAnswer]);
 
   // Assign refs after functions are defined
   useEffect(() => {
@@ -1788,6 +2013,16 @@ const ConversationalInterview = () => {
   useEffect(() => {
     handleSubmitAnswerRef.current = handleSubmitAnswer;
   }, [handleSubmitAnswer]);
+
+  // Animate dots (1 → 2 → 3 → 1) when showing "Generating your first/next question"
+  useEffect(() => {
+    const isGenerating = aiPlaceholder === 'generating_first' || aiPlaceholder === 'generating_next';
+    if (!isGenerating) return;
+    const id = setInterval(() => {
+      setLoadingDots((prev) => (prev + 1) % 3);
+    }, 450);
+    return () => clearInterval(id);
+  }, [aiPlaceholder]);
 
   useEffect(() => {
     if (!isInterviewTimerActive) {
@@ -1804,23 +2039,13 @@ const ConversationalInterview = () => {
     }
 
     if (timeRemaining <= 30 && lastInterviewWarningRef.current !== 30) {
-      toast('⚠️ 30 seconds remaining! Please finish your current response.', {
+      toast('30 seconds remaining! Please finish your current response.', {
         id: 'interview-warning-30',
-        icon: '⚠️',
-        style: {
-          background: '#fbbf24',
-          color: '#92400e'
-        }
       });
       lastInterviewWarningRef.current = 30;
     } else if (timeRemaining <= 60 && lastInterviewWarningRef.current !== 60) {
-      toast('⚠️ 1 minute remaining in your interview!', {
+      toast('1 minute remaining in your interview!', {
         id: 'interview-warning-60',
-        icon: '⚠️',
-        style: {
-          background: '#fbbf24',
-          color: '#92400e'
-        }
       });
       lastInterviewWarningRef.current = 60;
     } else if (timeRemaining <= 120 && timeRemaining > 0) {
@@ -1845,24 +2070,13 @@ const ConversationalInterview = () => {
 
     // Prioritize 30-second warning - check this first
     if (questionTimeRemaining <= 30 && lastQuestionWarningRef.current !== 30) {
-      toast('⚠️ Less than 30 seconds remaining! Answer will auto-submit soon.', {
+      toast('Less than 30 seconds remaining! Answer will auto-submit soon.', {
         id: 'question-warning-30',
-        icon: '⚠️',
-        style: {
-          background: '#fbbf24',
-          color: '#92400e'
-        }
       });
       lastQuestionWarningRef.current = 30;
     } else if (questionTimeRemaining > 30 && questionTimeRemaining <= 60 && lastQuestionWarningRef.current !== 60) {
-      // Only show 60-second warning if time is between 30-60 seconds
-      toast('⚠️ 1 minute remaining for this question.', {
+      toast('1 minute remaining for this question.', {
         id: 'question-warning-60',
-        icon: '⚠️',
-        style: {
-          background: '#fbbf24',
-          color: '#92400e'
-        }
       });
       lastQuestionWarningRef.current = 60;
     }
@@ -2039,15 +2253,8 @@ const ConversationalInterview = () => {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.key === 'Escape' || event.keyCode === 27) && isFullscreenRef.current) {
-        toast('🚨 STOP! Pressing ESC will exit fullscreen and terminate your interview!', {
-          icon: '🚨',
+        toast('STOP! Pressing ESC will exit fullscreen and terminate your interview!', {
           duration: 2000,
-          style: {
-            background: '#ef4444',
-            color: '#fff',
-            fontSize: '16px',
-            fontWeight: 'bold',
-          },
         });
 
         if (escTerminateTimeoutRef.current) {
@@ -2075,19 +2282,22 @@ const ConversationalInterview = () => {
   
     const startQuestionRecording = async () => {
     try {
-      console.log('🖥️ Starting screen recording...');
-      console.log('🔍 Current state - isRecording:', isRecording, 'isVideoOn:', isVideoOn, 'screenPermissionGranted:', screenPermissionGranted, 'hasRequestedScreenPermissions:', hasRequestedScreenPermissions);
+      console.log('🎥 Starting camera video recording...');
+      console.log('🔍 Current state - isRecording:', isRecording, 'isVideoOn:', isVideoOn, 'cameraPermissionGranted:', cameraPermissionGranted, 'hasRequestedCameraPermissions:', hasRequestedCameraPermissions);
       
-      // Check if screen permissions are already granted
-      if (!screenPermissionGranted || !screenStream) {
-        toast.error('❌ Screen recording permissions required. Please allow screen access first.');
+      // Check if camera permissions are already granted and camera stream is available
+      if (!cameraPermissionGranted || !streamRef.current || !isVideoOn) {
+        toast.error('Camera permissions required. Please allow camera access first.');
         return;
       }
       
-      // Start timer for current question
-      if (currentQuestionMaxTime > 0) {
+      // Start timer for current question (skip if timer is locked — e.g. written question, user already stopped)
+      if (currentQuestionMaxTime > 0 && !writtenQuestionTimerLockedRef.current) {
         console.log('⏰ Starting timer for current question:', currentQuestionMaxTime, 'seconds');
         setQuestionTimerSeconds(currentQuestionMaxTime);
+        setIsQuestionTimerActive(true);
+      } else if (currentQuestionMaxTime > 0 && writtenQuestionTimerLockedRef.current) {
+        // Timer already running for written question; just ensure active
         setIsQuestionTimerActive(true);
       } else {
         // Initialize timer if not set
@@ -2098,7 +2308,14 @@ const ConversationalInterview = () => {
         }
       }
       
-      console.log('✅ Using approved screen stream for recording');
+      console.log('✅ Using camera stream for recording');
+      
+      // Get camera video stream (already initialized)
+      const cameraStream = streamRef.current;
+      if (!cameraStream) {
+        toast.error('Camera stream not available. Please refresh and try again.');
+        return;
+      }
       
       // Re-enable microphone recording ONLY to capture audio blob for upload (not for transcription)
       let audioRecorder = null;
@@ -2128,8 +2345,8 @@ const ConversationalInterview = () => {
       }
       const combinedStream = new MediaStream();
       
-      // Add video tracks from screen stream
-      screenStream.getVideoTracks().forEach(track => {
+      // Add video tracks from camera stream
+      cameraStream.getVideoTracks().forEach(track => {
         combinedStream.addTrack(track);
       });
 
@@ -2142,24 +2359,25 @@ const ConversationalInterview = () => {
       console.log('🎬 Combined stream created with video tracks:', combinedStream.getVideoTracks().length);
       console.log('🎤 Combined stream created with audio tracks:', combinedStream.getAudioTracks().length);
       
-      // Create recorder using the combined stream (video + audio)
+      // Create recorder using the combined stream (video + audio); lower bitrate/quality for smaller files
+      const videoBitsPerSecond = isMobile ? 400000 : INTERVIEW_CONSTANTS.MEDIA.VIDEO_BITRATE;
       const questionVideoRecorder = new RecordRTC(combinedStream, {
         type: 'video',
         mimeType: 'video/webm',
         recorderType: RecordRTC.MediaStreamRecorder,
-        quality: 7,                    // Balanced quality for recordings
-        frameRate: 20,                 // Balanced 20fps for smooth recording
+        quality: 3,
+        frameRate: 10,
         disableLogs: false,
-        videoBitsPerSecond: INTERVIEW_CONSTANTS.MEDIA.VIDEO_BITRATE,
+        videoBitsPerSecond,
         timeSlice: INTERVIEW_CONSTANTS.MEDIA.TIME_SLICE,
         ondataavailable: function(blob) {
-          console.log('🖥️ Combined video+audio chunk available:', blob.type, blob.size);
+          console.log('🎥 Combined video+audio chunk available:', blob.type, blob.size);
         }
       });
       
       // Start video recorder
       questionVideoRecorder.startRecording();
-      console.log('🖥️ Video recording started');
+      console.log('🎥 Video recording started');
       
       // Start browser Web Speech recognition for live transcript
       startWebSpeech();
@@ -2173,7 +2391,7 @@ const ConversationalInterview = () => {
       setVideoRecorder(questionVideoRecorder);
       
       // Initialize timer for first question when recording actually starts (after permissions are granted)
-      if (!hasRequestedScreenPermissions) {
+      if (!hasRequestedCameraPermissions) {
         console.log('⏰ Starting timer for first question - recording is about to begin');
         // Only initialize timer if we don't already have correct values from API response
         if (currentQuestionMaxTime === 0) {
@@ -2212,8 +2430,8 @@ const ConversationalInterview = () => {
       // Do not use socket transcription; Web Speech handles transcription
       
     } catch (error) {
-      console.error('❌ Automatic screen recording start error:', error);
-      toast.error('❌ Failed to start screen recording. Please refresh and try again.');
+      console.error('❌ Automatic camera recording start error:', error);
+      toast.error('Failed to start camera recording. Please refresh and try again.');
     }
   };
   
@@ -2271,6 +2489,7 @@ const ConversationalInterview = () => {
         
         // Set current question from interview data or first question
         const firstQuestion = interviewData.currentQuestion || flattenedData.questions?.[0];
+        firstQuestionRef.current = firstQuestion;
         console.log('🎯 Setting current question:', firstQuestion);
         console.log('🎯 Interview data currentQuestion:', interviewData.currentQuestion);
         console.log('🎯 Data questions:', flattenedData.questions);
@@ -2306,8 +2525,8 @@ const ConversationalInterview = () => {
           console.log('🎯 Clean question text from interviewData:', cleanQuestionText);
         }
         
-        // Welcome message and first question will be handled after screen access is granted
-        console.log('🔍 Interview data loaded, waiting for screen access to start welcome message');
+        // Welcome message and first question will be handled after camera access is granted
+        console.log('🔍 Interview data loaded, waiting for camera access to start welcome message');
         
       } else {
         console.error('❌ Failed to load interview data:', response.status);
@@ -2426,7 +2645,7 @@ const ConversationalInterview = () => {
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
-    if (aiSpeaking && !aiMessage?.includes('Question') && speechPattern.length > 0) {
+    if (aiSpeaking && speechPattern.length > 0) {
       interval = setInterval(() => {
         setWaveformHeights(prev => {
           const newHeights = [...prev];
@@ -2457,21 +2676,15 @@ const ConversationalInterview = () => {
     };
   }, [aiSpeaking, aiMessage, speechPattern, patternIndex]);
 
-  // Start timer when recording begins
+  // Start timer when recording begins (only once; do not reset when timer is already running or when user stopped to write)
   useEffect(() => {
+    if (writtenQuestionTimerLockedRef.current) return; // Never reset timer after user stopped to write (written question)
     if (isRecording && currentQuestionMaxTime > 0 && !isQuestionTimerActive) {
       console.log('⏰ Recording started, starting question timer');
-      console.log('⏰ Timer values - maxTime:', currentQuestionMaxTime, 'remaining:', questionTimeRemaining);
-      
-      // CRITICAL FIX: Ensure timer starts with fresh values
-      if (questionTimeRemaining !== currentQuestionMaxTime) {
-        console.log('⏰ Resetting timer to max time before starting');
-        setQuestionTimerSeconds(currentQuestionMaxTime);
-      }
-      
+      setQuestionTimerSeconds(currentQuestionMaxTime);
       setIsQuestionTimerActive(true);
     }
-  }, [isRecording, currentQuestionMaxTime, isQuestionTimerActive, questionTimeRemaining]);
+  }, [isRecording, currentQuestionMaxTime, isQuestionTimerActive]);
 
   // Refs for cleanup
   const recordingDelayTimeoutRef = useRef<number | null>(null);
@@ -2479,17 +2692,22 @@ const ConversationalInterview = () => {
 
   // Lint-safe effect: starts countdown only after AI fully finished speaking
   useEffect(() => {
-    // Only run when questionFinishedSpeaking flips to true AND aiSpeaking is false
-    if (questionFinishedSpeaking && !aiSpeaking && !isRecording && !isSubmitting) {
+    // Written question and user already stopped to write (timer already running): do not reset timer or restart countdown
+    if (currentQuestion?.requires_written_answer === true && !isRecording && isQuestionTimerActive) {
+      writtenQuestionTimerLockedRef.current = true;
+      return;
+    }
+    // Only run when question just finished speaking and we're about to start recording (timer not yet active).
+    if (questionFinishedSpeaking && !aiSpeaking && !isRecording && !isSubmitting && !isQuestionTimerActive) {
       // Small stabilization delay to avoid React batching/race issues
       recordingDelayTimeoutRef.current = window.setTimeout(() => {
+        if (writtenQuestionTimerLockedRef.current) return; // User already stopped to write — do not reset timer
         console.log('✅ AI finished speaking (stable) — starting 3s countdown');
 
-        // Start the per-question timer once (if you want it to start immediately)
+        // Do NOT start the question timer here — start it only when recording actually begins,
+        // so "1 min remaining" and timer don't appear before the user can answer.
         if (currentQuestionMaxTime > 0) {
           setQuestionTimerSeconds(currentQuestionMaxTime);
-          setIsQuestionTimerActive(true);
-          console.log('⏰ Question timer set to', currentQuestionMaxTime);
         }
 
         // Initialize visual countdown
@@ -2538,7 +2756,9 @@ const ConversationalInterview = () => {
     aiSpeaking,
     isRecording,
     isSubmitting,
+    isQuestionTimerActive,
     currentQuestionMaxTime,
+    currentQuestion?.requires_written_answer,
     startRecordingRef
   ]);
 
@@ -2584,8 +2804,12 @@ const ConversationalInterview = () => {
 
   const initializeCamera = useCallback(async () => {
     try {
+      const videoConstraints = getAdaptiveVideoConstraints({
+        preferMobile: isMobile,
+        preferFrontCamera: isMobile,
+      });
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: true, 
+        video: videoConstraints, 
         audio: true 
       });
       
@@ -2594,20 +2818,27 @@ const ConversationalInterview = () => {
       }
       
       streamRef.current = stream;
+      videoStreamRef.current = stream;
       setIsVideoOn(true);
+      setCameraPermissionGranted(true);
+      setHasRequestedCameraPermissions(true);
       
       // Monitor camera status
       const videoTrack = stream.getVideoTracks()[0];
       videoTrack.onended = () => {
         setIsVideoOn(false);
+        setCameraPermissionGranted(false);
+        toast.error('Camera access lost. Interview may be affected.');
       };
       
     } catch (error) {
       console.error('Error accessing camera:', error);
+      setCameraPermissionGranted(false);
+      setHasRequestedCameraPermissions(false);
       toast.error('Camera access required for interview');
       navigate('/setup');
     }
-  }, [navigate]);
+  }, [navigate, isMobile]);
 
   // Capture candidate photo from video stream
   const captureCandidatePhoto = useCallback(async (): Promise<string | null> => {
@@ -2720,13 +2951,8 @@ const ConversationalInterview = () => {
       setFullscreenAttempts(attempts);
 
       if (attempts < 3) {
-        toast('⚠️ Please allow fullscreen for the interview', {
-          icon: '⚠️',
+        toast('Please allow fullscreen for the interview', {
           duration: 4000,
-          style: {
-            background: '#fbbf24',
-            color: '#92400e',
-          },
         });
       } else {
         toast.error('Fullscreen is required. Interview will be terminated.');
@@ -2737,137 +2963,7 @@ const ConversationalInterview = () => {
     }
   }, [fullscreenAttempts, terminateInterview]);
 
-  // Request screen sharing permissions once at the start
-  const requestScreenPermissions = useCallback(async () => {
-    try {
-      // console.log('🖥️ Requesting screen sharing permissions...');
-
-      const displayMediaOptions: any = {
-        video: {
-          displaySurface: 'browser',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30 }
-        },
-        audio: true,
-        preferCurrentTab: false
-      };
-
-      const stream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
-
-      console.log('✅ Screen stream obtained successfully');
-      setScreenStream(stream);
-      setScreenPermissionGranted(true);
-      setHasRequestedScreenPermissions(true);
-
-      //toast.success('✅ Screen access granted! Starting interview...');
-
-      // Start welcome message after screen access is granted
-      setTimeout(() => {
-        if (!hasSpokenWelcomeRef.current) {
-          console.log('🎤 Starting welcome message and requesting fullscreen...');
-
-          requestFullscreen();
-
-          const welcomeMessage = `Hello ${interviewData.candidateName}! Welcome to your ${interviewData.position} interview. I'm excited to meet you today and learn more about your experience and skills. This is a great opportunity to showcase your talents, so take a deep breath and remember - you've got this! I'll be your AI interviewer today, and I'm here to make this experience as comfortable as possible for you. All the best for your interview! Let's begin with our first question.`;
-
-          // Speak welcome message
-          if (aiAudioEnabled && 'speechSynthesis' in window) {
-            console.log('🎤 Setting aiSpeaking to true and aiMessage to welcome message');
-
-            // Create speech pattern for the welcome message
-            const pattern = createSpeechPattern(welcomeMessage);
-            setSpeechPattern(pattern);
-            setPatternIndex(0);
-
-            setAiSpeaking(true);
-            setAiMessage(welcomeMessage);
-            const utterance = new SpeechSynthesisUtterance(welcomeMessage);
-            utterance.rate = 0.9;
-            utterance.pitch = 1.0;
-            utterance.volume = 0.8;
-
-            utterance.onend = () => {
-              console.log('🎤 Welcome message finished, starting first question...');
-              setAiSpeaking(false);
-              setAiMessage('');
-              hasSpokenWelcomeRef.current = true;
-              setIsInterviewTimerActive(true);
-
-              // Start first question after welcome
-              setTimeout(() => {
-                if (currentQuestion && (currentQuestion.question || currentQuestion.question_text)) {
-                  const questionText = currentQuestion.question || currentQuestion.question_text;
-                  const questionMessage = `Question 1: ${questionText}`;
-
-                  console.log('📝 FIRST: Displaying question and keeping it visible:', questionMessage);
-                  setAiMessage(questionMessage);
-                  setIsWelcomeMessage(false);
-
-                  hasSpokenFirstQuestionRef.current = true;
-
-                  setTimeout(() => {
-                    console.log('🎤 THEN: Speaking question after display');
-                    speakWithAI(questionMessage);
-                  }, 500);
-                }
-              }, 1000);
-            };
-
-            utterance.onerror = (error) => {
-              console.error('❌ Error speaking welcome message:', error);
-              setAiSpeaking(false);
-              hasSpokenWelcomeRef.current = true;
-              setIsInterviewTimerActive(true);
-            };
-
-            speechSynthesis.speak(utterance);
-          } else {
-            console.log('🎤 Speech synthesis unavailable or disabled, skipping audio welcome');
-            setAiSpeaking(false);
-            setAiMessage('');
-            hasSpokenWelcomeRef.current = true;
-            setIsInterviewTimerActive(true);
-          }
-        }
-      }, 1000);
-
-      const [videoTrack] = stream.getVideoTracks();
-      if (videoTrack) {
-        videoTrack.onended = () => {
-          console.log('⚠️ User stopped screen sharing');
-          setScreenPermissionGranted(false);
-          setScreenStream(null);
-          setIsFullscreen(false);
-          toast('⚠️ Screen sharing stopped. Interview will be terminated.', {
-            icon: '⚠️',
-            style: {
-              background: '#fbbf24',
-              color: '#92400e',
-            },
-          });
-
-          // IMPROVEMENT: Auto-terminate if screen sharing stops
-          setTimeout(() => {
-            terminateInterview('Screen sharing stopped by candidate');
-          }, 3000);
-        };
-      }
-
-    } catch (error: any) {
-      console.error('❌ Screen sharing permission denied:', error);
-      setScreenPermissionGranted(false);
-      setScreenStream(null);
-      if (error?.name === 'NotAllowedError') {
-        toast.error('❌ Screen sharing permission denied. Interview cannot proceed.');
-        setTimeout(() => {
-          terminateInterview('Screen sharing permission denied');
-        }, 2000);
-      } else {
-        toast.error('❌ Screen sharing not supported in this browser.');
-      }
-    }
-  }, [aiAudioEnabled, currentQuestion, interviewData, requestFullscreen, speakWithAI, terminateInterview]);
+  // Camera permissions are handled in initializeCamera function
 
   useEffect(() => {
     const socket = io(API_CONFIG.BASE_URL, {
@@ -2983,17 +3079,7 @@ const ConversationalInterview = () => {
 
   // Disable socket-started transcription; Web Speech is the single source of truth
 
-  // Cleanup effect for screen stream when component unmounts
-  useEffect(() => {
-    return () => {
-      // Clean up screen stream when component unmounts
-      if (screenStream) {
-        screenStream.getTracks().forEach(track => track.stop());
-        setScreenStream(null);
-        setScreenPermissionGranted(false);
-      }
-    };
-  }, [screenStream]);
+  // Camera stream cleanup is handled by videoStreamRef and streamRef
 
   useEffect(() => {
     return () => {
@@ -3022,14 +3108,18 @@ const ConversationalInterview = () => {
   }, []);
 
   const stopQuestionRecording = () => {
-    // Stop the question timer immediately when recording stops
-    console.log('⏰ Stopping question timer - recording stopped manually');
-    setIsQuestionTimerActive(false);
-    
-    // CRITICAL FIX: Reset timer values to prevent carryover to next question
-    console.log('⏰ Resetting timer values for next question');
-    setQuestionTimerSeconds(0); // Reset to 0 so next question starts fresh
-    
+    // For written-answer questions, keep the timer running so the user sees time remaining while typing
+    const isWrittenQuestion = currentQuestion?.requires_written_answer === true;
+    if (!isWrittenQuestion) {
+      console.log('⏰ Stopping question timer - recording stopped manually');
+      setIsQuestionTimerActive(false);
+      setQuestionTimerSeconds(0);
+      writtenQuestionTimerLockedRef.current = false;
+    } else {
+      console.log('⏰ Written question: keeping timer running so user can see time while writing');
+      writtenQuestionTimerLockedRef.current = true; // Block any effect from resetting timer to full
+    }
+
     if (!mediaRecorder && !videoRecorder) {
       setIsRecording(false);
       setIsVideoRecording(false);
@@ -3066,21 +3156,21 @@ const ConversationalInterview = () => {
         videoRecorder.stopRecording(() => {
                   try {
           const videoBlob = videoRecorder.getBlob();
-          console.log('🖥️ Retrieved screen video blob:', videoBlob);
-          console.log('🖥️ Video blob size:', videoBlob?.size);
-          console.log('🖥️ Video blob type:', videoBlob?.type);
+          console.log('🎥 Retrieved camera video blob:', videoBlob);
+          console.log('🎥 Video blob size:', videoBlob?.size);
+          console.log('🎥 Video blob type:', videoBlob?.type);
             
             if (videoBlob && videoBlob.size > 0) {
               setQuestionVideoBlob(videoBlob);
               videoBlobRetrieved = true;
-              console.log('✅ Screen video blob set successfully');
-              toast.success(`✅ Screen recording saved! (${(videoBlob.size / 1024 / 1024).toFixed(1)} MB)`);
+              console.log('✅ Camera video blob set successfully');
+              toast.success(`Camera recording saved! (${(videoBlob.size / 1024 / 1024).toFixed(1)} MB)`);
             } else {
               console.log('❌ Video blob is empty or null');
             }
           } catch (blobError) {
             console.error('❌ Error getting video blob:', blobError);
-            toast.error('❌ Error processing video recording');
+            toast.error('Error processing video recording');
           }
         });
       } catch (stopError) {
@@ -3095,7 +3185,6 @@ const ConversationalInterview = () => {
     }
     
     // Don't stop videoStreamRef.current here as it's the camera stream
-    // The screen stream is managed separately and should persist
     
     // No audio fallback needed
     
@@ -3131,9 +3220,13 @@ const ConversationalInterview = () => {
 
   const toggleVideo = async () => {
     if (!isVideoOn) {
-      // Try to turn camera back on
+      // Try to turn camera back on (adaptive constraints for mobile)
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const videoConstraints = getAdaptiveVideoConstraints({
+          preferMobile: isMobile,
+          preferFrontCamera: isMobile,
+        });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
@@ -3151,174 +3244,72 @@ const ConversationalInterview = () => {
   const toggleAIAudio = () => {
     setAiAudioEnabled(!aiAudioEnabled);
     if (aiAudioEnabled) {
-      speechSynthesis.cancel(); // Stop current speech
+      speechSynthesis.cancel();
+      setAiTTSLoading(false);
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.currentTime = 0;
+        currentAudioRef.current = null;
+      }
     }
     toast.success(`AI audio ${aiAudioEnabled ? 'disabled' : 'enabled'}`);
   };
 
   if (isCreatingInterview) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto mb-6"></div>
-          <h2 className="text-2xl font-bold text-white mb-4">Creating Your Interview</h2>
-          <p className="text-gray-300 text-lg">Setting up your conversational interview session...</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-6"></div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Creating Your Interview</h2>
+          <p className="text-gray-600 text-lg">Setting up your conversational interview session...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 relative overflow-hidden">
-      {/* Header */}
-      <div className="glass border-b border-white/10 relative z-10">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  <div className="w-8 h-8 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-lg flex items-center justify-center animate-pulse shadow-lg">
-                    <Bot className="w-4 h-4 text-white" />
-                  </div>
-                </div>
-                <div>
-                  <h1 className="font-semibold text-white">PROVALUATE AI INTERVIEW</h1>
-                  <p className="text-xs text-gray-400">Live AI Assistant Interview Session</p>
-                </div>
-              </div>
-              
-              <div className="hidden lg:flex items-center gap-8 text-sm">
-                <div className="flex items-center gap-3 text-gray-200">
-                  <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
-                    <User className="w-4 h-4 text-white" />
-                  </div>
-                  <div>
-                    <div className="font-semibold">{interviewData.candidateName}</div>
-                    <div className="text-xs text-gray-400">Candidate</div>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-3 text-gray-200">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 ${
-                    timeRemaining <= 60 
-                      ? 'bg-gradient-to-r from-red-500 to-red-600 animate-pulse' 
-                      : timeRemaining <= 120 
-                        ? 'bg-gradient-to-r from-yellow-500 to-orange-500' 
-                        : 'bg-gradient-to-r from-green-500 to-emerald-500'
-                  }`}>
-                    <Clock className="w-4 h-4 text-white" />
-                  </div>
-                  <div>
-                    <div className={`font-semibold transition-all duration-300 ${
-                      timeRemaining <= 60 
-                        ? 'text-red-300 animate-pulse' 
-                        : timeRemaining <= 120 
-                          ? 'text-yellow-300' 
-                          : 'text-white'
-                    }`}>
-                      {formatTime(timeRemaining)}
-                    </div>
-                    <div className="text-xs text-gray-400">Time Remaining</div>
-                    {/* Time warning indicators */}
-                    {timeRemaining <= 60 && (
-                      <div className="text-xs text-red-400 font-medium animate-pulse">
-                        ⚠️ Time running out!
-                      </div>
-                    )}
-                    {timeRemaining <= 120 && timeRemaining > 60 && (
-                      <div className="text-xs text-yellow-400 font-medium">
-                        ⚠️ Less than 2 minutes
-                      </div>
-                    )}
-                    
-                    {/* Time progress bar */}
-                    <div className="w-full bg-gray-700 rounded-full h-1.5 mt-2">
-                      <div 
-                        className={`h-1.5 rounded-full transition-all duration-300 ${
-                          timeRemaining <= 60 
-                            ? 'bg-red-500' 
-                            : timeRemaining <= 120 
-                              ? 'bg-yellow-500' 
-                              : 'bg-green-500'
-                        }`}
-                        style={{ 
-                          width: `${Math.max(0, (timeRemaining / (interviewData.duration * 60)) * 100)}%` 
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-                  
-                  {/* Answer Timer Display */}
-                  {isAnswerTimerActive && answerTimer > 0 && (
-                    <div className="flex items-center gap-3 text-gray-200">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 ${
-                        answerTimer <= 30 
-                          ? 'bg-gradient-to-r from-red-500 to-red-600 animate-pulse' 
-                          : answerTimer <= 60 
-                            ? 'bg-gradient-to-r from-yellow-500 to-orange-500' 
-                            : 'bg-gradient-to-r from-green-500 to-emerald-500'
-                      }`}>
-                        <Mic className="w-4 h-4 text-white" />
-                      </div>
-                      <div>
-                        <div className="font-semibold text-white">
-                          Recording
-                        </div>
-                        <div className="text-xs text-gray-400">Recording Status</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+    <div className="min-h-screen bg-white relative overflow-x-hidden flex flex-col">
+      {/* Header - same style as Dashboard (bg #1e5da8) */}
+      <header className="flex-shrink-0 bg-[#1e5da8] border-b relative z-10">
+        <div className="w-full px-3 sm:px-4 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-2 sm:gap-4 w-full">
+            <div className="min-w-0 flex-shrink-0 text-left">
+              <h1 className="text-lg sm:text-xl font-semibold text-white truncate">ProValuate</h1>
+              <p className="text-xs sm:text-sm text-white/90 hidden sm:block">Smart Interview Assessment Platform</p>
             </div>
-            
-            <div className="flex items-center gap-4">
-              {isInterviewTimerActive && (
-                <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs ${
-                  isFullscreen ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full ${
-                    isFullscreen ? 'bg-green-400' : 'bg-red-400 animate-pulse'
-                  }`}></div>
-                  {isFullscreen ? 'Fullscreen' : 'Exit = Terminate'}
-                </div>
-              )}
-              <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs ${
-                connectionStatus === 'connected' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
-              }`}>
-                <div className={`w-2 h-2 rounded-full ${
-                  connectionStatus === 'connected' ? 'bg-green-400' : 'bg-red-400'
-                }`}></div>
-                {connectionStatus === 'connected' ? 'Connected' : 'Disconnected'}
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6 lg:gap-8 text-base sm:text-lg flex-shrink-0">
+              <div className="flex items-center gap-2 sm:gap-3 text-white">
+                <User className="w-5 h-5 sm:w-6 sm:h-6 text-white/90 flex-shrink-0" />
+                <span className="truncate max-w-[140px] sm:max-w-[220px] font-medium">{interviewData.candidateName}</span>
               </div>
-              
-              {/* Mobile Answer Timer Display */}
-              {isRecording && (
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full text-xs bg-blue-500/20 text-blue-300">
-                  <Mic className="w-3 h-3" />
-                  <span className="font-medium">Recording</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2 sm:gap-3 text-white">
+                <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-white/90 flex-shrink-0" />
+                <span className={`font-semibold tabular-nums ${
+                  timeRemaining <= 60 ? 'text-red-200 animate-pulse' : timeRemaining <= 120 ? 'text-yellow-200' : ''
+                }`}>
+                  {formatTime(timeRemaining)}
+                </span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Time Warning Banner */}
+      {/* Time Warning Banner - readable on narrow screens */}
       {timeRemaining <= 120 && (
-        <div className={`w-full py-4 px-6 text-center transition-all duration-500 ${
+        <div className={`flex-shrink-0 w-full py-3 sm:py-4 px-4 sm:px-6 text-center transition-all duration-500 ${
           timeRemaining <= 60 
             ? 'bg-gradient-to-r from-red-600 to-red-700 text-white animate-pulse' 
             : 'bg-gradient-to-r from-yellow-600 to-orange-600 text-white'
         }`}>
-          <div className="flex items-center justify-center gap-3">
-            <AlertTriangle className="w-6 h-6" />
-            <div className="font-semibold text-lg">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+            <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+            <div className="font-semibold text-sm sm:text-lg break-words">
               {timeRemaining <= 60 
                 ? '⚠️ INTERVIEW ENDING SOON! Please finish your current response.' 
                 : '⚠️ Less than 2 minutes remaining in your interview!'}
             </div>
-            <AlertTriangle className="w-6 h-6" />
+            <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
           </div>
           {timeRemaining <= 30 && (
             <div className="mt-2 text-sm opacity-90">
@@ -3328,98 +3319,78 @@ const ConversationalInterview = () => {
         </div>
       )}
 
-      {/* Main Interview Interface */}
-      <div className="w-full px-1 py-1 relative z-10">
-                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-1 mb-2">
-          {/* AI Assistant Panel - Question Card */}
-          <div className="lg:col-span-2 glass rounded-2xl p-1 border border-white/10">
-                         <div className="bg-gray-800/50 rounded-xl p-1 h-[450px] flex items-center justify-center relative">
-              {/* Volume Button - Top Right Corner */}
+      {/* Main Interview Interface - fixed height on mobile so no page scroll; full-width camera on mobile */}
+      <div className="flex-1 min-h-0 w-full min-w-0 px-0 py-1 sm:px-1 relative z-10 flex flex-col overflow-hidden bg-white">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-1 mb-1 flex-shrink-0 lg:mb-2">
+          {/* AI Assistant Panel - fixed height on mobile so question never pushes content down */}
+          <div className="lg:col-span-2 rounded-none sm:rounded-2xl overflow-hidden min-h-0 h-[26vh] max-h-[26vh] lg:h-[450px] lg:max-h-none lg:min-h-[450px] w-full">
+            <div className="bg-sky-100 rounded-none sm:rounded-xl p-1 sm:p-1 h-full min-h-0 flex flex-col items-center justify-center relative overflow-hidden">
+              {/* Volume Button - hidden on mobile */}
               <button
                 onClick={toggleAIAudio}
-                className={`absolute top-3 right-3 p-2 rounded-lg transition-colors z-10 backdrop-blur-sm ${
-                  aiAudioEnabled ? 'bg-green-500/30 text-green-300 hover:bg-green-500/40' : 'bg-red-500/30 text-red-300 hover:bg-red-500/40'
-                }`}
+                className="absolute top-3 right-3 min-h-[44px] min-w-[44px] p-2 rounded-lg transition-colors z-20 hidden sm:flex items-center justify-center bg-[#1e5da8]/20 text-[#1e5da8] hover:bg-[#1e5da8]/30"
               >
                 {aiAudioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
               </button>
-              {aiSpeaking && !aiMessage?.includes('Question') ? (
-                <div className="text-center w-full">
-                  {/* Animated AI Speaking - Clean waveform only */}
-                  
-                  {/* Audio Waveform */}
-                  <div className="flex items-end justify-center gap-1 mb-4 h-20">
-                    {[...Array(15)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="w-1.5 bg-gradient-to-t from-blue-400 via-purple-400 to-pink-400 rounded-full transition-all duration-500 ease-in-out"
-                        style={{
-                          height: `${waveformHeights[i] || 42}px`
-                        }}
-                      ></div>
-                    ))}
+              <div className="w-full min-h-0 flex-1 flex items-center justify-center px-2 py-2 overflow-hidden">
+                {aiPlaceholder ? (
+                  <div className="w-full h-full min-h-0 flex items-center justify-center overflow-y-auto overflow-x-hidden">
+                    <div className="w-full max-w-full bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 my-auto max-h-[22vh] sm:max-h-[38vh] overflow-y-auto overflow-x-hidden">
+                      <p className="text-black font-medium leading-relaxed break-words text-base sm:text-lg text-center">
+                        {aiPlaceholder === 'welcome' && 'Welcome to Provaluate interview platform. Have a great interview!'}
+                        {aiPlaceholder === 'generating_first' && `Generating your first question${'.'.repeat(loadingDots + 1)}`}
+                        {aiPlaceholder === 'generating_next' && `Generating your next question${'.'.repeat(loadingDots + 1)}`}
+                      </p>
+                    </div>
                   </div>
-                  
-                  {/* Speaking Text */}
-                  <div className="text-blue-300 text-lg font-medium mt-4">
-                    🤖 AI is speaking...
+                ) : aiSpeaking && aiMessage ? (
+                  <div className="text-center w-full h-full min-h-0 flex items-center justify-center overflow-y-auto overflow-x-hidden">
+                    <div className="inline-block text-left bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 w-full max-w-full my-auto max-h-[22vh] sm:max-h-[38vh] overflow-y-auto overflow-x-hidden">
+                      <p className="text-gray-900 font-medium leading-relaxed break-words text-base sm:text-lg">
+                        {aiMessage}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="text-center w-full">
-                   {/* Submission Status Indicator */}
-                   {answerSubmitted && (
-                     <div className="bg-green-600/20 border border-green-500/30 rounded-lg p-3 mb-3 animate-pulse">
-                       <div className="flex items-center gap-2">
-                         <div className="w-2 h-2 bg-green-400 rounded-full animate-ping"></div>
-                         <p className="text-green-300 text-sm font-medium">✅ Answer submitted successfully! Moving to next question...</p>
-                       </div>
-                     </div>
-                   )}
-
-                   {/* AI Message - clean during question reading */}
-                   {!isWelcomeMessage && (
-                     <div className="bg-gray-700/50 rounded-lg p-3 mb-3">
-                       <p className="text-white text-lg font-medium leading-relaxed">{aiMessage}</p>
-                     </div>
-                   )}
-                   
-                   {/* Status Indicator - only show when AI is not speaking */}
-                   {!aiSpeaking && (
-                     <div className="flex items-center justify-center gap-2 mb-3">
-                       <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                       <p className="text-gray-300 text-sm">Ready to speak</p>
-                     </div>
-                   )}
-                   
-                   {/* Auto-start interview */}
-                   {!hasSpokenWelcomeRef.current && !aiSpeaking && (
-                     <div className="text-center">
-                       <div className="animate-pulse">
-                         <div className="w-4 h-4 bg-blue-400 rounded-full mx-auto mb-2"></div>
-                         <p className="text-blue-300 text-sm">Starting interview automatically...</p>
-                       </div>
-                     </div>
-                   )}
-                </div>
-              )}
+                ) : aiSpeaking && !aiMessage ? (
+                  <div className="text-center w-full">
+                    <div className="flex items-end justify-center gap-1 mb-4 h-20">
+                      {[...Array(15)].map((_, i) => (
+                        <div
+                          key={i}
+                          className="w-1.5 bg-gradient-to-t from-blue-400 to-blue-600 rounded-full transition-all duration-500 ease-in-out"
+                          style={{ height: `${waveformHeights[i] || 42}px` }}
+                        />
+                      ))}
+                    </div>
+                    <div className="text-blue-700 text-base sm:text-lg font-medium mt-4">AI is speaking...</div>
+                  </div>
+                ) : aiMessage ? (
+                  <div className="text-center w-full h-full min-h-0 flex items-center justify-center overflow-y-auto overflow-x-hidden">
+                    <div className="inline-block text-left bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 w-full max-w-full my-auto max-h-[22vh] sm:max-h-[38vh] overflow-y-auto overflow-x-hidden">
+                      <p className="text-gray-900 font-medium leading-relaxed break-words text-base sm:text-lg">
+                        {aiMessage}
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
 
-          {/* Candidate Panel - Camera/Screen Sharing Card */}
-          <div className="lg:col-span-3 glass rounded-2xl p-1 border border-white/10">
-                         <div className="bg-gray-800/50 rounded-xl p-1 h-[450px] flex items-center justify-center overflow-hidden relative border border-gray-600/30">
-              {/* Camera Button - Top Right Corner */}
+          {/* Candidate Panel - Camera Video Card - full width on mobile, fixed height */}
+          <div className="lg:col-span-3 rounded-none sm:rounded-2xl overflow-hidden min-h-0 h-[26vh] max-h-[26vh] lg:h-[450px] lg:max-h-none lg:min-h-[450px] w-full">
+            <div className="bg-white rounded-none sm:rounded-xl p-0 sm:p-1 h-full min-h-0 w-full flex items-center justify-center overflow-hidden relative aspect-video lg:aspect-auto">
+              {/* Camera Button - hidden on mobile */}
               <button
                 onClick={toggleVideo}
-                className="absolute top-3 right-3 p-2 rounded-lg transition-colors z-20 backdrop-blur-sm bg-red-500/30 text-red-300 hover:bg-red-500/40"
+                className="absolute top-3 right-3 min-h-[44px] min-w-[44px] p-2 rounded-lg transition-colors z-20 hidden sm:flex items-center justify-center bg-[#1e5da8]/20 text-[#1e5da8] hover:bg-[#1e5da8]/30"
               >
                 {isVideoOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
               </button>
               
               {/* Camera Required Warning - Top Left Corner */}
               {!isVideoOn && (
-                <div className="absolute top-3 left-3 flex items-center gap-1 px-2 py-1 bg-red-500/30 text-red-300 rounded-full text-xs z-20 backdrop-blur-sm">
+                <div className="absolute top-3 left-3 flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs z-20">
                   <AlertTriangle className="w-3 h-3" />
                   Camera Required
                 </div>
@@ -3430,10 +3401,8 @@ const ConversationalInterview = () => {
                     ref={videoRef}
                     autoPlay
                     muted
-                    
                     playsInline
-                    className="w-full h-full object-cover rounded-lg shadow-2xl transform scale-105 hover:scale-110 transition-transform duration-300"
-                    style={{ height: '430px', width: '100%' }}
+                    className="w-full h-full min-h-[180px] object-cover rounded-none sm:rounded-lg shadow-md lg:transform lg:scale-105 lg:hover:scale-110 transition-transform duration-300"
                   />
                   
                   {/* Countdown Overlay */}
@@ -3447,138 +3416,99 @@ const ConversationalInterview = () => {
                 </>
               ) : (
                 <div className="text-center">
-                  <VideoOff className="w-16 h-16 text-red-400 mx-auto mb-4" />
-                  <p className="text-red-300 font-medium">Camera is required</p>
-                  <p className="text-gray-400 text-sm">Please turn on your camera to continue</p>
+                  <VideoOff className="w-16 h-16 text-red-500 mx-auto mb-4" />
+                  <p className="text-red-700 font-medium">Camera is required</p>
+                  <p className="text-gray-500 text-sm">Please turn on your camera to continue</p>
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Real-time Editable Transcription Card - Full Width */}
-        <div className={`glass rounded-xl p-2 border transition-all duration-300 mb-2 ${
-          aiSpeaking
-            ? 'border-blue-500/30 bg-blue-900/10'
-            : answerSubmitted 
-              ? 'border-gray-600/30 bg-gray-800/30'
-              : 'border-green-500/30 bg-green-900/10'
-        }`}>
-          {/* Header with expand/collapse controls */}
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full animate-pulse ${
-                aiSpeaking
-                  ? 'bg-blue-400'
-                  : answerSubmitted 
-                    ? 'bg-gray-400'
-                    : 'bg-green-400'
-              }`} />
-              <span className={`text-xs font-medium ${
-                aiSpeaking
-                  ? 'text-blue-300'
-                    : answerSubmitted 
-                      ? 'text-gray-400'
-                      : 'text-green-300'
-              }`}>
-                {aiSpeaking
-                  ? '🎤 AI Speaking - Locked'
-                    : answerSubmitted 
-                      ? '✅ Answer Submitted'
-                      : recordingCountdown > 0
-                        ? '⏱️ Get Ready - Editable'
-                        : isRecording
-                          ? '🎙️ Recording - Editable'
-                          : '✏️ Editable'
-                }
-              </span>
-            </div>
-            <button
-              onClick={() => setIsTranscriptDialogOpen(true)}
-              className="p-1 rounded-lg transition-all duration-200 bg-gray-700/50 text-gray-400 hover:bg-gray-700/70"
-              title="View full transcript"
-            >
-              <Maximize2 className="w-3 h-3" />
-            </button>
-          </div>
-          
+        {/* Transcription - show only when new question is displayed (not while loading next question) */}
+        {aiPlaceholder !== 'generating_next' && (
+        <div className="relative mb-1 flex-shrink-0">
           <textarea
             ref={transcriptTextareaRef}
             value={transcript}
             onChange={(e) => {
-              // Allow editing during countdown, recording, and answer period (not submitted, and AI not speaking)
               if (!answerSubmitted && !aiSpeaking) {
                 setTranscript(e.target.value);
               }
             }}
             placeholder="Start speaking to see real-time transcription here..."
             disabled={answerSubmitted || aiSpeaking}
-            className={`w-full rounded-lg p-3 transition-all duration-300 text-sm leading-relaxed resize-none ${
+            className={`w-full rounded-xl p-3 pr-12 transition-all duration-300 text-base sm:text-lg leading-relaxed resize-none bg-sky-100 border border-sky-200 text-black placeholder:text-black ${
               aiSpeaking
-                ? 'bg-gray-900/70 text-gray-300 cursor-not-allowed border border-blue-500/20'
+                ? 'cursor-not-allowed opacity-90'
                 : answerSubmitted 
-                  ? 'bg-gray-900/50 text-gray-400 cursor-not-allowed border border-gray-600/20'
-                  : 'bg-gray-800/50 text-white cursor-text border border-gray-600/30 focus:border-green-500/50 focus:outline-none focus:ring-2 focus:ring-green-500/20'
-            } min-h-[140px] max-h-[180px]`}
-            style={{
-              fontFamily: 'inherit',
-              opacity: aiSpeaking ? 0.7 : answerSubmitted ? 0.5 : 1
-            }}
+                  ? 'cursor-not-allowed opacity-80'
+                  : 'cursor-text focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200'
+            } min-h-[90px] max-h-[120px] sm:min-h-[140px] sm:max-h-[180px]`}
+            style={{ fontFamily: 'inherit' }}
           />
+          <button
+            onClick={() => setIsTranscriptDialogOpen(true)}
+            className="absolute top-3 right-3 min-h-[36px] min-w-[36px] p-1.5 rounded-lg bg-sky-200 text-sky-800 hover:bg-sky-300 flex items-center justify-center transition-colors"
+            title="View full transcript"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
         </div>
+        )}
 
-        {/* Transcript Dialog */}
+        {/* Written answer box (SQL/code/calculation) - show only when new question is displayed and requires it */}
+        {aiPlaceholder !== 'generating_next' && currentQuestion?.requires_written_answer && (
+          <div className="mb-2 flex-shrink-0">
+            <label className="block text-sm font-medium text-sky-700 mb-1">
+              Write your answer here (query, code, or calculation)
+            </label>
+            <textarea
+              value={writtenAnswer}
+              onChange={(e) => {
+                if (!answerSubmitted && !aiSpeaking && !isRecording) setWrittenAnswer(e.target.value);
+              }}
+              placeholder={isRecording ? "Stop recording first, then write your query or answer here." : "Paste or type your SQL query, code snippet, or calculation. Speak first, then write here before submitting."}
+              disabled={answerSubmitted || aiSpeaking || isRecording}
+              className={`w-full rounded-xl p-3 text-base font-mono border text-black placeholder:text-sky-600 min-h-[100px] max-h-[200px] resize-y focus:outline-none focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed ${
+                answerSubmitted || aiSpeaking || isRecording
+                  ? 'bg-gray-100 border-gray-300 opacity-90'
+                  : 'bg-sky-50 border-sky-200 focus:border-sky-400'
+              }`}
+            />
+          </div>
+        )}
+
+        {/* Transcript Dialog - solid, no transparency */}
         <Dialog open={isTranscriptDialogOpen} onOpenChange={setIsTranscriptDialogOpen}>
-          <DialogContent className={`max-w-4xl max-h-[80vh] overflow-hidden ${
-            aiSpeaking
-              ? 'border-blue-500/30 bg-blue-900/10'
-              : answerSubmitted 
-                ? 'border-gray-600/30 bg-gray-800/30'
-                : 'border-green-500/30 bg-green-900/10'
-          }`}>
+          <DialogContent className="w-[95vw] max-w-4xl max-h-[80vh] overflow-hidden bg-white border border-sky-200 shadow-xl">
             <DialogHeader>
-              <DialogTitle className={`${
-                aiSpeaking
-                  ? 'text-blue-300'
-                  : answerSubmitted 
-                    ? 'text-gray-400'
-                    : 'text-green-300'
-              }`}>Full Transcript - Review & Edit</DialogTitle>
+              <DialogTitle className="text-gray-900">Full Transcript - Review & Edit</DialogTitle>
             </DialogHeader>
-            <div className="p-4">
+            <div className="p-4 bg-white border border-sky-200 rounded-lg">
               <textarea
                 value={transcript}
                 onChange={(e) => {
-                  // Allow editing during countdown, recording, and answer period (not submitted, and AI not speaking)
                   if (!answerSubmitted && !aiSpeaking) {
                     setTranscript(e.target.value);
                   }
                 }}
                 disabled={answerSubmitted || aiSpeaking}
-                className={`w-full rounded-lg p-4 transition-all duration-300 text-sm leading-relaxed resize-none ${
+                className={`w-full rounded-lg p-4 transition-all duration-300 text-base sm:text-lg leading-relaxed resize-none bg-sky-100 border border-sky-200 text-black placeholder:text-black ${
                   aiSpeaking
-                    ? 'bg-gray-900/70 text-gray-300 cursor-not-allowed border border-blue-500/20'
+                    ? 'cursor-not-allowed opacity-90'
                     : answerSubmitted 
-                      ? 'bg-gray-900/50 text-gray-400 cursor-not-allowed border border-gray-600/20'
-                      : 'bg-gray-800/50 text-white cursor-text border border-gray-600/30 focus:border-green-500/50 focus:outline-none focus:ring-2 focus:ring-green-500/20'
+                      ? 'cursor-not-allowed opacity-80'
+                      : 'cursor-text focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200'
                 } min-h-[400px] max-h-[500px]`}
-                style={{
-                  fontFamily: 'inherit',
-                  opacity: aiSpeaking ? 0.7 : answerSubmitted ? 0.5 : 1
-                }}
+                style={{ fontFamily: 'inherit' }}
               />
-              <div className={`mt-3 text-xs text-center ${
-                aiSpeaking
-                  ? 'text-blue-300'
-                  : answerSubmitted 
-                    ? 'text-gray-400'
-                    : 'text-green-300'
-              }`}>
+              <div className="mt-3 text-xs text-center text-black">
                 {aiSpeaking
-                  ? '🎤 AI is speaking. Transcript will be editable during your answer.'
+                  ? 'AI is speaking. Transcript will be editable during your answer.'
                   : answerSubmitted 
-                    ? '📋 Answer has been submitted.'
-                    : '✏️ You can edit your transcript in this expanded view.'
+                    ? 'Answer has been submitted.'
+                    : 'You can edit your transcript in this expanded view.'
                 }
               </div>
             </div>
@@ -3589,128 +3519,55 @@ const ConversationalInterview = () => {
 
 
 
-                 {/* Instructions */}
-         <div className="glass rounded-2xl p-4 border border-white/10 mb-6">
-           <div className="text-center">
-              {!screenPermissionGranted ? (
-                <div className="text-blue-300 text-sm transition-all duration-500 ease-in-out">
-                  <p>🖥️ Setting up screen access for interview security...</p>
-                  <div className="mt-2 text-xs text-gray-400">
-                    Screen sharing is required and will be requested automatically
-                  </div>
-                </div>
-              ) : recordingCountdown > 0 ? (
-                <div className="text-blue-300 text-sm transition-all duration-500 ease-in-out">
-                  <p>🎥 Recording will start in {recordingCountdown}...</p>
-                  <div className="mt-1 text-xs text-gray-400">
-                    {/*Get ready to answer the question*/}
-                  </div>
-                </div>
-              ) : !questionFinishedSpeaking && !isRecording ? (
-                <div className="text-gray-300 text-sm transition-all duration-500 ease-in-out">
-                  {/*<p>🎤 Listen carefully to the question...</p>*/}
-                </div>
-              ) : questionFinishedSpeaking && !isRecording ? (
-               <div className="text-green-300 text-sm transition-all duration-500 ease-in-out">
-                 <div>
-                   <p>✅ Question finished! Click "Start Recording" to begin recording your answer.</p>
-                   <div className="mt-2 text-xs text-green-400">
-                     🎥 Screen access already granted - ready to record
-                   </div>
+                 {/* Reserved space for question timer - flex-shrink-0; smaller on mobile so buttons stay visible */}
+         <div className="min-h-[60px] sm:min-h-[120px] mb-1 flex-shrink-0 flex items-center justify-center">
+           {!answerSubmitted && isQuestionTimerActive && questionTimeRemaining > 0 && (isRecording || currentQuestion?.requires_written_answer) && (
+             <div className="w-full max-w-[88%] sm:max-w-2xl mx-auto">
+               <div className="flex items-center justify-between mb-2">
+                 <div className="flex items-center gap-2">
+                   <Clock className="w-4 h-4 text-sky-500" />
+                   <span className="text-sm font-medium text-sky-600">
+                     Question Time: {formatTime(questionTimeRemaining)} / {formatTime(currentQuestionMaxTime)}
+                   </span>
                  </div>
+                 <span className="text-xs text-sky-600">
+                   {Math.round((questionTimeRemaining / currentQuestionMaxTime) * 100)}% remaining
+                 </span>
                </div>
-             ) : isRecording ? (
-               <div>
-                 {/* Original Long Timer Bar */}
-                 {isQuestionTimerActive && questionTimeRemaining > 0 && (
-                   <div className="mt-2 w-full max-w-2xl mx-auto">
-                     <div className="flex items-center justify-between mb-2">
-                       <div className="flex items-center gap-2">
-                         <Clock className={`w-4 h-4 ${
-                           questionTimeRemaining <= 30 
-                             ? 'text-red-400' 
-                             : questionTimeRemaining <= 60 
-                               ? 'text-yellow-400' 
-                               : 'text-green-400'
-                         }`} />
-                         <span className={`text-sm font-medium ${
-                           questionTimeRemaining <= 30 
-                             ? 'text-red-400' 
-                             : questionTimeRemaining <= 60 
-                               ? 'text-yellow-400' 
-                               : 'text-green-400'
-                         }`}>
-                           Question Time: {formatTime(questionTimeRemaining)} / {formatTime(currentQuestionMaxTime)}
-                         </span>
-                       </div>
-                       <span className="text-xs text-gray-500">
-                         {Math.round((questionTimeRemaining / currentQuestionMaxTime) * 100)}% remaining
-                       </span>
-                     </div>
-                     
-                     {/* Progress Bar */}
-                     <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                       <div 
-                         className={`h-full transition-all duration-1000 ease-linear ${
-                           questionTimeRemaining <= 30 
-                             ? 'bg-gradient-to-r from-red-500 to-red-600 animate-pulse' 
-                             : questionTimeRemaining <= 60 
-                               ? 'bg-gradient-to-r from-yellow-500 to-yellow-600' 
-                               : 'bg-gradient-to-r from-green-500 to-green-600'
-                         }`}
-                         style={{ 
-                           width: `${(questionTimeRemaining / currentQuestionMaxTime) * 100}%`,
-                           transition: 'width 1s linear'
-                         }}
-                       ></div>
-                     </div>
-                     
-                     {/* Warning Messages */}
-                     {questionTimeRemaining <= 30 && (
-                       <div className="mt-2 text-red-400 text-sm font-medium animate-pulse flex items-center gap-2">
-                         <AlertTriangle className="w-4 h-4" />
-                         ⚠️ Time running out! Answer will auto-submit in {questionTimeRemaining} seconds
-                       </div>
-                     )}
-                     {questionTimeRemaining <= 60 && questionTimeRemaining > 30 && (
-                       <div className="mt-2 text-yellow-400 text-sm font-medium flex items-center gap-2">
-                         <AlertTriangle className="w-4 h-4" />
-                         ⚠️ Less than 1 minute remaining for this question
-                       </div>
-                     )}
-                   </div>
-                 )}
+               <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                 <div 
+                   className="h-full transition-all duration-1000 ease-linear bg-gradient-to-r from-sky-500 to-sky-600"
+                   style={{ 
+                     width: `${(questionTimeRemaining / currentQuestionMaxTime) * 100}%`,
+                     transition: 'width 1s linear'
+                   }}
+                 />
                </div>
-             ) : answerSubmitted ? (
-               <div className="text-green-300 text-sm">
-                 <div className="text-center">
-                   <div className="w-16 h-16 bg-green-500/20 rounded-full mx-auto mb-3 flex items-center justify-center">
-                     <CheckCircle className="w-8 h-8 text-green-400" />
-                   </div>
-                   <p className="text-lg font-semibold text-green-300 mb-2">✅ Answer Submitted Successfully!</p>
-                   <p className="text-sm text-green-200">
-                     {isGeneratingQuestion ? 'Generating next question...' : 'Loading next question...'}
-                   </p>
-                   <div className="mt-3 flex justify-center">
-                     <div className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div>
-                   </div>
+               {questionTimeRemaining <= 30 && (
+                 <div className="mt-2 text-sky-600 text-sm font-medium animate-pulse">
+                   Time running out! Answer will auto-submit in {questionTimeRemaining} seconds
                  </div>
-               </div>
-             ) : null}
-           </div>
+               )}
+               {questionTimeRemaining <= 60 && questionTimeRemaining > 30 && (
+                 <div className="mt-2 text-sky-600 text-sm font-medium">
+                   Less than 1 minute remaining for this question
+                 </div>
+               )}
+             </div>
+           )}
          </div>
 
 
 
-                 {/* Controls */}
-         <div className="flex items-center justify-center gap-4">
+                 {/* Controls - flex-shrink-0 so always visible; no page scroll needed */}
+         <div className="flex flex-shrink-0 flex-wrap items-center justify-center gap-3 sm:gap-4 py-2 sm:py-3 lg:py-0 lg:pb-2 bg-white border-t border-gray-200 px-2 sm:-mx-1 sm:px-2">
            
                                            {/* Stop Recording Button - only show when recording */}
              {isRecording && (
                <button
                  onClick={stopQuestionRecording}
                  disabled={!isVideoOn || isSubmitting}
-                 className="flex items-center gap-2 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-all duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                 className="flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-6 py-3 bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white rounded-xl font-medium transition-all duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
                >
                  <MicOff className="w-5 h-5" />
                  Stop Recording
@@ -3719,17 +3576,13 @@ const ConversationalInterview = () => {
            
                        <button
               onClick={handleSubmitAnswer}
-              disabled={!audioBlob || isSubmitting || !isVideoOn || answerSubmitted}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+              disabled={!audioBlob || isSubmitting || !isVideoOn || answerSubmitted || (currentQuestion?.requires_written_answer === true && !writtenAnswer?.trim())}
+              className={`flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-6 py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                 answerSubmitted || submissionStatus === 'submitted'
-                  ? 'bg-green-600 text-white cursor-default animate-pulse' 
-                  : isSubmitting 
-                    ? submissionStatus === 'uploading' 
-                      ? 'bg-blue-500 text-white cursor-wait'
-                      : submissionStatus === 'processing'
-                        ? 'bg-yellow-500 text-white cursor-wait'
-                        : 'bg-yellow-500 text-white cursor-wait'
-                    : 'bg-green-500 hover:bg-green-600 text-white'
+                  ? 'bg-[#1e5da8] text-white cursor-default animate-pulse'
+                  : isSubmitting
+                    ? 'bg-[#1e5da8]/80 text-white cursor-wait'
+                    : 'bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white'
               }`}
             >
               {isSubmitting ? (
@@ -3757,14 +3610,14 @@ const ConversationalInterview = () => {
             </button>
             
             
-            {/* End Interview Button - always visible */}
+            {/* End Interview Button - same colour as Submit */}
             <button
               onClick={() => {
                 if (window.confirm('Are you sure you want to end the interview? This action cannot be undone.')) {
                   terminateInterview('Manual termination by candidate willingly');
                 }
               }}
-              className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-all"
+              className="flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-6 py-3 bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white rounded-xl font-medium transition-all"
             >
               <X className="w-5 h-5" />
               End Interview

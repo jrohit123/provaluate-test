@@ -24,9 +24,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import StructuredInterviewSetup from './StructuredInterviewSetup';
+import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
+import { useInterviewCurrentStep, useInterviewNavigateToStep, INTERVIEW_WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
+
+interface AIsetupProps {
+  onSectionReady?: () => void;
+}
 
 interface FormData {
   position: string;
@@ -50,13 +57,17 @@ interface CustomParameter {
   max_time: number;
   level: 'Easy' | 'Regular' | 'Expert';
   scoring_criteria: string[];
+  /** When set, overrides keyword-based detection for written-answer (e.g. SQL/code) scenarios. */
+  requires_written_answer?: boolean;
 }
 
 
 
-const HRInterviewCreator = () => {
+const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const interviewCurrentStep = useInterviewCurrentStep();
+  const interviewNavigateToStep = useInterviewNavigateToStep();
   
   const [formData, setFormData] = useState<FormData>({
     position: '',
@@ -83,6 +94,8 @@ const HRInterviewCreator = () => {
   const [isExpandDialogOpen, setIsExpandDialogOpen] = useState(false);
   const [loadedPositions, setLoadedPositions] = useState<Set<string>>(new Set());
   const [expandedParameters, setExpandedParameters] = useState<Set<string>>(new Set());
+  /** Per-parameter max_time before "Requires written answer" was checked; restored when unchecked */
+  const [writtenAnswerPrevMaxTime, setWrittenAnswerPrevMaxTime] = useState<Record<string, number>>({});
 
   // Load job descriptions from both CV screening and AI interview tables
   const loadJobDescriptions = async () => {
@@ -625,7 +638,8 @@ const HRInterviewCreator = () => {
             acc[key] = {
               ...customParams[key],
               max_time: customParams[key].max_time || 3, // Default to 3 minutes if not set
-              level: customParams[key].level || 'Regular' // Default to Regular if not set
+              level: customParams[key].level || 'Regular', // Default to Regular if not set
+              requires_written_answer: customParams[key].requires_written_answer
             };
             return acc;
           }, {} as CustomParameters);
@@ -774,8 +788,8 @@ const HRInterviewCreator = () => {
     // Add 2 minutes buffer
     calculatedDuration += 2;
     
-    // Ensure duration is within reasonable bounds (5-120 minutes)
-    const finalDuration = Math.max(5, Math.min(120, calculatedDuration));
+    // Ensure duration is within reasonable bounds (5-120 minutes) and round to whole minutes
+    const finalDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
     
     console.log('🔄 Duration calculation summary:', {
       parameters: Object.keys(parameters).length,
@@ -830,7 +844,7 @@ const HRInterviewCreator = () => {
     // Add 2 minutes buffer
     calculatedDuration += 2;
     
-    const finalDuration = Math.max(5, Math.min(120, calculatedDuration));
+    const finalDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
     // FIXED: Replace duration instead of adding to it
     setFormData(prev => ({ ...prev, duration: finalDuration, totalQuestions: questions }));
   };
@@ -934,7 +948,8 @@ const HRInterviewCreator = () => {
             level: existingParam?.level || aiParam.level || 'Regular',
             min_questions: existingParam?.min_questions || (aiParam.min_questions && aiParam.min_questions >= 1 && aiParam.min_questions <= 8 ? aiParam.min_questions : 2),
             max_questions: existingParam?.max_questions || (aiParam.max_questions && aiParam.max_questions >= 1 && aiParam.max_questions <= 8 ? aiParam.max_questions : 5),
-            weight: existingParam?.weight || (aiParam.weight && aiParam.weight >= 10 && aiParam.weight <= 40 ? aiParam.weight : 25)
+            weight: existingParam?.weight || (aiParam.weight && aiParam.weight >= 10 && aiParam.weight <= 40 ? aiParam.weight : 25),
+            requires_written_answer: existingParam?.requires_written_answer ?? aiParam?.requires_written_answer
           };
           
           console.log(`🔄 Parameter ${key} settings:`, {
@@ -1110,6 +1125,12 @@ const HRInterviewCreator = () => {
       toast.error('Please configure parameters before saving', { id: 'params-configure-required' });
       return;
     }
+
+    const totalWeight = Object.values(customParameters).reduce((acc, p) => acc + (Number(p?.weight) || 0), 0);
+    if (Math.abs(totalWeight - 100) > 0.01) {
+      toast.error(`Total weight must equal 100%. Current total: ${totalWeight}%. Adjust parameter weights so they sum to exactly 100.`, { id: 'params-weight-invalid' });
+      return;
+    }
     
     setIsSavingParameters(true);
     try {
@@ -1194,6 +1215,7 @@ const HRInterviewCreator = () => {
           max_questions: 5,
           max_time: 3,
           level: 'Regular' as 'Easy' | 'Regular' | 'Expert',
+          requires_written_answer: undefined,
           scoring_criteria: [
             'Excellent (9-10): Demonstrates exceptional understanding and application',
             'Good (7-8): Shows strong competency with minor areas for improvement',
@@ -1209,8 +1231,8 @@ const HRInterviewCreator = () => {
     });
   };
 
-  const updateParameter = (key: string, field: keyof CustomParameter, value: string | number | string[]) => {
-    let processedValue: string | number | string[] = value;
+  const updateParameter = (key: string, field: keyof CustomParameter, value: string | number | string[] | boolean) => {
+    let processedValue: string | number | string[] | boolean = value;
     if (field === 'weight' || field === 'min_questions' || field === 'max_questions') {
       const numValue = parseInt(value.toString());
       processedValue = isNaN(numValue) ? 0 : numValue;
@@ -1280,11 +1302,11 @@ const HRInterviewCreator = () => {
         calculatedDuration += avgQuestions * totalTimePerQuestion;
       });
       calculatedDuration += 2; // Add buffer
-      baseDuration = Math.max(5, Math.min(120, calculatedDuration));
+      baseDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
     }
     
-    // Total duration = base duration + personalized questions duration
-    const totalDuration = baseDuration + personalizedDuration;
+    // Total duration = base duration + personalized questions duration (whole minutes)
+    const totalDuration = Math.round(baseDuration + personalizedDuration);
     
     // Calculate total questions (technical + personalized) - use same logic as calculateDuration
     let technicalQuestions = 0;
@@ -1342,14 +1364,14 @@ const HRInterviewCreator = () => {
         body: JSON.stringify({
           title: `${roleName} Interview Configuration`,
           description: `Interview configuration for ${roleName} position`,
-          duration: formData.duration,
+          duration: formData.duration != null ? Math.round(Number(formData.duration)) : formData.duration,
           difficulty: 'medium', // Default difficulty
           position: roleName,
           skills: [], // Could be extracted from job description
           custom_questions: [], // No custom questions in this component
           personalized_questions_enabled: formData.personalizedQuestionsEnabled,
           personalized_questions: formData.personalizedQuestions,
-          total_duration: formData.duration + (formData.personalizedQuestionsEnabled ? 
+          total_duration: (formData.duration != null ? Math.round(Number(formData.duration)) : 0) + (formData.personalizedQuestionsEnabled ?
             formData.personalizedQuestions.reduce((total, q) => total + q.timeLimit, 0) : 0),
           job_description: formData.jobDescription,
           interview_type: formData.interviewType,
@@ -1418,15 +1440,30 @@ const HRInterviewCreator = () => {
     });
   };
 
+  useEffect(() => {
+    const t = setTimeout(() => onSectionReady?.(), 500);
+    return () => clearTimeout(t);
+  }, [onSectionReady]);
+
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+    <div className="min-h-screen">
+      {/* Mobile step progress (interview workflow) */}
+      <div className="lg:hidden">
+        <CompactStepProgress
+          current={interviewCurrentStep}
+          total={INTERVIEW_WORKFLOW_STEPS.length}
+          steps={INTERVIEW_WORKFLOW_STEPS}
+          onStepClick={interviewNavigateToStep}
+        />
+      </div>
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       <div className="mb-4 sm:mb-6">
         <h2 className="text-xl sm:text-2xl font-bold text-primary-800 mb-2">Interview Parameters Setup</h2>
         <p className="text-sm sm:text-base text-muted-foreground">Select the role and configure the interview settings</p>
       </div>
 
       {/* Interview Configuration Section */}
-      <Card className="animate-fade-in">
+      <Card className="animate-fade-in" data-tour="setup-area">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
@@ -1473,7 +1510,7 @@ const HRInterviewCreator = () => {
                     setFormData(prev => ({ ...prev, interviewMode: value }))
                   }
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full h-14">
                     <SelectValue placeholder="Select interview mode..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -1671,7 +1708,7 @@ const HRInterviewCreator = () => {
               </div>
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
                 <div className="text-blue-600 font-medium text-xs sm:text-sm">Duration</div>
-                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.duration || 'Calculating...'} min</div>
+                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.duration != null ? Math.round(Number(formData.duration)) : 'Calculating...'} min</div>
                 <div className="text-xs text-blue-600">Auto-calculated</div>
               </div>
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
@@ -1698,7 +1735,7 @@ const HRInterviewCreator = () => {
                     id="duration"
                     type="number"
                     name="duration"
-                    value={formData.duration}
+                    value={formData.duration != null ? Math.round(Number(formData.duration)) : ''}
                     onChange={handleInputChange}
                     min="5"
                     max="120"
@@ -1706,14 +1743,14 @@ const HRInterviewCreator = () => {
                     className="text-sm sm:text-base"
                   />
                   <div className="text-xs sm:text-sm text-gray-500 min-w-fit">
-                    {formData.duration ? `${formData.duration} min` : 'Calculating...'}
+                    {formData.duration != null ? `${Math.round(Number(formData.duration))} min` : 'Calculating...'}
                   </div>
                 </div>
                 <p className="text-xs text-gray-500">
                   Duration includes answer time + 30 seconds reading time per question + 2 min buffer. You can edit this value manually.
                 </p>
                 <div className="text-xs text-blue-600 font-medium">
-                  💡 Formula: Sum of (questions × (answer time + 0.5 min reading)) for each parameter + 2 min buffer = {formData.duration || 'Calculating...'} min
+                  💡 Formula: Sum of (questions × (answer time + 0.5 min reading)) for each parameter + 2 min buffer = {formData.duration != null ? Math.round(Number(formData.duration)) : 'Calculating...'} min
                 </div>
               </div>
 
@@ -1789,7 +1826,7 @@ const HRInterviewCreator = () => {
               {Object.keys(customParameters).length > 0 && !parametersSaved && (
                 <Button
                   onClick={saveParameters}
-                  disabled={isSavingParameters}
+                  disabled={isSavingParameters || Math.abs(calculateTotalWeightage() - 100) > 0.01}
                   className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
                 >
                   {isSavingParameters ? (
@@ -2064,6 +2101,40 @@ const HRInterviewCreator = () => {
                                   <SelectItem value="Expert">Expert</SelectItem>
                                 </SelectContent>
                               </Select>
+                            </div>
+                            <div className="flex items-center space-x-2 pt-2">
+                              <Checkbox
+                                id={`${key}-requires-written`}
+                                checked={param.requires_written_answer === true}
+                                onCheckedChange={(checked) => {
+                                  updateParameter(key, 'requires_written_answer', checked === true);
+                                  const currentMax = typeof param.max_time === 'number' ? param.max_time : (parseInt(String(param.max_time), 10) || 3);
+                                  if (checked === true) {
+                                    // Remember current max_time so we can restore it when unchecking
+                                    setWrittenAnswerPrevMaxTime(prev => ({ ...prev, [key]: currentMax }));
+                                    // When enabling written answer, auto-increase max_time (5–6 min by complexity)
+                                    const suggested = param.level === 'Expert' ? 6 : 5;
+                                    if (currentMax < suggested) {
+                                      updateParameter(key, 'max_time', suggested);
+                                    }
+                                  } else {
+                                    // When unchecking, revert to the max_time that was there before we checked
+                                    const restoreMax = writtenAnswerPrevMaxTime[key] ?? 3;
+                                    updateParameter(key, 'max_time', restoreMax);
+                                    setWrittenAnswerPrevMaxTime(prev => {
+                                      const next = { ...prev };
+                                      delete next[key];
+                                      return next;
+                                    });
+                                  }
+                                }}
+                              />
+                              <Label
+                                htmlFor={`${key}-requires-written`}
+                                className="text-sm font-normal cursor-pointer"
+                              >
+                                Requires written answer (e.g. SQL/code)
+                              </Label>
                             </div>
                           </div>
                           
@@ -2352,6 +2423,7 @@ const HRInterviewCreator = () => {
         />
       )}
 
+      </div>
     </div>
   );
 };
