@@ -2,7 +2,38 @@
 
 const SETTINGS_KEYS = { API_BASE: 'provaluate_api_base', COMPANY_ID: 'provaluate_company_id', USER_ID: 'provaluate_user_id' };
 
+function parseUrlParams() {
+  var q = typeof window !== 'undefined' && window.location && window.location.search;
+  if (!q || q.length < 2) return null;
+  var params = {};
+  q.slice(1).split('&').forEach(function (pair) {
+    var i = pair.indexOf('=');
+    if (i !== -1) params[decodeURIComponent(pair.slice(0, i))] = decodeURIComponent(pair.slice(i + 1).replace(/\+/g, ' '));
+  });
+  var apiBase = params.api_base || '';
+  var companyId = params.company_id || '';
+  var userId = params.user_id || '';
+  if (!apiBase && !companyId && !userId) return null;
+  return { apiBase: apiBase, companyId: companyId, userId: userId };
+}
+
 function getSettings() {
+  var fromUrl = parseUrlParams();
+  if (fromUrl) {
+    if (typeof localStorage !== 'undefined') {
+      if (fromUrl.apiBase) localStorage.setItem(SETTINGS_KEYS.API_BASE, fromUrl.apiBase);
+      if (fromUrl.companyId) localStorage.setItem(SETTINGS_KEYS.COMPANY_ID, fromUrl.companyId);
+      if (fromUrl.userId) localStorage.setItem(SETTINGS_KEYS.USER_ID, fromUrl.userId);
+    }
+    if (typeof history !== 'undefined' && history.replaceState) {
+      try { history.replaceState(null, '', window.location.pathname || 'taskpane.html'); } catch (e) {}
+    }
+    return {
+      apiBase: fromUrl.apiBase || 'https://devprovaluate_py.aitamate.com',
+      companyId: fromUrl.companyId,
+      userId: fromUrl.userId
+    };
+  }
   return {
     apiBase: (typeof localStorage !== 'undefined' && localStorage.getItem(SETTINGS_KEYS.API_BASE)) || 'https://devprovaluate_py.aitamate.com',
     companyId: (typeof localStorage !== 'undefined' && localStorage.getItem(SETTINGS_KEYS.COMPANY_ID)) || '',

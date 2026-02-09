@@ -17,7 +17,9 @@ function save() {
     if (companyId) localStorage.setItem(SETTINGS_KEYS.COMPANY_ID, companyId);
     if (userId) localStorage.setItem(SETTINGS_KEYS.USER_ID, userId);
     var el = document.getElementById('saved');
-    if (el) { el.textContent = 'Settings saved. Close this tab and refresh the task pane.'; }
+    if (el) { el.textContent = 'Settings saved. Returning to task pane...'; }
+    var qs = '?api_base=' + encodeURIComponent(apiBase) + '&company_id=' + encodeURIComponent(companyId) + '&user_id=' + encodeURIComponent(userId);
+    window.location.href = 'taskpane.html' + qs;
   } catch (e) {
     var el = document.getElementById('saved');
     if (el) { el.textContent = 'Error saving: ' + e.message; el.style.color = '#c00'; }
