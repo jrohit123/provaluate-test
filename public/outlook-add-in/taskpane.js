@@ -132,8 +132,13 @@ function runAssess() {
   if (btn) btn.disabled = true;
   setStatus('Getting token and assessing...');
   getAccessToken()
+    .catch(function (err) {
+      if (err && err.message && err.message.indexOf('SSO not supported') !== -1) return null;
+      throw err;
+    })
     .then(function (token) {
-      setStatus('Analyzing resumes...');
+      if (token === null) setStatus('Using saved credentials. Analyzing resumes...');
+      else setStatus('Analyzing resumes...');
       var url = apiBase.replace(/\/$/, '') + '/api/outlook/fetch-and-analyze';
       var body = {
         messageId: messageId,
@@ -141,7 +146,7 @@ function runAssess() {
         criteria_id: criteriaId || null,
         company_id: companyId,
         user_id: userId,
-        accessToken: token,
+        accessToken: token || null,
         subject: getSubject(),
         receivedDateTime: getReceivedDateTime()
       };
