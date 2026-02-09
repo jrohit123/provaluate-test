@@ -15,6 +15,7 @@ export const API_CONFIG = {
     GENERATE_QUESTION: '/api/generate-question',
     SUBMIT_ANSWER: '/api/submit-answer',
     UPLOAD_QUESTION_VIDEO: '/api/upload-question-video',
+    UPLOAD_QUESTION_MEDIA: '/api/upload-question-media',
     
     // Parameter Management
     CUSTOM_PARAMETERS: '/api/custom-parameters',

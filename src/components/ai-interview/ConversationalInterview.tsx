@@ -294,6 +294,10 @@ const ConversationalInterview = () => {
   const finishInterviewRef = useRef<(() => Promise<void>) | null>(null);
   const speakWithAIRef = useRef<((text: string) => void) | null>(null);
   const ttsFallbackToastShownRef = useRef(false);
+  /** Total questions (from submit-answer response) to detect last question and use full submit flow */
+  const totalQuestionsRef = useRef<number | null>(null);
+  /** Promise for previous question's media upload; awaited in generateNextQuestion before TTS */
+  const pendingMediaUploadPromiseRef = useRef<Promise<void> | null>(null);
 
   const terminateInterview = useCallback(async (reason) => {
     // Use consistent toast ID to prevent duplicate messages
@@ -315,6 +319,17 @@ const ConversationalInterview = () => {
 
     try {
       console.log('🚫 Terminating interview due to:', reason);
+      if (pendingMediaUploadPromiseRef.current) {
+        try {
+          toast.loading('Saving your responses...', { id: 'terminate-upload' });
+          await pendingMediaUploadPromiseRef.current;
+          toast.dismiss('terminate-upload');
+        } catch (e) {
+          console.warn('⚠️ Pending media upload failed:', e);
+          toast.dismiss('terminate-upload');
+        }
+        pendingMediaUploadPromiseRef.current = null;
+      }
       const response = await apiCall(`${API_CONFIG.ENDPOINTS.TERMINATE_INTERVIEW}/${interviewData.interviewId}`, {
         method: 'POST',
         headers: {
@@ -408,13 +423,28 @@ const ConversationalInterview = () => {
   const accumulatedTranscriptRef = useRef(''); // Permanent storage for the current question
   const watchdogTimerRef = useRef<NodeJS.Timeout | null>(null);
   
-  // OpenAI Whisper API refs (for Chrome)
+  // Deepgram Live API refs (for Chrome - real-time transcription)
+  const deepgramWsRef = useRef<WebSocket | null>(null);
+  const deepgramAudioContextRef = useRef<AudioContext | null>(null);
+  const deepgramScriptNodeRef = useRef<ScriptProcessorNode | null>(null);
+  // OpenAI Realtime API refs (kept for cleanup; Chrome now uses Deepgram)
+  const openAIRealtimeWsRef = useRef<WebSocket | null>(null);
+  const openAIRealtimeAudioContextRef = useRef<AudioContext | null>(null);
+  const openAIRealtimeScriptNodeRef = useRef<ScriptProcessorNode | null>(null);
   const openAIAudioRecorderRef = useRef<any>(null);
   const openAIAudioStreamRef = useRef<MediaStream | null>(null);
   const openAITranscriptionIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const openAIAudioChunksRef = useRef<Blob[]>([]);
-  const transcriptionModeRef = useRef<'web-speech' | 'openai' | null>(null);
+  // AssemblyAI Streaming refs (Chrome - real-time transcription)
+  const assemblyAIWsRef = useRef<WebSocket | null>(null);
+  const assemblyAIAudioContextRef = useRef<AudioContext | null>(null);
+  const assemblyAIScriptNodeRef = useRef<ScriptProcessorNode | null>(null);
+  const assemblyAIAudioStreamRef = useRef<MediaStream | null>(null);
+  const assemblyAICurrentPartialRef = useRef<string>(''); // in-progress turn for live display
+  const transcriptionModeRef = useRef<'web-speech' | 'deepgram' | 'openai' | 'assemblyai' | null>(null);
   const lastTranscriptionTimeRef = useRef<number>(0);
+  const initOpenAIRealtimeSpeechRef = useRef<() => Promise<void>>(async () => {});
+  const initAssemblyAIRealtimeSpeechRef = useRef<() => Promise<void>>(async () => {});
 
   // Deduplication function to remove overlapping text
   const cleanTranscript = useCallback((newText: string, existingText: string): string => {
@@ -462,7 +492,350 @@ const ConversationalInterview = () => {
     }
   };
 
-  // OpenAI Whisper API Implementation (for Chrome) - Optimized
+  // Convert Float32Array to 16-bit PCM and then to base64 (for OpenAI Realtime API)
+  const floatTo16BitPCMBase64 = (float32Array: Float32Array): string => {
+    const pcm = new Int16Array(float32Array.length);
+    for (let i = 0; i < float32Array.length; i++) {
+      const s = Math.max(-1, Math.min(1, float32Array[i]));
+      pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    const uint8 = new Uint8Array(pcm.buffer);
+    let binary = '';
+    for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+    return btoa(binary);
+  };
+
+  // Convert Float32Array to 16-bit PCM ArrayBuffer (for Deepgram binary send)
+  const floatTo16BitPCM = (float32Array: Float32Array): ArrayBuffer => {
+    const pcm = new Int16Array(float32Array.length);
+    for (let i = 0; i < float32Array.length; i++) {
+      const s = Math.max(-1, Math.min(1, float32Array[i]));
+      pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    return pcm.buffer;
+  };
+
+  // Deepgram Live API (Chrome primary) — on failure/limit falls back to OpenAI then AssemblyAI
+  const initDeepgramRealtimeSpeech = useCallback(async () => {
+    if (transcriptionModeRef.current !== 'deepgram') return;
+    const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
+    if (!apiKey) {
+      toast.error('Deepgram API key not configured.');
+      transcriptionModeRef.current = 'openai';
+      await initOpenAIRealtimeSpeech();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: 16000, channelCount: 1 } });
+      openAIAudioStreamRef.current = stream;
+      const params = new URLSearchParams({ encoding: 'linear16', sample_rate: '16000', channels: '1', language: 'en', smart_format: 'true', model: 'nova-2' });
+      const ws = new WebSocket(`wss://api.deepgram.com/v1/listen?${params.toString()}`, ['token', apiKey]);
+      deepgramWsRef.current = ws;
+      ws.onopen = () => { console.log('✅ [DEEPGRAM] WebSocket connected'); };
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'Results' && data.channel?.alternatives?.[0]) {
+            const transcript = (data.channel.alternatives[0].transcript || '').trim();
+            if (transcript && webSpeechActiveRef.current && transcriptionModeRef.current === 'deepgram') {
+              const isFinal = data.is_final === true || data.speech_final === true;
+              if (isFinal) accumulatedTranscriptRef.current = cleanTranscript(transcript, accumulatedTranscriptRef.current);
+              else accumulatedTranscriptRef.current = (accumulatedTranscriptRef.current + (accumulatedTranscriptRef.current ? ' ' : '') + transcript).trim();
+              setTranscript(accumulatedTranscriptRef.current.trim());
+            }
+          }
+        } catch (e) {}
+      };
+      const tryFallbackToOpenAI = () => {
+        if (transcriptionModeRef.current !== 'deepgram') return;
+        if (openAIAudioStreamRef.current) {
+          openAIAudioStreamRef.current.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+          openAIAudioStreamRef.current = null;
+        }
+        if (deepgramWsRef.current) { try { deepgramWsRef.current.close(); } catch (_) {} deepgramWsRef.current = null; }
+        if (deepgramScriptNodeRef.current) { try { deepgramScriptNodeRef.current.disconnect(); } catch (_) {} deepgramScriptNodeRef.current = null; }
+        if (deepgramAudioContextRef.current) { deepgramAudioContextRef.current.close().catch(() => {}); deepgramAudioContextRef.current = null; }
+        transcriptionModeRef.current = 'openai';
+        console.log('🔄 [DEEPGRAM] Fallback to OpenAI Realtime');
+        initOpenAIRealtimeSpeechRef.current?.();
+      };
+      ws.onerror = () => {
+        toast.error('Deepgram connection error — switching to OpenAI.');
+        tryFallbackToOpenAI();
+      };
+      ws.onclose = (ev) => {
+        if (ev.code !== 1000 && transcriptionModeRef.current === 'deepgram') tryFallbackToOpenAI();
+      };
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      deepgramAudioContextRef.current = audioContext;
+      const source = audioContext.createMediaStreamSource(stream);
+      const scriptNode = audioContext.createScriptProcessor(4096, 1, 1);
+      deepgramScriptNodeRef.current = scriptNode;
+      scriptNode.onaudioprocess = (e) => { if (deepgramWsRef.current?.readyState === WebSocket.OPEN && webSpeechActiveRef.current) { try { deepgramWsRef.current.send(floatTo16BitPCM(e.inputBuffer.getChannelData(0))); } catch (_) {} } };
+      source.connect(scriptNode);
+      const silentGain = audioContext.createGain();
+      silentGain.gain.value = 0;
+      scriptNode.connect(silentGain);
+      silentGain.connect(audioContext.destination);
+    } catch (error: any) {
+      toast.error('Failed to start Deepgram — trying OpenAI.');
+      webSpeechActiveRef.current = true;
+      transcriptionModeRef.current = 'openai';
+      await initOpenAIRealtimeSpeechRef.current?.();
+    }
+  }, [cleanTranscript]);
+
+  // OpenAI Realtime API (for Chrome) - Real-time streaming transcription
+  const initOpenAIRealtimeSpeech = useCallback(async () => {
+    if (transcriptionModeRef.current !== 'openai') return;
+    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+    if (!apiKey) {
+      toast.error('OpenAI API key not configured.');
+      return;
+    }
+    console.log('🎯 [REALTIME] Initializing OpenAI Realtime API for Chrome...');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 24000,
+          channelCount: 1
+        }
+      });
+      openAIAudioStreamRef.current = stream;
+
+      const clientSecretRes = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          session: {
+            type: 'transcription',
+            audio: {
+              input: {
+                format: { type: 'audio/pcm', rate: 24000 },
+                transcription: { model: 'gpt-4o-transcribe', language: 'en' },
+                turn_detection: { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 300 }
+              }
+            }
+          }
+        })
+      });
+      if (!clientSecretRes.ok) {
+        const errText = await clientSecretRes.text();
+        console.error('❌ [REALTIME] Client secret failed:', clientSecretRes.status, errText);
+        toast.error('Failed to create transcription session. Check API key and Realtime access.');
+        return;
+      }
+      const { value: ephemeralKey } = await clientSecretRes.json();
+      if (!ephemeralKey) {
+        console.error('❌ [REALTIME] No ephemeral key in response');
+        toast.error('Failed to create transcription session.');
+        return;
+      }
+
+      const ws = new WebSocket('wss://api.openai.com/v1/realtime', ['realtime', `openai-insecure-api-key.${ephemeralKey}`]);
+      openAIRealtimeWsRef.current = ws;
+
+      const tryFallbackToAssemblyAI = () => {
+        if (transcriptionModeRef.current !== 'openai') return;
+        if (openAIAudioStreamRef.current) {
+          openAIAudioStreamRef.current.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+          openAIAudioStreamRef.current = null;
+        }
+        if (openAIRealtimeWsRef.current) { try { openAIRealtimeWsRef.current.close(); } catch (_) {} openAIRealtimeWsRef.current = null; }
+        if (openAIRealtimeScriptNodeRef.current) { try { openAIRealtimeScriptNodeRef.current.disconnect(); } catch (_) {} openAIRealtimeScriptNodeRef.current = null; }
+        if (openAIRealtimeAudioContextRef.current) { openAIRealtimeAudioContextRef.current.close().catch(() => {}); openAIRealtimeAudioContextRef.current = null; }
+        transcriptionModeRef.current = 'assemblyai';
+        console.log('🔄 [OPENAI] Fallback to AssemblyAI');
+        initAssemblyAIRealtimeSpeechRef.current?.();
+      };
+
+      ws.onopen = () => {
+        console.log('✅ [REALTIME] WebSocket connected (transcription session from client_secret)');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const t = data.type;
+          // Use only 'completed' for transcript — deltas have no word boundaries and caused duplicate + no-space text
+          if (t === 'conversation.item.input_audio_transcription.completed' && data.transcript) {
+            const text = String(data.transcript).trim();
+            if (text && webSpeechActiveRef.current && transcriptionModeRef.current === 'openai') {
+              accumulatedTranscriptRef.current = cleanTranscript(text, accumulatedTranscriptRef.current);
+              setTranscript(accumulatedTranscriptRef.current.trim());
+            }
+          } else if (t === 'error') {
+            console.error('❌ [REALTIME] Server error:', data);
+            tryFallbackToAssemblyAI();
+          }
+        } catch (e) {
+          console.warn('⚠️ [REALTIME] Parse message error:', e);
+        }
+      };
+
+      ws.onerror = () => {
+        console.error('❌ [REALTIME] WebSocket error');
+        toast.error('OpenAI Realtime error — switching to AssemblyAI.');
+        tryFallbackToAssemblyAI();
+      };
+      ws.onclose = (ev) => {
+        console.log('🔌 [REALTIME] WebSocket closed');
+        if (ev.code !== 1000 && transcriptionModeRef.current === 'openai') tryFallbackToAssemblyAI();
+      };
+
+      const audioContext = new AudioContext({ sampleRate: 24000 });
+      openAIRealtimeAudioContextRef.current = audioContext;
+      const source = audioContext.createMediaStreamSource(stream);
+      const bufferSize = 4096;
+      const scriptNode = audioContext.createScriptProcessor(bufferSize, 1, 1);
+      openAIRealtimeScriptNodeRef.current = scriptNode;
+
+      scriptNode.onaudioprocess = (e) => {
+        if (transcriptionModeRef.current !== 'openai' || !webSpeechActiveRef.current) return;
+        const ws = openAIRealtimeWsRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        const input = e.inputBuffer.getChannelData(0);
+        const base64 = floatTo16BitPCMBase64(input);
+        try {
+          ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: base64 }));
+        } catch (err) {
+          console.warn('⚠️ [REALTIME] Send audio error:', err);
+        }
+      };
+      source.connect(scriptNode);
+      const silentGain = audioContext.createGain();
+      silentGain.gain.value = 0;
+      scriptNode.connect(silentGain);
+      silentGain.connect(audioContext.destination);
+      console.log('🎯 [REALTIME] Microphone streaming to Realtime API');
+    } catch (error: any) {
+      console.error('❌ [REALTIME] Failed to initialize:', error);
+      toast.error('OpenAI Realtime failed — trying AssemblyAI.');
+      webSpeechActiveRef.current = true;
+      transcriptionModeRef.current = 'assemblyai';
+      await initAssemblyAIRealtimeSpeechRef.current?.();
+    }
+  }, [cleanTranscript]);
+
+  // AssemblyAI Streaming API (for Chrome) - Token from backend to avoid CORS
+  const initAssemblyAIRealtimeSpeech = useCallback(async () => {
+    if (transcriptionModeRef.current !== 'assemblyai') return;
+    const pythonUrl = import.meta.env.VITE_PYTHON_URL || 'http://localhost:5003';
+    console.log('🎯 [ASSEMBLYAI] Initializing streaming transcription for Chrome...');
+    try {
+      const tokenRes = await fetch(`${pythonUrl}/api/assemblyai-streaming-token`);
+      if (!tokenRes.ok) {
+        const errData = await tokenRes.json().catch(() => ({}));
+        console.error('❌ [ASSEMBLYAI] Token failed:', tokenRes.status, errData);
+        toast.error(errData?.error || 'Failed to get AssemblyAI token. Set ASSEMBLYAI_API_KEY on server.');
+        return;
+      }
+      const { token } = await tokenRes.json();
+      if (!token) {
+        toast.error('Failed to get AssemblyAI streaming token.');
+        return;
+      }
+      const params = new URLSearchParams({
+        token,
+        sample_rate: '16000',
+        encoding: 'pcm_s16le',
+        min_end_of_turn_silence_when_confident: '300',
+        max_turn_silence: '600'
+      });
+      const ws = new WebSocket(`wss://streaming.assemblyai.com/v3/ws?${params.toString()}`);
+      assemblyAIWsRef.current = ws;
+
+      ws.onopen = () => {
+        assemblyAICurrentPartialRef.current = '';
+        console.log('✅ [ASSEMBLYAI] WebSocket connected');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const msgType = data.message_type ?? data.type;
+          if (msgType !== 'Turn' || data.transcript == null || !webSpeechActiveRef.current || transcriptionModeRef.current !== 'assemblyai') return;
+          const text = String(data.transcript).trim();
+          if (!text) return;
+          if (data.end_of_turn === true) {
+            accumulatedTranscriptRef.current = cleanTranscript(text, accumulatedTranscriptRef.current);
+            assemblyAICurrentPartialRef.current = '';
+            setTranscript(accumulatedTranscriptRef.current.trim());
+          } else {
+            assemblyAICurrentPartialRef.current = text;
+            const base = accumulatedTranscriptRef.current.trim();
+            setTranscript(base ? `${base} ${text}` : text);
+          }
+        } catch (e) {
+          console.warn('⚠️ [ASSEMBLYAI] Parse message error:', e);
+        }
+      };
+
+      ws.onerror = () => {
+        console.error('❌ [ASSEMBLYAI] WebSocket error');
+        toast.error('AssemblyAI transcription connection error.');
+      };
+      ws.onclose = () => {
+        console.log('🔌 [ASSEMBLYAI] WebSocket closed');
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 16000,
+          channelCount: 1
+        }
+      });
+      assemblyAIAudioStreamRef.current = stream;
+
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      assemblyAIAudioContextRef.current = audioContext;
+      const source = audioContext.createMediaStreamSource(stream);
+      const bufferSize = 4096;
+      const scriptNode = audioContext.createScriptProcessor(bufferSize, 1, 1);
+      assemblyAIScriptNodeRef.current = scriptNode;
+
+      scriptNode.onaudioprocess = (e) => {
+        if (transcriptionModeRef.current !== 'assemblyai' || !webSpeechActiveRef.current) return;
+        const ws = assemblyAIWsRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        try {
+          ws.send(floatTo16BitPCM(e.inputBuffer.getChannelData(0)));
+        } catch (err) {
+          console.warn('⚠️ [ASSEMBLYAI] Send audio error:', err);
+        }
+      };
+      source.connect(scriptNode);
+      const silentGain = audioContext.createGain();
+      silentGain.gain.value = 0;
+      scriptNode.connect(silentGain);
+      silentGain.connect(audioContext.destination);
+      console.log('🎯 [ASSEMBLYAI] Microphone streaming to AssemblyAI');
+    } catch (error: any) {
+      console.error('❌ [ASSEMBLYAI] Failed to initialize:', error);
+      toast.error('Failed to start AssemblyAI transcription. Check microphone and API key.');
+      webSpeechActiveRef.current = false;
+      if (assemblyAIWsRef.current) {
+        assemblyAIWsRef.current.close();
+        assemblyAIWsRef.current = null;
+      }
+    }
+  }, [cleanTranscript]);
+
+  useEffect(() => {
+    initOpenAIRealtimeSpeechRef.current = initOpenAIRealtimeSpeech;
+    initAssemblyAIRealtimeSpeechRef.current = initAssemblyAIRealtimeSpeech;
+  }, [initOpenAIRealtimeSpeech, initAssemblyAIRealtimeSpeech]);
+
+  // OpenAI Whisper API Implementation (for Chrome) - Fallback chunk-based
   const initOpenAISpeech = useCallback(async () => {
     // ✅ Safety check: Only initialize if mode is set to OpenAI
     if (transcriptionModeRef.current !== 'openai') {
@@ -823,12 +1196,11 @@ const ConversationalInterview = () => {
     const browser = detectBrowser();
     webSpeechActiveRef.current = true;
 
-    // ✅ CHROME: Use OpenAI Whisper API
+    // ✅ CHROME: Deepgram first → OpenAI fallback → AssemblyAI final fallback
     if (browser.isChrome) {
-      console.log('🌐 [BROWSER] ✅ Detected Chrome - using OpenAI Whisper API');
-      transcriptionModeRef.current = 'openai';
+      console.log('🌐 [BROWSER] ✅ Detected Chrome - using Deepgram (→ OpenAI → AssemblyAI fallback)');
+      transcriptionModeRef.current = 'deepgram';
       
-      // Ensure Web Speech is not running
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
@@ -838,7 +1210,7 @@ const ConversationalInterview = () => {
         }
       }
       
-      await initOpenAISpeech();
+      await initDeepgramRealtimeSpeech();
       return;
     }
 
@@ -847,7 +1219,28 @@ const ConversationalInterview = () => {
       console.log('🌐 [BROWSER] ✅ Detected Edge - using Web Speech API');
       transcriptionModeRef.current = 'web-speech';
       
-      // Ensure OpenAI is not running
+      // Ensure Deepgram and OpenAI are not running
+      if (deepgramWsRef.current) {
+        try { deepgramWsRef.current.close(); } catch (e) {}
+        deepgramWsRef.current = null;
+      }
+      if (deepgramScriptNodeRef.current) {
+        try { deepgramScriptNodeRef.current.disconnect(); } catch (_) {}
+        deepgramScriptNodeRef.current = null;
+      }
+      if (deepgramAudioContextRef.current) {
+        deepgramAudioContextRef.current.close().catch(() => {});
+        deepgramAudioContextRef.current = null;
+      }
+      if (openAIRealtimeWsRef.current) {
+        try { openAIRealtimeWsRef.current.close(); } catch (e) {}
+        openAIRealtimeWsRef.current = null;
+      }
+      if (openAIRealtimeAudioContextRef.current) {
+        openAIRealtimeAudioContextRef.current.close().catch(() => {});
+        openAIRealtimeAudioContextRef.current = null;
+      }
+      openAIRealtimeScriptNodeRef.current = null;
       if (openAIAudioRecorderRef.current) {
         try {
           openAIAudioRecorderRef.current.stopRecording();
@@ -859,6 +1252,22 @@ const ConversationalInterview = () => {
       if (openAIAudioStreamRef.current) {
         openAIAudioStreamRef.current.getTracks().forEach(track => track.stop());
         openAIAudioStreamRef.current = null;
+      }
+      if (assemblyAIWsRef.current) {
+        try { assemblyAIWsRef.current.close(); } catch (e) {}
+        assemblyAIWsRef.current = null;
+      }
+      if (assemblyAIScriptNodeRef.current) {
+        try { assemblyAIScriptNodeRef.current.disconnect(); } catch (_) {}
+        assemblyAIScriptNodeRef.current = null;
+      }
+      if (assemblyAIAudioContextRef.current) {
+        assemblyAIAudioContextRef.current.close().catch(() => {});
+        assemblyAIAudioContextRef.current = null;
+      }
+      if (assemblyAIAudioStreamRef.current) {
+        assemblyAIAudioStreamRef.current.getTracks().forEach(track => track.stop());
+        assemblyAIAudioStreamRef.current = null;
       }
       
       initWebSpeech();
@@ -879,7 +1288,7 @@ const ConversationalInterview = () => {
       return;
     }
 
-    // ⚠️ FALLBACK: Unknown browser - try Web Speech first, then OpenAI
+    // ⚠️ FALLBACK: Unknown browser - try Web Speech first, then AssemblyAI
     console.log('🌐 [BROWSER] ⚠️ Unknown browser - trying Web Speech API first');
     transcriptionModeRef.current = 'web-speech';
     initWebSpeech();
@@ -890,25 +1299,87 @@ const ConversationalInterview = () => {
         console.log('✅ Web Speech started successfully (fallback)');
       } catch (error: any) {
         if (!error.message?.includes('already started')) {
-          console.error('❌ Failed to start Web Speech, trying OpenAI...');
-          transcriptionModeRef.current = 'openai';
-          await initOpenAISpeech();
+          console.error('❌ Failed to start Web Speech, trying AssemblyAI...');
+          transcriptionModeRef.current = 'assemblyai';
+          await initAssemblyAIRealtimeSpeech();
         }
       }
     } else {
-      // No Web Speech API, try OpenAI
-      console.log('⚠️ Web Speech API not available, trying OpenAI...');
-      transcriptionModeRef.current = 'openai';
-      await initOpenAISpeech();
+      console.log('⚠️ Web Speech API not available, trying AssemblyAI...');
+      transcriptionModeRef.current = 'assemblyai';
+      await initAssemblyAIRealtimeSpeech();
     }
-  }, [initWebSpeech, initOpenAISpeech, detectBrowser]);
+  }, [initWebSpeech, initDeepgramRealtimeSpeech, initOpenAIRealtimeSpeech, initAssemblyAIRealtimeSpeech, detectBrowser]);
 
   const stopWebSpeech = useCallback(() => {
     webSpeechActiveRef.current = false;
     
     // Stop based on current transcription mode
-    if (transcriptionModeRef.current === 'openai') {
-      // Stop OpenAI transcription
+    if (transcriptionModeRef.current === 'deepgram') {
+      if (deepgramWsRef.current) {
+        try { deepgramWsRef.current.close(); } catch (e) {}
+        deepgramWsRef.current = null;
+      }
+      if (deepgramScriptNodeRef.current) {
+        try { deepgramScriptNodeRef.current.disconnect(); } catch (_) {}
+        deepgramScriptNodeRef.current = null;
+      }
+      if (deepgramAudioContextRef.current) {
+        deepgramAudioContextRef.current.close().catch(() => {});
+        deepgramAudioContextRef.current = null;
+      }
+      if (openAIAudioStreamRef.current) {
+        openAIAudioStreamRef.current.getTracks().forEach(track => track.stop());
+        openAIAudioStreamRef.current = null;
+      }
+      console.log('✅ Deepgram transcription stopped');
+    } else if (transcriptionModeRef.current === 'assemblyai') {
+      assemblyAICurrentPartialRef.current = '';
+      if (assemblyAIWsRef.current) {
+        try { assemblyAIWsRef.current.close(); } catch (e) {}
+        assemblyAIWsRef.current = null;
+      }
+      if (assemblyAIScriptNodeRef.current) {
+        try { assemblyAIScriptNodeRef.current.disconnect(); } catch (_) {}
+        assemblyAIScriptNodeRef.current = null;
+      }
+      if (assemblyAIAudioContextRef.current) {
+        assemblyAIAudioContextRef.current.close().catch(() => {});
+        assemblyAIAudioContextRef.current = null;
+      }
+      if (assemblyAIAudioStreamRef.current) {
+        assemblyAIAudioStreamRef.current.getTracks().forEach(track => track.stop());
+        assemblyAIAudioStreamRef.current = null;
+      }
+      console.log('✅ AssemblyAI transcription stopped');
+    } else if (transcriptionModeRef.current === 'openai') {
+      // Stop Deepgram Live (Chrome)
+      if (deepgramWsRef.current) {
+        try { deepgramWsRef.current.close(); } catch (e) {}
+        deepgramWsRef.current = null;
+      }
+      if (deepgramScriptNodeRef.current) {
+        try { deepgramScriptNodeRef.current.disconnect(); } catch (_) {}
+        deepgramScriptNodeRef.current = null;
+      }
+      if (deepgramAudioContextRef.current) {
+        deepgramAudioContextRef.current.close().catch(() => {});
+        deepgramAudioContextRef.current = null;
+      }
+      // OpenAI Realtime (commented out; kept for cleanup if re-enabled)
+      if (openAIRealtimeWsRef.current) {
+        try { openAIRealtimeWsRef.current.close(); } catch (e) {}
+        openAIRealtimeWsRef.current = null;
+      }
+      if (openAIRealtimeScriptNodeRef.current) {
+        try { openAIRealtimeScriptNodeRef.current.disconnect(); } catch (_) {}
+        openAIRealtimeScriptNodeRef.current = null;
+      }
+      if (openAIRealtimeAudioContextRef.current) {
+        openAIRealtimeAudioContextRef.current.close().catch(() => {});
+        openAIRealtimeAudioContextRef.current = null;
+      }
+      // Legacy Whisper recorder (if ever used as fallback)
       if (openAIAudioRecorderRef.current) {
         try {
           openAIAudioRecorderRef.current.stopRecording(() => {
@@ -934,7 +1405,7 @@ const ConversationalInterview = () => {
 
       // Clear audio chunks
       openAIAudioChunksRef.current = [];
-      console.log('✅ OpenAI transcription stopped');
+      console.log('✅ OpenAI Realtime transcription stopped');
     } else {
       // Stop Web Speech API (Edge)
       // Clear watchdog timer
@@ -1374,6 +1845,19 @@ const ConversationalInterview = () => {
       // Reset camera permissions flag
       setHasRequestedCameraPermissions(false);
       
+      // Await any pending question media upload before finishing
+      if (pendingMediaUploadPromiseRef.current) {
+        try {
+          toast.loading('Uploading your responses...', { id: 'finish-upload' });
+          await pendingMediaUploadPromiseRef.current;
+          toast.dismiss('finish-upload');
+        } catch (e) {
+          console.warn('⚠️ Pending media upload failed:', e);
+          toast.dismiss('finish-upload');
+        }
+        pendingMediaUploadPromiseRef.current = null;
+      }
+      
       const response = await apiCall(`${API_CONFIG.ENDPOINTS.FINISH_INTERVIEW}/${interviewData.interviewId}`, {
         method: 'POST',
         headers: {
@@ -1517,7 +2001,33 @@ const ConversationalInterview = () => {
           recognitionRef.current = null;
         }
         
-        // Clear OpenAI refs (Chrome)
+        // Clear Deepgram refs (Chrome)
+        if (deepgramWsRef.current) {
+          try { deepgramWsRef.current.close(); } catch (e) {}
+          deepgramWsRef.current = null;
+        }
+        if (deepgramScriptNodeRef.current) {
+          try { deepgramScriptNodeRef.current.disconnect(); } catch (_) {}
+          deepgramScriptNodeRef.current = null;
+        }
+        if (deepgramAudioContextRef.current) {
+          deepgramAudioContextRef.current.close().catch(() => {});
+          deepgramAudioContextRef.current = null;
+        }
+        // Clear OpenAI Realtime refs (if re-enabled later)
+        if (openAIRealtimeWsRef.current) {
+          try { openAIRealtimeWsRef.current.close(); } catch (e) {}
+          openAIRealtimeWsRef.current = null;
+        }
+        if (openAIRealtimeScriptNodeRef.current) {
+          try { openAIRealtimeScriptNodeRef.current.disconnect(); } catch (_) {}
+          openAIRealtimeScriptNodeRef.current = null;
+        }
+        if (openAIRealtimeAudioContextRef.current) {
+          openAIRealtimeAudioContextRef.current.close().catch(() => {});
+          openAIRealtimeAudioContextRef.current = null;
+        }
+        // Clear legacy Whisper refs (Chrome fallback)
         if (openAIAudioRecorderRef.current) {
           try {
             openAIAudioRecorderRef.current.stopRecording();
@@ -1535,6 +2045,24 @@ const ConversationalInterview = () => {
           openAITranscriptionIntervalRef.current = null;
         }
         openAIAudioChunksRef.current = [];
+        // Clear AssemblyAI refs (Chrome)
+        assemblyAICurrentPartialRef.current = '';
+        if (assemblyAIWsRef.current) {
+          try { assemblyAIWsRef.current.close(); } catch (e) {}
+          assemblyAIWsRef.current = null;
+        }
+        if (assemblyAIScriptNodeRef.current) {
+          try { assemblyAIScriptNodeRef.current.disconnect(); } catch (_) {}
+          assemblyAIScriptNodeRef.current = null;
+        }
+        if (assemblyAIAudioContextRef.current) {
+          assemblyAIAudioContextRef.current.close().catch(() => {});
+          assemblyAIAudioContextRef.current = null;
+        }
+        if (assemblyAIAudioStreamRef.current) {
+          assemblyAIAudioStreamRef.current.getTracks().forEach(track => track.stop());
+          assemblyAIAudioStreamRef.current = null;
+        }
         
         webSpeechActiveRef.current = false;
         transcriptionModeRef.current = null;
@@ -1605,6 +2133,17 @@ const ConversationalInterview = () => {
         console.log('🎤 Question ID:', questionId, 'Already spoken:', spokenQuestions.has(questionId));
         console.log('🎤 Clean question text:', cleanQuestionText);
         
+        // Await previous question's media upload (between "Generating your next question" and before reading ends)
+        if (pendingMediaUploadPromiseRef.current) {
+          try {
+            await pendingMediaUploadPromiseRef.current;
+            console.log('✅ Previous question media upload completed');
+          } catch (e) {
+            console.warn('⚠️ Previous question media upload failed:', e);
+          }
+          pendingMediaUploadPromiseRef.current = null;
+        }
+        
         // Use conversational transition phrase from API or fallback (do not display - question text only)
         const transitionPhrase = data.transition_phrase || FALLBACK_PHRASES.transition();
         
@@ -1672,6 +2211,32 @@ const ConversationalInterview = () => {
       setIsGeneratingQuestion(false);
     }
   }, [interviewData.interviewId, currentQuestionIndex, isGeneratingQuestion]);
+
+  /** Upload question video+audio to /upload-question-media via FormData (same as previous implementation; used between "Generating your next question" and before TTS ends). */
+  const uploadQuestionMedia = useCallback(async (params: {
+    interviewId: string;
+    questionId: string;
+    questionOrder: number;
+    videoBlob: Blob | null;
+    audioBlob: Blob | null;
+    duration: number;
+  }) => {
+    const { interviewId, questionId, questionOrder, videoBlob, audioBlob, duration } = params;
+    if (!videoBlob && !audioBlob) return;
+    const formData = new FormData();
+    formData.append('interview_id', interviewId);
+    formData.append('question_id', questionId);
+    formData.append('question_order', String(questionOrder));
+    formData.append('duration', String(duration));
+    formData.append('video_format', 'webm');
+    if (videoBlob) formData.append('video_file', videoBlob, `question_${questionOrder}.webm`);
+    if (audioBlob) formData.append('audio_file', audioBlob, `question_${questionOrder}_audio.wav`);
+    const res = await apiCall(API_CONFIG.ENDPOINTS.UPLOAD_QUESTION_MEDIA, {
+      method: 'POST',
+      body: formData,
+    }, API_CONFIG.TIMEOUTS.VIDEO_UPLOAD);
+    if (!res.ok) throw new Error('Upload question media failed');
+  }, []);
 
      const handleSubmitAnswer = useCallback(async () => {
        console.log('🔍 Submit button clicked!');
@@ -1741,14 +2306,16 @@ const ConversationalInterview = () => {
        dispatch(interviewActions.setSubmitting(true));
        setSubmissionStatus('uploading');
        
+       const isLastQuestion = totalQuestionsRef.current != null && (currentQuestionIndex + 1) >= totalQuestionsRef.current;
+       
        try {
-          // Upload question video if available
-           let questionVideoUrl = null;
-           console.log('🔍 Checking for question video blob:', questionVideoBlob);
+          // Last question: upload video first (current flow). Non-last: transcript-only, media uploaded later.
+           let questionVideoUrl: string | null = null;
+           if (isLastQuestion && questionVideoBlob) {
+           console.log('🔍 [Last question] Uploading question video...');
            console.log('🔍 Video blob size:', questionVideoBlob?.size);
            console.log('🔍 Video blob type:', questionVideoBlob?.type);
            
-           if (questionVideoBlob) {
              try {
                console.log('📤 Uploading question video...');
                // Keep uploading status for video upload
@@ -1795,7 +2362,7 @@ const ConversationalInterview = () => {
              }
            }
            
-           // Submit answer with cleaned transcript (from Web Speech)
+           // Submit answer: last question sends media; non-last sends transcript only
            console.log('🔄 Starting answer submission...');
            setSubmissionStatus('processing');
            const answerController = new AbortController();
@@ -1837,9 +2404,9 @@ const ConversationalInterview = () => {
              console.log('🔍 question_order:', currentQuestionIndex);
              console.log('🔍 transcript length:', finalTranscript.length);
 
-            // Prepare payload including audio blob (base64) and skip_transcription flag
+            // Last question: include audio + video URL. Non-last: transcript only (media uploaded later).
             let audioDataBase64: string | null = null;
-            if (audioBlob) {
+            if (isLastQuestion && audioBlob) {
               audioDataBase64 = await new Promise<string>((resolve, reject) => {
                 try {
                   const r = new FileReader();
@@ -1852,19 +2419,23 @@ const ConversationalInterview = () => {
               });
             }
 
+            const submitPayload: Record<string, unknown> = {
+              interview_id: interviewData.interviewId,
+              question_id: questionId,
+              question_order: currentQuestionIndex,
+              transcript: finalTranscript,
+              ...(currentQuestion?.requires_written_answer === true ? { written_answer: (writtenAnswer || '').trim() } : (writtenAnswer?.trim() ? { written_answer: writtenAnswer.trim() } : {})),
+            };
+            if (isLastQuestion) {
+              submitPayload.audio_data = audioDataBase64 ?? undefined;
+              submitPayload.skip_transcription = true;
+              submitPayload.question_video_url = questionVideoUrl ?? undefined;
+            }
+
             const response = await apiCall(API_CONFIG.ENDPOINTS.SUBMIT_ANSWER, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({
-                 interview_id: interviewData.interviewId,
-                 question_id: questionId,
-                 question_order: currentQuestionIndex,
-                 transcript: finalTranscript, // Use final transcript
-                 ...(currentQuestion?.requires_written_answer === true ? { written_answer: (writtenAnswer || '').trim() } : (writtenAnswer?.trim() ? { written_answer: writtenAnswer.trim() } : {})),
-                 audio_data: audioDataBase64, // Send audio for storage (not for transcription)
-                 skip_transcription: true,
-                 question_video_url: questionVideoUrl
-               }),
+               body: JSON.stringify(submitPayload),
                signal: answerController.signal
              });
              
@@ -1872,15 +2443,29 @@ const ConversationalInterview = () => {
 
              if (response.ok) {
                const result = await response.json();
+               if (result.total_questions != null) totalQuestionsRef.current = result.total_questions;
                
                // Check if interview is completed
                if (result.interview_completed) {
                  console.log('🏁 Interview completed after answer submission!');
-                 // No longer extending the interview time - let it end naturally
+                 // If we did transcript-only for last (didn't know in advance), upload this question's media first
+                 if (!isLastQuestion && (questionVideoBlob || audioBlob)) {
+                   try {
+                     await uploadQuestionMedia({
+                       interviewId: interviewData.interviewId,
+                       questionId: currentQuestion?.id || currentQuestion?.question_id || `q${currentQuestionIndex}`,
+                       questionOrder: currentQuestionIndex,
+                       videoBlob: questionVideoBlob,
+                       audioBlob: audioBlob ?? null,
+                       duration: questionVideoDuration || 0,
+                     });
+                   } catch (e) {
+                     console.warn('⚠️ Last question media upload failed:', e);
+                   }
+                 }
                  if (finishInterviewRef.current) {
                    await finishInterviewRef.current();
                  } else {
-                   console.log('⚠️ finishInterviewRef not ready, using direct call');
                    await finishInterview();
                  }
                  return;
@@ -1889,12 +2474,25 @@ const ConversationalInterview = () => {
                // "I don't know" flow: speak TTS phrase then generate simpler question (same timer)
                if (result.suggest_simpler && result.tts_phrase) {
                  console.log('🎤 Suggest simpler: speaking TTS phrase then generating simpler question');
+                 if (questionVideoBlob || audioBlob) {
+                   const qId = currentQuestion?.id || currentQuestion?.question_id || `q${currentQuestionIndex}`;
+                   pendingMediaUploadPromiseRef.current = uploadQuestionMedia({
+                     interviewId: interviewData.interviewId,
+                     questionId: qId,
+                     questionOrder: currentQuestionIndex,
+                     videoBlob: questionVideoBlob,
+                     audioBlob: audioBlob ?? null,
+                     duration: questionVideoDuration || 0,
+                   }).then(() => { pendingMediaUploadPromiseRef.current = null; }).catch((err) => {
+                     console.warn('⚠️ Background media upload failed:', err);
+                     pendingMediaUploadPromiseRef.current = null;
+                   });
+                 }
                  setQuestionVideoBlob(null);
                  setQuestionVideoDuration(0);
                  setAnswerSubmitted(true);
                  setSubmissionStatus('submitted');
                  dispatch(interviewActions.setSubmitting(false));
-                 // Show "Loading next question..." and hide old question + input boxes until new question is displayed
                  setAiPlaceholder('generating_next');
                  setAiMessage('');
                  speakWithAI(result.tts_phrase, {
@@ -1912,17 +2510,28 @@ const ConversationalInterview = () => {
                
                // Conversation history removed to reduce complexity
                
-               // Reset question video after successful submission
+               // Start background upload for this question (awaited in generateNextQuestion before TTS)
+               if (questionVideoBlob || audioBlob) {
+                 const qId = currentQuestion?.id || currentQuestion?.question_id || `q${currentQuestionIndex}`;
+                 pendingMediaUploadPromiseRef.current = uploadQuestionMedia({
+                   interviewId: interviewData.interviewId,
+                   questionId: qId,
+                   questionOrder: currentQuestionIndex,
+                   videoBlob: questionVideoBlob,
+                   audioBlob: audioBlob ?? null,
+                   duration: questionVideoDuration || 0,
+                 }).then(() => { pendingMediaUploadPromiseRef.current = null; }).catch((err) => {
+                   console.warn('⚠️ Background media upload failed:', err);
+                   pendingMediaUploadPromiseRef.current = null;
+                 });
+               }
                setQuestionVideoBlob(null);
                setQuestionVideoDuration(0);
                
-               // Set answer submitted state so button shows "Submitted" before toast
-               console.log('✅ Setting answerSubmitted to true');
                setAnswerSubmitted(true);
                setSubmissionStatus('submitted');
                dispatch(interviewActions.setSubmitting(false));
 
-               // Show toast after button has updated to "Submitted" (defer so user sees "Submitted" first)
                setTimeout(() => {
                  toast.success('Answer submitted successfully!', {
                    id: 'answer-submitted',
@@ -1930,11 +2539,9 @@ const ConversationalInterview = () => {
                  });
                }, 0);
 
-               // Show "Loading next question..." and hide question + input boxes until new question is displayed
                setAiPlaceholder('generating_next');
                setAiMessage('');
-               // Generate next question immediately (no delays for smooth transition)
-               console.log('🔄 Generating next question immediately...');
+               console.log('🔄 Generating next question (media upload running in parallel)...');
                await generateNextQuestion();
                
                // Reset submission states after next question is generated with a small delay
@@ -2002,7 +2609,7 @@ const ConversationalInterview = () => {
          dispatch(interviewActions.setSubmitting(false));
          setSubmissionStatus('idle');
        }
-     }, [transcript, audioBlob, isVideoOn, currentQuestion, currentQuestionIndex, interviewData.interviewId, spokenFeedback, generateNextQuestion, interviewData.candidateName, isSubmitting, questionVideoBlob, speakWithAI, writtenAnswer]);
+     }, [transcript, audioBlob, isVideoOn, currentQuestion, currentQuestionIndex, interviewData.interviewId, spokenFeedback, generateNextQuestion, interviewData.candidateName, isSubmitting, questionVideoBlob, speakWithAI, writtenAnswer, uploadQuestionMedia, questionVideoDuration]);
 
   // Assign refs after functions are defined
   useEffect(() => {
