@@ -232,6 +232,14 @@ function init() {
   }
 }
 
+function setRegisterLink() {
+  var settings = getSettings();
+  var apiBase = (settings.apiBase || '').replace(/\/$/, '');
+  var link = document.getElementById('register-link');
+  if (link && apiBase) link.href = apiBase + '/api/outlook/register-start';
+}
+
 Office.onReady(function () {
   init();
+  setRegisterLink();
 });
