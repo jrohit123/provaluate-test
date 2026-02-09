@@ -18,14 +18,16 @@
 </head>
 <body>
   <h2>ProValuate Outlook Add-in Settings</h2>
-  <p>Enter your backend API URL and ProValuate account details. These are stored in your browser only.</p>
-  <label for="api_base">API base URL</label>
+  <p>Enter the three values below and click Save. You'll return to the task pane and can use the add-in immediately.</p>
+  <label for="api_base">API URL</label>
   <input type="text" id="api_base" placeholder="https://devprovaluate_py.aitamate.com">
-  <span class="hint">Backend that serves /api/outlook/register and /api/outlook/fetch-and-analyze</span>
+  <span class="hint">Backend URL (e.g. https://devprovaluate_py.aitamate.com)</span>
   <label for="company_id">Company ID</label>
-  <input type="text" id="company_id" placeholder="UUID from ProValuate dashboard">
+  <input type="text" id="company_id" placeholder="From ProValuate dashboard">
+  <span class="hint">Your company ID from the ProValuate dashboard</span>
   <label for="user_id">User ID</label>
-  <input type="text" id="user_id" placeholder="UUID from ProValuate dashboard">
+  <input type="text" id="user_id" placeholder="Paste from Register / Sign in page">
+  <span class="hint">The ID shown after you click &quot;Register / Sign in for Outlook&quot; and sign in with Microsoft (not your dashboard user id)</span>
   <button id="save">Save</button>
   <div id="saved"></div>
   <script type="text/javascript" src="settings.js"></script>

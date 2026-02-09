@@ -234,9 +234,10 @@ function init() {
 
 function setRegisterLink() {
   var settings = getSettings();
-  var apiBase = (settings.apiBase || '').replace(/\/$/, '');
+  var apiBase = (settings.apiBase || '').trim().replace(/\/$/, '');
+  if (!apiBase) apiBase = 'https://devprovaluate_py.aitamate.com';
   var link = document.getElementById('register-link');
-  if (link && apiBase) link.href = apiBase + '/api/outlook/register-start';
+  if (link) link.href = apiBase + '/api/outlook/register-start';
 }
 
 Office.onReady(function () {
