@@ -34,7 +34,7 @@ function save() {
     var el = document.getElementById('saved');
     if (el) { el.textContent = 'Settings saved. Returning to task pane...'; }
     var qs = '?api_base=' + encodeURIComponent(apiBase) + '&company_id=' + encodeURIComponent(companyId) + '&user_id=' + encodeURIComponent(userId);
-    window.location.href = 'taskpane.html' + qs;
+    window.location.href = 'taskpane.html?v=2' + (qs ? qs.replace('?', '&') : '');
   } catch (e) {
     var el = document.getElementById('saved');
     if (el) { el.textContent = 'Error saving: ' + e.message; el.style.color = '#c00'; }
