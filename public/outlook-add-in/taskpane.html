@@ -20,22 +20,31 @@
     .link { color: #0078d4; text-decoration: none; }
     .link:hover { text-decoration: underline; }
     .settings-link { margin-top: 16px; font-size: 12px; }
+    .hint { font-size: 12px; color: #666; margin-top: 8px; }
   </style>
 </head>
 <body>
-  <h2>ProValuate</h2>
-  <p>Assess resume attachments in this email against a job description.</p>
-  <label for="jd">Job description</label>
-  <select id="jd">
-    <option value="">-- Select JD --</option>
-  </select>
-  <label for="criteria">Criteria</label>
-  <select id="criteria">
-    <option value="">-- Select criteria --</option>
-  </select>
-  <button id="assess" disabled>Assess resumes</button>
-  <div id="status"></div>
-  <p class="settings-link"><a href="settings.html" class="link">Settings</a> (API URL, Company ID, User ID) &middot; <a href="https://devprovaluate_py.aitamate.com/api/outlook/register-start" id="register-link" target="_blank" class="link">Register / Sign in for Outlook</a></p>
+  <div id="signin-prompt" style="display: none;">
+    <h2>ProValuate</h2>
+    <p>Sign in to ProValuate to use the add-in. Your User ID and Company ID will be filled automatically.</p>
+    <p><a href="#" id="signin-link" class="link" target="_blank">Sign in to ProValuate</a></p>
+    <p class="hint">You will be redirected to Settings with your details; save and you can assess resumes.</p>
+  </div>
+  <div id="main-content">
+    <h2>ProValuate</h2>
+    <p>Assess resume attachments in this email against a job description.</p>
+    <label for="jd">Job description</label>
+    <select id="jd">
+      <option value="">-- Select JD --</option>
+    </select>
+    <label for="criteria">Criteria</label>
+    <select id="criteria">
+      <option value="">-- Select criteria --</option>
+    </select>
+    <button id="assess" disabled>Assess resumes</button>
+    <div id="status"></div>
+    <p class="settings-link"><a href="settings.html" class="link">Settings</a> &middot; <a href="https://devprovaluate_py.aitamate.com/api/outlook/register-start" id="register-link" target="_blank" class="link">Register / Sign in for Outlook</a></p>
+  </div>
   <script type="text/javascript" src="taskpane.js"></script>
 </body>
 </html>

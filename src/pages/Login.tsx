@@ -267,6 +267,17 @@ const Login = () => {
           // no-op
         }
 
+      // If user came from Outlook add-in sign-in link, redirect to add-in Settings with user_id and company_id
+      const searchParams = new URLSearchParams(window.location.search);
+      const redirectTo = searchParams.get('redirect');
+      if (redirectTo === 'outlook-add-in') {
+        const origin = window.location.origin;
+        const settingsUrl = `${origin}/outlook-add-in/settings.html?user_id=${encodeURIComponent(userId)}&company_id=${encodeURIComponent(companyId)}&api_base=${encodeURIComponent(PYTHON_API_BASE)}`;
+        window.location.href = settingsUrl;
+        setIsLoading(false);
+        return;
+      }
+
       // Show toast only on desktop
       if (!isMobile) {
         toast({

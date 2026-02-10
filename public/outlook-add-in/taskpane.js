@@ -211,12 +211,26 @@ function onJdChange() {
   loadCriteria(settings.apiBase, settings.companyId, jdId).then(populateCriteria);
 }
 
+function getSignInUrl() {
+  var base = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : 'https://devprovaluate.aitamate.com';
+  return base + '/login?redirect=outlook-add-in';
+}
+
 function init() {
   var settings = getSettings();
+  var signinPrompt = document.getElementById('signin-prompt');
+  var mainContent = document.getElementById('main-content');
   if (!settings.companyId || !settings.userId) {
-    setStatus('Open Settings and enter your API URL, Company ID, and User ID.', true);
+    if (signinPrompt) {
+      signinPrompt.style.display = 'block';
+      var signinLink = document.getElementById('signin-link');
+      if (signinLink) signinLink.href = getSignInUrl();
+    }
+    if (mainContent) mainContent.style.display = 'none';
     return;
   }
+  if (signinPrompt) signinPrompt.style.display = 'none';
+  if (mainContent) mainContent.style.display = 'block';
   setStatus('Loading job descriptions...');
   loadJobDescriptions(settings.apiBase, settings.companyId).then(function (list) {
     populateJDs(list);
@@ -237,7 +251,11 @@ function setRegisterLink() {
   var apiBase = (settings.apiBase || '').trim().replace(/\/$/, '');
   if (!apiBase) apiBase = 'https://devprovaluate_py.aitamate.com';
   var link = document.getElementById('register-link');
-  if (link) link.href = apiBase + '/api/outlook/register-start';
+  if (link) {
+    var url = apiBase + '/api/outlook/register-start';
+    if (settings.userId) url += '?user_id=' + encodeURIComponent(settings.userId);
+    link.href = url;
+  }
 }
 
 Office.onReady(function () {
