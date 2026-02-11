@@ -46,25 +46,36 @@ function setStatus(text, isError, isSuccess) {
   if (!el) return;
   el.textContent = text || '';
   el.className = isError ? 'error' : (isSuccess ? 'success' : '');
+  if (text) console.log('[setStatus]', text.substring(0, 80), { isError: isError, isSuccess: isSuccess });
 }
 
 function getMessageId() {
-  if (!Office || !Office.context || !Office.context.mailbox || !Office.context.mailbox.item) return null;
+  if (!Office || !Office.context || !Office.context.mailbox || !Office.context.mailbox.item) {
+    console.warn('[getMessageId] Office.context.mailbox.item not available');
+    return null;
+  }
   var item = Office.context.mailbox.item;
-  return item.itemId || item.id || null;
+  var id = item.itemId || item.id || null;
+  console.log('[getMessageId]', id ? id.substring(0, 40) + '...' : null);
+  return id;
 }
 
 function getSubject() {
   if (!Office || !Office.context || !Office.context.mailbox || !Office.context.mailbox.item) return null;
   var item = Office.context.mailbox.item;
-  if (item.subject) return item.subject;
-  return null;
+  var subject = item.subject || null;
+  console.log('[getSubject]', subject);
+  return subject;
 }
 
 function getReceivedDateTime() {
   if (!Office || !Office.context || !Office.context.mailbox || !Office.context.mailbox.item) return null;
   var item = Office.context.mailbox.item;
-  if (item.dateTimeCreated) return item.dateTimeCreated.toISOString ? item.dateTimeCreated.toISOString() : String(item.dateTimeCreated);
+  if (item.dateTimeCreated) {
+    var dt = item.dateTimeCreated.toISOString ? item.dateTimeCreated.toISOString() : String(item.dateTimeCreated);
+    console.log('[getReceivedDateTime]', dt);
+    return dt;
+  }
   return null;
 }
 
@@ -77,72 +88,133 @@ function getSelectedAttachmentIds() {
     var id = checkboxes[i].value;
     if (id) ids.push(id);
   }
+  console.log('[getSelectedAttachmentIds]', ids.length, 'selected');
   return ids;
 }
 
 function loadAttachments() {
+  console.log('[loadAttachments] Starting...');
   var settings = getSettings();
+  console.log('[loadAttachments] Settings:', { hasApiBase: !!settings.apiBase, hasUserId: !!settings.userId, apiBase: settings.apiBase });
+
   var messageId = getMessageId();
-  if (!messageId || !settings.apiBase || !settings.userId) {
-    setStatus('Open an email first and ensure you are signed in.', true);
+  console.log('[loadAttachments] MessageId:', messageId ? messageId.substring(0, 40) + '...' : null);
+
+  if (!messageId) {
+    console.error('[loadAttachments] No message ID - user needs to open an email');
+    setStatus('Please open an email first.', true);
     return;
   }
+  if (!settings.apiBase) {
+    console.error('[loadAttachments] No API base URL');
+    setStatus('API URL not configured. Go to Settings.', true);
+    return;
+  }
+  if (!settings.userId) {
+    console.error('[loadAttachments] No user ID');
+    setStatus('User ID not set. Please sign in to ProValuate first.', true);
+    return;
+  }
+
   var url = settings.apiBase.replace(/\/$/, '') + '/api/outlook/list-attachments';
+  console.log('[loadAttachments] API URL:', url);
   setStatus('Loading attachments...');
-  getAccessToken().then(function (token) { return token; }).catch(function () { return null; }).then(function (token) {
-    var body = {
-      messageId: messageId,
-      user_id: settings.userId,
-      subject: getSubject(),
-      receivedDateTime: getReceivedDateTime()
-    };
-    if (token) body.accessToken = token;
-    return fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+
+  getAccessToken()
+    .then(function (token) { console.log('[loadAttachments] Got access token:', !!token); return token; })
+    .catch(function (err) { console.warn('[loadAttachments] Access token failed:', err && err.message); return null; })
+    .then(function (token) {
+      var body = {
+        messageId: messageId,
+        user_id: settings.userId,
+        subject: getSubject(),
+        receivedDateTime: getReceivedDateTime()
+      };
+      if (token) body.accessToken = token;
+      console.log('[loadAttachments] Sending request, hasAccessToken:', !!token);
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    })
+    .then(function (r) {
+      console.log('[loadAttachments] Response status:', r.status, r.statusText);
+      return r.json().then(function (data) {
+        return { status: r.status, ok: r.ok, data: data };
+      }).catch(function (parseErr) {
+        console.error('[loadAttachments] Failed to parse JSON:', parseErr);
+        throw new Error('Invalid JSON response from server');
+      });
+    })
+    .then(function (result) {
+      console.log('[loadAttachments] Result ok:', result.ok, 'data:', result.data);
+
+      if (!result.ok) {
+        var errorMsg = result.data && (result.data.error || result.data.message) ? (result.data.error || result.data.message) : 'Request failed';
+        if (result.data && result.data.registration_required) {
+          setStatus('Error: ' + errorMsg + '\n\nPlease click "Sign in for Outlook" below.', true);
+        } else {
+          setStatus('Error: ' + errorMsg, true);
+        }
+        return;
+      }
+
+      setStatus('');
+      var list = document.getElementById('attachment-list');
+      if (!list) { console.error('[loadAttachments] attachment-list element not found'); return; }
+      list.innerHTML = '';
+
+      var attachments = (result.data && result.data.attachments && Array.isArray(result.data.attachments)) ? result.data.attachments : [];
+      console.log('[loadAttachments] Found attachments:', attachments.length);
+
+      if (attachments.length === 0) {
+        var msg = 'No resume attachments found (looking for .pdf, .doc, .docx, .txt files).';
+        list.appendChild(document.createTextNode(msg));
+        return;
+      }
+      attachments.forEach(function (a) {
+        var id = a.id;
+        var name = a.name || ('Attachment ' + id);
+        var div = document.createElement('div');
+        div.className = 'attachment-item';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = id;
+        cb.id = 'att-' + id;
+        cb.checked = true;
+        var label = document.createElement('label');
+        label.htmlFor = cb.id;
+        label.appendChild(document.createTextNode(name));
+        div.appendChild(cb);
+        div.appendChild(label);
+        list.appendChild(div);
+      });
+      setStatus('Loaded ' + attachments.length + ' attachment(s). Select which to assess, or leave all checked.', false, true);
+    })
+    .catch(function (err) {
+      console.error('[loadAttachments] Error:', err);
+      setStatus('Failed to load attachments: ' + (err && err.message ? err.message : String(err)), true);
     });
-  }).then(function (r) { return r.json(); }).then(function (data) {
-    setStatus('');
-    var list = document.getElementById('attachment-list');
-    if (!list) return;
-    list.innerHTML = '';
-    var attachments = (data && data.attachments && Array.isArray(data.attachments)) ? data.attachments : [];
-    if (attachments.length === 0) {
-      list.appendChild(document.createTextNode('No resume attachments found.'));
-      return;
-    }
-    attachments.forEach(function (a) {
-      var id = a.id;
-      var name = a.name || ('Attachment ' + id);
-      var div = document.createElement('div');
-      div.className = 'attachment-item';
-      var cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.value = id;
-      cb.id = 'att-' + id;
-      cb.checked = true;
-      var label = document.createElement('label');
-      label.htmlFor = cb.id;
-      label.appendChild(document.createTextNode(name));
-      div.appendChild(cb);
-      div.appendChild(label);
-      list.appendChild(div);
-    });
-  }).catch(function (err) {
-    setStatus('Failed to load attachments: ' + (err && err.message ? err.message : String(err)), true);
-  });
 }
 
 function getAccessToken() {
+  console.log('[getAccessToken] Requesting SSO token...');
   return new Promise(function (resolve, reject) {
     if (!Office || !Office.auth || typeof Office.auth.getAccessTokenAsync !== 'function') {
+      console.warn('[getAccessToken] SSO not supported in this Outlook host');
       reject(new Error('SSO not supported in this host'));
       return;
     }
     Office.auth.getAccessTokenAsync({ allowSignInPrompt: true }, function (result) {
-      if (result.status === 'succeeded') resolve(result.value);
-      else reject(new Error(result.error?.message || 'Failed to get token'));
+      if (result.status === 'succeeded') {
+        console.log('[getAccessToken] Success');
+        resolve(result.value);
+      } else {
+        var errorMsg = result.error && (result.error.message || result.error.code) ? (result.error.message || result.error.code) : 'Failed to get token';
+        console.error('[getAccessToken] Failed:', errorMsg);
+        reject(new Error(errorMsg));
+      }
     });
   });
 }
@@ -150,29 +222,32 @@ function getAccessToken() {
 function loadJobDescriptions(apiBase, companyId) {
   if (!companyId) return Promise.resolve([]);
   var url = apiBase.replace(/\/$/, '') + '/api/job_descriptions?company_id=' + encodeURIComponent(companyId);
+  console.log('[loadJobDescriptions]', url);
   return fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } })
     .then(function (r) { return r.json(); })
     .then(function (data) {
       if (data && data.data && Array.isArray(data.data)) return data.data;
       return [];
     })
-    .catch(function () { return []; });
+    .catch(function (err) { console.error('[loadJobDescriptions]', err); return []; });
 }
 
 function loadCriteria(apiBase, companyId, jdId) {
   if (!companyId) return Promise.resolve([]);
   var url = apiBase.replace(/\/$/, '') + '/api/criteria?company_id=' + encodeURIComponent(companyId);
   if (jdId) url += '&jd_id=' + encodeURIComponent(jdId);
+  console.log('[loadCriteria]', url);
   return fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } })
     .then(function (r) { return r.json(); })
     .then(function (data) {
       if (data && data.data && Array.isArray(data.data)) return data.data;
       return [];
     })
-    .catch(function () { return []; });
+    .catch(function (err) { console.error('[loadCriteria]', err); return []; });
 }
 
 function runAssess() {
+  console.log('[runAssess] Starting...');
   var settings = getSettings();
   var apiBase = settings.apiBase;
   var companyId = settings.companyId;
@@ -203,6 +278,7 @@ function runAssess() {
       throw err;
     })
     .then(function (token) {
+      console.log('[runAssess] Token:', !!token);
       setStatus('Analyzing resumes...');
       var url = apiBase.replace(/\/$/, '') + '/api/outlook/fetch-and-analyze';
       var body = {
@@ -217,13 +293,17 @@ function runAssess() {
       };
       var selectedIds = getSelectedAttachmentIds();
       if (selectedIds && selectedIds.length > 0) body.attachmentIds = selectedIds;
+      console.log('[runAssess] Request url:', url, 'attachmentIds:', selectedIds.length);
       return fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
     })
-    .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+    .then(function (r) {
+      console.log('[runAssess] Response status:', r.status);
+      return r.json().then(function (data) { return { ok: r.ok, data: data }; });
+    })
     .then(function (result) {
       if (btn) btn.disabled = false;
       if (!result.ok) {
@@ -241,6 +321,7 @@ function runAssess() {
       }
     })
     .catch(function (err) {
+      console.error('[runAssess] Error:', err);
       if (btn) btn.disabled = false;
       setStatus('Error: ' + (err && err.message ? err.message : String(err)), true);
     });
@@ -283,10 +364,16 @@ function getSignInUrl() {
 }
 
 function init() {
+  console.log('[init] Initializing add-in...');
+  console.log('[init] Office:', typeof Office !== 'undefined', 'mailbox.item:', !!(Office && Office.context && Office.context.mailbox && Office.context.mailbox.item));
+
   var settings = getSettings();
+  console.log('[init] Settings:', { apiBase: settings.apiBase, hasCompanyId: !!settings.companyId, hasUserId: !!settings.userId });
+
   var signinPrompt = document.getElementById('signin-prompt');
   var mainContent = document.getElementById('main-content');
   if (!settings.companyId || !settings.userId) {
+    console.warn('[init] Missing Company ID or User ID - showing sign-in');
     if (signinPrompt) {
       signinPrompt.style.display = 'block';
       var signinLink = document.getElementById('signin-link');
@@ -295,12 +382,18 @@ function init() {
     if (mainContent) mainContent.style.display = 'none';
     return;
   }
+  console.log('[init] Showing main content, attaching Load attachments handler');
   if (signinPrompt) signinPrompt.style.display = 'none';
   if (mainContent) mainContent.style.display = 'block';
   var attachmentsSection = document.getElementById('attachments-section');
   if (attachmentsSection) attachmentsSection.style.display = 'block';
   var loadAttachmentsBtn = document.getElementById('load-attachments');
-  if (loadAttachmentsBtn) loadAttachmentsBtn.addEventListener('click', loadAttachments);
+  if (loadAttachmentsBtn) {
+    loadAttachmentsBtn.addEventListener('click', loadAttachments);
+    console.log('[init] Load attachments button wired');
+  } else {
+    console.warn('[init] load-attachments button not found');
+  }
   setStatus('Loading job descriptions...');
   loadJobDescriptions(settings.apiBase, settings.companyId).then(function (list) {
     populateJDs(list);
@@ -325,10 +418,12 @@ function setRegisterLink() {
     var url = apiBase + '/api/outlook/register-start';
     if (settings.userId) url += '?user_id=' + encodeURIComponent(settings.userId);
     link.href = url;
+    console.log('[setRegisterLink]', url);
   }
 }
 
-Office.onReady(function () {
+Office.onReady(function (info) {
+  console.log('[Office.onReady]', info);
   init();
   setRegisterLink();
 });
