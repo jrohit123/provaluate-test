@@ -21,6 +21,11 @@
     .link:hover { text-decoration: underline; }
     .settings-link { margin-top: 16px; font-size: 12px; }
     .hint { font-size: 12px; color: #666; margin-top: 8px; }
+    .addin-logo { height: 32px; width: auto; display: block; margin-bottom: 8px; }
+    .secondary-btn { margin: 4px 0; padding: 6px 12px; font-size: 13px; background: #505a64; color: white; border: none; cursor: pointer; }
+    .secondary-btn:hover { background: #3d454d; }
+    .attachment-item { margin: 6px 0; }
+    .attachment-item label { font-weight: normal; display: inline; margin-left: 6px; }
   </style>
 </head>
 <body>
@@ -31,8 +36,15 @@
     <p class="hint">You will be redirected to Settings with your details; save and you can assess resumes.</p>
   </div>
   <div id="main-content">
+    <p><img src="/favicon.png" alt="ProValuate" class="addin-logo" /></p>
     <h2>ProValuate</h2>
     <p>Assess resume attachments in this email against a job description.</p>
+    <div id="attachments-section" style="display: none;">
+      <label>Resume attachments</label>
+      <p class="hint">Select which attachments to assess, then click Assess resumes.</p>
+      <button type="button" id="load-attachments" class="secondary-btn">Load attachments</button>
+      <div id="attachment-list"></div>
+    </div>
     <label for="jd">Job description</label>
     <select id="jd">
       <option value="">-- Select JD --</option>
@@ -43,7 +55,7 @@
     </select>
     <button id="assess" disabled>Assess resumes</button>
     <div id="status"></div>
-    <p class="settings-link"><a href="settings.html?v=2" class="link">Settings</a> &middot; <a href="https://devprovaluate_py.aitamate.com/api/outlook/register-start" id="register-link" target="_blank" class="link">Register / Sign in for Outlook</a></p>
+    <p class="settings-link"><a href="settings.html?v=2" class="link">Settings</a> &middot; <a href="https://devprovaluate_py.aitamate.com/api/outlook/register-start" id="register-link" target="_blank" class="link">Sign in for Outlook</a></p>
   </div>
   <script type="text/javascript" src="taskpane.js?v=2"></script>
 </body>

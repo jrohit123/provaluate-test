@@ -68,6 +68,72 @@ function getReceivedDateTime() {
   return null;
 }
 
+function getSelectedAttachmentIds() {
+  var list = document.getElementById('attachment-list');
+  if (!list) return [];
+  var checkboxes = list.querySelectorAll('input[type="checkbox"]:checked');
+  var ids = [];
+  for (var i = 0; i < checkboxes.length; i++) {
+    var id = checkboxes[i].value;
+    if (id) ids.push(id);
+  }
+  return ids;
+}
+
+function loadAttachments() {
+  var settings = getSettings();
+  var messageId = getMessageId();
+  if (!messageId || !settings.apiBase || !settings.userId) {
+    setStatus('Open an email first and ensure you are signed in.', true);
+    return;
+  }
+  var url = settings.apiBase.replace(/\/$/, '') + '/api/outlook/list-attachments';
+  setStatus('Loading attachments...');
+  getAccessToken().then(function (token) { return token; }).catch(function () { return null; }).then(function (token) {
+    var body = {
+      messageId: messageId,
+      user_id: settings.userId,
+      subject: getSubject(),
+      receivedDateTime: getReceivedDateTime()
+    };
+    if (token) body.accessToken = token;
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }).then(function (r) { return r.json(); }).then(function (data) {
+    setStatus('');
+    var list = document.getElementById('attachment-list');
+    if (!list) return;
+    list.innerHTML = '';
+    var attachments = (data && data.attachments && Array.isArray(data.attachments)) ? data.attachments : [];
+    if (attachments.length === 0) {
+      list.appendChild(document.createTextNode('No resume attachments found.'));
+      return;
+    }
+    attachments.forEach(function (a) {
+      var id = a.id;
+      var name = a.name || ('Attachment ' + id);
+      var div = document.createElement('div');
+      div.className = 'attachment-item';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = id;
+      cb.id = 'att-' + id;
+      cb.checked = true;
+      var label = document.createElement('label');
+      label.htmlFor = cb.id;
+      label.appendChild(document.createTextNode(name));
+      div.appendChild(cb);
+      div.appendChild(label);
+      list.appendChild(div);
+    });
+  }).catch(function (err) {
+    setStatus('Failed to load attachments: ' + (err && err.message ? err.message : String(err)), true);
+  });
+}
+
 function getAccessToken() {
   return new Promise(function (resolve, reject) {
     if (!Office || !Office.auth || typeof Office.auth.getAccessTokenAsync !== 'function') {
@@ -137,8 +203,7 @@ function runAssess() {
       throw err;
     })
     .then(function (token) {
-      if (token === null) setStatus('Using saved credentials. Analyzing resumes...');
-      else setStatus('Analyzing resumes...');
+      setStatus('Analyzing resumes...');
       var url = apiBase.replace(/\/$/, '') + '/api/outlook/fetch-and-analyze';
       var body = {
         messageId: messageId,
@@ -150,6 +215,8 @@ function runAssess() {
         subject: getSubject(),
         receivedDateTime: getReceivedDateTime()
       };
+      var selectedIds = getSelectedAttachmentIds();
+      if (selectedIds && selectedIds.length > 0) body.attachmentIds = selectedIds;
       return fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -169,8 +236,7 @@ function runAssess() {
       var msg = (d && d.message) ? d.message : 'Done. ' + success + ' analyzed, ' + failed + ' failed.';
       setStatus(msg, false, true);
       if (success > 0 && d.jd_id) {
-        var dashboardUrl = settings.apiBase.replace(/\/$/, '').replace(/:\d+$/, '');
-        if (dashboardUrl.indexOf('localhost') !== -1) dashboardUrl = 'https://devprovaluate.aitamate.com';
+        var dashboardUrl = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : 'https://devprovaluate.aitamate.com';
         setStatus(msg + '\n\nOpen dashboard: ' + dashboardUrl, false, true);
       }
     })
@@ -231,6 +297,10 @@ function init() {
   }
   if (signinPrompt) signinPrompt.style.display = 'none';
   if (mainContent) mainContent.style.display = 'block';
+  var attachmentsSection = document.getElementById('attachments-section');
+  if (attachmentsSection) attachmentsSection.style.display = 'block';
+  var loadAttachmentsBtn = document.getElementById('load-attachments');
+  if (loadAttachmentsBtn) loadAttachmentsBtn.addEventListener('click', loadAttachments);
   setStatus('Loading job descriptions...');
   loadJobDescriptions(settings.apiBase, settings.companyId).then(function (list) {
     populateJDs(list);
