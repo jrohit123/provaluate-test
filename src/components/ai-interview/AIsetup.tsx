@@ -41,7 +41,7 @@ interface FormData {
   jobDescription: string;
   duration: number;
   totalQuestions: number;
-  interviewType: 'technical' | 'behavioral' | 'mixed';
+  interviewType: 'functional' | 'behavioral' | 'mixed';
   interviewMode: 'ai' | 'structured';
   personalizedQuestionsEnabled: boolean;
   personalizedQuestions: Array<{question: string, timeLimit: number}>;
@@ -720,28 +720,28 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
       return;
     }
 
-    let technicalQuestions = 0; // Will be calculated and rounded to whole number
+    let functionalQuestions = 0; // Will be calculated and rounded to whole number
 
     // Calculate questions per parameter: (min + max) ÷ 2, then round to nearest whole number
     Object.values(parameters).forEach(param => {
       const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
       const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
       const questionsPerParam = (minQuestions + maxQuestions) / 2;
-      technicalQuestions += questionsPerParam;
+      functionalQuestions += questionsPerParam;
     });
 
     // Round to nearest whole number for technical questions (no decimals)
-    technicalQuestions = Math.round(technicalQuestions);
+    functionalQuestions = Math.round(functionalQuestions);
     
     // Ensure minimum of 1 technical question
-    technicalQuestions = Math.max(1, technicalQuestions);
+    functionalQuestions = Math.max(1, functionalQuestions);
     
     // Add personalized questions to total
     const personalizedQuestionsCount = formData.personalizedQuestionsEnabled ? formData.personalizedQuestions.length : 0;
-    const totalQuestions = technicalQuestions + personalizedQuestionsCount;
+    const totalQuestions = functionalQuestions + personalizedQuestionsCount;
     
     console.log('🔍 calculateDuration debug:', {
-      technicalQuestions,
+      functionalQuestions,
       personalizedQuestionsEnabled: formData.personalizedQuestionsEnabled,
       personalizedQuestions: formData.personalizedQuestions,
       personalizedQuestionsCount,
@@ -793,7 +793,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
     
     console.log('🔄 Duration calculation summary:', {
       parameters: Object.keys(parameters).length,
-      technicalQuestions,
+      functionalQuestions,
       personalizedQuestionsCount,
       totalQuestions,
       calculatedDuration: calculatedDuration.toFixed(2),
@@ -801,7 +801,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
       finalDuration,
       breakdown: {
         answerTime: (calculatedDuration - 2).toFixed(2),
-        readingTime: (technicalQuestions * 0.5).toFixed(2),
+        readingTime: (functionalQuestions * 0.5).toFixed(2),
         buffer: 2
       },
       parameterDetails: Object.values(parameters).map(p => ({
@@ -816,7 +816,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
     console.log('🔄 Setting form data:', {
       previousDuration: formData.duration,
       calculatedDuration: finalDuration,
-      technicalQuestions,
+      functionalQuestions,
       personalizedQuestionsCount,
       totalQuestions
     });
@@ -1309,28 +1309,28 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
     const totalDuration = Math.round(baseDuration + personalizedDuration);
     
     // Calculate total questions (technical + personalized) - use same logic as calculateDuration
-    let technicalQuestions = 0;
+    let functionalQuestions = 0;
     Object.values(paramsToUse).forEach(param => {
       const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
       const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
       const questionsPerParam = (minQuestions + maxQuestions) / 2;
-      technicalQuestions += questionsPerParam;
+      functionalQuestions += questionsPerParam;
     });
     
     // Round to nearest whole number for technical questions (no decimals)
-    technicalQuestions = Math.round(technicalQuestions);
+    functionalQuestions = Math.round(functionalQuestions);
     
     // Ensure minimum of 1 technical question
-    technicalQuestions = Math.max(1, technicalQuestions);
+    functionalQuestions = Math.max(1, functionalQuestions);
     
-    const totalQuestions = technicalQuestions + personalizedQuestions.length;
+    const totalQuestions = functionalQuestions + personalizedQuestions.length;
     
     console.log('🔄 Duration recalculation:', {
       personalizedQuestions: personalizedQuestions.length,
       personalizedDuration,
       baseDuration,
       totalDuration,
-      technicalQuestions,
+      functionalQuestions,
       totalQuestions,
       usingProvidedParams: !!parameters
     });
@@ -1545,7 +1545,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                   <Label htmlFor="interviewType" className="text-sm sm:text-base">Interview Type *</Label>
                   <Select 
                     value={formData.interviewType} 
-                    onValueChange={async (value: 'technical' | 'behavioral' | 'mixed') => {
+                    onValueChange={async (value: 'functional' | 'behavioral' | 'mixed') => {
                       setFormData(prev => ({ ...prev, interviewType: value }));
                       // Trigger parameter loading when interview type changes
                       if (formData.position) {
@@ -1557,15 +1557,15 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                       <SelectValue placeholder="Select interview type..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="technical">Technical</SelectItem>
+                      <SelectItem value="functional">Functional</SelectItem>
                       <SelectItem value="behavioral">Behavioral</SelectItem>
-                      <SelectItem value="mixed">Mixed (Technical + Behavioral)</SelectItem>
+                      <SelectItem value="mixed">Mixed (Functional + Behavioral)</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-gray-500">
-                    Technical: Focus on technical skills and problem-solving<br/>
+                    Functional: Focus on functional skills and problem-solving<br/>
                     Behavioral: Focus on soft skills and communication<br/>
-                    Mixed: Combination of both technical and behavioral aspects
+                    Mixed: Combination of both functional and behavioral aspects
                   </p>
                 </div>
               )}
@@ -1695,7 +1695,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
         <Card className="animate-fade-in">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+              {/*<div className="w-2 h-2 bg-blue-500 rounded-full"></div>*/}
               Interview Summary
             </CardTitle>
           </CardHeader>
@@ -1724,61 +1724,6 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                 <div className="text-xs text-blue-600">Total weightage</div>
               </div>
             </div>
-            
-            {/* Editable Duration and Questions Fields - Only for AI Interviews */}
-            {formData.interviewMode === 'ai' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="duration" className="text-sm sm:text-base">Duration (minutes)</Label>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                  <Input
-                    id="duration"
-                    type="number"
-                    name="duration"
-                    value={formData.duration != null ? Math.round(Number(formData.duration)) : ''}
-                    onChange={handleInputChange}
-                    min="5"
-                    max="120"
-                    placeholder="Auto-calculated"
-                    className="text-sm sm:text-base"
-                  />
-                  <div className="text-xs sm:text-sm text-gray-500 min-w-fit">
-                    {formData.duration != null ? `${Math.round(Number(formData.duration))} min` : 'Calculating...'}
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500">
-                  Duration includes answer time + 30 seconds reading time per question + 2 min buffer. You can edit this value manually.
-                </p>
-                <div className="text-xs text-blue-600 font-medium">
-                  💡 Formula: Sum of (questions × (answer time + 0.5 min reading)) for each parameter + 2 min buffer = {formData.duration != null ? Math.round(Number(formData.duration)) : 'Calculating...'} min
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="totalQuestions" className="text-sm sm:text-base">Total Questions</Label>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                  <Input
-                    id="totalQuestions"
-                    type="number"
-                    name="totalQuestions"
-                    value={formData.totalQuestions}
-                    onChange={handleInputChange}
-                    min="1"
-                    max="30"
-                    step="1"
-                    placeholder="Auto-calculated"
-                    className="text-sm sm:text-base"
-                  />
-                  <div className="text-xs sm:text-sm text-gray-500 min-w-fit">
-                    {formData.totalQuestions ? `${formData.totalQuestions} questions` : 'Calculating...'}
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500">
-                  Total questions = Sum of (min+max)/2 for each parameter, rounded to nearest whole number. You can edit this value manually.
-                </p>
-              </div>
-            </div>
-            )}
 
           </CardContent>
         </Card>
@@ -1788,12 +1733,10 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
       {formData.interviewMode === 'ai' ? (
         <div>
 
-        {/* AI Interview - Interview Questions Configuration Section */}
+        {/* AI Interview - Parameters Section */}
         <Card className="animate-fade-in">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5" />
-              Interview Questions Configuration for {formData.position || 'Selected Role'}
+            <CardTitle>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -1997,7 +1940,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                               </div>
                             </div>
                             <div className="space-y-2">
-                              <Label className="text-xs sm:text-sm" title="Time allocated for candidate to answer (question reading time is additional)">Answer Time (min)</Label>
+                              <Label className="text-xs sm:text-sm" title="Time allocated for candidate to answer (question reading time is additional)">Answer Time (minutes)</Label>
                               <div className="text-base sm:text-lg font-semibold text-gray-900">
                                 {param.max_time}
                               </div>
@@ -2278,7 +2221,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                   {formData.personalizedQuestionsEnabled && (
                     <div className="space-y-3">
                       <p className="text-xs text-blue-600">
-                        Add 1-2 personal questions that will be asked before technical questions. These are for review only and won't be scored.
+                        Add 1-2 personal questions that will be asked before functional questions. These are for review only and won't be scored.
                       </p>
                       
                       {formData.personalizedQuestions.map((question, index) => (

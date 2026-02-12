@@ -390,7 +390,7 @@ const CandidateInterview = () => {
         position: interviewData.position,
         duration: interviewData.duration_minutes,
         currentQuestion: interviewData.questions?.[0],
-        technicalWeight: interviewData.technical_weight,
+        functionalWeight: interviewData.functional_weight ?? interviewData.technical_weight,
         softSkillsWeight: interviewData.soft_skills_weight,
         customInstructions: interviewData.custom_instructions,
         interviewType: interviewData.interview_type

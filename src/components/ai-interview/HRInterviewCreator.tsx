@@ -410,7 +410,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
         }
         
         // Set the interview type, mode, and personalized questions FIRST
-        if (interviewType && ['technical', 'behavioral', 'mixed'].includes(interviewType)) {
+        if (interviewType && ['functional', 'behavioral', 'mixed'].includes(interviewType)) {
           console.log(`✅ Setting interview_type from database: ${interviewType}`);
         }
         
@@ -423,7 +423,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
         
         setFormData(prev => ({
           ...prev,
-          interviewType: (interviewType && ['technical', 'behavioral', 'mixed'].includes(interviewType)) ? interviewType : prev.interviewType,
+          interviewType: (interviewType && ['functional', 'behavioral', 'mixed'].includes(interviewType)) ? interviewType : prev.interviewType,
           interviewMode: detectedMode, // Auto-update mode based on database content
           personalizedQuestionsEnabled: !!personalizedQuestions,
           personalizedQuestions: personalizedQuestions || []
@@ -608,21 +608,21 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
     }
     
     // Calculate total questions (technical + personalized) - use same logic as AIsetup
-    let technicalQuestions = 0;
+    let functionalQuestions = 0;
     Object.values(paramsToUse).forEach(param => {
       const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
       const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
       const questionsPerParam = (minQuestions + maxQuestions) / 2;
-      technicalQuestions += questionsPerParam;
+      functionalQuestions += questionsPerParam;
     });
     
     // Round to nearest whole number for technical questions (no decimals)
-    technicalQuestions = Math.round(technicalQuestions);
+    functionalQuestions = Math.round(functionalQuestions);
     
     // Ensure minimum of 1 technical question
-    technicalQuestions = Math.max(1, technicalQuestions);
+    functionalQuestions = Math.max(1, functionalQuestions);
     
-    const totalQuestions = technicalQuestions + personalizedQuestions.length;
+    const totalQuestions = functionalQuestions + personalizedQuestions.length;
     
     // Total duration = base duration + personalized questions duration
     const totalDuration = baseDuration + personalizedDuration;
@@ -632,7 +632,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
       personalizedDuration,
       baseDuration,
       totalDuration,
-      technicalQuestions,
+      functionalQuestions,
       totalQuestions,
       usingProvidedParams: !!parameters
     });
@@ -804,11 +804,11 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
     const link = interviewLink || '{INTERVIEW_LINK}';
     
     switch (interviewType) {
-      case 'technical':
+      case 'functional':
         return {
           ...baseTemplate,
           subject: `Technical Interview Invitation - ${formData.position} Position`,
-          body: `${baseTemplate.greeting}You have been invited to complete a technical interview for the ${formData.position} position.\n\nThis interview will assess your technical skills and problem-solving abilities. Please ensure you have a stable internet connection and a quiet environment.\n\nPlease click the link below to start your interview:\n${link}\n\nGood luck!${baseTemplate.closing}`
+          body: `${baseTemplate.greeting}You have been invited to complete a functional interview for the ${formData.position} position.\n\nThis interview will assess your technical skills and problem-solving abilities. Please ensure you have a stable internet connection and a quiet environment.\n\nPlease click the link below to start your interview:\n${link}\n\nGood luck!${baseTemplate.closing}`
         };
       case 'behavioral':
         return {
@@ -820,7 +820,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
         return {
           ...baseTemplate,
           subject: `Comprehensive Interview Invitation - ${formData.position} Position`,
-          body: `${baseTemplate.greeting}You have been invited to complete a comprehensive interview for the ${formData.position} position.\n\nThis interview will cover both technical skills and behavioral competencies. Please ensure you have a stable internet connection and are prepared to discuss your experience and technical knowledge.\n\nPlease click the link below to start your interview:\n${link}\n\nGood luck!${baseTemplate.closing}`
+          body: `${baseTemplate.greeting}You have been invited to complete a comprehensive interview for the ${formData.position} position.\n\nThis interview will cover both functional skills and behavioral competencies. Please ensure you have a stable internet connection and are prepared to discuss your experience and technical knowledge.\n\nPlease click the link below to start your interview:\n${link}\n\nGood luck!${baseTemplate.closing}`
         };
       default:
         return {
@@ -1392,9 +1392,8 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
       {formData.position && Object.keys(customParameters).length > 0 && formData.interviewMode === 'ai' && (
         <Card className="animate-fade-in">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              Interview Summary for {formData.position}
+            <CardTitle>
+              {formData.position}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -1552,15 +1551,12 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
             {/* Personalized Questions Section */}
             {formData.personalizedQuestionsEnabled && formData.personalizedQuestions.length > 0 && (
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <div className="h-4 w-4 bg-blue-600 rounded flex items-center justify-center">
-                    <div className="h-2 w-2 bg-white rounded-full"></div>
-                  </div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">
                   Personalized Questions
                 </h3>
                 
                 <p className="text-sm text-gray-600 mb-4">
-                  These personal questions will be asked before technical questions. They are for review only and won't be scored.
+                  These personal questions will be asked before functional questions. They are for review only and won't be scored.
                 </p>
                 
                 <div className="space-y-3">
@@ -1681,15 +1677,12 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
             {/* Personalized Questions Section */}
             {formData.personalizedQuestionsEnabled && formData.personalizedQuestions.length > 0 && (
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <div className="h-4 w-4 bg-blue-600 rounded flex items-center justify-center">
-                    <div className="h-2 w-2 bg-white rounded-full"></div>
-                  </div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">
                   Personalized Questions
                 </h3>
                 
                 <p className="text-sm text-gray-600 mb-4">
-                  These personal questions will be asked before technical questions. They are for review only and won't be scored.
+                  These personal questions will be asked before functional questions. They are for review only and won't be scored.
                 </p>
                 
                 <div className="space-y-3">

@@ -33,11 +33,11 @@ const mainDashboardItem = {
   description: 'Overview and quick actions'
 };
 
-// CV Screening section items
+// CV Screening section items (icons match Quick Actions on dashboard)
 const cvScreeningItems = [
   {
     title: 'New Job Upload',
-    icon: Upload,
+    icon: FileText,
     section: 'job-upload' as ActiveSection,
     description: 'Upload job descriptions and criteria'
   },
@@ -49,7 +49,7 @@ const cvScreeningItems = [
   },
   {
     title: 'Resume Upload',
-    icon: FileText,
+    icon: Upload,
     section: 'resume-upload' as ActiveSection,
     description: 'Upload and manage candidate resumes'
   },

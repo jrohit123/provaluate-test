@@ -1578,15 +1578,15 @@ const ConversationalInterview = () => {
         // Initialize audio worklet
         await initializeAudio();
          // Start welcome message after camera is ready (minimal delay for stability)
-         setTimeout(() => {
+         setTimeout(async () => {
            if (!hasSpokenWelcomeRef.current) {
              console.log('🎤 Starting welcome message and requesting fullscreen...');
              requestFullscreen();
              setAiPlaceholder('welcome');
-             const welcomeMessage = FALLBACK_PHRASES.welcome(
-               interviewData.candidateName || 'there',
-               interviewData.position || 'this role'
-             );
+             const candidateName = interviewData.candidateName || 'there';
+             const position = interviewData.position || 'this role';
+             const welcomePhrase = await fetchInterviewPhrase('welcome', candidateName, position);
+             const welcomeMessage = welcomePhrase || FALLBACK_PHRASES.welcome(candidateName, position);
              if (aiAudioEnabled && 'speechSynthesis' in window) {
                console.log('🎤 Starting welcome message (question text only in display)');
                const pattern = createSpeechPattern(welcomeMessage);

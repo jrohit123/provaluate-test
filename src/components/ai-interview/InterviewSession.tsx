@@ -949,7 +949,7 @@ const InterviewSession = () => {
       setAudioBlob(null);
       setTranscript('');
       
-      // Move to next personalized question or start technical questions
+      // Move to next personalized question or start functional questions
       if (currentPersonalizedQuestionIndex < personalizedQuestions.length - 1) {
         const nextIndex = currentPersonalizedQuestionIndex + 1;
         setCurrentPersonalizedQuestionIndex(nextIndex);
@@ -962,9 +962,9 @@ const InterviewSession = () => {
         setQuestionTimeRemaining(questionTimeInSeconds);
         setIsQuestionTimerActive(true);
       } else {
-        // All personalized questions answered, start technical questions
+        // All personalized questions answered, start functional questions
         setIsPersonalizedQuestionPhase(false);
-        await loadInterviewData(); // Load technical questions
+        await loadInterviewData(); // Load functional questions
       }
       
     } catch (error) {
@@ -1129,7 +1129,7 @@ const InterviewSession = () => {
                   {hasPersonalizedQuestions && personalizedQuestions.length > 0 && (
                     <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
                       <p className="text-blue-800 text-sm mb-2">
-                        This interview includes {personalizedQuestions.length} personal question{personalizedQuestions.length > 1 ? 's' : ''} that will be asked before the technical assessment.
+                        This interview includes {personalizedQuestions.length} personal question{personalizedQuestions.length > 1 ? 's' : ''} that will be asked before the functional assessment.
                       </p>
                       <p className="text-blue-600 text-xs">
                         These questions are for review only and won't be scored.

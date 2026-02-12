@@ -1798,9 +1798,9 @@ const FinalResults = () => {
                               ) : (
                                 <span>Weight: {(() => {
                                   // Calculate weight based on question count relative to total (excluding personal questions)
-                                  const technicalQuestions = Object.values(parameters).reduce((sum: number, p: any) => 
+                                  const functionalQuestions = Object.values(parameters).reduce((sum: number, p: any) => 
                                     p.isPersonal ? sum : sum + (p.questionCount as number), 0) as number;
-                                  const weight = technicalQuestions > 0 ? Math.round(((param.questionCount as number) / technicalQuestions) * 100) : 0;
+                                  const weight = functionalQuestions > 0 ? Math.round(((param.questionCount as number) / functionalQuestions) * 100) : 0;
                                   return weight;
                                 })()}%</span>
                               )}
