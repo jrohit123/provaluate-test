@@ -30,6 +30,7 @@ export const API_CONFIG = {
     
     // Results
     GET_FINAL_RESULTS: '/api/get-final-results',
+    ANALYZE_SPEECH: '/api/analyze-speech',
     GET_QUESTIONS: '/api/get-questions',
     TRACK_COMPLETION_VIEW: '/api/track-completion-view',
     

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft,
   Download, 
   Share2, 
   BarChart3, 
@@ -11,12 +10,28 @@ import {
   FileSpreadsheet,
   ChevronDown,
   ChevronUp,
-  Loader2
+  Loader2,
+  Menu,
+  LayoutDashboard
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import toast from 'react-hot-toast';
 import ExcelJS from 'exceljs';
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
+
+/** Format overall_score to 1 decimal with consistent rounding (7.25 → 7.3). */
+function formatOverallScore(score: number | string | null | undefined): string {
+  if (score == null || score === '') return 'N/A';
+  const n = Number(score);
+  if (Number.isNaN(n)) return 'N/A';
+  return (Math.round(n * 10) / 10).toFixed(1);
+}
 
 /** Format a date as "2nd Feb 2026", "4th Apr 2026" (ordinal day + short month + year). Returns 'N/A' if date is missing or invalid. */
 function formatOrdinalDate(date: Date | string | null | undefined): string {
@@ -87,8 +102,6 @@ const FinalResults = () => {
       return newSet;
     });
   };
-
-
 
   const loadFinalResults = useCallback(async () => {
     try {
@@ -177,7 +190,9 @@ const FinalResults = () => {
               feedback: answer.feedback, // This is the REAL AI feedback
               parameter_key: answer.parameter_key,
               parameter_name: answer.parameter_name,
-              written_answer: answer.written_answer // Add written answer
+              written_answer: answer.written_answer,
+              behavioral: answer.behavioral ?? answer.behavioral_metrics,
+              behavioral_metrics: answer.behavioral_metrics ?? answer.behavioral
             });
           });
           
@@ -221,7 +236,9 @@ const FinalResults = () => {
                     feedback: answer.feedback,
                     parameter_key: answer.parameter_key,
                     parameter_name: answer.parameter_name,
-                    written_answer: answer.written_answer
+                    written_answer: answer.written_answer,
+                    behavioral: answer.behavioral ?? answer.behavioral_metrics,
+                    behavioral_metrics: answer.behavioral_metrics ?? answer.behavioral
                   });
                 });
               } else {
@@ -246,7 +263,9 @@ const FinalResults = () => {
                     feedback: answer.feedback,
                     parameter_key: answer.parameter_key,
                     parameter_name: answer.parameter_name,
-                    written_answer: answer.written_answer
+                    written_answer: answer.written_answer,
+                    behavioral: answer.behavioral ?? answer.behavioral_metrics,
+                    behavioral_metrics: answer.behavioral_metrics ?? answer.behavioral
                   });
                 });
               }
@@ -275,7 +294,9 @@ const FinalResults = () => {
                 feedback: answer.feedback,
                 parameter_key: answer.parameter_key,
                 parameter_name: answer.parameter_name,
-                written_answer: answer.written_answer
+                written_answer: answer.written_answer,
+                behavioral: answer.behavioral ?? answer.behavioral_metrics,
+                behavioral_metrics: answer.behavioral_metrics ?? answer.behavioral
               });
             });
           }
@@ -328,17 +349,58 @@ const FinalResults = () => {
         extractedQuestions.sort((a, b) => a.question_order - b.question_order);
         extractedAnswers.sort((a, b) => a.question_order - b.question_order);
         
-         // Convert parameters array to object structure for UI compatibility
-         const parametersObject = {};
-         if (data.parameters && Array.isArray(data.parameters)) {
+        // Convert parameters array to object structure for UI compatibility
+        const parametersObject: Record<string, any> = {};
+
+        // When we have questions+answers, build parameters from them so behavioral is guaranteed
+        if (extractedQuestions.length > 0 && extractedAnswers.length > 0) {
+          const byParam = new Map<string, { questions: any[]; answers: any[] }>();
+          extractedQuestions.forEach((q, idx) => {
+            const paramKey = q.parameter_key || q.parameter_name || 'general';
+            if (!byParam.has(paramKey)) byParam.set(paramKey, { questions: [], answers: [] });
+            const ans = extractedAnswers.find((a: any) => (a.question_order || 0) === (q.question_order ?? idx));
+            byParam.get(paramKey)!.questions.push({ question: q, answer: ans || extractedAnswers[idx] });
+          });
+          const paramMeta = new Map<string, any>();
+          (data.parameters || []).forEach((p: any) => { if (p.key) paramMeta.set(p.key, p); });
+          byParam.forEach((val, paramKey) => {
+            const meta = paramMeta.get(paramKey);
+            parametersObject[paramKey] = {
+              name: meta?.name || paramKey,
+              score: meta?.score ?? 6,
+              weight: meta?.weight ?? 100,
+              questions: val.questions.map(({ question, answer }) => ({
+                question: { question_text: question.question_text, question_order: question.question_order },
+                answer: {
+                  transcript: answer?.transcript,
+                  score: answer?.score,
+                  feedback: answer?.feedback,
+                  audio_url: answer?.audio_url,
+                  question_video_url: answer?.question_video_url,
+                  written_answer: answer?.written_answer,
+                  behavioral: answer?.behavioral ?? answer?.behavioral_metrics,
+                  behavioral_metrics: answer?.behavioral_metrics ?? answer?.behavioral
+                }
+              })),
+              isPersonal: (meta?.name || '').toLowerCase().includes('personal'),
+              questionCount: val.questions.length,
+              totalScore: (meta?.score ?? 6) * val.questions.length
+            };
+          });
+        }
+
+        // Fallback: build from data.parameters when questions/answers path didn't populate
+         if (Object.keys(parametersObject).length === 0 && data.parameters && Array.isArray(data.parameters)) {
            data.parameters.forEach(param => {
              // Map questions to the format expected by the UI
              const mappedQuestions = (param.questions || []).map((questionData, index) => {
-               // Prefer exact 1-based match; fallback to 0-based
+               // Match by 0-based question_order first (API uses 0-based), then 1-based
                const oneBasedOrder = index + 1;
                const correspondingAnswer =
-                 data.answers?.find(a => a.parameter_key === param.key && Number(a.question_order) === oneBasedOrder) ||
-                 data.answers?.find(a => a.parameter_key === param.key && Number(a.question_order) === index);
+                 data.answers?.find((a: any) => (a.parameter_key === param.key || a.parameter_name === param.name) && Number(a.question_order) === index) ||
+                 data.answers?.find((a: any) => (a.parameter_key === param.key || a.parameter_name === param.name) && Number(a.question_order) === oneBasedOrder) ||
+                 data.answers?.find((a: any) => a.parameter_key === param.key && Number(a.question_order) === index) ||
+                 data.answers?.find((a: any) => Number(a.question_order) === index);
 
                // Seed values from available sources
                let realQuestionText = questionData.text;
@@ -382,6 +444,13 @@ const FinalResults = () => {
                if (realFeedback == null) realFeedback = `Assessment for ${param.name}: ${param.reason}`;
                if (realScore == null) realScore = param.score;
 
+               // Use full answer when available (includes behavioral) - ensures speech analysis shows
+               const fullAnswer = correspondingAnswer || data.answers?.find((a: any) =>
+                 (a.parameter_key === param.key || a.parameter_name === param.name) &&
+                 (Number(a.question_order) === index || Number(a.question_order) === oneBasedOrder)
+               ) || data.answers?.find((a: any) => Number(a.question_order) === index);
+               const behavioralData = fullAnswer?.behavioral ?? fullAnswer?.behavioral_metrics;
+
                return {
                  question: {
                    question_text: realQuestionText,
@@ -393,7 +462,9 @@ const FinalResults = () => {
                    feedback: realFeedback,
                    audio_url: realAudioUrl,
                    question_video_url: realVideoUrl,
-                   written_answer: realWrittenAnswer
+                   written_answer: realWrittenAnswer,
+                   behavioral: behavioralData,
+                   behavioral_metrics: behavioralData
                  }
                };
              });
@@ -457,6 +528,11 @@ const FinalResults = () => {
     }
   }, [reportData, selectedParameter]);
 
+  // Reset expanded questions when parameter changes
+  useEffect(() => {
+    setExpandedQuestions(new Set());
+  }, [selectedParameter]);
+
 
 
   const downloadReport = () => {
@@ -471,7 +547,7 @@ const FinalResults = () => {
       reportContent += `CANDIDATE: ${reportData.interview?.candidate_name || 'N/A'}\n`;
       reportContent += `POSITION: ${reportData.interview?.position || 'N/A'}\n`;
       // Remove Interview Type from text report - not needed
-      reportContent += `OVERALL SCORE: ${reportData.interview?.overall_score || 'N/A'}/10\n`;
+      reportContent += `OVERALL SCORE: ${formatOverallScore(reportData.interview?.overall_score)}/10\n`;
       reportContent += `TOTAL QUESTIONS: ${reportData.questions?.length || 0}\n`;
       reportContent += `ASSESSMENT DATE: ${formatOrdinalDate(reportData.interview?.created_at)}\n`;
       reportContent += `REPORT GENERATED: ${formatOrdinalDate(new Date())}\n\n`;
@@ -621,86 +697,11 @@ const FinalResults = () => {
       doc.text(`Interview Type: ${reportData.interview?.interview_type || 'N/A'}`, 15, yPosition + 16);
       
       // Right column
-      doc.text(`Overall Score: ${reportData.interview?.overall_score || 'N/A'}/10`, 110, yPosition);
+      doc.text(`Overall Score: ${formatOverallScore(reportData.interview?.overall_score)}/10`, 110, yPosition);
       doc.text(`Total Questions: ${reportData.questions?.length || 0}`, 110, yPosition + 8);
       doc.text(`Date: ${formatOrdinalDate(reportData.interview?.created_at)}`, 110, yPosition + 16);
       
       yPosition += 45;
-      
-      // Parameter scores section with professional table
-      if (reportData.parameters && reportData.parameters.length > 0) {
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.text('PARAMETER PERFORMANCE', 15, yPosition);
-        yPosition += 15;
-        
-        // Create professional table
-        const tableData = [['Parameter', 'Score', 'Weight', 'Performance']];
-        reportData.parameters.forEach((param, index) => {
-          const paramName = param.name || param.parameter_name || `Parameter ${index + 1}`;
-          const score = param.score || param.averageScore || 'N/A';
-          const weight = param.weight ? `${param.weight}%` : 'N/A';
-          
-          // Performance indicator
-          let performance = 'Needs Improvement';
-          if (score >= 8) performance = 'Excellent';
-          else if (score >= 6) performance = 'Good';
-          else if (score >= 4) performance = 'Fair';
-          
-          tableData.push([paramName, score.toString(), weight, performance]);
-        });
-        
-        // Professional table with borders and styling
-        let tableY = yPosition;
-        const colWidths = [70, 25, 25, 50];
-        const startX = 15;
-        
-        tableData.forEach((row, rowIndex) => {
-          if (tableY > 250) {
-            doc.addPage();
-            tableY = 20;
-          }
-          
-          let currentX = startX;
-          
-          // Draw cell borders
-          doc.setDrawColor(189, 195, 199);
-          doc.setLineWidth(0.2);
-          
-          row.forEach((cell, colIndex) => {
-            // Cell background for header
-            if (rowIndex === 0) {
-              doc.setFillColor(52, 73, 94); // Dark blue
-              doc.rect(currentX, tableY - 5, colWidths[colIndex], 8, 'F');
-              doc.setTextColor(255, 255, 255);
-            } else {
-              doc.setFillColor(236, 240, 241); // Light gray
-              doc.rect(currentX, tableY - 5, colWidths[colIndex], 8, 'F');
-              doc.setTextColor(0, 0, 0);
-            }
-            
-            // Cell border
-            doc.rect(currentX, tableY - 5, colWidths[colIndex], 8);
-            
-            // Text
-            doc.setFont('helvetica', rowIndex === 0 ? 'bold' : 'normal');
-            doc.setFontSize(10);
-            
-            // Center align score and weight
-            if (colIndex === 1 || colIndex === 2) {
-              doc.text(cell, currentX + colWidths[colIndex]/2, tableY, { align: 'center' });
-            } else {
-              doc.text(cell, currentX + 3, tableY);
-            }
-            
-            currentX += colWidths[colIndex];
-          });
-          
-          tableY += 8;
-        });
-        
-        yPosition = tableY + 15;
-      }
       
       // Detailed assessment section
       if (reportData.questions && reportData.answers) {
@@ -874,7 +875,7 @@ const FinalResults = () => {
       // Add data rows
       overviewSheet.addRow(['Candidate Name', reportData.interview?.candidate_name || 'N/A']);
       overviewSheet.addRow(['Position Applied', reportData.interview?.position || 'N/A']);
-      overviewSheet.addRow(['Overall Score', (parseFloat(reportData.interview?.overall_score) || 0).toString()]);
+      overviewSheet.addRow(['Overall Score', formatOverallScore(reportData.interview?.overall_score)]);
       overviewSheet.addRow(['Total Questions', (reportData.questions?.length || 0).toString()]);
       overviewSheet.addRow(['Assessment Date', formatOrdinalDate(reportData.interview?.created_at)]);
       overviewSheet.addRow(['Report generated time', new Date().toLocaleTimeString()]);
@@ -1113,7 +1114,8 @@ const FinalResults = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex flex-col overflow-x-hidden">
-        <header className="flex-shrink-0 bg-sky-100 border-b border-sky-200">
+        {/* Light bar with logo - commented to avoid flash when navigating to Results */}
+        {/* <header className="flex-shrink-0 bg-sky-100 border-b border-sky-200">
           <div className="w-full pl-0 pr-2 sm:pr-6 py-2 sm:py-3 lg:py-4">
             <img
               src="/Logo_Transparent_BG.png"
@@ -1121,7 +1123,7 @@ const FinalResults = () => {
               className="h-8 sm:h-10 lg:h-12 w-auto object-contain"
             />
           </div>
-        </header>
+        </header> */}
         <div className="flex-1 flex items-center justify-center p-3 sm:p-6">
           <div className="text-center">
             <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-[#1e5da8] mx-auto mb-3 sm:mb-4" />
@@ -1135,7 +1137,8 @@ const FinalResults = () => {
   if (!reportData) {
     return (
       <div className="min-h-screen bg-white flex flex-col overflow-x-hidden">
-        <header className="flex-shrink-0 bg-sky-100 border-b border-sky-200">
+        {/* Light bar with logo - commented to avoid flash when navigating to Results */}
+        {/* <header className="flex-shrink-0 bg-sky-100 border-b border-sky-200">
           <div className="w-full pl-0 pr-2 sm:pr-6 py-2 sm:py-3 lg:py-4">
             <img
               src="/Logo_Transparent_BG.png"
@@ -1143,14 +1146,14 @@ const FinalResults = () => {
               className="h-8 sm:h-10 lg:h-12 w-auto object-contain"
             />
           </div>
-        </header>
+        </header> */}
         <div className="flex-1 flex items-center justify-center px-3 sm:px-6 py-4 sm:py-6">
           <div className="bg-white rounded-xl shadow-lg p-4 sm:p-8 max-w-md w-full text-center mx-2 sm:mx-0">
             <XCircle className="w-12 h-12 sm:w-16 sm:h-16 text-red-500 mx-auto mb-3 sm:mb-4 flex-shrink-0" />
             <h2 className="text-lg sm:text-2xl font-bold text-gray-800 mb-2 break-words">Results Not Found</h2>
             <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6 break-words">The interview results could not be loaded.</p>
             <button
-              onClick={() => navigate('/dashboard', { state: { activeSection: 'interview-dashboard' } })}
+              onClick={() => navigate('/dashboard?section=interview-dashboard')}
               className="min-h-[44px] px-4 sm:px-6 py-3 rounded-lg bg-[#1e5da8] text-white text-sm sm:text-base font-medium hover:bg-[#1e5da8]/90 transition-colors touch-manipulation w-full sm:w-auto"
             >
               Go to Dashboard
@@ -1215,7 +1218,7 @@ const FinalResults = () => {
       doc.text(`Candidate: ${interview.candidate_name}`, 20, 45);
       doc.text(`Email: ${interview.candidate_email || 'N/A'}`, 20, 52);
       doc.text(`Position: ${interview.position}`, 20, 59);
-      doc.text(`Overall Score: ${interview.overall_score || 'N/A'}`, 20, 66);
+      doc.text(`Overall Score: ${formatOverallScore(interview.overall_score)}/10`, 20, 66);
       doc.text(`Interview Date: ${formatOrdinalDate(interview.created_at)}`, 20, 73);
       
       // Add termination reason only if interview is terminated (below interview date, not in table)
@@ -1381,10 +1384,8 @@ const FinalResults = () => {
         console.log('⚠️ Continuing without photo');
       }
       
-      // Prepare table data
-      const tableData: any[][] = [];
-      
-      // Debug logging - Enhanced to track feedback data
+      // Prepare question data first (needed for total page count)
+      const questionRows: { question: any; answer: any; parameter: string; feedback: string }[] = [];
       console.log('🔍 PDF Generation Debug - Enhanced Version:');
       console.log('🔍 Parameters object:', parameters);
       console.log('🔍 Parameters keys:', Object.keys(parameters || {}));
@@ -1430,8 +1431,8 @@ const FinalResults = () => {
           const questionText = question.question_text || question.question || 'N/A';
           const parameter = question.parameter_name || question.parameter_key || 'N/A';
           
-          // Only add if we have a valid question (not N/A) - same logic as Excel
-          if (questionText !== 'N/A' && parameter !== 'N/A') {
+          // Include all questions (including terminated/partial interviews with 1+ answers)
+          if (questionText && questionText !== 'N/A') {
             if (answer) {
               // Enhanced feedback extraction with multiple fallbacks
               const getFeedback = (question: any, answer: any) => {
@@ -1495,73 +1496,240 @@ const FinalResults = () => {
               
               const feedback = getFeedback(question, answer);
               const formattedFeedback = formatFeedback(feedback);
-              console.log(`🔍 Feedback for question ${questionOrder}:`, feedback?.substring(0, 100) + '...');
-              console.log(`🔍 Formatted feedback for question ${questionOrder}:`, formattedFeedback?.substring(0, 200) + '...');
-              
-              tableData.push([
+              questionRows.push({
+                question: { ...question, questionText },
+                answer,
                 parameter,
-                questionText,
-                answer.transcript || answer.answer || 'No transcript available',
-                answer.written_answer || 'No written answer',
-                formattedFeedback,
-                answer.score || 'N/A'
-              ]);
+                feedback: formattedFeedback
+              });
             } else {
-              // Handle case where answer is missing but question exists (same as Excel)
-              tableData.push([
+              questionRows.push({
+                question: { ...question, questionText },
+                answer: null,
                 parameter,
-                questionText,
-                'No answer recorded',
-                'No written answer',
-                'No feedback available',
-                'N/A'
-              ]);
+                feedback: 'No feedback available'
+              });
             }
           }
         });
+      } else if (reportData.parameters && reportData.parameters.length > 0) {
+        // Fallback for terminated interviews: build question rows from parameters.questions
+        console.log('🔍 Using parameters.questions for PDF (terminated/partial interview fallback)');
+        let globalIdx = 0;
+        const answersList = reportData.answers || [];
+        reportData.parameters.forEach((param: any) => {
+          const paramQuestions = param.questions || [];
+          paramQuestions.forEach((qData: any, qIdx: number) => {
+            const questionText = qData.text || qData.question_text || `Question ${globalIdx + 1}`;
+            const parameter = param.name || param.parameter_name || param.key || 'General';
+            const matchedAnswer = answersList.find((a: any) =>
+              (a.parameter_key === param.key || a.parameter_name === param.name) &&
+              ((a.question_order || 0) === globalIdx || (a.question_order || 0) === qIdx)
+            ) || answersList.find((a: any) => (a.question_order || 0) === globalIdx);
+            const answer = matchedAnswer || {
+              transcript: qData.answer || qData.transcript || '',
+              score: param.score ?? qData.score ?? 'N/A',
+              feedback: param.reason || 'Partial assessment',
+              written_answer: qData.written_answer,
+              behavioral: null,
+              question_order: globalIdx
+            };
+            questionRows.push({
+              question: { question_order: globalIdx, question_text: questionText, questionText, parameter_key: param.key, parameter_name: parameter },
+              answer,
+              parameter,
+              feedback: answer.feedback || 'No feedback available'
+            });
+            globalIdx++;
+          });
+        });
       }
-      
-      // Add table with proper column widths
-      autoTable(doc, {
-        head: [['Parameter', 'Questions', 'Answers', 'Written Answer', 'AI Feedback', 'Scores']],
-        body: tableData,
-        startY: tableStartY, // Use calculated startY (85 normally, 92 if termination reason shown)
-        styles: {
-          fontSize: 7,
-          cellPadding: 2,
-          overflow: 'linebreak',
-          halign: 'left',
-          lineColor: [0, 0, 0], // Black borders
-          lineWidth: 0.1
-        },
-        headStyles: {
-          fillColor: [68, 114, 196], // Same blue as Excel (FF4472C4)
-          textColor: 255,
-          fontStyle: 'bold',
-          fontSize: 8,
-          lineColor: [0, 0, 0], // Black borders
-          lineWidth: 0.2 // Thicker borders for header
-        },
-        columnStyles: {
-          0: { cellWidth: 25 }, // Parameter - slightly smaller
-          1: { cellWidth: 35 }, // Questions - slightly smaller  
-          2: { cellWidth: 35 }, // Answers - slightly smaller
-          3: { cellWidth: 35 }, // Written Answer - new column
-          4: { cellWidth: 35 }, // AI Feedback - slightly smaller
-          5: { cellWidth: 15 }  // Scores - slightly smaller
-        },
-        margin: { left: 15, right: 15 },
-        pageBreak: 'auto',
-        rowPageBreak: 'avoid',
-        didDrawPage: function (data: any) {
-          // Add page numbers
-          const pageCount = (doc as any).internal.getNumberOfPages();
-          doc.setFontSize(8);
-          doc.text(`Page ${data.pageNumber} of ${pageCount}`, 
-            data.settings.margin.left, 
-            (doc as any).internal.pageSize.height - 10);
+
+      const totalPageCount = 1 + questionRows.length + 1; // +1 for disclaimer page
+      let behavioralStartY = tableStartY + 30;
+
+      // Add average behavioral metrics per parameter on Page 1 (all metrics matching individual question speech table)
+      type ParamMetrics = {
+        wpm: number[]; filler: number[]; filler_density: number[]; word_count: number[];
+        speech_ratio: number[]; pause: number[]; longest_pause: number[]; articulation: number[];
+      };
+      const paramBehavioralMap: Record<string, ParamMetrics> = {};
+      const initParam = (): ParamMetrics => ({
+        wpm: [], filler: [], filler_density: [], word_count: [],
+        speech_ratio: [], pause: [], longest_pause: [], articulation: []
+      });
+      questionRows.forEach((row: any) => {
+        const p = row.parameter;
+        if (!paramBehavioralMap[p]) paramBehavioralMap[p] = initParam();
+        const b = row.answer?.behavioral || row.answer?.behavioral_metrics;
+        if (b) {
+          if (typeof b.speaking_pace_wpm === 'number') paramBehavioralMap[p].wpm.push(b.speaking_pace_wpm);
+          if (typeof b.filler_words === 'number') paramBehavioralMap[p].filler.push(b.filler_words);
+          if (typeof b.filler_density === 'number') paramBehavioralMap[p].filler_density.push(b.filler_density);
+          if (typeof b.word_count === 'number') paramBehavioralMap[p].word_count.push(b.word_count);
+          if (typeof b.speech_ratio === 'number') paramBehavioralMap[p].speech_ratio.push(b.speech_ratio);
+          if (typeof b.avg_pause_seconds === 'number') paramBehavioralMap[p].pause.push(b.avg_pause_seconds);
+          if (typeof b.longest_pause_seconds === 'number') paramBehavioralMap[p].longest_pause.push(b.longest_pause_seconds);
+          if (typeof b.articulation_score === 'number') paramBehavioralMap[p].articulation.push(b.articulation_score);
         }
       });
+
+      const hasBehavioralData = Object.keys(paramBehavioralMap).some(p => {
+        const d = paramBehavioralMap[p];
+        return d.wpm.length > 0 || d.filler.length > 0 || d.pause.length > 0 || d.articulation.length > 0 ||
+          d.filler_density.length > 0 || d.word_count.length > 0 || d.speech_ratio.length > 0 || d.longest_pause.length > 0;
+      });
+
+      if (hasBehavioralData) {
+        const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+        const fmt = (v: number | null, decimals = 0) => v == null ? '-' : decimals ? v.toFixed(2) : String(Math.round(v));
+        const paramNames = Object.entries(paramBehavioralMap)
+          .filter(([, d]) => d.wpm.length || d.filler.length || d.pause.length || d.articulation.length ||
+            d.filler_density.length || d.word_count.length || d.speech_ratio.length || d.longest_pause.length)
+          .map(([name]) => name);
+        const metrics = [
+          { key: 'Speaking Pace', get: (d: ParamMetrics) => fmt(avg(d.wpm)) + (avg(d.wpm) != null ? ' WPM' : '') },
+          { key: 'Filler Words', get: (d: ParamMetrics) => fmt(avg(d.filler)) },
+          { key: 'Filler Density', get: (d: ParamMetrics) => fmt(avg(d.filler_density), 2) + (avg(d.filler_density) != null ? '/100' : '') },
+          { key: 'Word Count', get: (d: ParamMetrics) => fmt(avg(d.word_count)) },
+          { key: 'Speech Ratio', get: (d: ParamMetrics) => fmt(avg(d.speech_ratio)) + (avg(d.speech_ratio) != null ? '%' : '') },
+          { key: 'Avg Pause (s)', get: (d: ParamMetrics) => fmt(avg(d.pause), 2) },
+          { key: 'Longest Pause (s)', get: (d: ParamMetrics) => fmt(avg(d.longest_pause), 2) },
+          { key: 'Articulation %', get: (d: ParamMetrics) => fmt(avg(d.articulation)) + (avg(d.articulation) != null ? '%' : '') },
+        ];
+        const headers = ['Metric', ...paramNames];
+        const behavioralSummaryData: any[][] = [headers];
+        metrics.forEach(m => {
+          behavioralSummaryData.push([m.key, ...paramNames.map(p => m.get(paramBehavioralMap[p]))]);
+        });
+        if (behavioralSummaryData.length > 1) {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(10);
+          doc.text('Behavioral / Speech Analysis Summary (Averages per Parameter)', 15, behavioralStartY - 5);
+          doc.setFont('helvetica', 'normal');
+          const metricColWidth = 42;
+          const paramColWidth = Math.max(35, (180 - metricColWidth) / paramNames.length);
+          const colStyles: Record<number, { cellWidth: number }> = { 0: { cellWidth: metricColWidth } };
+          paramNames.forEach((_, i) => { colStyles[i + 1] = { cellWidth: paramColWidth }; });
+          autoTable(doc, {
+            head: [behavioralSummaryData[0]],
+            body: behavioralSummaryData.slice(1),
+            startY: behavioralStartY,
+            styles: { fontSize: 8, cellPadding: 2 },
+            headStyles: { fillColor: [68, 114, 196], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+            columnStyles: colStyles,
+            margin: { left: 15, right: 15 }
+          });
+          behavioralStartY = (doc as any).lastAutoTable?.finalY || behavioralStartY;
+        }
+      }
+
+      doc.setFontSize(8);
+      doc.text(`Page 1 of ${totalPageCount}`, 15, (doc as any).internal.pageSize.height - 10);
+
+      // Pages 2+: One question per page with table and Speech Analysis
+      const totalQuestions = questionRows.length;
+      questionRows.forEach((row, idx) => {
+        doc.addPage();
+        const qNum = idx + 1;
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Parameter: ${row.parameter}`, 15, 20);
+        doc.text(`Question ${qNum} of ${totalQuestions}`, 150, 20);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+
+        const transcript = row.answer ? (row.answer.transcript || row.answer.answer || 'No transcript available') : 'No answer recorded';
+        const writtenAnswer = row.answer?.written_answer?.trim();
+        const requiresWritten = row.question?.requires_written_answer === true;
+        const written = writtenAnswer
+          ? writtenAnswer
+          : requiresWritten
+            ? 'No written answer'
+            : 'This was not a written question';
+        const score = row.answer != null ? (row.answer.score ?? 'N/A') : 'N/A';
+
+        const mainData: [string, string][] = [
+          ['Question', row.question.questionText || 'N/A'],
+          ['Answer', transcript],
+          ['Written', written],
+          ['AI Feedback', row.feedback || 'No feedback available'],
+          ['AI Score', String(score)],
+        ];
+
+        autoTable(doc, {
+          head: [['Metric', 'Value']],
+          body: mainData,
+          startY: 28,
+          styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
+          headStyles: { fillColor: [68, 114, 196], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+          columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 140 } },
+          margin: { left: 15, right: 15 }
+        });
+
+        const tableEndY = (doc as any).lastAutoTable?.finalY || 50;
+        let yPos = tableEndY + 10;
+
+        // Speech Analysis section - ensure behavioral from answer or fallback to answers list
+        const answerWithBehavioral = row.answer || reportData?.answers?.find((a: any) => (a.question_order || 0) === (row.question?.question_order ?? idx));
+        const b = row.answer?.behavioral ?? row.answer?.behavioral_metrics ?? answerWithBehavioral?.behavioral ?? answerWithBehavioral?.behavioral_metrics;
+        if (b) {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(10);
+          doc.text('Speech Analysis', 15, yPos);
+          yPos += 7;
+          const speechData: [string, string][] = [
+            ['Speaking Pace', `${b.speaking_pace_wpm ?? '-'} WPM`],
+            ['Filler Words', String(b.filler_words ?? '-')],
+            ['Filler Density', b.filler_density != null ? `${b.filler_density} per 100 words` : '-'],
+            ['Word Count', String(b.word_count ?? '-')],
+            ['Speech Ratio', b.speech_ratio != null ? `${b.speech_ratio}%` : '-'],
+            ['Avg Pause', `${b.avg_pause_seconds ?? '-'}s`],
+            ['Longest Pause', `${b.longest_pause_seconds ?? '-'}s`],
+            ['Articulation', `${b.articulation_score ?? '-'}%`],
+          ];
+          if (b.filler_examples?.length) {
+            speechData.push(['Fillers found', b.filler_examples.join(', ')]);
+          }
+          autoTable(doc, {
+            head: [['Metric', 'Value']],
+            body: speechData,
+            startY: yPos,
+            styles: { fontSize: 9, cellPadding: 3 },
+            headStyles: { fillColor: [68, 114, 196], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+            columnStyles: { 0: { cellWidth: 45 }, 1: { cellWidth: 135 } },
+            margin: { left: 15, right: 15 }
+          });
+        }
+
+        // Page number (page 1 = overview, page 2+idx = this question)
+        const currentPageNum = 2 + idx;
+        doc.setFontSize(8);
+        doc.text(`Page ${currentPageNum} of ${totalPageCount}`, 15, doc.internal.pageSize.height - 10);
+      });
+
+      // Add closing/disclaimer page
+      doc.addPage();
+      const pageHeight = doc.internal.pageSize.height;
+      const pageWidth = doc.internal.pageSize.width;
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(11);
+      doc.setTextColor(30, 30, 30);
+      const disclaimerLines = [
+        'This report combines AI content evaluation with advanced behavioral analysis.',
+        'Metrics are calculated using computer vision, speech analysis, and machine learning.',
+        'This report was created by the smart assessment system ProValuate.'
+      ];
+      const lineHeight = 8;
+      let disclaimerY = pageHeight / 2 - (disclaimerLines.length * lineHeight) / 2;
+      disclaimerLines.forEach((line) => {
+        doc.text(line, pageWidth / 2, disclaimerY, { align: 'center' });
+        disclaimerY += lineHeight;
+      });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(0, 0, 0);
+      doc.text(`Page ${totalPageCount} of ${totalPageCount}`, 15, pageHeight - 10);
       
       // Save the PDF with proper filename
       const candidateName = interview.candidate_name.replace(/[^a-zA-Z0-9]/g, '_');
@@ -1585,106 +1753,140 @@ const FinalResults = () => {
 
   return (
     <div className="min-h-screen w-full flex flex-col overflow-x-hidden bg-white text-gray-900">
-      {/* Header - same as CandidateInterview/CandidateCompletion: sky-100 + ProValuate logo */}
-      <header className="flex-shrink-0 bg-sky-100 border-b border-sky-200">
-        <div className="w-full pl-0 pr-2 sm:pr-6 py-2 sm:py-3 lg:py-4 flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
-          <img
-            src="/Logo_Transparent_BG.png"
-            alt="ProValuate"
-            className="h-8 sm:h-10 lg:h-12 w-auto object-contain flex-shrink-0 order-first max-h-10 sm:max-h-none"
-          />
-          <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-3 ml-auto min-w-0">
-            <button
-              onClick={generatePDFReport}
-              disabled={isGeneratingPDF}
-              className={`inline-flex items-center gap-1 sm:gap-2 min-h-[44px] px-2 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-base font-medium transition-colors touch-manipulation bg-[#1e5da8] text-white hover:bg-[#1e5da8]/90 flex-shrink-0 ${isGeneratingPDF ? 'opacity-50 cursor-not-allowed' : ''}`}
-              title="Download comprehensive PDF report with all questions, answers, scores, feedback, and media files"
-            >
-              {isGeneratingPDF ? (
-                <>
-                  <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin flex-shrink-0" />
-                  <span className="hidden sm:inline">Generating PDF...</span>
-                  <span className="sm:hidden">PDF...</span>
-                </>
-              ) : (
-                <>
-                  <FileText className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                  <span className="hidden sm:inline">Download PDF Report</span>
-                  <span className="sm:hidden">PDF</span>
-                </>
-              )}
-            </button>
-            <button
-              onClick={downloadExcel}
-              className="inline-flex items-center gap-1 sm:gap-2 min-h-[44px] px-2 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-base font-medium transition-colors touch-manipulation bg-[#1e5da8] text-white hover:bg-[#1e5da8]/90 flex-shrink-0"
-              title="Download comprehensive Excel report"
-            >
-              <FileSpreadsheet className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Excel Report</span>
-              <span className="sm:hidden">Excel</span>
-            </button>
-            <button
-              onClick={shareReport}
-              className="inline-flex items-center gap-1 sm:gap-2 min-h-[44px] px-2 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-base font-medium transition-colors touch-manipulation bg-[#1e5da8] text-white hover:bg-[#1e5da8]/90 flex-shrink-0"
-            >
-              <Share2 className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Share</span>
-            </button>
-            <button
-              onClick={() => navigate('/dashboard', { state: { activeSection: 'interview-dashboard' } })}
-              className="inline-flex items-center gap-1 sm:gap-2 min-h-[44px] px-2 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-base font-medium transition-colors touch-manipulation bg-[#1e5da8] text-white hover:bg-[#1e5da8]/90 flex-shrink-0"
-              aria-label="Back to Dashboard"
-            >
-              <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Back to Dashboard</span>
-              <span className="sm:hidden">Back</span>
-            </button>
+      {/* Header - dark blue bar with title and Menu */}
+      <header className="flex-shrink-0 bg-[#1e5da8] border-b border-[#1e5da8]/80 min-h-[72px] sm:min-h-[80px] flex items-center">
+        <div className="w-full pl-4 sm:pl-6 pr-4 sm:pr-6 py-4 sm:py-5 flex items-center justify-between gap-4">
+          {/* Left: Title and subtitle */}
+          <div className="flex flex-col min-w-0">
+            <h1 className="text-base sm:text-lg lg:text-xl font-bold text-white truncate">
+              Parameter-Based Assessment Analysis
+            </h1>
+            <p className="text-xs sm:text-sm text-white/90 mt-0.5">
+              AI Evaluation and Communication Insights
+            </p>
+          </div>
+          {/* Right: Menu - aligned to end, vertically centered */}
+          <div className="flex items-center flex-shrink-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="inline-flex items-center gap-2 min-h-[44px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-full text-sm sm:text-base font-medium transition-colors touch-manipulation bg-white text-[#1e5da8] hover:bg-gray-50 flex-shrink-0"
+                  aria-label="Open menu"
+                >
+                  <Menu className="h-5 w-5 sm:h-5 sm:w-5 flex-shrink-0" />
+                  <span>Menu</span>
+                  <ChevronDown className="h-4 w-4 flex-shrink-0" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={() => navigate('/dashboard?section=interview-dashboard')}>
+                  <LayoutDashboard className="mr-2 h-4 w-4 flex-shrink-0" />
+                  Back to Dashboard
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={generatePDFReport}
+                  disabled={isGeneratingPDF}
+                  className={isGeneratingPDF ? 'opacity-50 cursor-not-allowed' : ''}
+                >
+                  {isGeneratingPDF ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin flex-shrink-0" />
+                  ) : (
+                    <FileText className="mr-2 h-4 w-4 flex-shrink-0" />
+                  )}
+                  Download PDF Report
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={downloadExcel}>
+                  <FileSpreadsheet className="mr-2 h-4 w-4 flex-shrink-0" />
+                  Excel Report
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={shareReport}>
+                  <Share2 className="mr-2 h-4 w-4 flex-shrink-0" />
+                  Share
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
 
       {/* Main Content - full width as old setup */}
-      <div className="flex-1 w-full min-w-0 py-4 sm:py-8 px-3 sm:px-4 overflow-x-hidden">
-        {/* Interview Overview */}
-        <div className="rounded-lg p-3 sm:p-6 mb-4 sm:mb-8 bg-white border border-gray-200 shadow-sm">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-            <div className="text-center min-w-0">
-              <div className="text-xl sm:text-3xl font-bold text-[#1e5da8] break-words">{interview?.overall_score?.toFixed(1) || 'N/A'}/10</div>
-              <div className="text-xs sm:text-sm text-gray-600">Overall Score</div>
-              <div className={`text-xs mt-1 px-2 py-1 rounded-full text-white ${getScoreClass(interview?.overall_score || 0)}`}>
-                {getScoreLabel(interview?.overall_score || 0)}
+      <div className="flex-1 w-full min-w-0 py-4 sm:py-8 px-4 sm:px-6 pb-8 sm:pb-12 overflow-x-hidden">
+        {/* Interview Overview - Two Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-10">
+          {/* Card 1: Overall Score - Circular Diagram */}
+          <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm flex flex-col items-center justify-center">
+            <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex-shrink-0">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="42" fill="none" stroke="#e5e7eb" strokeWidth="10" />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  fill="none"
+                  stroke="#1e5da8"
+                  strokeWidth="10"
+                  strokeLinecap="round"
+                  strokeDasharray={`${(Math.min(10, Math.max(0, Number(interview?.overall_score) || 0)) / 10) * 263} 263`}
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl sm:text-3xl font-bold text-[#1e5da8]">
+                  {interview?.overall_score != null ? `${formatOverallScore(interview.overall_score)}/10` : 'N/A'}
+                </span>
+                <span className="text-xs sm:text-sm text-gray-600 mt-1">Overall Score</span>
               </div>
             </div>
-            <div className="text-center min-w-0">
-              <div className="text-xl sm:text-3xl font-bold text-[#1e5da8]">{parameterCount}</div>
-              <div className="text-xs sm:text-sm text-gray-600">Parameters</div>
+            <div className={`text-xs sm:text-sm mt-2 px-3 py-1 rounded-full text-white ${getScoreClass(interview?.overall_score || 0)}`}>
+              {getScoreLabel(interview?.overall_score || 0)}
             </div>
-            <div className="text-center min-w-0">
-              <div className="text-xl sm:text-3xl font-bold text-[#1e5da8]">{interview?.total_questions || 0}</div>
-              <div className="text-xs sm:text-sm text-gray-600">Questions</div>
+          </div>
+
+          {/* Card 2: Interview Summary */}
+          <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm">
+            <h2 className="text-lg sm:text-xl font-bold mb-4 flex items-center text-gray-900">
+              <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 mr-2 text-[#1e5da8] flex-shrink-0" />
+              Interview Summary
+            </h2>
+            <div className="space-y-3 sm:space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm sm:text-base text-gray-600">Candidate:</span>
+                <span className="text-sm sm:text-base font-semibold text-gray-900">{interview?.candidate_name ?? 'N/A'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm sm:text-base text-gray-600">Role:</span>
+                <span className="text-sm sm:text-base font-semibold text-gray-900">{interview?.position ?? 'N/A'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm sm:text-base text-gray-600">Date:</span>
+                <span className="text-sm sm:text-base font-semibold text-gray-900">
+                  {formatOrdinalDate(interview?.completed_at || interview?.created_at)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm sm:text-base text-gray-600">Duration:</span>
+                <span className="text-sm sm:text-base font-semibold text-gray-900">
+                  {interview?.completed_at && interview?.started_at
+                    ? `${Math.round((new Date(interview.completed_at).getTime() - new Date(interview.started_at).getTime()) / 60000)} minutes`
+                    : `${Math.round(Number(interview?.duration_minutes) || 30)} minutes`
+                  }
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm sm:text-base text-gray-600">Parameters Evaluated:</span>
+                <span className="text-sm sm:text-base font-semibold text-gray-900">{parameterCount}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm sm:text-base text-gray-600">Total Questions:</span>
+                <span className="text-sm sm:text-base font-semibold text-gray-900">{interview?.total_questions ?? 0}</span>
+              </div>
             </div>
-             <div className="text-center min-w-0">
-               <div className="text-xl sm:text-3xl font-bold text-[#1e5da8]">
-                 {interview.completed_at && interview.started_at 
-                   ? `${Math.round((new Date(interview.completed_at).getTime() - new Date(interview.started_at).getTime()) / 60000)} min` 
-                   : `${Math.round(Number(interview.duration_minutes) || 30)} min`
-                 }
-               </div>
-               <div className="text-xs sm:text-sm text-gray-600">Duration</div>
-             </div>
           </div>
         </div>
 
-
-        {/* Unified Assessment Dashboard */}
+        {/* Parameter selection and questions */}
         {reportData?.questions && reportData.questions.length > 0 && (
-          <div className="rounded-lg p-3 sm:p-6 bg-white border border-gray-200 shadow-sm">
-            <h2 className="text-lg sm:text-2xl font-bold mb-4 sm:mb-8 flex items-center break-words text-gray-900">
-              <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 mr-2 sm:mr-3 flex-shrink-0" />
-              Assessment Dashboard
-            </h2>
-            
-            {/* Parameter Navigation Tabs */}
+          <div className="rounded-lg p-3 sm:p-6 bg-white border border-gray-200 shadow-sm mt-2 sm:mt-4">
+            {/* Parameter cards */}
             {(() => {
               // Safety check - ensure data exists
               if (!reportData.questions || !reportData.answers) {
@@ -1762,7 +1964,7 @@ const FinalResults = () => {
                     {Object.entries(parameters).map(([paramKey, param]: [string, any]) => (
                       <button
                         key={paramKey}
-                        onClick={() => setSelectedParameter(paramKey)}
+                        onClick={() => { setSelectedParameter(paramKey); setExpandedQuestions(new Set()); }}
                         className={`p-3 sm:p-6 rounded-xl transition-all duration-200 text-left min-w-0 ${
                           selectedParameter === paramKey
                             ? 'bg-blue-50 text-blue-900 border-2 border-blue-200 shadow-lg transform scale-105'
@@ -1833,172 +2035,105 @@ const FinalResults = () => {
 
                   {/* Questions for Selected Parameter */}
                   {selectedParameter && parameters[selectedParameter] && (
-            <div className="space-y-6">
-                      <div className="rounded-xl p-3 sm:p-6 mb-4 sm:mb-6 transition-colors duration-300 bg-gray-50 border border-gray-200 shadow-sm">
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 min-w-0">
-                          <div className="min-w-0 flex-1">
-                            <h3 className="text-lg sm:text-2xl font-bold text-gray-900 break-words">
-                              {parameters[selectedParameter].name}
-                            </h3>
-                            <p className="text-xs sm:text-lg mt-2 sm:mt-3 leading-relaxed text-gray-600 break-words">
-                              {parameters[selectedParameter].isPersonal 
-                                ? 'These questions are for review only - no scoring applied'
-                                : 'Detailed questions and feedback for this assessment area'
-                              }
-                            </p>
-                          </div>
-                          <div className="text-left sm:text-right flex-shrink-0 min-w-0">
-                            {parameters[selectedParameter].isPersonal ? (
-                              <div className="bg-[#1e5da8] text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-lg font-medium">
-                                Review Only
-                              </div>
-                            ) : (
-                              <div className={`text-2xl sm:text-4xl font-bold ${getScoreColor(parameters[selectedParameter].averageScore)}`}>
-                                {parameters[selectedParameter].averageScore}/10
-                              </div>
-                            )}
-                            <div className="text-xs sm:text-lg font-medium text-gray-600">
-                              {parameters[selectedParameter].questionCount} questions
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {parameters[selectedParameter].questions.map(({ question, answer }, index) => {
-                        const questionId = `${selectedParameter}-${index}`;
-                        const isExpanded = expandedQuestions.has(questionId);
-                        
-                        return (
-                          <div key={index} className={`rounded-xl overflow-hidden transition-colors duration-300 ${
-                            'bg-white border border-gray-200 shadow-sm'
-                          }`}>
-                            {/* Question Header - Always Visible */}
-                            <div 
-                              className="p-3 sm:p-6 cursor-pointer transition-colors hover:bg-gray-50 touch-manipulation"
-                              onClick={() => toggleQuestion(questionId)}
+            <div className="space-y-6 mt-6">
+                      {/* Question cards - vertical list with Expand */}
+                      <div className="space-y-4 sm:space-y-5">
+                        {parameters[selectedParameter].questions.map(({ question, answer }: { question: any; answer: any }, idx: number) => {
+                          const expandKey = `${selectedParameter}-${idx}`;
+                          const isExpanded = expandedQuestions.has(expandKey);
+                          return (
+                            <div
+                              key={idx}
+                              className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden hover:border-[#1e5da8]/50 transition-colors cursor-pointer"
+                              onClick={() => toggleQuestion(expandKey)}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleQuestion(expandKey); } }}
                             >
-                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 min-w-0">
-                                <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-wrap">
-                                  <h4 className="text-sm sm:text-xl font-bold text-gray-900">Question {index + 1}</h4>
-                                  {parameters[selectedParameter].isPersonal ? (
-                                    <div className="bg-[#1e5da8] text-white px-3 py-1 rounded-full text-sm font-medium">
-                                      Review Only
-                                    </div>
-                                  ) : (
-                                    <div className={`text-xl sm:text-2xl font-bold ${getScoreColor(answer.score)}`}>
-                                      {answer.score}/10
-                                    </div>
-                                  )}
+                              <div className="flex items-start justify-between gap-5 p-6 sm:p-8 min-h-[140px] sm:min-h-[160px]">
+                                <div className="min-w-0 flex-1 text-left">
+                                  <div className="flex items-center gap-3 mb-3">
+                                    <span className="font-bold text-base sm:text-lg text-gray-900">Question {idx + 1}</span>
+                                    {!parameters[selectedParameter].isPersonal && answer?.score != null && (
+                                      <span className={`text-xl sm:text-2xl font-bold ${getScoreColor(answer.score)}`}>{answer.score}/10</span>
+                                    )}
+                                  </div>
+                                  <p className="text-base sm:text-lg text-gray-600 line-clamp-3">{question?.question_text || 'No question text'}</p>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-xs sm:text-sm ${
-                                    'text-gray-500'
-                                  }`}>
-                                    {isExpanded ? 'Collapse' : 'Expand'}
-                                  </span>
-                                  {isExpanded ? (
-                                    <ChevronUp className={`h-5 w-5 ${
-                                      'text-gray-500'
-                                    }`} />
-                                  ) : (
-                                    <ChevronDown className={`h-5 w-5 ${
-                                      'text-gray-500'
-                                    }`} />
-                                  )}
+                                <div className="flex-shrink-0 inline-flex items-center gap-1.5 px-4 py-2.5 text-base font-medium text-[#1e5da8] rounded-lg">
+                                  {isExpanded ? 'Collapse' : 'Expand'}
+                                  {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                 </div>
                               </div>
-                              
-                              {/* Question Preview - Always Visible */}
-                              <div className="mt-3 min-w-0">
-                                <p className="text-xs sm:text-sm leading-relaxed text-gray-600 break-words">
-                                  {question.question_text.length > 100 
-                                    ? `${question.question_text.substring(0, 100)}...` 
-                                    : question.question_text
-                                  }
-                                </p>
-                              </div>
-                            </div>
-                            
-                            {/* Expandable Content */}
-                            {isExpanded && (
-                              <div className="px-3 sm:px-6 pb-3 sm:pb-6 border-t border-gray-200">
-                                <div className="pt-3 sm:pt-6 space-y-3 sm:space-y-6">
-                                  {/* Full Question */}
-                                  <div className="min-w-0">
-                                    <h5 className="font-bold mb-2 sm:mb-3 text-base sm:text-lg text-gray-900">Question:</h5>
-                                    <p className="text-sm sm:text-lg leading-relaxed text-gray-700 break-words">{question.question_text}</p>
+                              {isExpanded && (
+                                <div className="px-5 sm:px-8 pb-5 sm:pb-8 pt-0 border-t border-gray-100 space-y-5 sm:space-y-6" onClick={(e) => e.stopPropagation()}>
+                                  <div>
+                                    <h5 className="font-bold mb-2 text-base sm:text-lg text-gray-900">Answer:</h5>
+                                    <p className="text-base sm:text-lg text-gray-700 break-words">{answer.transcript || 'No transcript available'}</p>
                                   </div>
-
-                                  {/* Answer */}
-                                  <div className="min-w-0">
-                                    <h5 className="font-bold mb-2 sm:mb-3 text-base sm:text-lg text-gray-900">Answer:</h5>
-                                    <p className="text-sm sm:text-lg leading-relaxed text-gray-700 break-words">{answer.transcript || 'No transcript available'}</p>
-                                  </div>
-
-                                  {/* Audio/Video Buttons */}
-                                  <div className="flex flex-wrap gap-2 sm:gap-4">
+                                  <div className="flex flex-wrap gap-2">
                                     {answer.audio_url && (
-                                      <button
-                                        onClick={() => playAudio(answer.audio_url)}
-                                        className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white rounded-lg transition-colors text-sm sm:text-base touch-manipulation"
-                                      >
-                                        <Download className="h-4 w-4" />
-                                        Play Audio
+                                      <button onClick={() => playAudio(answer.audio_url)} className="inline-flex items-center gap-2 px-4 py-2 bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white rounded-lg text-sm">
+                                        <Download className="h-4 w-4" /> Play Audio
                                       </button>
                                     )}
-                                    
                                     {answer.question_video_url && (
-                                      <button
-                                        onClick={() => playVideo(answer.question_video_url)}
-                                        className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 sm:px-5 py-2.5 rounded-lg text-sm sm:text-base font-medium transition-colors touch-manipulation bg-[#1e5da8] text-white hover:bg-[#1e5da8]/90"
-                                      >
-                                        <Download className="h-4 w-4 flex-shrink-0" />
-                                        Play Video
+                                      <button onClick={() => playVideo(answer.question_video_url)} className="inline-flex items-center gap-2 px-4 py-2 bg-[#1e5da8] text-white rounded-lg text-sm hover:bg-[#1e5da8]/90">
+                                        <Download className="h-4 w-4" /> Play Video
                                       </button>
                                     )}
-
                                     {answer.written_answer && (
-                                      <button
-                                        onClick={() => showWrittenAnswer(answer.written_answer)}
-                                        className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 sm:px-5 py-2.5 rounded-lg text-sm sm:text-base font-medium transition-colors touch-manipulation bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white"
-                                      >
-                                        <FileText className="h-4 w-4 flex-shrink-0" />
-                                        Show Written Answer
+                                      <button onClick={() => showWrittenAnswer(answer.written_answer)} className="inline-flex items-center gap-2 px-4 py-2 bg-[#1e5da8] text-white rounded-lg text-sm hover:bg-[#1e5da8]/90">
+                                        <FileText className="h-4 w-4" /> Show Written Answer
                                       </button>
                                     )}
                                   </div>
-
-                                  {/* AI Feedback - Only for scored parameters */}
                                   {!parameters[selectedParameter].isPersonal && (
-                                    answer.feedback ? (
-                                      <div className="min-w-0">
-                                        <h5 className="font-bold mb-2 sm:mb-3 text-base sm:text-lg text-gray-900">AI Feedback:</h5>
-                                        <p className="text-sm sm:text-lg leading-relaxed text-gray-700 break-words">{answer.feedback}</p>
-                                      </div>
-                                    ) : (
-                                      <div className="min-w-0">
-                                        <h5 className="font-bold mb-2 sm:mb-3 text-base sm:text-lg text-gray-900">AI Feedback:</h5>
-                                        <p className="italic text-sm sm:text-lg text-gray-500 break-words">Feedback analysis pending - will be available soon</p>
-                                      </div>
-                                    )
+                                    <div>
+                                      <h5 className="font-bold mb-2 text-base sm:text-lg text-gray-900">AI Feedback:</h5>
+                                      <p className="text-base sm:text-lg text-gray-700 break-words">{answer.feedback || 'Feedback analysis pending - will be available soon'}</p>
+                                    </div>
+                                  )}
+                                  {(answer.behavioral || answer.behavioral_metrics) && (
+                                    <div className="p-5 bg-sky-100 rounded-lg border border-sky-200">
+                                      <h5 className="font-bold mb-3 text-base sm:text-lg text-gray-900">Speech Analysis</h5>
+                                      {(() => {
+                                        const b = answer.behavioral || answer.behavioral_metrics;
+                                        return (
+                                          <>
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm sm:text-base">
+                                              <div><span className="text-gray-600">Speaking Pace</span><span className="font-semibold block">{b.speaking_pace_wpm ?? '-'} WPM</span></div>
+                                              <div><span className="text-gray-600">Filler Words</span><span className="font-semibold block">{b.filler_words ?? '-'}</span></div>
+                                              <div><span className="text-gray-600">Filler Density</span><span className="font-semibold block">{b.filler_density != null ? `${b.filler_density} per 100 words` : '-'}</span></div>
+                                              <div><span className="text-gray-600">Word Count</span><span className="font-semibold block">{b.word_count ?? '-'}</span></div>
+                                              <div><span className="text-gray-600">Avg Pause</span><span className="font-semibold block">{b.avg_pause_seconds ?? '-'}s</span></div>
+                                              <div><span className="text-gray-600">Speech Ratio</span><span className="font-semibold block">{b.speech_ratio != null ? `${b.speech_ratio}%` : '-'}</span></div>
+                                              <div><span className="text-gray-600">Articulation</span><span className="font-semibold block">{b.articulation_score ?? '-'}%</span></div>
+                                            </div>
+                                            {b.filler_examples?.length > 0 && (
+                                              <p className="mt-2 text-xs text-gray-600">Fillers found: {b.filler_examples.join(', ')}</p>
+                                            )}
+                                          </>
+                                        );
+                                      })()}
+                                    </div>
                                   )}
                                 </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
 
                   {/* No Parameter Selected Message */}
                   {!selectedParameter && (
                     <div className="text-center py-8 sm:py-16 text-gray-500 px-2">
-                      <BarChart3 className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 sm:mb-6 opacity-50" />
-                      <p className="text-base sm:text-xl font-medium break-words">Select a parameter above to view detailed questions and feedback</p>
-                      <p className="text-sm sm:text-lg mt-2 sm:mt-3 leading-relaxed break-words">Each parameter card shows performance metrics and clicking reveals detailed questions, answers, audio, videos, and AI feedback</p>
-                      </div>
-                    )}
+                      <p className="text-base sm:text-xl font-medium break-words">Select a parameter to view its questions</p>
+                      <p className="text-sm sm:text-lg mt-2 sm:mt-3 leading-relaxed break-words">Click a parameter card above, then expand a question to see full details</p>
+                    </div>
+                  )}
                   </div>
                 );
             })()}
