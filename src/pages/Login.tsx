@@ -334,7 +334,7 @@ const Login = () => {
             AI-Powered Candidate Assessment System
           </h2>
           <p className="text-base sm:text-lg lg:text-xl text-gray-600 max-w-3xl mx-auto px-4">
-            Upload job descriptions and resumes to get intelligent candidate rankings based on your custom criteria. Save time, improve accuracy, and make better hiring decisions.
+            Upload job descriptions and resumes for intelligent candidate rankings, then run structured interviews—all driven by your custom criteria. Save time, improve accuracy, and make better hiring decisions.
           </p>
         </div>
 
@@ -489,7 +489,7 @@ const Login = () => {
             </Card>
             
             <div className="mt-6 sm:mt-8 text-center text-xs sm:text-sm text-gray-600 px-4">
-              <p>Automated JD parsing and resume ranking engine based on customized selection criteria</p>
+              <p>Automated JD parsing, resume ranking, and interview management based on your customized selection criteria</p>
               <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-2">
                 <span className="text-gray-500">Powered by</span>
                 <a 

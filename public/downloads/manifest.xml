@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0" xsi:type="MailApp">
+  <Id>8a3f2b1c-4d5e-6f7a-8b9c-0d1e2f3a4b5c</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>ProValuate</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="ProValuate - Resume Evaluator"/>
+  <Description DefaultValue="Evaluate resumes from this email against a job description. Select a JD and criteria, then click Assess."/>
+  <IconUrl DefaultValue="https://devprovaluate.aitamate.com/favicon.png"/>
+  <HighResolutionIconUrl DefaultValue="https://devprovaluate.aitamate.com/favicon.png"/>
+  <SupportUrl DefaultValue="https://www.provaluate.com"/>
+  <AppDomains>
+    <AppDomain>https://www.provaluate.com</AppDomain>
+    <AppDomain>https://devprovaluate.aitamate.com</AppDomain>
+    <AppDomain>https://devprovaluate_py.aitamate.com</AppDomain>
+    <AppDomain>https://login.microsoftonline.com</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Mailbox"/>
+  </Hosts>
+  <Requirements>
+    <Sets>
+      <Set Name="Mailbox" MinVersion="1.5"/>
+    </Sets>
+  </Requirements>
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://devprovaluate.aitamate.com/outlook-add-in/taskpane.html?v=3"/>
+        <RequestedHeight>450</RequestedHeight>
+      </DesktopSettings>
+      <TabletSettings>
+        <SourceLocation DefaultValue="https://devprovaluate.aitamate.com/outlook-add-in/taskpane.html?v=3"/>
+        <RequestedHeight>450</RequestedHeight>
+      </TabletSettings>
+    </Form>
+  </FormSettings>
+  <Permissions>ReadWriteMailbox</Permissions>
+  <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read"/>
+  <DisableEntityHighlighting>false</DisableEntityHighlighting>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Requirements>
+      <bt:Sets>
+        <bt:Set Name="Mailbox" MinVersion="1.5"/>
+      </bt:Sets>
+    </Requirements>
+    <Hosts>
+      <Host xsi:type="MailHost">
+        <DesktopFormFactor>
+          <ExtensionPoint xsi:type="MessageReadCommandSurface">
+            <OfficeTab id="TabDefault">
+              <Group id="ProValuate.Group">
+                <Label resid="GroupLabel"/>
+                <Control xsi:type="Button" id="ProValuate.Open">
+                  <Label resid="ButtonLabel"/>
+                  <Supertip>
+                    <Title resid="ButtonLabel"/>
+                    <Description resid="ButtonDescription"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon16"/>
+                    <bt:Image size="32" resid="Icon32"/>
+                    <bt:Image size="80" resid="Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon16" DefaultValue="https://devprovaluate.aitamate.com/favicon.png"/>
+        <bt:Image id="Icon32" DefaultValue="https://devprovaluate.aitamate.com/favicon.png"/>
+        <bt:Image id="Icon80" DefaultValue="https://devprovaluate.aitamate.com/favicon.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://devprovaluate.aitamate.com/outlook-add-in/taskpane.html?v=3"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="GroupLabel" DefaultValue="ProValuate"/>
+        <bt:String id="ButtonLabel" DefaultValue="Assess Resumes"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="ButtonDescription" DefaultValue="Evaluate resume attachments in this email"/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>

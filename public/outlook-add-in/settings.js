@@ -11,13 +11,15 @@ function parseUrlParams() {
   return params;
 }
 
+var DEFAULT_API_BASE = 'https://flask-6421998707235322.kloudbeansite.com';
+
 function load() {
   try {
     var params = parseUrlParams();
-    var apiBase = params.api_base || localStorage.getItem(SETTINGS_KEYS.API_BASE) || 'https://devprovaluate_py.aitamate.com';
+    var apiBase = params.api_base || localStorage.getItem(SETTINGS_KEYS.API_BASE) || DEFAULT_API_BASE;
     var companyId = params.company_id || localStorage.getItem(SETTINGS_KEYS.COMPANY_ID) || '';
     var userId = params.user_id || localStorage.getItem(SETTINGS_KEYS.USER_ID) || '';
-    document.getElementById('api_base').value = apiBase;
+    if (apiBase) localStorage.setItem(SETTINGS_KEYS.API_BASE, apiBase);
     document.getElementById('company_id').value = companyId;
     document.getElementById('user_id').value = userId;
   } catch (e) {}
@@ -25,10 +27,9 @@ function load() {
 
 function save() {
   try {
-    var apiBase = (document.getElementById('api_base').value || '').trim();
+    var apiBase = localStorage.getItem(SETTINGS_KEYS.API_BASE) || DEFAULT_API_BASE;
     var companyId = (document.getElementById('company_id').value || '').trim();
     var userId = (document.getElementById('user_id').value || '').trim();
-    if (apiBase) localStorage.setItem(SETTINGS_KEYS.API_BASE, apiBase);
     if (companyId) localStorage.setItem(SETTINGS_KEYS.COMPANY_ID, companyId);
     if (userId) localStorage.setItem(SETTINGS_KEYS.USER_ID, userId);
     var el = document.getElementById('saved');

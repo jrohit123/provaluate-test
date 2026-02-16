@@ -450,13 +450,13 @@ const CandidateInterview = () => {
 
   return (
     <div className="min-h-screen bg-white flex flex-col overflow-x-hidden lg:overflow-hidden">
-      {/* Header: light blue, same as Terms / Privacy Policy */}
+      {/* Header: light blue, same as Terms / Privacy Policy; logo size matches Login */}
       <header className="flex-shrink-0 bg-sky-100 border-b border-sky-200">
-        <div className="max-w-[1800px] mx-auto px-3 sm:px-6 py-2.5 sm:py-3 lg:py-4">
+        <div className="max-w-[1800px] mx-auto px-3 sm:px-6 py-3 sm:py-4 lg:py-5">
           <img
             src="/Logo_Transparent_BG.png"
             alt="ProValuate"
-            className="h-9 sm:h-10 lg:h-12 w-auto object-contain"
+            className="h-12 sm:h-16 lg:h-20 w-auto object-contain"
           />
         </div>
       </header>
