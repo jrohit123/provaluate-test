@@ -21,6 +21,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import toast from 'react-hot-toast';
 import ExcelJS from 'exceljs';
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
@@ -31,6 +37,74 @@ function formatOverallScore(score: number | string | null | undefined): string {
   const n = Number(score);
   if (Number.isNaN(n)) return 'N/A';
   return (Math.round(n * 10) / 10).toFixed(1);
+}
+
+/** Remove "Speech Analysis Report for [Name]" line from the start of the report (bold or plain). */
+function stripSpeechReportTitleLine(raw: string): string {
+  const trimmed = raw.trim();
+  const withoutBold = trimmed.replace(/^\*\*Speech Analysis Report for [^*]+\*\*\s*\n?/i, '').trim();
+  const withoutPlain = withoutBold.replace(/^Speech Analysis Report for [^\n]+\n?/i, '').trim();
+  return withoutPlain;
+}
+
+/** Parse speech report into section/content rows for table display. Returns [] if no clear sections. */
+function parseSpeechReportSections(reportText: string): { section: string; content: string }[] {
+  const text = reportText.replace(/''/g, "'").trim();
+  const sections: { section: string; content: string }[] = [];
+  const regex = /\*\*([^*]+)\*\*\s*:?\s*([\s\S]*?)(?=\*\*[^*]+\*\*\s*:?\s*|$)/gi;
+  let m;
+  while ((m = regex.exec(text)) !== null) {
+    const section = m[1].trim();
+    const content = m[2].trim();
+    if (section && (content || section.toLowerCase().includes('where') || section.toLowerCase().includes('overall') || section.toLowerCase().includes('what'))) {
+      sections.push({ section, content: content || '—' });
+    }
+  }
+  return sections;
+}
+
+/** Normalize action plan text: add line breaks before labels (used when falling back to plain text render). */
+function normalizeActionPlanText(raw: string): string {
+  let s = raw.replace(/''/g, "'");
+  s = s.replace(/\s+\*\*Addresses:\*\*/g, '\n\n**Addresses:**');
+  s = s.replace(/\s+\*\*Description:\*\*/g, '\n\n**Description:**');
+  s = s.replace(/\s+\*\*Timeline:\*\*/g, '\n\n**Timeline:**');
+  s = s.replace(/\s+\*\*Expected outcome:\*\*/g, '\n\n**Expected outcome:**');
+  s = s.replace(/\n(\d\.\s+\*\*)/g, '\n\n$1');
+  return s.trim();
+}
+
+/** Parsed single action plan item for table row. */
+interface ActionPlanItem {
+  srNo: number;
+  actionName: string;
+  addresses: string;
+  description: string;
+  timeline: string;
+  expectedOutcome: string;
+}
+
+/**
+ * Parse action plan text into structured items (Sr No, Action Name, Addresses, Description, Timeline, Expected outcome).
+ * Returns empty array if format doesn't match.
+ */
+function parseActionPlanItems(raw: string): ActionPlanItem[] {
+  const text = raw.replace(/''/g, "'").trim();
+  const items: ActionPlanItem[] = [];
+  const blockRegex = /(\d+)\.\s*\*\*([^*]+)\*\*\s*([\s\S]*?)(?=\n\s*\d+\.\s*\*\*|$)/g;
+  let m;
+  while ((m = blockRegex.exec(text)) !== null) {
+    const srNo = parseInt(m[1], 10);
+    const actionName = m[2].trim();
+    const block = m[3];
+    const addresses = block.match(/\*\*Addresses:\*\*\s*([\s\S]*?)(?=\n\s*Description:|\*\*Timeline:\*\*|\*\*Expected outcome:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
+    // Description: after "Description:" (with optional **) until **Timeline:** or **Expected outcome:**
+    const description = block.match(/(?:\n\s*)?(?:\*\*)?Description(?:\*\*)?:\s*([\s\S]*?)(?=\*\*Timeline:\*\*|\*\*Expected outcome:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
+    const timeline = block.match(/\*\*Timeline:\*\*\s*([\s\S]*?)(?=\*\*Expected outcome:\*\*|\*\*Addresses:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
+    const expectedOutcome = block.match(/\*\*Expected outcome:\*\*\s*([\s\S]*?)(?=\*\*Addresses:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
+    items.push({ srNo, actionName, addresses, description, timeline, expectedOutcome });
+  }
+  return items;
 }
 
 /** Format a date as "2nd Feb 2026", "4th Apr 2026" (ordinal day + short month + year). Returns 'N/A' if date is missing or invalid. */
@@ -47,6 +121,46 @@ function formatOrdinalDate(date: Date | string | null | undefined): string {
   return `${day}${suffix} ${month} ${year}`;
 }
 
+/**
+ * Draw report/plan text with proper formatting: unescape '' to ', render **...** as bold.
+ * Handles page breaks. doc is jsPDF instance.
+ */
+function drawFormattedReportText(
+  doc: any,
+  rawText: string,
+  opts: { startX: number; startY: number; maxWidth: number; lineHeight: number; pageHeight: number; bottomMargin: number; fontSize: number }
+): void {
+  const unescaped = rawText.replace(/''/g, "'");
+  const parts: { text: string; bold: boolean }[] = [];
+  let remaining = unescaped;
+  let bold = false;
+  while (remaining.length > 0) {
+    const idx = remaining.indexOf('**');
+    if (idx === -1) {
+      if (remaining) parts.push({ text: remaining, bold });
+      break;
+    }
+    if (idx > 0) parts.push({ text: remaining.slice(0, idx), bold });
+    bold = !bold;
+    remaining = remaining.slice(idx + 2);
+  }
+  let y = opts.startY;
+  const x = opts.startX;
+  doc.setFontSize(opts.fontSize);
+  for (const part of parts) {
+    doc.setFont('helvetica', part.bold ? 'bold' : 'normal');
+    const lines = doc.splitTextToSize(part.text, opts.maxWidth);
+    for (const line of lines) {
+      if (y > opts.pageHeight - opts.bottomMargin) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.text(line, x, y);
+      y += opts.lineHeight;
+    }
+  }
+}
+
 const FinalResults = () => {
   const { interviewId } = useParams();
   const navigate = useNavigate();
@@ -59,6 +173,7 @@ const FinalResults = () => {
   const [playingVideo, setPlayingVideo] = useState(null);
   const [playingAudio, setPlayingAudio] = useState(null);
   const [showingWrittenAnswer, setShowingWrittenAnswer] = useState(null);
+  const [showSpeechDetailsCard, setShowSpeechDetailsCard] = useState(false);
 
   const playVideo = (videoUrl) => {
     if (videoUrl) {
@@ -1055,27 +1170,75 @@ const FinalResults = () => {
       }
 
       // ============================================
-      // CREATE SPEECH ANALYSIS SHEET
+      // CREATE SPEECH ANALYSIS SHEET (Overall Summary + Per-Question + Detailed Feedback + Action Plan)
       // ============================================
       const speechSheet = workbook.addWorksheet('Speech Analysis');
-      speechSheet.columns = [
-        { header: 'Q NO', key: 'q', width: 8 },
-        { header: 'PARAMETER', key: 'parameter', width: 28 },
-        { header: 'Overall speech quality', key: 'overall_speech_quality', width: 18 },
-        { header: 'Speaking pace (WPM)', key: 'speaking_pace_wpm', width: 18 },
-        { header: 'Speech ratio %', key: 'speech_ratio', width: 14 },
-        { header: 'Word count', key: 'word_count', width: 12 },
-        { header: 'Filler words', key: 'filler_words', width: 12 },
-        { header: 'Filler density %', key: 'filler_density', width: 14 },
-        { header: 'Filler rate/min', key: 'filler_rate_per_minute', width: 14 },
-        { header: 'Articulation score', key: 'articulation_score', width: 16 },
-        { header: 'Pause quality', key: 'pause_quality_score', width: 14 },
-        { header: 'Voice confidence', key: 'voice_confidence', width: 16 },
-        { header: 'Voice modulation', key: 'voice_modulation', width: 16 },
-        { header: 'Stress level', key: 'stress_score', width: 14 },
-        { header: 'Calmness', key: 'calmness_score', width: 12 },
-      ];
+      const blueFill = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF1E5DA8' } };
+      const thinBorder = {
+        top: { style: 'thin' as const, color: { argb: 'FF000000' } },
+        left: { style: 'thin' as const, color: { argb: 'FF000000' } },
+        bottom: { style: 'thin' as const, color: { argb: 'FF000000' } },
+        right: { style: 'thin' as const, color: { argb: 'FF000000' } }
+      };
+      let speechRow = 1;
 
+      // --- Section 1: Overall Metrics Summary (same as PDF) ---
+      const withBehavioral = (reportData.answers || []).filter((a: any) => {
+        const b = a.behavioral ?? a.behavioral_metrics;
+        return b && (typeof b.overall_speech_quality === 'number' || typeof b.speaking_pace_wpm === 'number' || typeof b.pause_quality_score === 'number');
+      });
+      const avg = (key: string, formatter: (v: number) => string) => {
+        const vals = withBehavioral.map((a: any) => (a.behavioral ?? a.behavioral_metrics)?.[key]).filter((v: any) => typeof v === 'number');
+        if (vals.length === 0) return null;
+        const sum = vals.reduce((s: number, v: number) => s + v, 0);
+        return formatter(sum / vals.length);
+      };
+      const idealRanges: { name: string; getCandidate: () => string | null; ideal: string }[] = [
+        { name: 'Overall speech quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}/100`), ideal: '70–80' },
+        { name: 'Speaking pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), ideal: '120–160' },
+        { name: 'Filler words', getCandidate: () => avg('filler_words', (v) => v.toFixed(1)), ideal: '< 8' },
+        { name: 'Filler density', getCandidate: () => avg('filler_density', (v) => `${v.toFixed(1)}%`), ideal: '< 5%' },
+        { name: 'Pause & pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}/100`), ideal: '65–100' },
+        { name: 'Voice confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}/100`), ideal: '70–100' },
+        { name: 'Stress level', getCandidate: () => avg('stress_score', (v) => `${Math.round(v)}/100`), ideal: '20–35' },
+      ];
+      const overallMetricsRows = idealRanges
+        .map((r) => ({ name: r.name, candidate: r.getCandidate(), ideal: r.ideal }))
+        .filter((r) => r.candidate != null) as { name: string; candidate: string; ideal: string }[];
+
+      speechSheet.getCell(speechRow, 1).value = 'Speech Analysis — Overall Metrics Summary';
+      speechSheet.getCell(speechRow, 1).font = { bold: true, size: 12 };
+      speechSheet.mergeCells(speechRow, 1, speechRow, 3);
+      speechRow += 2;
+      speechSheet.addRow(['Metric name', 'Candidate score', 'Ideal range']);
+      speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
+        cell.fill = blueFill;
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+        cell.border = thinBorder;
+        cell.alignment = { vertical: 'middle', wrapText: true };
+      });
+      overallMetricsRows.forEach((r) => {
+        speechSheet.addRow([r.name, r.candidate, r.ideal]);
+        speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
+          cell.border = thinBorder;
+          cell.font = { size: 10 };
+          cell.alignment = { vertical: 'middle', wrapText: true };
+        });
+      });
+      speechRow = speechSheet.rowCount + 2;
+
+      // --- Section 2: Per-Question Speech Metrics ---
+      speechSheet.getCell(speechRow, 1).value = 'Per-Question Speech Metrics';
+      speechSheet.getCell(speechRow, 1).font = { bold: true, size: 12 };
+      speechRow += 2;
+      const perQHeaders = ['Q NO', 'PARAMETER', 'Overall speech quality', 'Speaking pace (WPM)', 'Speech ratio %', 'Word count', 'Filler words', 'Filler density %', 'Filler rate/min', 'Articulation score', 'Pause & pacing', 'Voice confidence', 'Voice modulation', 'Stress level', 'Calmness'];
+      speechSheet.addRow(perQHeaders);
+      speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
+        cell.fill = blueFill;
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+        cell.border = thinBorder;
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      });
       if (reportData.questions && reportData.answers) {
         const sortedQuestions = [...reportData.questions].sort((a, b) => (a.question_order || 0) - (b.question_order || 0));
         sortedQuestions.forEach((question) => {
@@ -1101,52 +1264,95 @@ const FinalResults = () => {
             b && b.stress_score != null ? fmt(b.stress_score, '/100') : '-',
             b && b.calmness_score != null ? fmt(b.calmness_score, '/100') : '-',
           ]);
+          const rn = speechSheet.rowCount;
+          speechSheet.getRow(rn).eachCell((cell, colNumber) => {
+            cell.border = thinBorder;
+            cell.font = { size: 10 };
+            cell.alignment = { vertical: 'middle', horizontal: colNumber <= 2 ? 'left' : 'center', wrapText: true };
+            if (rn % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+          });
         });
       }
+      speechRow = speechSheet.rowCount + 2;
 
-      // Style Speech Analysis header row
-      const speechHeaderRow = speechSheet.getRow(1);
-      speechHeaderRow.height = 28;
-      speechHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-      speechHeaderRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-      speechHeaderRow.eachCell((cell) => {
-        if (cell.value && cell.value.toString().trim() !== '') {
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FF4472C4' }
-          };
-          cell.border = {
-            top: { style: 'thin', color: { argb: 'FF000000' } },
-            left: { style: 'thin', color: { argb: 'FF000000' } },
-            bottom: { style: 'thin', color: { argb: 'FF000000' } },
-            right: { style: 'thin', color: { argb: 'FF000000' } }
-          };
-        }
-      });
-      speechSheet.eachRow((row, rowNumber) => {
-        if (rowNumber > 1) {
-          row.height = 22;
-          row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-            if (cell.value != null && cell.value.toString().trim() !== '') {
-              cell.border = {
-                top: { style: 'thin', color: { argb: 'FF000000' } },
-                left: { style: 'thin', color: { argb: 'FF000000' } },
-                bottom: { style: 'thin', color: { argb: 'FF000000' } },
-                right: { style: 'thin', color: { argb: 'FF000000' } }
-              };
-              cell.font = { size: 10 };
-              if (rowNumber % 2 === 0) {
-                cell.fill = {
-                  type: 'pattern',
-                  pattern: 'solid',
-                  fgColor: { argb: 'FFF2F2F2' }
-                };
-              }
-              cell.alignment = { vertical: 'middle', horizontal: colNumber <= 2 ? 'left' : 'center', wrapText: true };
-            }
+      // --- Section 3: Detailed Feedback on Candidate Speech Abilities (table: Section | Content when parseable) ---
+      const speechReport = reportData?.interview?.speech_detailed_report;
+      speechSheet.getCell(speechRow, 1).value = 'Detailed Feedback on Candidate Speech Abilities';
+      speechSheet.getCell(speechRow, 1).font = { bold: true, size: 12 };
+      speechRow += 2;
+      if (speechReport && String(speechReport).trim()) {
+        const reportText = stripSpeechReportTitleLine(String(speechReport).trim()).replace(/''/g, "'");
+        const reportSections = parseSpeechReportSections(reportText);
+        if (reportSections.length >= 2) {
+          speechSheet.addRow(reportSections.map((s) => s.section));
+          speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
+            cell.fill = blueFill;
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+            cell.border = thinBorder;
+            cell.alignment = { vertical: 'middle', wrapText: true };
           });
+          speechSheet.addRow(reportSections.map((s) => s.content || '—'));
+          speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
+            cell.border = thinBorder;
+            cell.font = { size: 10 };
+            cell.alignment = { vertical: 'top', wrapText: true };
+          });
+          speechRow = speechSheet.rowCount + 1;
+        } else {
+          speechSheet.getCell(speechRow, 1).value = reportText;
+          speechSheet.getCell(speechRow, 1).alignment = { vertical: 'top', wrapText: true };
+          speechSheet.getCell(speechRow, 1).font = { size: 10 };
+          speechSheet.mergeCells(speechRow, 1, speechRow, 5);
+          speechSheet.getRow(speechRow).height = Math.min(400, Math.max(80, (reportText.match(/\n/g)?.length || 0) * 14 + 40));
+          speechRow += 1;
         }
+      } else {
+        speechSheet.getCell(speechRow, 1).value = 'No detailed feedback available.';
+        speechRow += 1;
+      }
+      speechRow += 2;
+
+      // --- Section 4: Your Personalised Action Plan ---
+      const actionPlan = reportData?.interview?.personalised_action_plan;
+      speechSheet.getCell(speechRow, 1).value = 'Your Personalised Action Plan';
+      speechSheet.getCell(speechRow, 1).font = { bold: true, size: 12 };
+      speechRow += 2;
+      const planItems = actionPlan && String(actionPlan).trim() ? parseActionPlanItems(String(actionPlan).trim()) : [];
+      if (planItems.length > 0) {
+        speechSheet.addRow(['Action Name', 'Addresses', 'Description', 'Timeline', 'Expected outcome']);
+        speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
+          cell.fill = blueFill;
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+          cell.border = thinBorder;
+          cell.alignment = { vertical: 'middle', wrapText: true };
+        });
+        planItems.forEach((item) => {
+          speechSheet.addRow([
+            item.actionName || '—',
+            item.addresses || '—',
+            item.description || '—',
+            item.timeline || '—',
+            item.expectedOutcome || '—',
+          ]);
+          speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
+            cell.border = thinBorder;
+            cell.font = { size: 10 };
+            cell.alignment = { vertical: 'middle', wrapText: true };
+          });
+        });
+      } else if (actionPlan && String(actionPlan).trim()) {
+        speechSheet.getCell(speechRow, 1).value = String(actionPlan).trim().replace(/''/g, "'");
+        speechSheet.getCell(speechRow, 1).alignment = { vertical: 'top', wrapText: true };
+        speechSheet.mergeCells(speechRow, 1, speechRow, 5);
+      } else {
+        speechSheet.getCell(speechRow, 1).value = 'No personalised action plan available.';
+      }
+
+      // Column widths for Speech sheet (cols 1–5 for summary/feedback/plan; 1–15 for per-question table)
+      const colWidths = [22, 28, 45, 18, 40, 18, 18, 14, 12, 14, 14, 16, 14, 16, 14];
+      colWidths.forEach((w, i) => {
+        const col = i + 1;
+        if (speechSheet.getColumn(col)) speechSheet.getColumn(col).width = w;
       });
       speechSheet.views = [{ state: 'frozen', ySplit: 1 }];
 
@@ -1413,7 +1619,9 @@ const FinalResults = () => {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       doc.setTextColor(0, 0, 0);
-      const summaryParagraph = 'This report analyses the candidate across various parameters and multiple speech metrics. Parameter-based scores reflect AI evaluation of answers; speech metrics capture delivery, pace, fillers, pauses, and voice quality. Speech averages per parameter are summarised on the following page. Detailed question-wise analysis with feedback and speech breakdown appears in the subsequent pages.';
+      const execCandidateName = interview.candidate_name || 'the candidate';
+      const execRole = interview.position || 'the applied role';
+      const summaryParagraph = `This report is an overview of ${execCandidateName}, who has completed the interview for the role of ${execRole}. The following pages provide insight into the candidate's answers for various questions across parameters. This is followed by a Detailed Speech Analysis section, which presents a detailed plan and personalised feedback on the candidate's speech and delivery.`;
       const maxLineWidth = pageWidth - leftMargin * 2;
       const summarySegments = doc.splitTextToSize(summaryParagraph, maxLineWidth);
       summarySegments.forEach((seg: string) => {
@@ -1582,8 +1790,8 @@ const FinalResults = () => {
         });
       }
 
-      const questionPageCount = questionRows.reduce((sum, row) => sum + (row.answer?.behavioral || row.answer?.behavioral_metrics ? 2 : 1), 0);
-      const totalPageCount = 3 + questionPageCount; // 1=cover, 2=speech summary, then 1 or 2 per question, disclaimer
+      const questionPageCount = questionRows.length; // One page per question (speech analysis moved to overall table)
+      const totalPageCount = 3 + questionPageCount; // 1=cover, 2=score summary, then 1 per question, then optional speech/feedback/plan, disclaimer
 
       type ParamMetrics = {
         overall_quality: number[]; wpm: number[]; filler: number[]; pause_quality: number[];
@@ -1616,80 +1824,10 @@ const FinalResults = () => {
 
       // Page 1: no footer drawn here (final pass draws all footers once)
 
-      // Page 2: Speech Analysis Summary only
-      doc.addPage();
-      let behavioralStartY = 25;
-      if (hasBehavioralData) {
-        const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
-        const fmt = (v: number | null, decimals = 0) => v == null ? '-' : decimals ? v.toFixed(2) : String(Math.round(v));
-        const paramNames = Object.entries(paramBehavioralMap)
-          .filter(([, d]) => d.overall_quality.length || d.wpm.length || d.filler.length || d.pause_quality.length || d.voice_confidence.length || d.stress.length)
-          .map(([name]) => name);
-        const metrics = [
-          { key: 'Overall speech quality', get: (d: ParamMetrics) => fmt(avg(d.overall_quality)) + (avg(d.overall_quality) != null ? '/100' : '') },
-          { key: 'Speaking pace (WPM)', get: (d: ParamMetrics) => fmt(avg(d.wpm)) + (avg(d.wpm) != null ? ' WPM' : '') },
-          { key: 'Filler words', get: (d: ParamMetrics) => fmt(avg(d.filler)) },
-          { key: 'Pause quality', get: (d: ParamMetrics) => fmt(avg(d.pause_quality)) + (avg(d.pause_quality) != null ? '/100' : '') },
-          { key: 'Voice confidence', get: (d: ParamMetrics) => fmt(avg(d.voice_confidence)) + (avg(d.voice_confidence) != null ? '/100' : '') },
-          { key: 'Stress level', get: (d: ParamMetrics) => fmt(avg(d.stress)) + (avg(d.stress) != null ? '/100' : '') },
-        ];
-        const headers = ['Metric', ...paramNames];
-        const behavioralSummaryData: any[][] = [headers];
-        metrics.forEach(m => {
-          behavioralSummaryData.push([m.key, ...paramNames.map(p => m.get(paramBehavioralMap[p]))]);
-        });
-        if (behavioralSummaryData.length > 1) {
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(10);
-          doc.text('Speech Analysis Summary (Averages per Parameter)', 15, behavioralStartY - 5);
-          doc.setFont('helvetica', 'normal');
-          const metricColWidth = 42;
-          const paramColWidth = Math.max(35, (180 - metricColWidth) / paramNames.length);
-          const colStyles: Record<number, { cellWidth: number }> = { 0: { cellWidth: metricColWidth } };
-          paramNames.forEach((_, i) => { colStyles[i + 1] = { cellWidth: paramColWidth }; });
-          autoTable(doc, {
-            head: [behavioralSummaryData[0]],
-            body: behavioralSummaryData.slice(1),
-            startY: behavioralStartY,
-            styles: { fontSize: 8, cellPadding: 2, ...tableBorder },
-            headStyles: { fillColor: [30, 93, 168], textColor: 255, fontStyle: 'bold', fontSize: 8, ...tableBorder },
-            columnStyles: colStyles,
-            margin: { left: 15, right: 15 }
-          });
-        }
-      }
-      // Score summary by parameter (below speech table on page 2)
-      let scoreSummaryY = hasBehavioralData ? (doc as any).lastAutoTable?.finalY + 14 : 25;
-      const paramScores = interview.parameter_scores
-        ? (typeof interview.parameter_scores === 'string' ? JSON.parse(interview.parameter_scores) : interview.parameter_scores)
-        : {};
-      const scoreSummaryRows: [string, string][] = Object.entries(paramScores).map(([key, data]: [string, any]) => {
-        const score = data.final_score ?? data.question_details?.average_score ?? data.score;
-        return [
-          data.parameter_name || data.name || key,
-          formatOverallScore(score) ?? (score != null ? String(score) : 'N/A')
-        ];
-      });
-      if (scoreSummaryRows.length > 0) {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.text('Score Summary by Parameter', 15, scoreSummaryY - 5);
-        doc.setFont('helvetica', 'normal');
-        autoTable(doc, {
-          head: [['Parameter', 'Score']],
-          body: scoreSummaryRows,
-          startY: scoreSummaryY,
-          styles: { fontSize: 9, cellPadding: 2, ...tableBorder },
-          headStyles: { fillColor: [30, 93, 168], textColor: 255, fontStyle: 'bold', fontSize: 9, ...tableBorder },
-          columnStyles: { 0: { cellWidth: 100 }, 1: { cellWidth: 40 } },
-          margin: { left: 15, right: 15 }
-        });
-      }
-
-      // Pages 3+: One question per page with table and Speech Analysis
+      // Pages 2+: One question per page with table (Score Summary by Parameter removed)
       const totalQuestions = questionRows.length;
       const qFooterY = doc.internal.pageSize.height - 8;
-      let currentPageNum = 3;
+      let currentPageNum = 2;
       questionRows.forEach((row, idx) => {
         doc.addPage();
         const qNum = idx + 1;
@@ -1769,135 +1907,200 @@ const FinalResults = () => {
           yPos += 8;
         }
 
-        // Whenever there was a written answer (even if it spanned multiple pages), put Speech Analysis on a fresh page
-        if (hasWrittenAnswer && writtenAnswerRaw) {
+        // Next question starts on a fresh page only when there is a next question (avoids blank page after last question)
+        if (hasWrittenAnswer && writtenAnswerRaw && idx < totalQuestions - 1) {
           doc.addPage();
           currentPageNum++;
-          yPos = 20;
         }
-
-        // Speech Analysis section: header + 4 subheadings with tables (always starts here; on new page if there was written answer)
-        const answerWithBehavioral = row.answer || reportData?.answers?.find((a: any) => (a.question_order || 0) === (row.question?.question_order ?? idx));
-        const b = row.answer?.behavioral ?? row.answer?.behavioral_metrics ?? answerWithBehavioral?.behavioral ?? answerWithBehavioral?.behavioral_metrics;
-        if (b) {
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(11);
-          doc.text('Speech Analysis', 15, yPos);
-          yPos += 8;
-
-          // 1. Overall & delivery
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(9);
-          doc.text('Overall & delivery', 15, yPos);
-          yPos += 6;
-          doc.setFont('helvetica', 'normal');
-          const overallData: [string, string][] = [
-            ['Overall speech quality', b.overall_speech_quality != null ? `${b.overall_speech_quality}/100` : '-'],
-            ['Speaking pace', `${b.speaking_pace_wpm ?? '-'} WPM`],
-            ['Speech ratio', b.speech_ratio != null ? `${b.speech_ratio}%` : '-'],
-            ['Word count', String(b.word_count ?? '-')],
-          ];
-          autoTable(doc, {
-            head: [['Metric', 'Value']],
-            body: overallData,
-            startY: yPos,
-            styles: { fontSize: 8, cellPadding: 2, ...tableBorder },
-            headStyles: { fillColor: [68, 114, 196], textColor: 255, fontStyle: 'bold', fontSize: 8, ...tableBorder },
-            columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 90 } },
-            margin: { left: 15, right: 15, bottom: 24 }
-          });
-          yPos = (doc as any).lastAutoTable?.finalY + 6;
-
-          // 2. Fillers & clarity
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(9);
-          doc.text('Fillers & clarity', 15, yPos);
-          yPos += 6;
-          doc.setFont('helvetica', 'normal');
-          const fillerWordsValue = `${b.filler_words ?? '-'}${b.filler_density != null ? ` (${b.filler_density}%)` : ''}${b.filler_examples?.length ? ` (${b.filler_examples.join(', ')})` : ''}`;
-          const fillersData: [string, string][] = [
-            ['Filler words', fillerWordsValue],
-            ['Potential fillers (audio)', String(b.acoustic_filler_count ?? '-')],
-            ['Articulation score', b.articulation_score != null ? `${b.articulation_score}/100` : '-'],
-          ];
-          autoTable(doc, {
-            head: [['Metric', 'Value']],
-            body: fillersData,
-            startY: yPos,
-            styles: { fontSize: 8, cellPadding: 2, ...tableBorder },
-            headStyles: { fillColor: [68, 114, 196], textColor: 255, fontStyle: 'bold', fontSize: 8, ...tableBorder },
-            columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 90 } },
-            margin: { left: 15, right: 15, bottom: 24 }
-          });
-          yPos = (doc as any).lastAutoTable?.finalY + 6;
-
-          currentPageNum++;
-
-          // 3. Pauses & pacing and 4. Voice & expression on next page
-          doc.addPage();
-          let yPos2 = 20;
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(11);
-          doc.text('Speech Analysis (continued)', 15, yPos2);
-          doc.text(`Parameter: ${row.parameter}  ·  Question ${qNum} of ${totalQuestions}`, 15, yPos2 + 7);
-          yPos2 += 18;
-          doc.setFont('helvetica', 'normal');
-
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(9);
-          doc.text('Pauses & pacing', 15, yPos2);
-          yPos2 += 6;
-          doc.setFont('helvetica', 'normal');
-          const pauseTimelineStr = (b.pause_timeline || []).length > 0
-            ? (b.pause_timeline || []).map((p: any) => `${p.start_time}-${p.end_time}: ${p.duration_seconds}s (${p.category || 'pause'})`).join('; ')
-            : '-';
-          const pausesData: [string, string][] = [
-            ['Pause quality score', b.pause_quality_score != null ? `${b.pause_quality_score}/100` : '-'],
-            ['Average pause', b.avg_pause_seconds != null ? `${b.avg_pause_seconds}s` : '-'],
-            ['Longest pause', b.longest_pause_seconds != null ? `${b.longest_pause_seconds}s` : '-'],
-            ['Breathing', String(b.breathing_pause_count ?? '-')],
-            ['Thoughtful', String(b.thoughtful_pause_count ?? '-')],
-            ['Awkward', String(b.awkward_pause_count ?? '-')],
-            ['Long (dead air)', String(b.dead_air_count ?? '-')],
-            ['Pause timeline', pauseTimelineStr],
-          ];
-          autoTable(doc, {
-            head: [['Metric', 'Value']],
-            body: pausesData,
-            startY: yPos2,
-            styles: { fontSize: 8, cellPadding: 2, ...tableBorder },
-            headStyles: { fillColor: [68, 114, 196], textColor: 255, fontStyle: 'bold', fontSize: 8, ...tableBorder },
-            columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 90 } },
-            margin: { left: 15, right: 15, bottom: 24 }
-          });
-          yPos2 = (doc as any).lastAutoTable?.finalY + 6;
-
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(9);
-          doc.text('Voice & expression', 15, yPos2);
-          yPos2 += 6;
-          doc.setFont('helvetica', 'normal');
-          const voiceData: [string, string][] = [
-            ['Voice confidence', b.voice_confidence != null ? `${b.voice_confidence}/100` : '-'],
-            ['Voice modulation', b.voice_modulation != null ? `${b.voice_modulation}/100` : '-'],
-            ['Stress level', b.stress_score != null ? `${b.stress_score}/100` : '-'],
-            ['Calmness', b.calmness_score != null ? `${b.calmness_score}/100` : '-'],
-          ];
-          autoTable(doc, {
-            head: [['Metric', 'Value']],
-            body: voiceData,
-            startY: yPos2,
-            styles: { fontSize: 8, cellPadding: 2, ...tableBorder },
-            headStyles: { fillColor: [68, 114, 196], textColor: 255, fontStyle: 'bold', fontSize: 8, ...tableBorder },
-            columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 90 } },
-            margin: { left: 15, right: 15, bottom: 24 }
-          });
-
-          currentPageNum++;
-        } else {
-          currentPageNum++;
-        }
+        currentPageNum++;
       });
+
+      // Page after all questions: Speech Analysis — Overall Metrics Summary (Metric | Candidate score | Ideal range)
+      if (hasBehavioralData) {
+        const withBehavioral = (reportData?.answers ?? []).filter((a: any) => {
+          const b = a.behavioral ?? a.behavioral_metrics;
+          return b && (typeof b.overall_speech_quality === 'number' || typeof b.speaking_pace_wpm === 'number' || typeof b.pause_quality_score === 'number');
+        });
+        const avg = (key: string, formatter: (v: number) => string) => {
+          const vals = withBehavioral.map((a: any) => (a.behavioral ?? a.behavioral_metrics)?.[key]).filter((v: any) => typeof v === 'number');
+          if (vals.length === 0) return null;
+          const sum = vals.reduce((s: number, v: number) => s + v, 0);
+          return formatter(sum / vals.length);
+        };
+        const idealRanges: { name: string; getCandidate: () => string | null; ideal: string }[] = [
+          { name: 'Overall speech quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}/100`), ideal: '70–80' },
+          { name: 'Speaking pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), ideal: '120–160' },
+          { name: 'Filler words', getCandidate: () => avg('filler_words', (v) => v.toFixed(1)), ideal: '< 8' },
+          { name: 'Filler density', getCandidate: () => avg('filler_density', (v) => `${v.toFixed(1)}%`), ideal: '< 5%' },
+          { name: 'Pause & pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}/100`), ideal: '65–100' },
+          { name: 'Voice confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}/100`), ideal: '70–100' },
+          { name: 'Stress level', getCandidate: () => avg('stress_score', (v) => `${Math.round(v)}/100`), ideal: '20–35' },
+        ];
+        const overallMetricsRows = idealRanges
+          .map((r) => ({ name: r.name, candidate: r.getCandidate(), ideal: r.ideal }))
+          .filter((r) => r.candidate != null) as { name: string; candidate: string; ideal: string }[];
+        if (overallMetricsRows.length > 0) {
+          const speechMargin = 8;
+          const speechContentWidth = pageWidth - speechMargin * 2;
+          doc.addPage();
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(12);
+          doc.text('Speech Analysis — Overall Metrics Summary', speechMargin, 20);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.setTextColor(60, 60, 60);
+          doc.text('The table below shows the candidate\'s overall average for each speech metric across the entire interview, compared against professionally accepted benchmark ranges.', speechMargin, 28, { maxWidth: speechContentWidth });
+          doc.setTextColor(0, 0, 0);
+          const overallTableBody = overallMetricsRows.map((r) => [r.name, r.candidate, r.ideal]);
+          const summaryCol0 = speechContentWidth * 0.38;
+          const summaryCol1 = speechContentWidth * 0.32;
+          const summaryCol2 = speechContentWidth * 0.30;
+          autoTable(doc, {
+            head: [['Metric name', 'Candidate score', 'Ideal range']],
+            body: overallTableBody,
+            startY: 38,
+            styles: { fontSize: 9, cellPadding: 3, ...tableBorder },
+            headStyles: { fillColor: [30, 93, 168], textColor: 255, fontStyle: 'bold', fontSize: 9, ...tableBorder },
+            columnStyles: { 0: { cellWidth: summaryCol0 }, 1: { cellWidth: summaryCol1 }, 2: { cellWidth: summaryCol2 } },
+            margin: { left: speechMargin, right: speechMargin },
+            tableWidth: speechContentWidth,
+          });
+          const summaryTableEndY = (doc as any).lastAutoTable?.finalY ?? 100;
+          const defStartY = summaryTableEndY + 14;
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(10);
+          doc.text('Metric definitions', speechMargin, defStartY - 6);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          const metricDefinitions: [string, string][] = [
+            ['Overall speech quality', 'A composite score (0–100) derived from clarity, fluency, and delivery quality of the spoken response.'],
+            ['Speaking pace (WPM)', 'Words per minute calculated from the transcript and audio duration; reflects whether the candidate speaks at a clear, steady rate.'],
+            ['Filler words', 'Count of filler or hesitation words (e.g. um, uh, like) detected in the transcript during the response.'],
+            ['Filler density', 'Percentage of total words that are filler words; indicates how much the response is diluted by hesitations.'],
+            ['Pause & pacing', 'Score (0–100) reflecting use of pauses and rhythm: appropriate pausing vs. rushed or disjointed delivery.'],
+            ['Voice confidence', 'Score (0–100) based on vocal features (tone, steadiness, projection) indicating how confident the speaker sounds.'],
+            ['Stress level', 'Score (0–100) indicating perceived stress or anxiety in the voice, inferred from acoustic and prosodic analysis.'],
+          ];
+          const defCol0 = speechContentWidth * 0.22;
+          const defCol1 = speechContentWidth * 0.78;
+          autoTable(doc, {
+            head: [['Metric', 'Definition']],
+            body: metricDefinitions,
+            startY: defStartY,
+            styles: { fontSize: 9, cellPadding: 3, overflow: 'linebreak', ...tableBorder },
+            headStyles: { fillColor: [30, 93, 168], textColor: 255, fontStyle: 'bold', fontSize: 9, ...tableBorder },
+            columnStyles: { 0: { cellWidth: defCol0 }, 1: { cellWidth: defCol1 } },
+            margin: { left: speechMargin, right: speechMargin },
+            tableWidth: speechContentWidth,
+          });
+        }
+      }
+
+      // Page: Detailed feedback on candidate speech abilities — table (Section | Content) when sections parse, else paragraph
+      const speechReport = reportData?.interview?.speech_detailed_report;
+      if (speechReport && String(speechReport).trim()) {
+        const speechMargin = 8;
+        const speechContentWidth = pageWidth - speechMargin * 2;
+        doc.addPage();
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(30, 93, 168);
+        doc.text('DETAILED FEEDBACK ON CANDIDATE SPEECH ABILITIES', speechMargin, 20);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(0, 0, 0);
+        const reportBody = stripSpeechReportTitleLine(String(speechReport).trim());
+        const reportSections = parseSpeechReportSections(reportBody);
+        if (reportSections.length >= 2) {
+          const colCount = reportSections.length;
+          const colWidth = speechContentWidth / colCount;
+          const headerRow = reportSections.map((s) => s.section);
+          const contentRow = reportSections.map((s) => s.content);
+          const columnStyles: Record<number, { cellWidth: number }> = {};
+          for (let i = 0; i < colCount; i++) columnStyles[i] = { cellWidth: colWidth };
+          autoTable(doc, {
+            head: [headerRow],
+            body: [contentRow],
+            startY: 28,
+            styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak', ...tableBorder },
+            headStyles: { fillColor: [30, 93, 168], textColor: 255, fontStyle: 'bold', fontSize: 9, ...tableBorder },
+            columnStyles,
+            margin: { left: speechMargin, right: speechMargin },
+            tableWidth: speechContentWidth,
+          });
+        } else {
+          drawFormattedReportText(doc, reportBody, {
+            startX: speechMargin,
+            startY: 28,
+            maxWidth: speechContentWidth,
+            lineHeight: 5,
+            pageHeight: doc.internal.pageSize.height,
+            bottomMargin: 28,
+            fontSize: 9,
+          });
+        }
+      }
+
+      // Page: Your Personalised Action Plan — one column per attribute (no Sr No)
+      const actionPlan = reportData?.interview?.personalised_action_plan;
+      if (actionPlan && String(actionPlan).trim()) {
+        const speechMargin = 8;
+        const speechContentWidth = pageWidth - speechMargin * 2;
+        doc.addPage();
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(30, 93, 168);
+        doc.text('YOUR PERSONALISED ACTION PLAN', speechMargin, 20);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(0, 0, 0);
+        const planRaw = String(actionPlan).trim();
+        const planItems = parseActionPlanItems(planRaw);
+        if (planItems.length > 0) {
+          const tableTotalWidth = speechContentWidth;
+          const colWidths = [
+            tableTotalWidth * 0.18,  // Action Name
+            tableTotalWidth * 0.22,  // Addresses
+            tableTotalWidth * 0.28,  // Description
+            tableTotalWidth * 0.14,  // Timeline
+            tableTotalWidth * 0.18,  // Expected outcome
+          ];
+          const tableBody = planItems.map((item) => [
+            item.actionName || '—',
+            item.addresses || '—',
+            item.description || '—',
+            item.timeline || '—',
+            item.expectedOutcome || '—',
+          ]);
+          autoTable(doc, {
+            head: [['Action Name', 'Addresses', 'Description', 'Timeline', 'Expected outcome']],
+            body: tableBody,
+            startY: 28,
+            styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak', ...tableBorder },
+            headStyles: { fillColor: [30, 93, 168], textColor: 255, fontStyle: 'bold', fontSize: 9, ...tableBorder },
+            columnStyles: {
+              0: { cellWidth: colWidths[0] },
+              1: { cellWidth: colWidths[1] },
+              2: { cellWidth: colWidths[2] },
+              3: { cellWidth: colWidths[3] },
+              4: { cellWidth: colWidths[4] },
+            },
+            margin: { left: speechMargin, right: speechMargin },
+            tableWidth: tableTotalWidth,
+          });
+        } else {
+          const planBody = normalizeActionPlanText(planRaw);
+          drawFormattedReportText(doc, planBody, {
+            startX: speechMargin,
+            startY: 28,
+            maxWidth: speechContentWidth,
+            lineHeight: 5.5,
+            pageHeight: doc.internal.pageSize.height,
+            bottomMargin: 28,
+            fontSize: 9,
+          });
+        }
+      }
 
       // Add closing/disclaimer page
       doc.addPage();
@@ -1906,7 +2109,7 @@ const FinalResults = () => {
       doc.setTextColor(30, 30, 30);
       const disclaimerLines = [
         'This report combines AI content evaluation with advanced speech analysis.',
-        'Metrics are calculated using computer vision, speech analysis, and machine learning.',
+        'Metrics are calculated using speech analysis and machine learning.',
         'This report was created by the smart assessment system ProValuate.'
       ];
       const lineHeight = 8;
@@ -2076,9 +2279,83 @@ const FinalResults = () => {
                 <span className="text-sm sm:text-base text-gray-600">Total Questions:</span>
                 <span className="text-sm sm:text-base font-semibold text-gray-900">{interview?.total_questions ?? 0}</span>
               </div>
+
+              {/* Speech details: single row with clickable text that opens the card */}
+              {reportData?.answers?.some((a) => {
+                const b = a.behavioral ?? a.behavioral_metrics;
+                return b && (typeof b.overall_speech_quality === 'number' || typeof b.speaking_pace_wpm === 'number' || typeof b.pause_quality_score === 'number');
+              }) && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm sm:text-base text-gray-600">Speech details:</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowSpeechDetailsCard(true)}
+                    className="text-sm sm:text-base font-bold text-[#1e5da8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#1e5da8] focus:ring-offset-1 rounded px-2 py-1"
+                  >
+                    Click here for speech details
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
+
+        {/* Speech details card (dialog) */}
+        <Dialog open={showSpeechDetailsCard} onOpenChange={setShowSpeechDetailsCard}>
+          <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto p-6 sm:p-8">
+            <DialogHeader>
+              <DialogTitle className="text-xl sm:text-2xl">Speech details</DialogTitle>
+            </DialogHeader>
+            <p className="text-base sm:text-lg text-gray-600 mb-6">
+              For further details and detailed analysis, please download the PDF.
+            </p>
+            {reportData?.answers && (() => {
+              const answers = reportData.answers;
+              const withBehavioral = answers.filter((a) => {
+                const b = a.behavioral ?? a.behavioral_metrics;
+                return b && (typeof b.overall_speech_quality === 'number' || typeof b.speaking_pace_wpm === 'number' || typeof b.pause_quality_score === 'number');
+              });
+              if (withBehavioral.length === 0) return null;
+
+              const avg = (key, formatter = (v) => v) => {
+                const vals = withBehavioral.map((a) => (a.behavioral ?? a.behavioral_metrics)?.[key]).filter((v) => typeof v === 'number');
+                if (vals.length === 0) return null;
+                const sum = vals.reduce((s, v) => s + v, 0);
+                return formatter(sum / vals.length);
+              };
+              const metrics = [
+                { name: 'Overall speech quality', candidate: avg('overall_speech_quality', (v) => `${Math.round(v)}/100`) },
+                { name: 'Speaking pace (WPM)', candidate: avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`) },
+                { name: 'Filler words', candidate: avg('filler_words', (v) => `${v.toFixed(1)}`) },
+                { name: 'Filler density', candidate: avg('filler_density', (v) => `${v.toFixed(1)}%`) },
+                { name: 'Pause & pacing', candidate: avg('pause_quality_score', (v) => `${Math.round(v)}/100`) },
+                { name: 'Voice confidence', candidate: avg('voice_confidence', (v) => `${Math.round(v)}/100`) },
+                { name: 'Stress level', candidate: avg('stress_score', (v) => `${Math.round(v)}/100`) },
+              ].filter((m) => m.candidate != null);
+
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-base sm:text-lg border border-gray-200 rounded-lg overflow-hidden">
+                    <thead>
+                      <tr className="bg-[#1e5da8] text-white">
+                        <th className="text-left py-3 px-4 font-semibold text-base sm:text-lg">Metric name</th>
+                        <th className="text-left py-3 px-4 font-semibold text-base sm:text-lg">Candidate score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {metrics.map((m, i) => (
+                        <tr key={m.name} className={i % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                          <td className="py-3 px-4 text-gray-700">{m.name}</td>
+                          <td className="py-3 px-4 font-medium text-gray-900">{m.candidate}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+          </DialogContent>
+        </Dialog>
 
         {/* Parameter selection and questions */}
         {reportData?.questions && reportData.questions.length > 0 && (
@@ -2302,7 +2579,7 @@ const FinalResults = () => {
                                               <div><span className="text-gray-600">Overall speech quality</span><span className="font-semibold block">{b.overall_speech_quality != null ? `${b.overall_speech_quality}/100` : '-'}</span></div>
                                               <div><span className="text-gray-600">Speaking pace</span><span className="font-semibold block">{b.speaking_pace_wpm ?? '-'} WPM</span></div>
                                               <div><span className="text-gray-600">Filler words</span><span className="font-semibold block">{b.filler_words ?? '-'}{b.filler_density != null ? ` (${b.filler_density}%)` : ''}{b.filler_examples?.length ? ` (${b.filler_examples.join(', ')})` : ''}</span></div>
-                                              <div><span className="text-gray-600">Pause quality</span><span className="font-semibold block">{b.pause_quality_score != null ? `${b.pause_quality_score}/100` : '-'}</span></div>
+                                              <div><span className="text-gray-600">Pause & pacing</span><span className="font-semibold block">{b.pause_quality_score != null ? `${b.pause_quality_score}/100` : '-'}</span></div>
                                               <div><span className="text-gray-600">Voice confidence</span><span className="font-semibold block">{b.voice_confidence != null ? `${b.voice_confidence}/100` : '-'}</span></div>
                                               <div><span className="text-gray-600">Stress level</span><span className="font-semibold block">{b.stress_score != null ? `${b.stress_score}/100` : '-'}</span></div>
                                             </div>
