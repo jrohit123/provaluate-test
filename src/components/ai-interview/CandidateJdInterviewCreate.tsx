@@ -1,9 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import HRInterviewCreator, { type InjectedJD } from './HRInterviewCreator';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 interface CandidateJdInterviewCreateProps {
   candidateId: string;
@@ -56,15 +54,7 @@ export default function CandidateJdInterviewCreate({ candidateId }: CandidateJdI
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" asChild>
-          <Link to="/candidate-dashboard/jds">
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to My JDs
-          </Link>
-        </Button>
-      </div>
+    <div className="w-full min-w-0 space-y-4 overflow-x-hidden">
       {loading ? (
         <div className="flex items-center gap-2 text-gray-600 py-8">
           <Loader2 className="h-5 w-5 animate-spin" />

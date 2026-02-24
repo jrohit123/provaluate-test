@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -7,7 +7,6 @@ import { API_CONFIG, buildApiUrl, apiCall } from '@/constants/api';
 import { INTERVIEW_CONSTANTS } from '@/constants/interview';
 import { JobDescription, StructuredQuestion, CustomParameters } from '@/types/interview';
 import {
-  Settings,
   FileText,
   Plus,
   Trash2,
@@ -17,9 +16,11 @@ import {
   Loader2,
   X,
   Upload,
-  Maximize2
+  Maximize2,
+  HelpCircle
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -72,11 +73,24 @@ interface CustomParameter {
 
 
 
+const CANDIDATE_WORKFLOW_PATHS = ['/candidate-dashboard/jds/configure', '/candidate-dashboard/jds/create', '/candidate-dashboard/interviews'] as const;
+
 const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedLoadJobDescriptions, candidateId }: AIsetupProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const interviewCurrentStep = useInterviewCurrentStep();
   const interviewNavigateToStep = useInterviewNavigateToStep();
+  const pathname = location.pathname;
+  const isCandidateFlow = !!candidateId;
+  const candidateCurrentStep = pathname.includes('/jds/create') ? 1 : pathname.includes('/interviews') ? 2 : 0;
+  const candidateNavigateToStep = (stepIndex: number) => {
+    if (stepIndex >= 0 && stepIndex < CANDIDATE_WORKFLOW_PATHS.length) {
+      navigate(CANDIDATE_WORKFLOW_PATHS[stepIndex]);
+    }
+  };
+  const currentStep = isCandidateFlow ? candidateCurrentStep : interviewCurrentStep;
+  const navigateToStep = isCandidateFlow ? candidateNavigateToStep : interviewNavigateToStep;
   
   const [formData, setFormData] = useState<FormData>({
     position: '',
@@ -1472,39 +1486,89 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     return () => clearTimeout(t);
   }, [onSectionReady]);
 
+  const isCandidate = !!candidateId;
+  const titleClass = isCandidate ? 'text-sky-800' : 'text-primary-800';
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen w-full min-w-0 overflow-x-hidden">
       {/* Mobile step progress (interview workflow) */}
       <div className="lg:hidden">
         <CompactStepProgress
-          current={interviewCurrentStep}
+          current={currentStep}
           total={INTERVIEW_WORKFLOW_STEPS.length}
           steps={INTERVIEW_WORKFLOW_STEPS}
-          onStepClick={interviewNavigateToStep}
+          onStepClick={navigateToStep}
+          allowClickAnyStep={isCandidateFlow}
         />
       </div>
-      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-      <div className="mb-4 sm:mb-6">
-        <h2 className="text-xl sm:text-2xl font-bold text-primary-800 mb-2">Interview Parameters Setup</h2>
-        <p className="text-sm sm:text-base text-muted-foreground">Select the role and configure the interview settings</p>
+      <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
+      <div className="mb-4 sm:mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className={`text-xl sm:text-2xl font-bold mb-2 ${titleClass}`}>Interview Parameters Setup</h2>
+          <p className="text-sm sm:text-base text-muted-foreground">Select the role and configure the interview settings</p>
+        </div>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="icon" className="shrink-0 rounded-full h-9 w-9" aria-label="Help">
+              <HelpCircle className="h-5 w-5" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-full max-w-md sm:max-w-lg max-h-[85vh] overflow-y-auto" align="end" side="bottom">
+            <div className="space-y-4 text-sm">
+              <h3 className="font-semibold text-base border-b pb-2">Interview Parameters Setup — Help</h3>
+
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">Interview modes</h4>
+                <ul className="list-disc list-inside space-y-1 text-gray-600">
+                  <li><strong>AI Interview (Dynamic):</strong> Questions are generated dynamically based on candidate responses.</li>
+                  <li><strong>Structured Interview (Pre-defined):</strong> Pre-defined questions and parameters set by HR.</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">Interview types (AI mode)</h4>
+                <ul className="list-disc list-inside space-y-1 text-gray-600">
+                  <li><strong>Functional:</strong> Focus on functional skills and problem-solving.</li>
+                  <li><strong>Behavioral:</strong> Focus on soft skills and communication.</li>
+                  <li><strong>Mixed:</strong> Combination of both functional and behavioral aspects.</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">How to create parameters (existing JD)</h4>
+                <ol className="list-decimal list-inside space-y-1 text-gray-600">
+                  <li>Select a job description from the <strong>Select Role</strong> dropdown.</li>
+                  <li>Choose <strong>Interview Mode</strong> (AI or Structured) and, for AI, the <strong>Interview Type</strong>.</li>
+                  <li>Click <strong>Generate AI Parameters</strong> to create assessment parameters from the job description.</li>
+                  <li>Modify parameters as needed: weights, questions, bullet points, timer, level of question, and any other settings. Ensure parameter <strong>weights total 100%</strong>.</li>
+                  <li>Click <strong>Save Parameters</strong> when done.</li>
+                </ol>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">How to save a new role (step by step)</h4>
+                <ol className="list-decimal list-inside space-y-1 text-gray-600">
+                  <li>Enter the new role name in the <strong>New Role (Optional)</strong> field.</li>
+                  <li>Upload a job description (PDF, DOCX, or TXT) or paste it into the Job Description area.</li>
+                  <li>Select the new role from the &quot;Select Role&quot; dropdown after it appears, or ensure the job description is filled.</li>
+                  <li>Generate and save parameters as above; the new role will be associated with this configuration.</li>
+                </ol>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Interview Configuration Section */}
-      <Card className="animate-fade-in" data-tour="setup-area">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            Interview Configuration
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      <Card className="animate-fade-in overflow-hidden" data-tour="setup-area">
+        <CardContent className="space-y-6 pt-4 sm:pt-6 px-3 sm:px-6 pb-4 sm:pb-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Left Column */}
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0">
               <div className="space-y-2">
                 <Label className="text-sm sm:text-base">Select Role *</Label>
                 <Select onValueChange={handleJobDescriptionSelect}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
                     <SelectValue placeholder="Select a role from existing job descriptions..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -1537,7 +1601,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                     setFormData(prev => ({ ...prev, interviewMode: value }))
                   }
                 >
-                  <SelectTrigger className="w-full h-14">
+                  <SelectTrigger className="w-full min-h-[44px] h-12 sm:h-14 touch-manipulation">
                     <SelectValue placeholder="Select interview mode..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -1561,10 +1625,6 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-500">
-                  AI Interview: Dynamic questions generated based on candidate responses<br className="hidden sm:block"/>
-                  Structured Interview: Pre-defined questions and parameters set by HR
-                </p>
               </div>
 
               {formData.interviewMode === 'ai' && (
@@ -1580,7 +1640,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                       }
                     }}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
                       <SelectValue placeholder="Select interview type..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -1589,11 +1649,6 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                       <SelectItem value="mixed">Mixed (Functional + Behavioral)</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-gray-500">
-                    Functional: Focus on functional skills and problem-solving<br/>
-                    Behavioral: Focus on soft skills and communication<br/>
-                    Mixed: Combination of both functional and behavioral aspects
-                  </p>
                 </div>
               )}
 
@@ -1611,7 +1666,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                 <div
                   className={`border-2 border-dashed rounded-lg p-4 sm:p-6 text-center transition-colors ${
                     isDragOver 
-                      ? 'border-primary-500 bg-primary-50' 
+                      ? (candidateId ? 'border-sky-500 bg-sky-50' : 'border-primary-500 bg-primary-50')
                       : 'border-gray-300 hover:border-gray-400'
                   }`}
                   onDragOver={handleDragOver}
@@ -1727,7 +1782,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-sm mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 text-sm mb-4">
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
                 <div className="text-blue-600 font-medium text-xs sm:text-sm">Total Questions</div>
                 <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.totalQuestions || 'Calculating...'}</div>
@@ -1775,7 +1830,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                 <Button
                   onClick={() => generateDynamicParameters(true)} // Always force fresh generation
                   disabled={isLoadingParameters || !formData.position}
-                  className="flex items-center gap-2 w-full sm:w-auto"
+                  className={isCandidate ? 'flex items-center gap-2 w-full sm:w-auto bg-sky-600 hover:bg-sky-700 text-white' : 'flex items-center gap-2 w-full sm:w-auto'}
                   title="Generate completely new parameters, ignoring any cached versions"
                 >
                   {isLoadingParameters ? (
@@ -1797,7 +1852,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                 <Button
                   onClick={saveParameters}
                   disabled={isSavingParameters || Math.abs(calculateTotalWeightage() - 100) > 0.01}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
+                  className={isCandidate ? 'flex items-center gap-2 bg-sky-600 hover:bg-sky-700 text-white w-full sm:w-auto' : 'flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto'}
                 >
                   {isSavingParameters ? (
                     <>

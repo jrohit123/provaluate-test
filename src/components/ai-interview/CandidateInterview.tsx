@@ -414,7 +414,7 @@ const CandidateInterview = () => {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center px-3 sm:px-6">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-600 mx-auto mb-4" />
           <p className="text-base sm:text-lg text-gray-600">Loading your interview...</p>
         </div>
       </div>
@@ -430,7 +430,7 @@ const CandidateInterview = () => {
           <p className="text-sm sm:text-base text-gray-600 mb-6 break-words">{error}</p>
           <button
             onClick={() => window.history.back()}
-            className="min-h-[44px] px-6 py-3 rounded-lg bg-blue-600 text-white text-sm sm:text-base font-medium hover:bg-blue-700 transition-colors touch-manipulation"
+            className="min-h-[44px] px-6 py-3 rounded-lg bg-sky-600 text-white text-sm sm:text-base font-medium hover:bg-sky-700 transition-colors touch-manipulation"
           >
             Go Back
           </button>
@@ -553,7 +553,7 @@ const CandidateInterview = () => {
                       <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0" />
                     )}
                     {browserCheck === 'checking' && (
-                      <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
+                      <Loader2 className="w-5 h-5 text-sky-600 animate-spin flex-shrink-0" />
                     )}
                     {browserCheck === 'pass' && (
                       <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
@@ -570,7 +570,7 @@ const CandidateInterview = () => {
                       <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0" />
                     )}
                     {permissionsCheck === 'checking' && (
-                      <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
+                      <Loader2 className="w-5 h-5 text-sky-600 animate-spin flex-shrink-0" />
                     )}
                     {permissionsCheck === 'pass' && (
                       <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
@@ -587,7 +587,7 @@ const CandidateInterview = () => {
                       <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0" />
                     )}
                     {cameraMicCheck === 'checking' && (
-                      <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
+                      <Loader2 className="w-5 h-5 text-sky-600 animate-spin flex-shrink-0" />
                     )}
                     {cameraMicCheck === 'pass' && (
                       <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
@@ -604,7 +604,7 @@ const CandidateInterview = () => {
                       <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0" />
                     )}
                     {internetCheck === 'checking' && (
-                      <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
+                      <Loader2 className="w-5 h-5 text-sky-600 animate-spin flex-shrink-0" />
                     )}
                     {internetCheck === 'pass' && (
                       <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
@@ -623,7 +623,7 @@ const CandidateInterview = () => {
             {/* Right: Photo Capture */}
             <div className="flex-1 lg:max-w-[50%] order-2 min-w-0">
               <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2 flex items-center justify-center gap-2">
-                <Camera className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                <Camera className="w-5 h-5 text-sky-600 flex-shrink-0" />
                 <span className="break-words">Capture Your Photo</span>
               </h2>
               <p className="text-gray-600 text-sm sm:text-base text-center mb-4 break-words">
@@ -657,7 +657,7 @@ const CandidateInterview = () => {
                   <button
                     onClick={handleCapturePhoto}
                     disabled={isCapturingPhoto || !cameraReady}
-                    className="w-full min-h-[44px] sm:min-h-[48px] bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm sm:text-base font-semibold touch-manipulation"
+                    className="w-full min-h-[44px] sm:min-h-[48px] bg-sky-600 text-white py-3 rounded-xl hover:bg-sky-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm sm:text-base font-semibold touch-manipulation"
                   >
                     <Camera className="w-5 h-5" />
                     {isCapturingPhoto ? 'Capturing...' : 'Capture Photo'}
@@ -693,9 +693,9 @@ const CandidateInterview = () => {
           <button
             onClick={startInterview}
             disabled={!photoCaptured}
-            className={`w-full min-h-[48px] py-3 rounded-lg text-sm sm:text-base font-semibold flex items-center justify-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 touch-manipulation ${
+            className={`w-full min-h-[48px] py-3 rounded-lg text-sm sm:text-base font-semibold flex items-center justify-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 touch-manipulation ${
               photoCaptured
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                ? 'bg-sky-600 text-white hover:bg-sky-700'
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
           >

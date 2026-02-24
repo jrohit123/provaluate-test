@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
 import {
   UserPlus,
-  Settings,
   Copy,
   Send,
   FileText,
@@ -85,8 +84,20 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+  const location = useLocation();
   const interviewCurrentStep = useInterviewCurrentStep();
   const interviewNavigateToStep = useInterviewNavigateToStep();
+  const pathname = location.pathname;
+  const isCandidateFlow = !!candidateId;
+  const candidateWorkflowPaths = ['/candidate-dashboard/jds/configure', '/candidate-dashboard/jds/create', '/candidate-dashboard/interviews'] as const;
+  const candidateCurrentStep = pathname.includes('/jds/create') ? 1 : pathname.includes('/interviews') ? 2 : 0;
+  const candidateNavigateToStep = (stepIndex: number) => {
+    if (stepIndex >= 0 && stepIndex < candidateWorkflowPaths.length) {
+      navigate(candidateWorkflowPaths[stepIndex]);
+    }
+  };
+  const currentStep = isCandidateFlow ? candidateCurrentStep : interviewCurrentStep;
+  const navigateToStep = isCandidateFlow ? candidateNavigateToStep : interviewNavigateToStep;
 
   const [formData, setFormData] = useState<FormData>({
     candidates: [{ name: '', email: '' }],
@@ -1298,34 +1309,36 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     return () => clearTimeout(t);
   }, [onSectionReady]);
 
+  const isCandidate = !!candidateId;
+  const titleClass = isCandidate ? 'text-sky-800' : 'text-primary-800';
+  const statBgClass = isCandidate ? 'bg-sky-50 border-sky-200' : 'bg-blue-50 border-blue-200';
+  const statNumClass = isCandidate ? 'text-sky-800' : 'text-blue-800';
+  const statLabelClass = isCandidate ? 'text-sky-600' : 'text-blue-600';
+  const statSubClass = isCandidate ? 'text-sky-500' : 'text-blue-500';
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen w-full min-w-0 overflow-x-hidden">
       <div className="lg:hidden">
         <CompactStepProgress
-          current={interviewCurrentStep}
+          current={currentStep}
           total={INTERVIEW_WORKFLOW_STEPS.length}
           steps={INTERVIEW_WORKFLOW_STEPS}
-          onStepClick={interviewNavigateToStep}
+          onStepClick={navigateToStep}
+          allowClickAnyStep={isCandidateFlow}
         />
       </div>
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
       <div className="mb-4 sm:mb-6">
-        <h2 className="text-xl sm:text-2xl font-bold text-primary-800 mb-2">Final Overview</h2>
+        <h2 className={`text-xl sm:text-2xl font-bold mb-2 ${titleClass}`}>Final Overview</h2>
         {!candidateId && (
           <p className="text-sm sm:text-base text-muted-foreground">Set up an interview and generate a link for your candidate</p>
         )}
       </div>
 
       {/* Interview Configuration Section */}
-      <Card className="animate-fade-in" data-tour="ai-interview-area">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            {candidateId ? 'Create your interview' : 'Send the Interview'}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-6">
+      <Card className="animate-fade-in overflow-hidden" data-tour="ai-interview-area">
+        <CardContent className="space-y-6 pt-4 sm:pt-6 px-3 sm:px-6 pb-4 sm:pb-6">
+          <div className="space-y-6 min-w-0">
             {/* Candidates Section: recruiter = import/add + name/email inputs; candidate = read-only self */}
             <div className="space-y-4">
               {candidateId ? (
@@ -1430,7 +1443,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
             <div className="space-y-2">
               <Label className="text-sm sm:text-base">Select Role *</Label>
               <Select onValueChange={handleJobDescriptionSelect}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
                   <SelectValue placeholder="Select a role from existing job descriptions..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -1467,7 +1480,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                   setFormData(prev => ({ ...prev, interviewMode: value }))
                 }
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
                   <SelectValue placeholder="Select interview mode..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -1496,25 +1509,25 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           <CardContent className="space-y-6">
             {/* Stats Overview */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-              <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200 text-center">
-                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.totalQuestions || 'Calculating...'}</div>
-                <div className="text-xs sm:text-sm text-blue-600 font-medium">Total Questions</div>
-                <div className="text-xs text-blue-500">Based on parameters</div>
+              <div className={`rounded-lg p-3 sm:p-4 border text-center ${statBgClass}`}>
+                <div className={`text-xl sm:text-2xl font-bold ${statNumClass}`}>{formData.totalQuestions || 'Calculating...'}</div>
+                <div className={`text-xs sm:text-sm font-medium ${statLabelClass}`}>Total Questions</div>
+                <div className={`text-xs ${statSubClass}`}>Based on parameters</div>
               </div>
-              <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200 text-center">
-                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.duration != null ? Math.round(Number(formData.duration)) : 'Calculating...'} min</div>
-                <div className="text-xs sm:text-sm text-blue-600 font-medium">Duration</div>
-                <div className="text-xs text-blue-500">Auto-calculated</div>
+              <div className={`rounded-lg p-3 sm:p-4 border text-center ${statBgClass}`}>
+                <div className={`text-xl sm:text-2xl font-bold ${statNumClass}`}>{formData.duration != null ? Math.round(Number(formData.duration)) : 'Calculating...'} min</div>
+                <div className={`text-xs sm:text-sm font-medium ${statLabelClass}`}>Duration</div>
+                <div className={`text-xs ${statSubClass}`}>Auto-calculated</div>
               </div>
-              <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200 text-center">
-                <div className="text-xl sm:text-2xl font-bold text-blue-800">{Object.keys(customParameters).length}</div>
-                <div className="text-xs sm:text-sm text-blue-600 font-medium">Parameters</div>
-                <div className="text-xs text-blue-500">Assessment areas</div>
+              <div className={`rounded-lg p-3 sm:p-4 border text-center ${statBgClass}`}>
+                <div className={`text-xl sm:text-2xl font-bold ${statNumClass}`}>{Object.keys(customParameters).length}</div>
+                <div className={`text-xs sm:text-sm font-medium ${statLabelClass}`}>Parameters</div>
+                <div className={`text-xs ${statSubClass}`}>Assessment areas</div>
               </div>
-              <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200 text-center">
-                <div className="text-xl sm:text-2xl font-bold text-blue-800">{calculateTotalWeightage()}%</div>
-                <div className="text-xs sm:text-sm text-blue-600 font-medium">Weightage</div>
-                <div className="text-xs text-blue-500">Total weightage</div>
+              <div className={`rounded-lg p-3 sm:p-4 border text-center ${statBgClass}`}>
+                <div className={`text-xl sm:text-2xl font-bold ${statNumClass}`}>{calculateTotalWeightage()}%</div>
+                <div className={`text-xs sm:text-sm font-medium ${statLabelClass}`}>Weightage</div>
+                <div className={`text-xs ${statSubClass}`}>Total weightage</div>
               </div>
             </div>
 
@@ -1761,7 +1774,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                     {question.expectedAnswer && (
                       <div className="mt-3">
                         <div className="text-xs font-medium text-gray-600 mb-1">Expected Answer:</div>
-                        <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded border">
+                        <div className={`text-xs text-gray-600 p-2 rounded border ${isCandidate ? 'bg-sky-50' : 'bg-blue-50'}`}>
                           {question.expectedAnswer}
                         </div>
                       </div>
@@ -1810,7 +1823,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         <Button
           onClick={createInterview}
           disabled={isCreating || (!!candidateId && (loggedInCandidateLoading || !loggedInCandidate))}
-          className="px-6 sm:px-8 py-2 w-full sm:w-auto"
+          className={isCandidate ? 'px-6 sm:px-8 py-2 w-full sm:w-auto bg-sky-600 hover:bg-sky-700 text-white' : 'px-6 sm:px-8 py-2 w-full sm:w-auto'}
           size="default"
         >
           {isCreating ? (
@@ -1913,7 +1926,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                     {candidateId ? (
                       <Button
                         size="sm"
-                        className="w-full sm:w-auto shrink-0"
+                        className="w-full sm:w-auto shrink-0 bg-sky-600 hover:bg-sky-700 text-white"
                         onClick={() => window.open(interviewLink, '_blank', 'noopener,noreferrer')}
                       >
                         <ExternalLink className="h-4 w-4 sm:mr-2" />
@@ -1935,7 +1948,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
             })}
             {!candidateId && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
-                <div className="bg-blue-50 rounded-lg p-3">
+                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
                   <p className="font-medium text-blue-800">Total Interviews</p>
                   <p className="text-blue-600 font-mono">{createdInterviews.length}</p>
                 </div>

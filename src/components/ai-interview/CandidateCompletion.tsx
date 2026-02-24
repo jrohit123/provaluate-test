@@ -74,7 +74,7 @@ const CandidateCompletion = () => {
         </header>
         <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1e5da8] mx-auto mb-4" />
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-600 mx-auto mb-4" />
             <p className="text-base sm:text-lg text-gray-600">Loading interview details...</p>
           </div>
         </div>
@@ -100,11 +100,11 @@ const CandidateCompletion = () => {
       <main className="flex-1 w-full max-w-6xl mx-auto px-3 sm:px-6 py-6 sm:py-8 lg:py-10">
         {/* Status icon - same blue as Contact Sales */}
         <div className="flex justify-center mb-6 sm:mb-8">
-          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center bg-[#1e5da8]/10">
+          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center bg-sky-100">
             {isTerminated ? (
-              <XCircle className="w-10 h-10 sm:w-12 sm:h-12 text-[#1e5da8]" />
+              <XCircle className="w-10 h-10 sm:w-12 sm:h-12 text-sky-600" />
             ) : (
-              <CheckCircle className="w-10 h-10 sm:w-12 sm:h-12 text-[#1e5da8]" />
+              <CheckCircle className="w-10 h-10 sm:w-12 sm:h-12 text-sky-600" />
             )}
           </div>
         </div>
@@ -127,7 +127,7 @@ const CandidateCompletion = () => {
               )}
             </p>
 
-            <div className="rounded-lg border border-[#1e5da8]/20 bg-[#1e5da8]/5 p-4 sm:p-6 mb-6">
+            <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 sm:p-6 mb-6">
               {isTerminated ? (
                 <div>
                   <p className="text-gray-800 text-sm sm:text-base mb-3">
@@ -135,7 +135,7 @@ const CandidateCompletion = () => {
                     terminated.
                   </p>
                   {terminationReason && (
-                    <div className="mt-3 pt-3 border-t border-[#1e5da8]/20">
+                    <div className="mt-3 pt-3 border-t border-sky-200">
                       <p className="text-xs sm:text-sm font-semibold text-gray-800 mb-1">Reason</p>
                       <p className="text-xs sm:text-sm text-gray-700">{terminationReason}</p>
                     </div>
@@ -176,13 +176,13 @@ const CandidateCompletion = () => {
           <div className="mb-6 sm:mb-8">
             <div>
               <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 sm:mb-6 flex items-center justify-center gap-2">
-                <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-[#1e5da8] flex-shrink-0" />
+                <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-sky-600 flex-shrink-0" />
                 What Happens Next?
               </h2>
               <div className="grid sm:grid-cols-2 gap-4 sm:gap-6 text-left">
                 <div className="flex items-start gap-3 min-w-0">
                   <div className="w-8 h-8 sm:w-9 sm:h-9 bg-sky-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-[#1e5da8] font-semibold text-sm">1</span>
+                    <span className="text-sky-600 font-semibold text-sm">1</span>
                   </div>
                   <div className="min-w-0">
                     <h3 className="font-semibold text-gray-900 mb-1 text-sm sm:text-base">Review Process</h3>
@@ -193,7 +193,7 @@ const CandidateCompletion = () => {
                 </div>
                 <div className="flex items-start gap-3 min-w-0">
                   <div className="w-8 h-8 sm:w-9 sm:h-9 bg-sky-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-[#1e5da8] font-semibold text-sm">2</span>
+                    <span className="text-sky-600 font-semibold text-sm">2</span>
                   </div>
                   <div className="min-w-0">
                     <h3 className="font-semibold text-gray-900 mb-1 text-sm sm:text-base">Follow-up</h3>
@@ -213,7 +213,7 @@ const CandidateCompletion = () => {
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Link
                 to={`/final-results/${interviewId}`}
-                className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 sm:px-6 py-3 rounded-lg bg-[#1e5da8] text-white text-sm sm:text-base font-medium hover:bg-[#1e5da8]/90 transition-colors touch-manipulation"
+                className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 sm:px-6 py-3 rounded-lg bg-sky-600 text-white text-sm sm:text-base font-medium hover:bg-sky-700 transition-colors touch-manipulation"
               >
                 <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
                 View report
@@ -221,7 +221,7 @@ const CandidateCompletion = () => {
               {isCandidateUser && (
                 <Link
                   to="/candidate-dashboard/interviews"
-                  className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 sm:px-6 py-3 rounded-lg border border-[#1e5da8] text-[#1e5da8] text-sm sm:text-base font-medium hover:bg-[#1e5da8]/5 transition-colors touch-manipulation"
+                  className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 sm:px-6 py-3 rounded-lg border border-sky-600 text-sky-600 text-sm sm:text-base font-medium hover:bg-sky-50 transition-colors touch-manipulation"
                 >
                   <List className="w-4 h-4 sm:w-5 sm:h-5" />
                   My Interviews
@@ -236,7 +236,7 @@ const CandidateCompletion = () => {
           </p>
           <a
             href="mailto:sales@aitamate.com"
-            className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 sm:px-6 py-3 rounded-lg bg-[#1e5da8] text-white text-sm sm:text-base font-medium hover:bg-[#1e5da8]/90 transition-colors touch-manipulation"
+            className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 sm:px-6 py-3 rounded-lg bg-sky-600 text-white text-sm sm:text-base font-medium hover:bg-sky-700 transition-colors touch-manipulation"
           >
             <Mail className="w-4 h-4 sm:w-5 sm:h-5" />
             Contact Sales

@@ -91,21 +91,21 @@ const CandidateLogin = () => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header Section */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
-          <div className="flex justify-between items-center">
+    <div className="min-h-screen w-full bg-gradient-to-br from-sky-50 to-sky-100 overflow-x-hidden">
+      {/* Header Section - white like recruiter login */}
+      <header className="bg-white shadow-sm border-b sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
+          <div className="flex flex-wrap justify-between items-center gap-2">
             <div className="flex items-center space-x-2 sm:space-x-3">
-              <Link to="/candidate-login" className="flex items-center space-x-2">
-                <img src="/Logo_Transparent_BG.png" alt="ProValuate" className="h-12 sm:h-16 lg:h-20" />
+              <Link to="/candidate-login" className="flex items-center space-x-2 min-h-[44px]">
+                <img src="/Logo_Transparent_BG.png" alt="ProValuate" className="h-10 sm:h-16 lg:h-20 w-auto" />
               </Link>
             </div>
-            <div className="flex items-center space-x-3 sm:space-x-6">
-              <Link to="/login" className="text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <Link to="/login" className="min-h-[44px] flex items-center px-2 text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors touch-manipulation">
                 Recruiter login
               </Link>
-              <a href="mailto:sales@aitamate.com?&subject=Provaluate&body=Hi,%0D%0A%0D%0AI'm facing an issue with ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors">
+              <a href="mailto:sales@aitamate.com?&subject=Provaluate&body=Hi,%0D%0A%0D%0AI'm facing an issue with ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="min-h-[44px] min-w-[44px] flex items-center justify-center text-sky-600 hover:text-sky-800 transition-colors touch-manipulation" aria-label="Contact support">
                 <Mail className="h-6 w-6 sm:h-8 sm:w-8" />
               </a>
             </div>
@@ -114,7 +114,7 @@ const CandidateLogin = () => {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
         <div className="text-center mb-8 sm:mb-12">
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-3 sm:mb-4 px-4">
             Your Interview & Profile Hub
@@ -138,8 +138,8 @@ const CandidateLogin = () => {
 
           <Card className="text-center border-0 shadow-lg">
             <CardContent className="pt-4 sm:pt-6">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-blue-200 flex items-center justify-center">
-                <ClipboardList className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+              <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-sky-200 flex items-center justify-center">
+                <ClipboardList className="h-6 w-6 sm:h-8 sm:w-8 text-sky-600" />
               </div>
               <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">Track Your Interviews</h3>
               <p className="text-sm sm:text-base text-gray-600">See all your interviews and take new ones from a single dashboard</p>
@@ -148,8 +148,8 @@ const CandidateLogin = () => {
 
           <Card className="text-center border-0 shadow-lg sm:col-span-2 lg:col-span-1">
             <CardContent className="pt-4 sm:pt-6">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-purple-200 flex items-center justify-center">
-                <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
+              <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-sky-300 flex items-center justify-center">
+                <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-sky-600" />
               </div>
               <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">View Your Reports</h3>
               <p className="text-sm sm:text-base text-gray-600">Access detailed feedback and personalised action plans after each interview</p>
@@ -163,7 +163,7 @@ const CandidateLogin = () => {
             <Card className="shadow-lg border-0">
               <CardHeader className="space-y-1 px-4 sm:px-6 pt-4 sm:pt-6">
                 <div className="flex items-center justify-center space-x-2 mb-3 sm:mb-4">
-                  <div className="bg-indigo-600 p-2 rounded-lg">
+                  <div className="bg-sky-600 p-2 rounded-lg">
                     <LogIn className="h-5 w-5 text-white" />
                   </div>
                   <CardTitle className="text-xl sm:text-2xl text-center">
@@ -185,7 +185,7 @@ const CandidateLogin = () => {
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           required
-                          className="h-10 sm:h-11 text-base"
+                          className="min-h-[44px] h-11 text-base touch-manipulation"
                           disabled={isLoading}
                         />
                       </div>
@@ -196,13 +196,13 @@ const CandidateLogin = () => {
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           required
-                          className="h-10 sm:h-11 text-base"
+                          className="min-h-[44px] h-11 text-base touch-manipulation"
                           disabled={isLoading}
                         />
                       </div>
                       <Button
                         type="submit"
-                        className="w-full h-10 sm:h-11 bg-indigo-600 hover:bg-indigo-700 text-base"
+                        className="w-full min-h-[44px] h-11 bg-sky-600 hover:bg-sky-700 text-base touch-manipulation"
                         disabled={isLoading}
                       >
                         {isLoading ? 'Please wait...' : 'Sign In'}
@@ -211,7 +211,7 @@ const CandidateLogin = () => {
                     <div className="mt-3 sm:mt-4 text-center">
                       <button
                         type="button"
-                        className="text-indigo-600 underline text-xs sm:text-sm"
+                        className="text-sky-600 hover:text-sky-800 underline text-xs sm:text-sm"
                         onClick={() => setShowReset(true)}
                         disabled={isLoading}
                       >
@@ -227,15 +227,15 @@ const CandidateLogin = () => {
                       value={resetEmail}
                       onChange={(e) => setResetEmail(e.target.value)}
                       required
-                      className="h-10 sm:h-11 text-base"
+                      className="min-h-[44px] h-11 text-base touch-manipulation"
                       disabled={resetLoading}
                     />
-                    <Button type="submit" className="w-full h-10 sm:h-11 bg-indigo-600 hover:bg-indigo-700 text-base" disabled={resetLoading}>
+                    <Button type="submit" className="w-full min-h-[44px] h-11 bg-sky-600 hover:bg-sky-700 text-base touch-manipulation" disabled={resetLoading}>
                       {resetLoading ? 'Sending...' : 'Send Password Reset Email'}
                     </Button>
                     <button
                       type="button"
-                      className="text-gray-600 underline text-xs sm:text-sm"
+                      className="text-gray-600 underline text-xs sm:text-sm min-h-[44px] flex items-center justify-center w-full sm:w-auto touch-manipulation"
                       onClick={() => setShowReset(false)}
                       disabled={resetLoading}
                     >
@@ -249,7 +249,7 @@ const CandidateLogin = () => {
                   <button
                     type="button"
                     onClick={() => navigate('/candidate-signup')}
-                    className="text-indigo-600 hover:text-indigo-800 transition-colors text-xs sm:text-sm"
+                    className="text-sky-600 hover:text-sky-800 transition-colors text-xs sm:text-sm"
                     disabled={isLoading}
                   >
                     Don&apos;t have an account? Create account
@@ -281,7 +281,7 @@ const CandidateLogin = () => {
         </div>
 
         {/* Call to Action Section */}
-        <div className="bg-gradient-to-r from-purple-600 to-pink-500 py-4 sm:py-6 rounded-lg mx-4 sm:mx-0 mt-8">
+        <div className="bg-gradient-to-r from-sky-600 to-sky-700 py-4 sm:py-6 rounded-lg mx-4 sm:mx-0 mt-8">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
             <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white mb-1">
               Ready for your next interview?
@@ -294,13 +294,13 @@ const CandidateLogin = () => {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white border-t py-4 mt-8">
+      <footer className="bg-white border-t border-sky-100 py-4 mt-8">
         <div className="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs sm:text-sm text-muted-foreground">
-          <Link to="/privacy" className="text-indigo-600 hover:text-indigo-800 font-medium">Privacy Policy</Link>
+          <Link to="/privacy" className="text-sky-600 hover:text-sky-800 font-medium">Privacy Policy</Link>
           <span className="hidden sm:inline">|</span>
-          <Link to="/terms" className="text-indigo-600 hover:text-indigo-800 font-medium">Terms</Link>
+          <Link to="/terms" className="text-sky-600 hover:text-sky-800 font-medium">Terms</Link>
           <span className="hidden sm:inline">|</span>
-          <a href="mailto:sales@aitamate.com?subject=ProValuate%20Contact" className="text-indigo-600 hover:text-indigo-800">Contact</a>
+          <a href="mailto:sales@aitamate.com?subject=ProValuate%20Contact" className="text-sky-600 hover:text-sky-800">Contact</a>
         </div>
       </footer>
     </div>

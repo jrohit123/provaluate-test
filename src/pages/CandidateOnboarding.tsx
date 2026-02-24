@@ -85,13 +85,13 @@ export default function CandidateOnboarding() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <Card className="w-full max-w-md shadow-lg border-0">
-        <CardHeader>
-          <CardTitle className="text-2xl font-bold text-gray-900">Complete your profile</CardTitle>
-          <p className="text-sm text-gray-600">Enter your name to continue to your candidate dashboard.</p>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-50 to-sky-100 p-3 sm:p-4 overflow-x-hidden">
+      <Card className="w-full max-w-md shadow-lg border-0 mx-2">
+        <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+          <CardTitle className="text-xl sm:text-2xl font-bold text-gray-900">Complete your profile</CardTitle>
+          <p className="text-sm sm:text-base text-gray-600">Enter your name to continue to your candidate dashboard.</p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">First name</label>
@@ -100,7 +100,7 @@ export default function CandidateOnboarding() {
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 required
-                className="h-10"
+                className="min-h-[44px] h-11 text-base touch-manipulation"
                 disabled={submitting}
               />
             </div>
@@ -111,11 +111,11 @@ export default function CandidateOnboarding() {
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
                 required
-                className="h-10"
+                className="min-h-[44px] h-11 text-base touch-manipulation"
                 disabled={submitting}
               />
             </div>
-            <Button type="submit" className="w-full h-10 bg-indigo-600 hover:bg-indigo-700" disabled={submitting}>
+            <Button type="submit" className="w-full min-h-[44px] h-11 text-base bg-sky-600 hover:bg-sky-700 touch-manipulation" disabled={submitting}>
               {submitting ? 'Saving...' : 'Continue to dashboard'}
             </Button>
             {error && <div className="text-red-600 text-sm text-center">{error}</div>}

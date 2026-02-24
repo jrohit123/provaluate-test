@@ -5,9 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Users, Clock, CheckCircle, Shield, Mail, FileText, BarChart, UserPlus, LogIn } from "lucide-react";
+import { Users, Clock, CheckCircle, Shield, Mail, FileText, BarChart, UserPlus, LogIn, Menu } from "lucide-react";
 import { SessionManager } from '@/utils/sessionManager';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 const PYTHON_API_BASE = import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com';
 
@@ -25,6 +26,7 @@ const Login = () => {
   const [resetMessage, setResetMessage] = useState('');
   const [resetError, setResetError] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -323,17 +325,53 @@ const Login = () => {
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 hidden sm:block"></h1>
             </div>
             <div className="flex items-center space-x-3 sm:space-x-6">
-              <Link to="/candidate-login" className="text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
+              <Link to="/candidate-login" className="hidden sm:inline-block text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
                 Candidate login
               </Link>
-              <a href="/pricing" className="text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
-                <span className="hidden sm:inline">Pricing</span>
-                <span className="sm:hidden">Pricing</span>
+              {/* Desktop: Pricing & Impact visible */}
+              <a href="/pricing" className="hidden sm:inline-block text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
+                Pricing
               </a>
-              <a href="/impact" className="text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
-                <span className="hidden sm:inline">Impact</span>
-                <span className="sm:hidden">Impact</span>
+              <a href="/impact" className="hidden sm:inline-block text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
+                Impact
               </a>
+              {/* Mobile: hamburger menu with Pricing & Impact */}
+              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <button
+                    type="button"
+                    className="sm:hidden p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+                    aria-label="Open menu"
+                  >
+                    <Menu className="h-6 w-6" />
+                  </button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-56">
+                  <nav className="flex flex-col gap-4 pt-8">
+                    <Link
+                      to="/candidate-login"
+                      className="text-base font-medium text-gray-700 hover:text-gray-900 transition-colors"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Candidate login
+                    </Link>
+                    <a
+                      href="/pricing"
+                      className="text-base font-medium text-gray-700 hover:text-gray-900 transition-colors"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Pricing
+                    </a>
+                    <a
+                      href="/impact"
+                      className="text-base font-medium text-gray-700 hover:text-gray-900 transition-colors"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Impact
+                    </a>
+                  </nav>
+                </SheetContent>
+              </Sheet>
               <a href="mailto:sales@aitamate.com?&subject=Provaluate&body=Hi,%0D%0A%0D%0AI'm facing an issue with ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors">
                 <Mail className="h-6 w-6 sm:h-8 sm:w-8" />
               </a>

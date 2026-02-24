@@ -1,11 +1,13 @@
 import React from 'react';
-import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 
 interface CompactStepProgressProps {
   current: number; // 0-based index
   total: number;
   steps: Array<{ label: string; key: string }>;
   onStepClick?: (index: number) => void;
+  /** When true, any step is clickable (e.g. candidate can jump to any step). When false, only completed steps are clickable. */
+  allowClickAnyStep?: boolean;
   className?: string;
 }
 
@@ -14,6 +16,7 @@ export const CompactStepProgress: React.FC<CompactStepProgressProps> = ({
   total,
   steps,
   onStepClick,
+  allowClickAnyStep = false,
   className = ''
 }) => {
   const handlePrevious = () => {
@@ -33,18 +36,19 @@ export const CompactStepProgress: React.FC<CompactStepProgressProps> = ({
 
   return (
     <div 
-      className={`sticky top-0 z-50 bg-white border-b shadow-sm px-3 py-3 ${className}`}
+      className={`sticky top-0 z-50 bg-white border-b shadow-sm px-2 sm:px-3 py-2 sm:py-3 ${className}`}
       role="navigation"
       aria-label="Step progress"
     >
-      <div className="flex items-center justify-between">
-        {/* Previous Button */}
+      <div className="flex items-center justify-between gap-2 sm:gap-3">
+        {/* Previous Button - touch-friendly */}
         <button
+          type="button"
           onClick={handlePrevious}
           disabled={!canGoPrevious}
           className={`
-            w-8 h-8 rounded-full flex items-center justify-center
-            transition-all duration-200 flex-shrink-0
+            min-w-[44px] min-h-[44px] w-10 h-10 sm:w-9 sm:h-9 rounded-full flex items-center justify-center
+            transition-all duration-200 flex-shrink-0 touch-manipulation
             ${canGoPrevious 
               ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer' 
               : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -55,59 +59,57 @@ export const CompactStepProgress: React.FC<CompactStepProgressProps> = ({
           <ChevronLeft className="w-4 h-4" />
         </button>
 
-        {/* Step dots and text - centered */}
-        <div className="flex items-center gap-2 flex-1 justify-center">
-          {/* Step dots */}
-          <div className="flex items-center gap-2">
-            {steps.map((step, index) => {
+        {/* Bar-type progress + Step label */}
+        <div className="flex flex-col gap-1.5 sm:gap-2 flex-1 min-w-0 max-w-[min(100%,280px)] sm:max-w-none">
+          {/* Segmented bar */}
+          <div className="flex gap-0.5 sm:gap-1 w-full rounded-full overflow-hidden bg-gray-200">
+            {steps.slice(0, total).map((step, index) => {
               const isActive = index === current;
               const isCompleted = index < current;
-              const isClickable = isCompleted && onStepClick;
+              const isClickable = (allowClickAnyStep ? !!onStepClick : (isCompleted && !!onStepClick));
 
               return (
                 <button
+                  type="button"
                   key={step.key}
-                  onClick={() => isClickable && onStepClick(index)}
+                  onClick={() => isClickable && onStepClick?.(index)}
                   disabled={!isClickable}
                   className={`
-                    relative transition-all duration-300 flex items-center justify-center
+                    flex-1 min-w-0 h-2 sm:h-2.5 transition-all duration-300 touch-manipulation
+                    ${index === 0 ? 'rounded-l-full' : ''}
+                    ${index === total - 1 ? 'rounded-r-full' : ''}
                     ${isActive 
-                      ? 'w-8 h-2 bg-blue-600 rounded-full' 
+                      ? 'bg-blue-600 cursor-default' 
                       : isCompleted
-                      ? 'w-5 h-5 bg-green-500 rounded-full hover:bg-green-600'
-                      : 'w-2 h-2 bg-gray-300 rounded-full'
+                      ? 'bg-green-500 ' + (isClickable ? 'hover:bg-green-600 cursor-pointer' : 'cursor-default')
+                      : 'bg-gray-300 ' + (isClickable ? 'hover:bg-gray-400 cursor-pointer' : 'cursor-default')
                     }
-                    ${isClickable ? 'cursor-pointer' : 'cursor-default'}
                   `}
                   aria-label={`${step.label}${isCompleted ? ' (completed)' : isActive ? ' (current)' : ''}`}
                   aria-current={isActive ? 'step' : undefined}
-                >
-                  {isCompleted && (
-                    <Check className="w-3 h-3 text-white" strokeWidth={3} />
-                  )}
-                </button>
+                  title={step.label}
+                />
               );
             })}
           </div>
-          
-          {/* Step counter and label - close to dots */}
-          <div className="flex flex-col items-start flex-shrink-0 ml-2">
-            <span className="text-xs font-medium text-gray-900">
-              Step {current + 1}/{total}
+          <div className="flex flex-col items-center sm:items-start min-w-0">
+            <span className="text-xs font-medium text-gray-900 whitespace-nowrap">
+              Step {current + 1} of {total}
             </span>
-            <span className="text-[10px] text-gray-500 truncate max-w-[120px]">
+            <span className="text-[10px] sm:text-xs text-gray-500 truncate w-full text-center sm:text-left max-w-[140px] sm:max-w-[200px]" title={steps[current]?.label}>
               {steps[current]?.label}
             </span>
           </div>
         </div>
 
-        {/* Next Button */}
+        {/* Next Button - touch-friendly */}
         <button
+          type="button"
           onClick={handleNext}
           disabled={!canGoNext}
           className={`
-            w-8 h-8 rounded-full flex items-center justify-center
-            transition-all duration-200 flex-shrink-0
+            min-w-[44px] min-h-[44px] w-10 h-10 sm:w-9 sm:h-9 rounded-full flex items-center justify-center
+            transition-all duration-200 flex-shrink-0 touch-manipulation
             ${canGoNext 
               ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer' 
               : 'bg-gray-200 text-gray-400 cursor-not-allowed'

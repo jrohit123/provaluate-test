@@ -3876,8 +3876,8 @@ const ConversationalInterview = () => {
 
   return (
     <div className="min-h-screen bg-white relative overflow-x-hidden flex flex-col">
-      {/* Header - same style as Dashboard (bg #1e5da8) */}
-      <header className="flex-shrink-0 bg-[#1e5da8] border-b relative z-10">
+      {/* Header - cerulean/sky palette for candidate flow */}
+      <header className="flex-shrink-0 bg-sky-700 border-b border-sky-800 relative z-10">
         <div className="w-full px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex items-center justify-between gap-2 sm:gap-4 w-full">
             <div className="min-w-0 flex-shrink-0 text-left">
@@ -3935,7 +3935,7 @@ const ConversationalInterview = () => {
               {/* Volume Button - hidden on mobile */}
               <button
                 onClick={toggleAIAudio}
-                className="absolute top-3 right-3 min-h-[44px] min-w-[44px] p-2 rounded-lg transition-colors z-20 hidden sm:flex items-center justify-center bg-[#1e5da8]/20 text-[#1e5da8] hover:bg-[#1e5da8]/30"
+                className="absolute top-3 right-3 min-h-[44px] min-w-[44px] p-2 rounded-lg transition-colors z-20 hidden sm:flex items-center justify-center bg-sky-200 text-sky-700 hover:bg-sky-300"
               >
                 {aiAudioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
               </button>
@@ -3964,12 +3964,12 @@ const ConversationalInterview = () => {
                       {[...Array(15)].map((_, i) => (
                         <div
                           key={i}
-                          className="w-1.5 bg-gradient-to-t from-blue-400 to-blue-600 rounded-full transition-all duration-500 ease-in-out"
+                          className="w-1.5 bg-gradient-to-t from-sky-400 to-sky-600 rounded-full transition-all duration-500 ease-in-out"
                           style={{ height: `${waveformHeights[i] || 42}px` }}
                         />
                       ))}
                     </div>
-                    <div className="text-blue-700 text-base sm:text-lg font-medium mt-4">AI is speaking...</div>
+                    <div className="text-sky-700 text-base sm:text-lg font-medium mt-4">AI is speaking...</div>
                   </div>
                 ) : aiMessage ? (
                   <div className="text-center w-full h-full min-h-0 flex items-center justify-center overflow-y-auto overflow-x-hidden">
@@ -3990,7 +3990,7 @@ const ConversationalInterview = () => {
               {/* Camera Button - hidden on mobile */}
               <button
                 onClick={toggleVideo}
-                className="absolute top-3 right-3 min-h-[44px] min-w-[44px] p-2 rounded-lg transition-colors z-20 hidden sm:flex items-center justify-center bg-[#1e5da8]/20 text-[#1e5da8] hover:bg-[#1e5da8]/30"
+                className="absolute top-3 right-3 min-h-[44px] min-w-[44px] p-2 rounded-lg transition-colors z-20 hidden sm:flex items-center justify-center bg-sky-200 text-sky-700 hover:bg-sky-300"
               >
                 {isVideoOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
               </button>

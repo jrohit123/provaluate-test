@@ -68,7 +68,6 @@ function normalizeActionPlanText(raw: string): string {
   let s = raw.replace(/''/g, "'");
   s = s.replace(/\s+\*\*Addresses:\*\*/g, '\n\n**Addresses:**');
   s = s.replace(/\s+\*\*Description:\*\*/g, '\n\n**Description:**');
-  s = s.replace(/\s+\*\*Timeline:\*\*/g, '\n\n**Timeline:**');
   s = s.replace(/\s+\*\*Expected outcome:\*\*/g, '\n\n**Expected outcome:**');
   s = s.replace(/\n(\d\.\s+\*\*)/g, '\n\n$1');
   return s.trim();
@@ -80,12 +79,11 @@ interface ActionPlanItem {
   actionName: string;
   addresses: string;
   description: string;
-  timeline: string;
   expectedOutcome: string;
 }
 
 /**
- * Parse action plan text into structured items (Sr No, Action Name, Addresses, Description, Timeline, Expected outcome).
+ * Parse action plan text into structured items (Sr No, Action Name, Addresses, Description, Expected outcome).
  * Returns empty array if format doesn't match.
  */
 function parseActionPlanItems(raw: string): ActionPlanItem[] {
@@ -97,12 +95,10 @@ function parseActionPlanItems(raw: string): ActionPlanItem[] {
     const srNo = parseInt(m[1], 10);
     const actionName = m[2].trim();
     const block = m[3];
-    const addresses = block.match(/\*\*Addresses:\*\*\s*([\s\S]*?)(?=\n\s*Description:|\*\*Timeline:\*\*|\*\*Expected outcome:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
-    // Description: after "Description:" (with optional **) until **Timeline:** or **Expected outcome:**
-    const description = block.match(/(?:\n\s*)?(?:\*\*)?Description(?:\*\*)?:\s*([\s\S]*?)(?=\*\*Timeline:\*\*|\*\*Expected outcome:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
-    const timeline = block.match(/\*\*Timeline:\*\*\s*([\s\S]*?)(?=\*\*Expected outcome:\*\*|\*\*Addresses:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
-    const expectedOutcome = block.match(/\*\*Expected outcome:\*\*\s*([\s\S]*?)(?=\*\*Addresses:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
-    items.push({ srNo, actionName, addresses, description, timeline, expectedOutcome });
+    const addresses = block.match(/\*\*Addresses:\*\*\s*([\s\S]*?)(?=\n\s*\*\*Description:\*\*|\*\*Expected outcome:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
+    const description = block.match(/\*\*Description:\*\*\s*([\s\S]*?)(?=\*\*Expected outcome:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
+    const expectedOutcome = block.match(/\*\*Expected outcome:\*\*\s*([\s\S]*?)(?=\*\*Addresses:\*\*|\*\*Description:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
+    items.push({ srNo, actionName, addresses, description, expectedOutcome });
   }
   return items;
 }
@@ -1321,7 +1317,7 @@ const FinalResults = () => {
       speechRow += 2;
       const planItems = actionPlan && String(actionPlan).trim() ? parseActionPlanItems(String(actionPlan).trim()) : [];
       if (planItems.length > 0) {
-        speechSheet.addRow(['Action Name', 'Addresses', 'Description', 'Timeline', 'Expected outcome']);
+        speechSheet.addRow(['Action Name', 'Addresses', 'Description', 'Expected outcome']);
         speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
           cell.fill = blueFill;
           cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
@@ -1333,7 +1329,6 @@ const FinalResults = () => {
             item.actionName || '—',
             item.addresses || '—',
             item.description || '—',
-            item.timeline || '—',
             item.expectedOutcome || '—',
           ]);
           speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
@@ -1345,7 +1340,7 @@ const FinalResults = () => {
       } else if (actionPlan && String(actionPlan).trim()) {
         speechSheet.getCell(speechRow, 1).value = String(actionPlan).trim().replace(/''/g, "'");
         speechSheet.getCell(speechRow, 1).alignment = { vertical: 'top', wrapText: true };
-        speechSheet.mergeCells(speechRow, 1, speechRow, 5);
+        speechSheet.mergeCells(speechRow, 1, speechRow, 4);
       } else {
         speechSheet.getCell(speechRow, 1).value = 'No personalised action plan available.';
       }
@@ -1405,7 +1400,8 @@ const FinalResults = () => {
     }
   };
 
-  const getScoreColor = (score) => 'text-[#1e5da8]';
+  const isCandidateReport = reportVariant === 'candidate';
+  const getScoreColor = (score) => isCandidateReport ? 'text-sky-600' : 'text-[#1e5da8]';
 
   const getScoreLabel = (score) => {
     if (score >= 8) return 'Excellent';
@@ -1414,7 +1410,21 @@ const FinalResults = () => {
     return 'Needs Improvement';
   };
 
-  const getScoreClass = (score) => 'bg-[#1e5da8]';
+  const getScoreClass = (score) => isCandidateReport ? 'bg-sky-600' : 'bg-[#1e5da8]';
+  const accentHex = isCandidateReport ? '#0284c7' : '#1e5da8'; // sky-600 vs blue
+  const headerBg = isCandidateReport ? 'bg-sky-700 border-sky-800' : 'bg-[#1e5da8] border-[#1e5da8]/80';
+  const btnPrimary = isCandidateReport ? 'bg-sky-600 hover:bg-sky-700' : 'bg-[#1e5da8] hover:bg-[#1e5da8]/90';
+  const btnOutline = isCandidateReport ? 'bg-white text-sky-600 hover:bg-gray-50' : 'bg-white text-[#1e5da8] hover:bg-gray-50';
+  const loadingBorder = isCandidateReport ? 'border-sky-600' : 'border-[#1e5da8]';
+  const paramSelected = isCandidateReport ? 'bg-sky-50 text-sky-900 border-2 border-sky-200' : 'bg-blue-50 text-blue-900 border-2 border-blue-200';
+  const paramBadge = isCandidateReport ? 'bg-sky-100 text-sky-600 border border-sky-200' : 'bg-sky-100 text-[#1e5da8] border border-sky-200';
+  const paramBadgeSelected = isCandidateReport ? 'bg-sky-200/50 text-sky-700' : 'bg-[#1e5da8]/20 text-[#1e5da8]';
+  const cardHover = isCandidateReport ? 'hover:border-sky-500/50' : 'hover:border-[#1e5da8]/50';
+  const expandBtn = isCandidateReport ? 'text-sky-600' : 'text-[#1e5da8]';
+  const tableHeaderBg = isCandidateReport ? 'bg-sky-700' : 'bg-[#1e5da8]';
+  const iconBg = isCandidateReport ? 'bg-sky-600' : 'bg-[#1e5da8]';
+  const barSelected = isCandidateReport ? 'bg-sky-600' : 'bg-[#1e5da8]';
+  const accentText = isCandidateReport ? 'text-sky-600' : 'text-[#1e5da8]';
 
   if (loading) {
     return (
@@ -1431,7 +1441,7 @@ const FinalResults = () => {
         </header> */}
         <div className="flex-1 flex items-center justify-center p-3 sm:p-6">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-[#1e5da8] mx-auto mb-3 sm:mb-4" />
+            <div className={`animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 ${loadingBorder} mx-auto mb-3 sm:mb-4`} />
             <p className="text-sm sm:text-lg text-gray-600">Loading final results...</p>
           </div>
         </div>
@@ -1459,7 +1469,7 @@ const FinalResults = () => {
             <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6 break-words">The interview results could not be loaded.</p>
             <button
               onClick={() => navigate(reportVariant === 'recruiter' ? '/dashboard?section=interview-dashboard' : '/candidate-dashboard/interviews')}
-              className="min-h-[44px] px-4 sm:px-6 py-3 rounded-lg bg-[#1e5da8] text-white text-sm sm:text-base font-medium hover:bg-[#1e5da8]/90 transition-colors touch-manipulation w-full sm:w-auto"
+              className={`min-h-[44px] px-4 sm:px-6 py-3 rounded-lg ${btnPrimary} text-white text-sm sm:text-base font-medium transition-colors touch-manipulation w-full sm:w-auto`}
             >
               {reportVariant === 'recruiter' ? 'Go to Dashboard' : 'Go to My Interviews'}
             </button>
@@ -2064,20 +2074,18 @@ const FinalResults = () => {
           const tableTotalWidth = speechContentWidth;
           const colWidths = [
             tableTotalWidth * 0.18,  // Action Name
-            tableTotalWidth * 0.22,  // Addresses
-            tableTotalWidth * 0.28,  // Description
-            tableTotalWidth * 0.14,  // Timeline
-            tableTotalWidth * 0.18,  // Expected outcome
+            tableTotalWidth * 0.24,  // Addresses
+            tableTotalWidth * 0.32,  // Description
+            tableTotalWidth * 0.26,  // Expected outcome
           ];
           const tableBody = planItems.map((item) => [
             item.actionName || '—',
             item.addresses || '—',
             item.description || '—',
-            item.timeline || '—',
             item.expectedOutcome || '—',
           ]);
           autoTable(doc, {
-            head: [['Action Name', 'Addresses', 'Description', 'Timeline', 'Expected outcome']],
+            head: [['Action Name', 'Addresses', 'Description', 'Expected outcome']],
             body: tableBody,
             startY: 28,
             styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak', ...tableBorder },
@@ -2087,7 +2095,6 @@ const FinalResults = () => {
               1: { cellWidth: colWidths[1] },
               2: { cellWidth: colWidths[2] },
               3: { cellWidth: colWidths[3] },
-              4: { cellWidth: colWidths[4] },
             },
             margin: { left: speechMargin, right: speechMargin },
             tableWidth: tableTotalWidth,
@@ -2159,7 +2166,7 @@ const FinalResults = () => {
   return (
     <div className="min-h-screen w-full flex flex-col overflow-x-hidden bg-white text-gray-900">
       {/* Header - dark blue bar with title and Menu */}
-      <header className="flex-shrink-0 bg-[#1e5da8] border-b border-[#1e5da8]/80 min-h-[72px] sm:min-h-[80px] flex items-center">
+      <header className={`flex-shrink-0 border-b min-h-[72px] sm:min-h-[80px] flex items-center ${headerBg}`}>
         <div className="w-full pl-4 sm:pl-6 pr-4 sm:pr-6 py-4 sm:py-5 flex items-center justify-between gap-4">
           {/* Left: Title and subtitle */}
           <div className="flex flex-col min-w-0">
@@ -2175,7 +2182,7 @@ const FinalResults = () => {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
-                  className="inline-flex items-center gap-2 min-h-[44px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-full text-sm sm:text-base font-medium transition-colors touch-manipulation bg-white text-[#1e5da8] hover:bg-gray-50 flex-shrink-0"
+                  className={`inline-flex items-center gap-2 min-h-[44px] px-4 sm:px-6 py-2 sm:py-2.5 rounded-full text-sm sm:text-base font-medium transition-colors touch-manipulation ${btnOutline} flex-shrink-0`}
                   aria-label="Open menu"
                 >
                   <Menu className="h-5 w-5 sm:h-5 sm:w-5 flex-shrink-0" />
@@ -2228,14 +2235,14 @@ const FinalResults = () => {
                   cy="50"
                   r="42"
                   fill="none"
-                  stroke="#1e5da8"
+                  stroke={accentHex}
                   strokeWidth="10"
                   strokeLinecap="round"
                   strokeDasharray={`${(Math.min(10, Math.max(0, Number(interview?.overall_score) || 0)) / 10) * 263} 263`}
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-2xl sm:text-3xl font-bold text-[#1e5da8]">
+                <span className={`text-2xl sm:text-3xl font-bold ${accentText}`}>
                   {interview?.overall_score != null ? `${formatOverallScore(interview.overall_score)}/10` : 'N/A'}
                 </span>
                 <span className="text-xs sm:text-sm text-gray-600 mt-1">Overall Score</span>
@@ -2249,7 +2256,7 @@ const FinalResults = () => {
           {/* Card 2: Interview Summary */}
           <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm">
             <h2 className="text-lg sm:text-xl font-bold mb-4 flex items-center text-gray-900">
-              <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 mr-2 text-[#1e5da8] flex-shrink-0" />
+              <BarChart3 className={`h-5 w-5 sm:h-6 sm:w-6 mr-2 ${accentText} flex-shrink-0`} />
               Interview Summary
             </h2>
             <div className="space-y-3 sm:space-y-4">
@@ -2295,7 +2302,7 @@ const FinalResults = () => {
                   <button
                     type="button"
                     onClick={() => setShowSpeechDetailsCard(true)}
-                    className="text-sm sm:text-base font-bold text-[#1e5da8] hover:underline focus:outline-none focus:ring-2 focus:ring-[#1e5da8] focus:ring-offset-1 rounded px-2 py-1"
+                    className={`text-sm sm:text-base font-bold ${accentText} hover:underline focus:outline-none focus:ring-2 focus:ring-offset-1 rounded px-2 py-1 ${isCandidateReport ? 'focus:ring-sky-600' : 'focus:ring-[#1e5da8]'}`}
                   >
                     Click here for speech details
                   </button>
@@ -2342,7 +2349,7 @@ const FinalResults = () => {
                 <div className="overflow-x-auto">
                   <table className="w-full text-base sm:text-lg border border-gray-200 rounded-lg overflow-hidden">
                     <thead>
-                      <tr className="bg-[#1e5da8] text-white">
+                      <tr className={`${tableHeaderBg} text-white`}>
                         <th className="text-left py-3 px-4 font-semibold text-base sm:text-lg">Metric name</th>
                         <th className="text-left py-3 px-4 font-semibold text-base sm:text-lg">Candidate score</th>
                       </tr>
@@ -2446,7 +2453,7 @@ const FinalResults = () => {
                         onClick={() => { setSelectedParameter(paramKey); setExpandedQuestions(new Set()); }}
                         className={`p-3 sm:p-6 rounded-xl transition-all duration-200 text-left min-w-0 ${
                           selectedParameter === paramKey
-                            ? 'bg-blue-50 text-blue-900 border-2 border-blue-200 shadow-lg transform scale-105'
+                            ? `${paramSelected} shadow-lg transform scale-105`
                             : 'bg-white text-gray-800 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 hover:scale-102 shadow-sm hover:shadow-md'
                         }`}
                       >
@@ -2456,15 +2463,15 @@ const FinalResults = () => {
                             {param.isPersonal ? (
                               <div className={`px-3 py-1 rounded-full text-sm font-medium ${
                                 selectedParameter === paramKey
-                                  ? 'bg-[#1e5da8]/20 text-[#1e5da8]'
-                                  : 'bg-sky-100 text-[#1e5da8] border border-sky-200'
+                                  ? paramBadgeSelected
+                                  : paramBadge
                               }`}>
                                 Review Only
                               </div>
                             ) : (
                               <div className={`text-2xl sm:text-3xl font-bold ${
                                 selectedParameter === paramKey 
-                                  ? 'text-[#1e5da8]'
+                                  ? accentText
                                   : getScoreColor(param.averageScore)
                               }`}>
                                 {param.averageScore}/10
@@ -2495,9 +2502,9 @@ const FinalResults = () => {
                               }`}>
                                 <div 
                                   className={`h-3 rounded-full transition-all duration-300 ${
-                                    selectedParameter === paramKey 
-                                      ? 'bg-[#1e5da8]'
-                                      : getScoreClass(param.averageScore)
+selectedParameter === paramKey 
+                                  ? barSelected
+                                  : getScoreClass(param.averageScore)
                                   }`}
                                   style={{ width: `${param.averageScore * 10}%` }}
                                 ></div>
@@ -2523,7 +2530,7 @@ const FinalResults = () => {
                           return (
                             <div
                               key={idx}
-                              className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden hover:border-[#1e5da8]/50 transition-colors cursor-pointer"
+                              className={`rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden ${cardHover} transition-colors cursor-pointer`}
                               onClick={() => toggleQuestion(expandKey)}
                               role="button"
                               tabIndex={0}
@@ -2539,7 +2546,7 @@ const FinalResults = () => {
                                   </div>
                                   <p className="text-base sm:text-lg text-gray-600 line-clamp-3">{question?.question_text || 'No question text'}</p>
                                 </div>
-                                <div className="flex-shrink-0 inline-flex items-center gap-1.5 px-4 py-2.5 text-base font-medium text-[#1e5da8] rounded-lg">
+                                <div className={`flex-shrink-0 inline-flex items-center gap-1.5 px-4 py-2.5 text-base font-medium ${expandBtn} rounded-lg`}>
                                   {isExpanded ? 'Collapse' : 'Expand'}
                                   {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                 </div>
@@ -2552,17 +2559,17 @@ const FinalResults = () => {
                                   </div>
                                   <div className="flex flex-wrap gap-2">
                                     {answer.audio_url && (
-                                      <button onClick={() => playAudio(answer.audio_url)} className="inline-flex items-center gap-2 px-4 py-2 bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white rounded-lg text-sm">
+                                      <button onClick={() => playAudio(answer.audio_url)} className={`inline-flex items-center gap-2 px-4 py-2 ${btnPrimary} text-white rounded-lg text-sm`}>
                                         <Download className="h-4 w-4" /> Play Audio
                                       </button>
                                     )}
                                     {answer.question_video_url && (
-                                      <button onClick={() => playVideo(answer.question_video_url)} className="inline-flex items-center gap-2 px-4 py-2 bg-[#1e5da8] text-white rounded-lg text-sm hover:bg-[#1e5da8]/90">
+                                      <button onClick={() => playVideo(answer.question_video_url)} className={`inline-flex items-center gap-2 px-4 py-2 ${btnPrimary} text-white rounded-lg text-sm`}>
                                         <Download className="h-4 w-4" /> Play Video
                                       </button>
                                     )}
                                     {answer.written_answer && (
-                                      <button onClick={() => showWrittenAnswer(answer.written_answer)} className="inline-flex items-center gap-2 px-4 py-2 bg-[#1e5da8] text-white rounded-lg text-sm hover:bg-[#1e5da8]/90">
+                                      <button onClick={() => showWrittenAnswer(answer.written_answer)} className={`inline-flex items-center gap-2 px-4 py-2 ${btnPrimary} text-white rounded-lg text-sm`}>
                                         <FileText className="h-4 w-4" /> Show Written Answer
                                       </button>
                                     )}
@@ -2635,7 +2642,7 @@ const FinalResults = () => {
                 <div className="flex flex-wrap gap-2 sm:flex-shrink-0">
                   <button
                     onClick={() => playVideo(reportData.interview.session_video_url)}
-                    className="min-h-[44px] px-4 py-2 rounded-lg bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white text-sm sm:text-base font-medium transition-colors touch-manipulation flex-1 sm:flex-none"
+                    className={`min-h-[44px] px-4 py-2 rounded-lg ${btnPrimary} text-white text-sm sm:text-base font-medium transition-colors touch-manipulation flex-1 sm:flex-none`}
                   >
                     Play Full Video
                   </button>
@@ -2715,7 +2722,7 @@ const FinalResults = () => {
             <div className="p-3 sm:p-6 overflow-auto min-h-0">
               <div className="rounded-lg p-4 sm:p-6 text-center transition-colors duration-300 bg-gray-50 border border-gray-200">
                 <div className="mb-4 sm:mb-6">
-                  <div className="w-16 h-16 sm:w-24 sm:h-24 bg-[#1e5da8] rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                  <div className={`w-16 h-16 sm:w-24 sm:h-24 ${iconBg} rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4`}>
                     <Download className="h-8 w-8 sm:h-12 sm:w-12 text-white" />
                   </div>
                   <h4 className="text-lg sm:text-xl font-semibold mb-2 text-gray-900">Audio Recording</h4>
