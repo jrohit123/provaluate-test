@@ -15,11 +15,14 @@ import {
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
 import { getAdaptiveVideoConstraints } from '@/utils/mediaConstraints';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useAuthContext, isCandidate } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 const CandidateInterview = () => {
   const { interviewId } = useParams();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const { user } = useAuthContext();
   
   // State
   const [interviewData, setInterviewData] = useState(null);
@@ -182,6 +185,15 @@ const CandidateInterview = () => {
 
           setInterviewData(flattenedData);
           setIsLoading(false);
+          // If logged-in candidate, link this interview to their account for "My Interviews"
+          if (interviewId && isCandidate(user) && user.candidate?.candidate_id) {
+            supabase
+              .from('interviews')
+              .update({ candidate_id: user.candidate.candidate_id })
+              .eq('id', interviewId)
+              .is('candidate_id', null)
+              .then(() => {});
+          }
         } else if (response.status === 404) {
           console.error('❌ Interview not found (404)');
           setError('Interview not found. Please check your link.');

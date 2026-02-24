@@ -109,6 +109,18 @@ const Login = () => {
         }
 
         console.log('✅ Login successful for user:', data.user.id, data.user.email);
+        const { data: candidateRow } = await supabase.from('candidates').select('candidate_id').eq('auth_user_id', data.user.id).maybeSingle();
+        const { data: userProfile } = await supabase.from('users').select('user_id').eq('user_id', data.user.id).maybeSingle();
+        if (candidateRow && !userProfile) {
+          await supabase.auth.signOut();
+          toast({
+            title: 'Use candidate login',
+            description: 'This account is a candidate account. Please sign in on the candidate login page.',
+            variant: 'destructive',
+          });
+          setIsLoading(false);
+          return;
+        }
         await completeLogin(data.user.id);
       }
     } catch (error: any) {
@@ -311,6 +323,9 @@ const Login = () => {
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 hidden sm:block"></h1>
             </div>
             <div className="flex items-center space-x-3 sm:space-x-6">
+              <Link to="/candidate-login" className="text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
+                Candidate login
+              </Link>
               <a href="/pricing" className="text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
                 <span className="hidden sm:inline">Pricing</span>
                 <span className="sm:hidden">Pricing</span>

@@ -567,7 +567,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => window.open(`/final-results/${interview.id}`, '_blank')}
+                              onClick={() => window.open(`/final-results/${interview.id}?variant=recruiter`, '_blank')}
                               className="w-full"
                             >
                               <BarChart3 className="w-4 h-4 mr-2" />
@@ -859,7 +859,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => window.open(`/final-results/${interview.id}`, '_blank')}
+                              onClick={() => window.open(`/final-results/${interview.id}?variant=recruiter`, '_blank')}
                               title={interview.status === 'terminated' ? 'View Interview Details (Terminated)' : 'View Final Results'}
                               className="h-8 w-8 p-0"
                             >

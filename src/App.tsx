@@ -22,6 +22,10 @@ import Pricing from "./pages/Pricing";
 import Impact from "./pages/Impact";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
+import CandidateSignUp from "./pages/CandidateSignUp";
+import CandidateLogin from "./pages/CandidateLogin";
+import CandidateOnboarding from "./pages/CandidateOnboarding";
+import CandidateDashboard from "./pages/CandidateDashboard";
 
 // Import AI Interview components (now TypeScript)
 import InterviewDashboard from "./components/ai-interview/InterviewDashboard";
@@ -136,6 +140,38 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+const CandidateProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const [loading, setLoading] = useState(true);
+  const [allowed, setAllowed] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+
+  useEffect(() => {
+    const check = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) {
+        setAllowed(false);
+        setNeedsOnboarding(false);
+        setLoading(false);
+        return;
+      }
+      const { data: candidate } = await supabase
+        .from('candidates')
+        .select('candidate_id')
+        .eq('auth_user_id', user.id)
+        .maybeSingle();
+      setAllowed(!!candidate);
+      setNeedsOnboarding(!candidate);
+      setLoading(false);
+    };
+    check();
+  }, []);
+
+  if (loading) return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
+  if (needsOnboarding) return <Navigate to="/candidate-onboarding" replace />;
+  if (!allowed) return <Navigate to="/candidate-login" replace />;
+  return <>{children}</>;
+};
+
 // Toast component that adapts to mobile
 const AdaptiveToaster = () => {
   const isMobile = useIsMobile();
@@ -181,6 +217,9 @@ const App = () => {
                 <Routes>
             {/* Authentication Routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/candidate-signup" element={<CandidateSignUp />} />
+            <Route path="/candidate-login" element={<CandidateLogin />} />
+            <Route path="/candidate-onboarding" element={<CandidateOnboarding />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/pricing" element={<Pricing />} />
@@ -200,6 +239,38 @@ const App = () => {
               <ProtectedRoute>
                 <Dashboard />
               </ProtectedRoute>
+            } />
+
+            {/* Candidate Dashboard - Protected (no onboarding) */}
+            <Route path="/candidate-dashboard" element={
+              <CandidateProtectedRoute>
+                <CandidateDashboard />
+              </CandidateProtectedRoute>
+            } />
+            <Route path="/candidate-dashboard/profile" element={
+              <CandidateProtectedRoute>
+                <CandidateDashboard />
+              </CandidateProtectedRoute>
+            } />
+            <Route path="/candidate-dashboard/jds" element={
+              <CandidateProtectedRoute>
+                <CandidateDashboard />
+              </CandidateProtectedRoute>
+            } />
+            <Route path="/candidate-dashboard/jds/configure" element={
+              <CandidateProtectedRoute>
+                <CandidateDashboard />
+              </CandidateProtectedRoute>
+            } />
+            <Route path="/candidate-dashboard/jds/create" element={
+              <CandidateProtectedRoute>
+                <CandidateDashboard />
+              </CandidateProtectedRoute>
+            } />
+            <Route path="/candidate-dashboard/interviews" element={
+              <CandidateProtectedRoute>
+                <CandidateDashboard />
+              </CandidateProtectedRoute>
             } />
             
             {/* AI Interview Routes - Original Interface */}

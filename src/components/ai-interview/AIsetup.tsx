@@ -31,8 +31,17 @@ import StructuredInterviewSetup from './StructuredInterviewSetup';
 import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
 import { useInterviewCurrentStep, useInterviewNavigateToStep, INTERVIEW_WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
 
+/** When provided, JDs are loaded from this list (e.g. candidate's jd_candidates) instead of company tables. Recruiter flow unchanged when omitted. */
+export type InjectedJD = { jd_id: string; title: string | null; extracted_text?: string | null; jd_file?: string | null; created_at?: string };
+
 interface AIsetupProps {
   onSectionReady?: () => void;
+  /** Optional: use these JDs instead of loading from jd_for_interview + job_descriptions (e.g. for candidate dashboard from jd_candidates). */
+  injectedJobDescriptions?: InjectedJD[];
+  /** Optional: called when JDs should be refreshed (e.g. refetch jd_candidates). Used when injectedJobDescriptions is provided. */
+  injectedLoadJobDescriptions?: () => Promise<void>;
+  /** When set, uploads go to jd_candidates (candidate_id) instead of jd_for_interview (company_id). Use for candidate dashboard. */
+  candidateId?: string;
 }
 
 interface FormData {
@@ -63,7 +72,7 @@ interface CustomParameter {
 
 
 
-const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
+const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedLoadJobDescriptions, candidateId }: AIsetupProps) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const interviewCurrentStep = useInterviewCurrentStep();
@@ -82,6 +91,8 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
   });
 
   const [jobDescriptions, setJobDescriptions] = useState<JobDescription[]>([]);
+  // Effective JD list: use injected (candidate jd_candidates) or internal (recruiter company JDs)
+  const effectiveJobDescriptions = injectedJobDescriptions ?? jobDescriptions;
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -202,7 +213,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
 
   // Handle job description selection from both CV screening and AI interview
   const handleJobDescriptionSelect = async (jdId: string) => {
-    const selectedJD = jobDescriptions.find(jd => jd.jd_id === jdId);
+    const selectedJD = effectiveJobDescriptions.find((jd: { jd_id: string }) => jd.jd_id === jdId);
     if (selectedJD) {
       // Set the role name from the selected JD title
       setFormData(prev => ({ ...prev, position: selectedJD.title }));
@@ -420,31 +431,46 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
 
       console.log('🔄 Cleaned text length:', cleanedText.length);
 
-      // Save JD record to jd_for_interview table
-      console.log('🔄 Saving JD record to database...');
-      const { data: jdData, error: jdError } = await supabase
-        .from('jd_for_interview')
-        .insert({
-          title: formData.newRole,
-          jd_file: uploadData.path,
-          extracted_text: cleanedText,
-          company_id: user?.profile?.company_id
-        })
-        .select()
-        .single();
-
-      if (jdError) {
-        console.error('❌ Database insert error:', jdError);
-        throw new Error(`Database insert failed: ${jdError.message}`);
+      // Save JD: candidate → jd_candidates; recruiter → jd_for_interview
+      if (candidateId) {
+        console.log('🔄 Saving JD record to jd_candidates (candidate)...');
+        const { data: jdData, error: jdError } = await supabase
+          .from('jd_candidates')
+          .insert({
+            candidate_id: candidateId,
+            title: formData.newRole,
+            jd_file: uploadData.path,
+            extracted_text: cleanedText
+          })
+          .select()
+          .single();
+        if (jdError) {
+          console.error('❌ jd_candidates insert error:', jdError);
+          throw new Error(`Database insert failed: ${jdError.message}`);
+        }
+        console.log('✅ JD record saved to jd_candidates:', jdData);
+        setFormData(prev => ({ ...prev, jobDescription: cleanedText }));
+        if (injectedLoadJobDescriptions) await injectedLoadJobDescriptions();
+      } else {
+        console.log('🔄 Saving JD record to jd_for_interview (recruiter)...');
+        const { data: jdData, error: jdError } = await supabase
+          .from('jd_for_interview')
+          .insert({
+            title: formData.newRole,
+            jd_file: uploadData.path,
+            extracted_text: cleanedText,
+            company_id: user?.profile?.company_id
+          })
+          .select()
+          .single();
+        if (jdError) {
+          console.error('❌ Database insert error:', jdError);
+          throw new Error(`Database insert failed: ${jdError.message}`);
+        }
+        console.log('✅ JD record saved to database:', jdData);
+        setFormData(prev => ({ ...prev, jobDescription: cleanedText }));
+        await loadJobDescriptions();
       }
-      console.log('✅ JD record saved to database:', jdData);
-      
-      // Update form data with cleaned text
-      setFormData(prev => ({ ...prev, jobDescription: cleanedText }));
-      console.log('✅ Form data updated with extracted text');
-      
-      // Reload job descriptions to include the newly uploaded one
-      await loadJobDescriptions();
       console.log('✅ Job descriptions reloaded');
       
       // Load existing parameters for this role (if any)
@@ -1060,12 +1086,13 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
     }
   };
 
-  // Load job descriptions on component mount
+  // Load job descriptions on component mount (recruiter only; candidate uses injected list)
   useEffect(() => {
+    if (injectedJobDescriptions != null) return; // Candidate: no company load
     if (user?.profile?.company_id) {
       loadJobDescriptions(); // Load existing JDs from CV screening and AI interview
     }
-  }, [user?.profile?.company_id]);
+  }, [user?.profile?.company_id, injectedJobDescriptions]);
 
   useEffect(() => {
     // Immediately clear parameters when position changes to prevent showing old parameters
@@ -1481,9 +1508,9 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                     <SelectValue placeholder="Select a role from existing job descriptions..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {jobDescriptions.map(jd => (
+                    {effectiveJobDescriptions.map((jd: { jd_id: string; title: string | null }) => (
                       <SelectItem key={jd.jd_id} value={jd.jd_id}>
-                        {jd.title}
+                        {jd.title ?? 'Untitled'}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Download, 
   Share2, 
@@ -164,6 +164,8 @@ function drawFormattedReportText(
 const FinalResults = () => {
   const { interviewId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const reportVariant = searchParams.get('variant') || 'candidate'; // 'recruiter' = report ends at speech scores
   const [loading, setLoading] = useState(true);
   const [reportData, setReportData] = useState(null);
   const [selectedParameter, setSelectedParameter] = useState(null);
@@ -1275,7 +1277,8 @@ const FinalResults = () => {
       }
       speechRow = speechSheet.rowCount + 2;
 
-      // --- Section 3: Detailed Feedback on Candidate Speech Abilities (table: Section | Content when parseable) ---
+      // --- Section 3 & 4: Detailed Feedback + Action Plan (candidate report only; recruiter report ends at speech scores) ---
+      if (reportVariant !== 'recruiter') {
       const speechReport = reportData?.interview?.speech_detailed_report;
       speechSheet.getCell(speechRow, 1).value = 'Detailed Feedback on Candidate Speech Abilities';
       speechSheet.getCell(speechRow, 1).font = { bold: true, size: 12 };
@@ -1312,7 +1315,6 @@ const FinalResults = () => {
       }
       speechRow += 2;
 
-      // --- Section 4: Your Personalised Action Plan ---
       const actionPlan = reportData?.interview?.personalised_action_plan;
       speechSheet.getCell(speechRow, 1).value = 'Your Personalised Action Plan';
       speechSheet.getCell(speechRow, 1).font = { bold: true, size: 12 };
@@ -1346,6 +1348,7 @@ const FinalResults = () => {
         speechSheet.mergeCells(speechRow, 1, speechRow, 5);
       } else {
         speechSheet.getCell(speechRow, 1).value = 'No personalised action plan available.';
+      }
       }
 
       // Column widths for Speech sheet (cols 1–5 for summary/feedback/plan; 1–15 for per-question table)
@@ -1455,10 +1458,10 @@ const FinalResults = () => {
             <h2 className="text-lg sm:text-2xl font-bold text-gray-800 mb-2 break-words">Results Not Found</h2>
             <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6 break-words">The interview results could not be loaded.</p>
             <button
-              onClick={() => navigate('/dashboard?section=interview-dashboard')}
+              onClick={() => navigate(reportVariant === 'recruiter' ? '/dashboard?section=interview-dashboard' : '/candidate-dashboard/interviews')}
               className="min-h-[44px] px-4 sm:px-6 py-3 rounded-lg bg-[#1e5da8] text-white text-sm sm:text-base font-medium hover:bg-[#1e5da8]/90 transition-colors touch-manipulation w-full sm:w-auto"
             >
-              Go to Dashboard
+              {reportVariant === 'recruiter' ? 'Go to Dashboard' : 'Go to My Interviews'}
             </button>
           </div>
         </div>
@@ -1996,7 +1999,8 @@ const FinalResults = () => {
         }
       }
 
-      // Page: Detailed feedback on candidate speech abilities — table (Section | Content) when sections parse, else paragraph
+      // Page: Detailed feedback on candidate speech abilities (candidate report only; recruiter report ends at speech scores)
+      if (reportVariant !== 'recruiter') {
       const speechReport = reportData?.interview?.speech_detailed_report;
       if (speechReport && String(speechReport).trim()) {
         const speechMargin = 8;
@@ -2101,6 +2105,7 @@ const FinalResults = () => {
           });
         }
       }
+      }
 
       // Add closing/disclaimer page
       doc.addPage();
@@ -2179,9 +2184,9 @@ const FinalResults = () => {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={() => navigate('/dashboard?section=interview-dashboard')}>
+                <DropdownMenuItem onClick={() => navigate(reportVariant === 'recruiter' ? '/dashboard?section=interview-dashboard' : '/candidate-dashboard/interviews')}>
                   <LayoutDashboard className="mr-2 h-4 w-4 flex-shrink-0" />
-                  Back to Dashboard
+                  {reportVariant === 'recruiter' ? 'Back to Dashboard' : 'Back to My Interviews'}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={generatePDFReport}

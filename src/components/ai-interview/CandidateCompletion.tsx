@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
-import { CheckCircle, Clock, XCircle, Mail } from 'lucide-react';
+import { useLocation, useParams, Link } from 'react-router-dom';
+import { CheckCircle, Clock, XCircle, Mail, FileText, List } from 'lucide-react';
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
+import { useAuthContext, isCandidate } from '@/contexts/AuthContext';
 
 const CandidateCompletion = () => {
   const location = useLocation();
   const params = useParams();
+  const { user } = useAuthContext();
+  const isCandidateUser = isCandidate(user);
   const [candidateName, setCandidateName] = useState<string | undefined>((location.state as any)?.candidateName);
   const [position, setPosition] = useState<string | undefined>((location.state as any)?.position);
   const [interviewStatus, setInterviewStatus] = useState<'completed' | 'terminated' | 'loading'>('loading');
@@ -204,8 +207,28 @@ const CandidateCompletion = () => {
           </div>
         )}
 
-        {/* Contact Sales - always visible */}
-        <div className="text-center">
+        {/* View report (completed) + My Interviews (candidate) + Contact Sales */}
+        <div className="text-center space-y-4">
+          {!isTerminated && interviewId && (
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Link
+                to={`/final-results/${interviewId}`}
+                className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 sm:px-6 py-3 rounded-lg bg-[#1e5da8] text-white text-sm sm:text-base font-medium hover:bg-[#1e5da8]/90 transition-colors touch-manipulation"
+              >
+                <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
+                View report
+              </Link>
+              {isCandidateUser && (
+                <Link
+                  to="/candidate-dashboard/interviews"
+                  className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 sm:px-6 py-3 rounded-lg border border-[#1e5da8] text-[#1e5da8] text-sm sm:text-base font-medium hover:bg-[#1e5da8]/5 transition-colors touch-manipulation"
+                >
+                  <List className="w-4 h-4 sm:w-5 sm:h-5" />
+                  My Interviews
+                </Link>
+              )}
+            </div>
+          )}
           <p className="text-gray-500 text-xs sm:text-sm mb-3">
             {isTerminated
               ? 'For questions or to discuss your application, contact our team.'
