@@ -7,7 +7,6 @@ import {
   Award,
   XCircle,
   FileText,
-  FileSpreadsheet,
   ChevronDown,
   ChevronUp,
   Loader2,
@@ -84,11 +83,34 @@ interface ActionPlanItem {
 
 /**
  * Parse action plan text into structured items (Sr No, Action Name, Addresses, Description, Expected outcome).
+ * Supports two formats:
+ * - "1. Action name: Title" then **Addresses:**, **Description:**, **Expected outcome:** (prompt output)
+ * - "1. **Title**" then same labels (legacy)
  * Returns empty array if format doesn't match.
  */
 function parseActionPlanItems(raw: string): ActionPlanItem[] {
   const text = raw.replace(/''/g, "'").trim();
   const items: ActionPlanItem[] = [];
+
+  // Format A: "1. Action name: Pace Control Practice" then **Addresses:**, **Description:**, **Expected outcome:**
+  const blocksA = text.split(/(?:^|\n)\s*(\d+)\.\s*Action name:\s*/i);
+  if (blocksA.length > 1) {
+    // split with capture: [preamble, "1", block1, "2", block2, ...]
+    for (let idx = 1; idx + 1 < blocksA.length; idx += 2) {
+      const srNo = parseInt(blocksA[idx], 10) || items.length + 1;
+      const rest = (blocksA[idx + 1] ?? '').trim();
+      const firstLine = rest.split(/\n/)[0] ?? '';
+      const actionName = firstLine.replace(/\*\*Addresses:\*\*/i, '').trim();
+      const block = rest.replace(/^[^\n]*\n?/, '').trim();
+      const addresses = block.match(/\*\*Addresses:\*\*\s*([\s\S]*?)(?=\*\*Description:\*\*|\*\*Expected outcome:\*\*|\n\s*\d+\.\s*Action name:|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
+      const description = block.match(/\*\*Description:\*\*\s*([\s\S]*?)(?=\*\*Expected outcome:\*\*|\n\s*\d+\.\s*Action name:|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
+      const expectedOutcome = block.match(/\*\*Expected outcome:\*\*\s*([\s\S]*?)(?=\*\*Addresses:\*\*|\*\*Description:\*\*|\n\s*\d+\.\s*Action name:|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
+      items.push({ srNo, actionName, addresses, description, expectedOutcome });
+    }
+    if (items.length > 0) return items;
+  }
+
+  // Format B (legacy): "1. **Action Name**" then block with **Addresses:**, **Description:**, **Expected outcome:**
   const blockRegex = /(\d+)\.\s*\*\*([^*]+)\*\*\s*([\s\S]*?)(?=\n\s*\d+\.\s*\*\*|$)/g;
   let m;
   while ((m = blockRegex.exec(text)) !== null) {
@@ -1192,13 +1214,13 @@ const FinalResults = () => {
         return formatter(sum / vals.length);
       };
       const idealRanges: { name: string; getCandidate: () => string | null; ideal: string }[] = [
-        { name: 'Overall speech quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}/100`), ideal: '70–80' },
-        { name: 'Speaking pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), ideal: '120–160' },
-        { name: 'Filler words', getCandidate: () => avg('filler_words', (v) => v.toFixed(1)), ideal: '< 8' },
-        { name: 'Filler density', getCandidate: () => avg('filler_density', (v) => `${v.toFixed(1)}%`), ideal: '< 5%' },
-        { name: 'Pause & pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}/100`), ideal: '65–100' },
-        { name: 'Voice confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}/100`), ideal: '70–100' },
-        { name: 'Stress level', getCandidate: () => avg('stress_score', (v) => `${Math.round(v)}/100`), ideal: '20–35' },
+        { name: 'Overall Speech Quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}/100`), ideal: '85-100' },
+        { name: 'Speaking Pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), ideal: '120-160 WPM' },
+        { name: 'Filler Words', getCandidate: () => avg('filler_words', (v) => v.toFixed(1)), ideal: '< 3-5 total' },
+        { name: 'Filler Density', getCandidate: () => avg('filler_density', (v) => `${v.toFixed(1)}%`), ideal: '< 2-5%' },
+        { name: 'Pause & Pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}/100`), ideal: '80-100' },
+        { name: 'Voice Confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}/100`), ideal: '80-100' },
+        { name: 'Stress Level', getCandidate: () => avg('stress_score', (v) => `${Math.round(v)}/100`), ideal: '0-30' },
       ];
       const overallMetricsRows = idealRanges
         .map((r) => ({ name: r.name, candidate: r.getCandidate(), ideal: r.ideal }))
@@ -1282,15 +1304,18 @@ const FinalResults = () => {
       if (speechReport && String(speechReport).trim()) {
         const reportText = stripSpeechReportTitleLine(String(speechReport).trim()).replace(/''/g, "'");
         const reportSections = parseSpeechReportSections(reportText);
-        if (reportSections.length >= 2) {
-          speechSheet.addRow(reportSections.map((s) => s.section));
+        const tableSections = reportSections.filter(
+          (s) => !/^What the Data Tells You$/i.test((s.section || '').trim())
+        );
+        if (tableSections.length >= 2) {
+          speechSheet.addRow(tableSections.map((s) => s.section));
           speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
             cell.fill = blueFill;
             cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
             cell.border = thinBorder;
             cell.alignment = { vertical: 'middle', wrapText: true };
           });
-          speechSheet.addRow(reportSections.map((s) => s.content || '—'));
+          speechSheet.addRow(tableSections.map((s) => s.content || '—'));
           speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
             cell.border = thinBorder;
             cell.font = { size: 10 };
@@ -1941,13 +1966,13 @@ const FinalResults = () => {
           return formatter(sum / vals.length);
         };
         const idealRanges: { name: string; getCandidate: () => string | null; ideal: string }[] = [
-          { name: 'Overall speech quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}/100`), ideal: '70–80' },
-          { name: 'Speaking pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), ideal: '120–160' },
-          { name: 'Filler words', getCandidate: () => avg('filler_words', (v) => v.toFixed(1)), ideal: '< 8' },
-          { name: 'Filler density', getCandidate: () => avg('filler_density', (v) => `${v.toFixed(1)}%`), ideal: '< 5%' },
-          { name: 'Pause & pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}/100`), ideal: '65–100' },
-          { name: 'Voice confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}/100`), ideal: '70–100' },
-          { name: 'Stress level', getCandidate: () => avg('stress_score', (v) => `${Math.round(v)}/100`), ideal: '20–35' },
+          { name: 'Overall Speech Quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}/100`), ideal: '85-100' },
+          { name: 'Speaking Pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), ideal: '120-160 WPM' },
+          { name: 'Filler Words', getCandidate: () => avg('filler_words', (v) => v.toFixed(1)), ideal: '< 3-5 total' },
+          { name: 'Filler Density', getCandidate: () => avg('filler_density', (v) => `${v.toFixed(1)}%`), ideal: '< 2-5%' },
+          { name: 'Pause & Pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}/100`), ideal: '80-100' },
+          { name: 'Voice Confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}/100`), ideal: '80-100' },
+          { name: 'Stress Level', getCandidate: () => avg('stress_score', (v) => `${Math.round(v)}/100`), ideal: '0-30' },
         ];
         const overallMetricsRows = idealRanges
           .map((r) => ({ name: r.name, candidate: r.getCandidate(), ideal: r.ideal }))
@@ -2025,11 +2050,15 @@ const FinalResults = () => {
         doc.setTextColor(0, 0, 0);
         const reportBody = stripSpeechReportTitleLine(String(speechReport).trim());
         const reportSections = parseSpeechReportSections(reportBody);
-        if (reportSections.length >= 2) {
-          const colCount = reportSections.length;
+        // Exclude "What the Data Tells You" — it's a parent heading with no body, so it shows as an empty column
+        const tableSections = reportSections.filter(
+          (s) => !/^What the Data Tells You$/i.test((s.section || '').trim())
+        );
+        if (tableSections.length >= 2) {
+          const colCount = tableSections.length;
           const colWidth = speechContentWidth / colCount;
-          const headerRow = reportSections.map((s) => s.section);
-          const contentRow = reportSections.map((s) => s.content);
+          const headerRow = tableSections.map((s) => s.section);
+          const contentRow = tableSections.map((s) => s.content);
           const columnStyles: Record<number, { cellWidth: number }> = {};
           for (let i = 0; i < colCount; i++) columnStyles[i] = { cellWidth: colWidth };
           autoTable(doc, {
@@ -2206,10 +2235,6 @@ const FinalResults = () => {
                     <FileText className="mr-2 h-4 w-4 flex-shrink-0" />
                   )}
                   Download PDF Report
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={downloadExcel}>
-                  <FileSpreadsheet className="mr-2 h-4 w-4 flex-shrink-0" />
-                  Excel Report
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={shareReport}>
                   <Share2 className="mr-2 h-4 w-4 flex-shrink-0" />

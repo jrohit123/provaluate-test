@@ -19,9 +19,10 @@ import CandidateJdInterviewConfig from '@/components/ai-interview/CandidateJdInt
 import CandidateJdInterviewCreate from '@/components/ai-interview/CandidateJdInterviewCreate';
 import { API_CONFIG, buildApiUrl } from '@/constants/api';
 import { ChartContainer } from '@/components/ui/chart';
-import { LineChart, Line, XAxis, YAxis, Tooltip } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceArea } from 'recharts';
 import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
 import { INTERVIEW_WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const CandidateDashboard = () => {
   const { user } = useAuthContext();
@@ -55,22 +56,22 @@ const CandidateDashboard = () => {
               lastName={candidate?.last_name ?? undefined}
             />
         <SidebarInset>
-          <header className="bg-sky-700 border-b border-sky-800 px-2 sm:px-6 py-2 sm:py-4 flex items-center justify-between gap-2 min-h-[48px] sm:min-h-[52px]">
+          <header className="bg-sky-700 border-b border-sky-800 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 min-h-[52px] sm:min-h-[58px]">
             <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1 overflow-hidden">
               <SidebarTrigger className="text-white flex-shrink-0 min-h-[44px] min-w-[44px] rounded-md touch-manipulation flex items-center justify-center" />
               <div className="min-w-0 flex-1 overflow-hidden">
-                <h1 className="text-base sm:text-xl font-semibold text-white truncate">ProValuate</h1>
-                <p className="text-xs sm:text-sm text-white/90 hidden sm:block truncate">Smart Candidate Evaluation Platform</p>
+                <h1 className="text-lg sm:text-xl font-semibold text-white truncate">ProValuate</h1>
+                <p className="text-sm sm:text-base text-white/90 hidden sm:block truncate">Smart Candidate Evaluation Platform</p>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 sm:gap-4 flex-shrink-0 min-w-0">
-              <span className="text-xs text-white truncate max-w-[90px] sm:max-w-[140px] md:max-w-[200px]" title={greeting}>
+            <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0 min-w-0">
+              <span className="text-sm sm:text-base text-white truncate max-w-[90px] sm:max-w-[140px] md:max-w-[200px]" title={greeting}>
                 {truncatedGreeting}
               </span>
               <Button
                 variant="outline"
                 onClick={handleSignOut}
-                className="text-xs sm:text-sm px-2.5 sm:px-4 min-h-[40px] sm:min-h-[44px] flex-shrink-0 bg-white text-gray-900 border-white hover:bg-gray-100 hover:border-gray-200 touch-manipulation rounded-md"
+                className="text-sm sm:text-base px-3 sm:px-5 min-h-[42px] sm:min-h-[46px] flex-shrink-0 bg-white text-gray-900 border-white hover:bg-gray-100 hover:border-gray-200 touch-manipulation rounded-md"
               >
                 Logout
               </Button>
@@ -160,11 +161,13 @@ const CHART_OVERALL = 'overall';
 type ChartMetricOption = typeof CHART_OVERALL | keyof SpeechMetrics;
 
 function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: string | undefined; candidateEmail?: string }) {
+  const isMobile = useIsMobile();
   const [list, setList] = useState<InterviewRow[]>([]);
   const [progress, setProgress] = useState<ProgressItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedChart, setSelectedChart] = useState<ChartMetricOption>(CHART_OVERALL);
+  const tooltipFontSize = isMobile ? 12 : 14;
 
   useEffect(() => {
     if (!candidateId && !candidateEmail) {
@@ -247,13 +250,25 @@ function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: str
   const progressSortedByDate = [...progress].sort(
     (a, b) => new Date(a.completed_at || 0).getTime() - new Date(b.completed_at || 0).getTime()
   );
-  const speechMetricConfigs: { key: keyof SpeechMetrics; label: string; unit: string; color: string; domain: [number, number] }[] = [
-    { key: 'overall_speech_quality', label: 'Overall speech quality', unit: '/100', color: 'hsl(199, 89%, 48%)', domain: [0, 100] },
-    { key: 'speaking_pace_wpm', label: 'Pace (WPM)', unit: ' WPM', color: 'hsl(142, 71%, 45%)', domain: [0, 200] },
-    { key: 'filler_density', label: 'Filler density', unit: '%', color: 'hsl(38, 92%, 50%)', domain: [0, 15] },
-    { key: 'pause_quality_score', label: 'Pause & pacing', unit: '/100', color: 'hsl(262, 83%, 58%)', domain: [0, 100] },
-    { key: 'voice_confidence', label: 'Voice confidence', unit: '/100', color: 'hsl(199, 89%, 48%)', domain: [0, 100] },
-    { key: 'stress_score', label: 'Stress', unit: '/100', color: 'hsl(0, 84%, 60%)', domain: [0, 100] },
+  // Ideal ranges aligned with PDF report (candidate scores shown against these bands)
+  const speechMetricConfigs: {
+    key: keyof SpeechMetrics;
+    label: string;
+    description: string;
+    unit: string;
+    color: string;
+    domain: [number, number];
+    idealRange: [number, number];
+    yAxisLabel: string;
+    tickFormatter?: (v: number) => string;
+  }[] = [
+    { key: 'overall_speech_quality', label: 'Overall Speech Quality', description: 'A composite score (0–100) from the clarity, fluency, and delivery quality of your spoken answers.', unit: '/100', color: 'hsl(199, 89%, 48%)', domain: [0, 100], idealRange: [85, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
+    { key: 'speaking_pace_wpm', label: 'Speaking Pace (WPM)', description: 'Words per minute. Reflects whether you speak at a clear, steady rate that is easy for the listener to follow.', unit: ' WPM', color: 'hsl(142, 71%, 45%)', domain: [0, 200], idealRange: [120, 160], yAxisLabel: 'WPM', tickFormatter: (v) => `${Math.round(v)}` },
+    { key: 'filler_words', label: 'Filler Words', description: 'Count of filler words or phrases (e.g. "um", "like", "you know") in your answer. Lower is better for clearer delivery.', unit: '', color: 'hsl(38, 92%, 50%)', domain: [0, 20], idealRange: [0, 5], yAxisLabel: 'Count', tickFormatter: (v) => `${Math.round(v)}` },
+    { key: 'filler_density', label: 'Filler Density', description: 'Percentage of your words that are fillers. Lower is better; it shows clearer, more confident speech.', unit: '%', color: 'hsl(38, 92%, 50%)', domain: [0, 20], idealRange: [0, 5], yAxisLabel: 'Filler density (%)', tickFormatter: (v) => v.toFixed(1) },
+    { key: 'pause_quality_score', label: 'Pause & Pacing', description: 'How well you use pauses and rhythm in your speech (0–100). Good pacing helps the listener follow and shows control.', unit: '/100', color: 'hsl(262, 83%, 58%)', domain: [0, 100], idealRange: [80, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
+    { key: 'voice_confidence', label: 'Voice Confidence', description: 'How confident and assured your voice sounds (0–100). Higher scores suggest you came across as self-assured and clear.', unit: '/100', color: 'hsl(199, 89%, 48%)', domain: [0, 100], idealRange: [80, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
+    { key: 'stress_score', label: 'Stress Level', description: 'Indication of stress or tension in your voice (0–100). Lower is better; it suggests a calmer, more composed delivery.', unit: '/100', color: 'hsl(0, 84%, 60%)', domain: [0, 100], idealRange: [0, 30], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
   ];
   const speechChartDataByMetric = speechMetricConfigs.map((config) => {
     const data = progressSortedByDate
@@ -302,7 +317,7 @@ function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: str
       {!loading && showAnyChart && chartDropdownOptions.length > 0 && (
         <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="flex flex-col gap-3 mb-3 min-w-0">
-            <h2 className="text-sm sm:text-base font-semibold text-gray-900">
+            <h2 className="text-sm sm:text-lg font-semibold text-gray-900">
               {selectedChart === CHART_OVERALL ? 'Performance over time' : selectedMetricConfig?.label ?? 'Performance over time'}
             </h2>
             <Select value={selectedChart} onValueChange={(v) => setSelectedChart(v as ChartMetricOption)}>
@@ -320,11 +335,17 @@ function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: str
           </div>
           <div className="w-full min-w-0 -mx-1 sm:mx-0">
           {selectedMetricHasData && selectedChart === CHART_OVERALL && (
-            <ChartContainer config={{ score: { label: 'Overall score', color: 'hsl(199, 89%, 48%)' } }} className="h-[200px] sm:h-[260px] md:h-[280px] w-full min-w-0">
-              <LineChart data={chartData} margin={{ top: 6, right: 4, left: 0, bottom: 6 }}>
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis domain={[0, 10]} tick={{ fontSize: 10 }} width={24} />
+            <ChartContainer
+              config={{ score: { label: 'Overall score', color: 'hsl(199, 89%, 48%)' } }}
+              className="h-[200px] sm:h-[260px] md:h-[280px] w-full min-w-0 [&_.recharts-cartesian-axis-tick_text]:!fill-gray-900 [&_.recharts-cartesian-axis-tick_text]:!text-[12px] sm:[&_.recharts-cartesian-axis-tick_text]:!text-[14px] [&_.recharts-cartesian-axis-tick_text]:!font-medium [&_.recharts-cartesian-axis_text]:!fill-gray-900 [&_.recharts-label]:!fill-gray-900 [&_.recharts-label]:!text-[13px] sm:[&_.recharts-label]:!text-[15px]"
+            >
+              <LineChart data={chartData} margin={{ top: 10, right: 10, left: 14, bottom: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(0 0% 90%)" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#111827' }} tickFormatter={() => ''} label={{ value: 'Interview', position: 'insideBottom', offset: -8, style: { fontSize: 13, fill: '#111827', fontWeight: 500 } }} />
+                <YAxis domain={[0, 10]} tick={{ fontSize: 12, fill: '#111827' }} width={40} tickMargin={10} tickFormatter={(v) => `${v}/10`} />
                 <Tooltip
+                  contentStyle={{ fontSize: tooltipFontSize }}
+                  labelStyle={{ fontSize: tooltipFontSize }}
                   formatter={(value: number) => [`${Number(value).toFixed(1)}/10`, 'Score']}
                   labelFormatter={(_, payload) => (payload?.[0]?.payload?.fullLabel ?? '')}
                 />
@@ -335,13 +356,30 @@ function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: str
           {selectedMetricHasData && selectedChart !== CHART_OVERALL && selectedMetricConfig && (
             <ChartContainer
               config={{ value: { label: selectedMetricConfig.label, color: selectedMetricConfig.color } }}
-              className="h-[200px] sm:h-[260px] md:h-[280px] w-full min-w-0"
+              className="h-[200px] sm:h-[260px] md:h-[280px] w-full min-w-0 [&_.recharts-cartesian-axis-tick_text]:!fill-gray-900 [&_.recharts-cartesian-axis-tick_text]:!text-[12px] sm:[&_.recharts-cartesian-axis-tick_text]:!text-[14px] [&_.recharts-cartesian-axis-tick_text]:!font-medium [&_.recharts-cartesian-axis_text]:!fill-gray-900 [&_.recharts-label]:!fill-gray-900 [&_.recharts-label]:!text-[13px] sm:[&_.recharts-label]:!text-[15px]"
             >
-              <LineChart data={selectedMetricConfig.data} margin={{ top: 6, right: 4, left: 0, bottom: 6 }}>
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis domain={selectedMetricConfig.domain} tick={{ fontSize: 10 }} width={24} />
+              <LineChart data={selectedMetricConfig.data} margin={{ top: 10, right: 10, left: 14, bottom: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(0 0% 90%)" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#111827' }} tickFormatter={() => ''} label={{ value: 'Interview', position: 'insideBottom', offset: -8, style: { fontSize: 13, fill: '#111827', fontWeight: 500 } }} />
+                <YAxis
+                  domain={selectedMetricConfig.domain}
+                  tick={{ fontSize: 12, fill: '#111827' }}
+                  width={40}
+                  tickMargin={10}
+                  tickFormatter={selectedMetricConfig.tickFormatter ?? ((v) => String(v))}
+                />
+                <ReferenceArea
+                  y1={selectedMetricConfig.idealRange[0]}
+                  y2={selectedMetricConfig.idealRange[1]}
+                  fill="hsl(142 71% 45% / 0.12)"
+                  stroke="hsl(142 71% 45% / 0.4)"
+                  strokeWidth={1}
+                  strokeDasharray="2 2"
+                />
                 <Tooltip
-                  formatter={(value: number) => [String(Number(value).toFixed(1)) + selectedMetricConfig.unit, selectedMetricConfig.label]}
+                  contentStyle={{ fontSize: tooltipFontSize }}
+                  labelStyle={{ fontSize: tooltipFontSize }}
+                  formatter={(value: number) => [String(Number(value).toFixed(1)) + (selectedMetricConfig.unit || ''), selectedMetricConfig.label]}
                   labelFormatter={(_, payload) => (payload?.[0]?.payload?.fullLabel ?? '')}
                 />
                 <Line
@@ -354,6 +392,18 @@ function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: str
                 />
               </LineChart>
             </ChartContainer>
+          )}
+          {selectedMetricHasData && selectedChart === CHART_OVERALL && (
+            <div className="text-xs sm:text-sm text-gray-900 mt-2 px-1 space-y-0.5">
+              <p>Y-axis: Score (out of 10)</p>
+            </div>
+          )}
+          {selectedMetricHasData && selectedChart !== CHART_OVERALL && selectedMetricConfig && (
+            <div className="text-xs sm:text-sm text-gray-900 mt-2 px-1 space-y-1">
+              <p>Shaded band = ideal range for this metric. Compare your scores against the band.</p>
+              <p>Y-axis: {selectedMetricConfig.yAxisLabel}</p>
+              <p className="text-gray-700 mt-1.5">{selectedMetricConfig.description}</p>
+            </div>
           )}
           {!selectedMetricHasData && (
             <p className="text-sm text-gray-500 py-6 sm:py-8 text-center">Complete more interviews to see progress for this metric.</p>
@@ -671,7 +721,7 @@ function ProfileBuilderSection({ candidateId }: { candidateId: string | undefine
                 </div>
                 <p className="text-sm sm:text-base text-gray-600 leading-snug">{section.description}</p>
                 {isFilled && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500 rounded-b-xl" aria-hidden />
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-sky-700 rounded-b-xl" aria-hidden />
                 )}
               </button>
             );
