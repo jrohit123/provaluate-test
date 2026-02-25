@@ -12,16 +12,16 @@ import {
 } from '@/components/ui/sidebar';
 
 const mainItem = {
-  title: 'Main Dashboard',
+  title: 'My Dashboard',
   icon: LayoutDashboard,
   path: '/candidate-dashboard',
 };
 
 const stepItems = [
-  { title: 'Profile overview', icon: User, path: '/candidate-dashboard/profile' },
-  { title: 'Interview config', icon: Settings, path: '/candidate-dashboard/jds/configure' },
-  { title: 'Interview creation', icon: UserPlus, path: '/candidate-dashboard/jds/create' },
-  { title: 'Interview dashboard', icon: Briefcase, path: '/candidate-dashboard/interviews' },
+  { title: 'My Profile', icon: User, path: '/candidate-dashboard/profile' },
+  { title: 'Customize Interview', icon: Settings, path: '/candidate-dashboard/jds/configure' },
+  { title: 'Generate Interview', icon: UserPlus, path: '/candidate-dashboard/jds/create' },
+  { title: 'Performance Report', icon: Briefcase, path: '/candidate-dashboard/interviews' },
 ];
 
 function getInitials(firstName?: string, lastName?: string): string {
@@ -69,7 +69,7 @@ export function CandidateAppSidebar({ firstName, lastName }: CandidateAppSidebar
     <Sidebar className="border-r border-sky-100 bg-white" data-tour="candidate-sidebar">
       <SidebarContent className="gap-0 pt-4 pb-4">
         {/* Profile: circle with initials + full name */}
-        <SidebarGroup className="px-3 pb-6">
+        <SidebarGroup className="px-3 pb-4">
           <div className="flex flex-col items-center gap-4">
             <div
               className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-800 font-semibold text-3xl"
@@ -83,7 +83,7 @@ export function CandidateAppSidebar({ firstName, lastName }: CandidateAppSidebar
           </div>
         </SidebarGroup>
 
-        <SidebarGroup className="pt-2 pb-0">
+        <SidebarGroup className="pt-8 pb-0">
           <SidebarGroupContent className="py-0">
             <SidebarMenu className="flex flex-col gap-3">
               <SidebarMenuItem>

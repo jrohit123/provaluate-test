@@ -8,6 +8,8 @@ interface CompactStepProgressProps {
   onStepClick?: (index: number) => void;
   /** When true, any step is clickable (e.g. candidate can jump to any step). When false, only completed steps are clickable. */
   allowClickAnyStep?: boolean;
+  /** Use candidate (sky/cerulean) theme to match candidate dashboard header. */
+  theme?: 'default' | 'candidate';
   className?: string;
 }
 
@@ -17,8 +19,12 @@ export const CompactStepProgress: React.FC<CompactStepProgressProps> = ({
   steps,
   onStepClick,
   allowClickAnyStep = false,
+  theme = 'default',
   className = ''
 }) => {
+  const isCandidate = theme === 'candidate';
+  const btnActiveClass = isCandidate ? 'bg-sky-700 text-white hover:bg-sky-800' : 'bg-primary text-white hover:bg-primary/90';
+  const barActiveClass = isCandidate ? 'bg-sky-700' : 'bg-blue-600';
   const handlePrevious = () => {
     if (current > 0 && onStepClick) {
       onStepClick(current - 1);
@@ -50,7 +56,7 @@ export const CompactStepProgress: React.FC<CompactStepProgressProps> = ({
             min-w-[44px] min-h-[44px] w-10 h-10 sm:w-9 sm:h-9 rounded-full flex items-center justify-center
             transition-all duration-200 flex-shrink-0 touch-manipulation
             ${canGoPrevious 
-              ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer' 
+              ? `${btnActiveClass} cursor-pointer` 
               : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }
           `}
@@ -79,7 +85,7 @@ export const CompactStepProgress: React.FC<CompactStepProgressProps> = ({
                     ${index === 0 ? 'rounded-l-full' : ''}
                     ${index === total - 1 ? 'rounded-r-full' : ''}
                     ${isActive 
-                      ? 'bg-blue-600 cursor-default' 
+                      ? `${barActiveClass} cursor-default` 
                       : isCompleted
                       ? 'bg-green-500 ' + (isClickable ? 'hover:bg-green-600 cursor-pointer' : 'cursor-default')
                       : 'bg-gray-300 ' + (isClickable ? 'hover:bg-gray-400 cursor-pointer' : 'cursor-default')
@@ -111,7 +117,7 @@ export const CompactStepProgress: React.FC<CompactStepProgressProps> = ({
             min-w-[44px] min-h-[44px] w-10 h-10 sm:w-9 sm:h-9 rounded-full flex items-center justify-center
             transition-all duration-200 flex-shrink-0 touch-manipulation
             ${canGoNext 
-              ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer' 
+              ? `${btnActiveClass} cursor-pointer` 
               : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }
           `}

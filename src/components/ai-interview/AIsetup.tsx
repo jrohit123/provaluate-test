@@ -1499,6 +1499,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           steps={INTERVIEW_WORKFLOW_STEPS}
           onStepClick={navigateToStep}
           allowClickAnyStep={isCandidateFlow}
+          theme={isCandidateFlow ? 'candidate' : 'default'}
         />
       </div>
       <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">

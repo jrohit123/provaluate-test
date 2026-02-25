@@ -77,43 +77,59 @@ const CandidateDashboard = () => {
             </div>
           </header>
 
-          <main className="flex-1 w-full min-w-0 px-3 sm:px-6 py-4 sm:py-8 overflow-x-hidden">
-            {isHome && (
-              <CandidateMainDashboard
-                candidateId={candidate?.candidate_id}
-                candidateEmail={candidate?.email ?? undefined}
-                onNavigate={(path) => navigate(path)}
-              />
-            )}
-            {isProfile && (
-              <ProfileBuilderSection candidateId={candidate?.candidate_id} />
-            )}
-            {isJdsConfigure && (
-              <CandidateJdInterviewConfig candidateId={candidate?.candidate_id ?? ''} />
-            )}
-            {isJdsCreate && (
-              <CandidateJdInterviewCreate candidateId={candidate?.candidate_id ?? ''} />
-            )}
-            {isJds && !isJdsConfigure && !isJdsCreate && (
-              <MyJdsSection candidateId={candidate?.candidate_id} />
-            )}
-            {isInterviews && (
-              <>
-                <div className="lg:hidden">
-                  <CompactStepProgress
-                    current={2}
-                    total={INTERVIEW_WORKFLOW_STEPS.length}
-                    steps={INTERVIEW_WORKFLOW_STEPS}
-                    onStepClick={(index) => {
-                      const routes = ['/candidate-dashboard/jds/configure', '/candidate-dashboard/jds/create', '/candidate-dashboard/interviews'];
-                      if (index >= 0 && index < routes.length) navigate(routes[index]);
-                    }}
-                    allowClickAnyStep
-                  />
-                </div>
-                <MyInterviewsSection candidateId={candidate?.candidate_id} candidateEmail={candidate?.email ?? undefined} />
-              </>
-            )}
+          <main className="flex-1 w-full min-w-0 flex flex-col min-h-0 overflow-x-hidden">
+            <div className="flex-1 min-h-0 px-3 sm:px-6 py-4 sm:py-8">
+              {isHome && (
+                <CandidateMainDashboard
+                  candidateId={candidate?.candidate_id}
+                  candidateEmail={candidate?.email ?? undefined}
+                  onNavigate={(path) => navigate(path)}
+                />
+              )}
+              {isProfile && (
+                <ProfileBuilderSection candidateId={candidate?.candidate_id} />
+              )}
+              {isJdsConfigure && (
+                <CandidateJdInterviewConfig candidateId={candidate?.candidate_id ?? ''} />
+              )}
+              {isJdsCreate && (
+                <CandidateJdInterviewCreate candidateId={candidate?.candidate_id ?? ''} />
+              )}
+              {isJds && !isJdsConfigure && !isJdsCreate && (
+                <MyJdsSection candidateId={candidate?.candidate_id} />
+              )}
+              {isInterviews && (
+                <>
+                  <div className="lg:hidden">
+                    <CompactStepProgress
+                      current={2}
+                      total={INTERVIEW_WORKFLOW_STEPS.length}
+                      steps={INTERVIEW_WORKFLOW_STEPS}
+                      onStepClick={(index) => {
+                        const routes = ['/candidate-dashboard/jds/configure', '/candidate-dashboard/jds/create', '/candidate-dashboard/interviews'];
+                        if (index >= 0 && index < routes.length) navigate(routes[index]);
+                      }}
+                      allowClickAnyStep
+                      theme="candidate"
+                    />
+                  </div>
+                  <MyInterviewsSection candidateId={candidate?.candidate_id} candidateEmail={candidate?.email ?? undefined} />
+                </>
+              )}
+            </div>
+            <footer className="flex-shrink-0 bg-white border-t border-sky-100 px-4 sm:px-6 py-3 sm:py-4 text-center text-xs sm:text-sm text-muted-foreground">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-0 sm:space-x-2">
+                <span>© ProValuate 2025</span>
+                <span className="hidden sm:inline">|</span>
+                <Link to="/privacy" className="text-sky-600 hover:text-sky-800 transition-colors whitespace-nowrap">Privacy Policy</Link>
+                <span className="hidden sm:inline">|</span>
+                <Link to="/terms" className="text-sky-600 hover:text-sky-800 transition-colors whitespace-nowrap">Terms</Link>
+                <span className="hidden sm:inline">|</span>
+                <a href="mailto:sales@aitamate.com?&subject=ProValuate&body=Hi,%0D%0A%0D%0AI'd like to know more about ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" rel="noopener noreferrer" className="text-sky-600 hover:text-sky-800 transition-colors whitespace-nowrap">Contact</a>
+                <span className="hidden sm:inline">|</span>
+                <span className="whitespace-nowrap">Powered by <a href="https://aitamate.com" target="_blank" rel="noopener noreferrer" className="text-sky-600 hover:text-sky-800">aitamate</a></span>
+              </div>
+            </footer>
           </main>
         </SidebarInset>
       </div>
@@ -368,12 +384,14 @@ function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: str
                   </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 w-full">
-                  <Button asChild size="sm" variant="outline" className="min-h-[44px] touch-manipulation w-full text-sm sm:text-base">
-                    <Link to={`/interview/${i.id}`} className="flex items-center justify-center gap-2">
-                      <ClipboardList className="h-4 w-4 shrink-0" />
-                      Take interview
-                    </Link>
-                  </Button>
+                  {i.status !== 'completed' && i.status !== 'terminated' && (
+                    <Button asChild size="sm" variant="outline" className="min-h-[44px] touch-manipulation w-full text-sm sm:text-base">
+                      <Link to={`/interview/${i.id}`} className="flex items-center justify-center gap-2">
+                        <ClipboardList className="h-4 w-4 shrink-0" />
+                        Take interview
+                      </Link>
+                    </Button>
+                  )}
                   <Button asChild size="sm" variant="outline" className="min-h-[44px] touch-manipulation w-full text-sm sm:text-base">
                     <a href={`/final-results/${i.id}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2">
                       <ExternalLink className="h-4 w-4 shrink-0" />
