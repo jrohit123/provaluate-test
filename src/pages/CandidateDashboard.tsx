@@ -652,12 +652,16 @@ function ProfileBuilderSection({ candidateId }: { candidateId: string | undefine
           {PROFILE_SECTIONS.map((section) => {
             const Icon = section.icon;
             const isCustom = section.id === 'custom';
+            const raw = profileData[section.dataKey];
+            const isFilled = section.isArray
+              ? Array.isArray(raw) && raw.length > 0
+              : typeof raw === 'string' && raw.trim().length > 0;
             return (
               <button
                 key={section.id}
                 type="button"
                 onClick={() => openSection(section)}
-                className={`text-left p-4 sm:p-6 md:p-8 rounded-xl border bg-white transition shadow-sm hover:shadow-md hover:border-sky-200 flex flex-col gap-3 min-h-[120px] sm:min-h-[140px] touch-manipulation ${isCustom ? 'border-dashed border-2 border-gray-300' : 'border-gray-200'}`}
+                className={`relative text-left p-4 sm:p-6 md:p-8 rounded-xl border bg-white transition shadow-sm hover:shadow-md hover:border-sky-200 flex flex-col gap-3 min-h-[120px] sm:min-h-[140px] touch-manipulation overflow-hidden ${isCustom ? 'border-dashed border-2 border-gray-300' : 'border-gray-200'}`}
               >
                 <div className="flex items-center gap-3">
                   <div className="p-3 rounded-xl bg-sky-100 text-sky-600 flex-shrink-0">
@@ -666,6 +670,9 @@ function ProfileBuilderSection({ candidateId }: { candidateId: string | undefine
                   <span className="font-semibold text-gray-900 text-base sm:text-lg">{section.title}</span>
                 </div>
                 <p className="text-sm sm:text-base text-gray-600 leading-snug">{section.description}</p>
+                {isFilled && (
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500 rounded-b-xl" aria-hidden />
+                )}
               </button>
             );
           })}
