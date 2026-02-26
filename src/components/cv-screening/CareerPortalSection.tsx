@@ -122,7 +122,7 @@ export function CareerPortalSection({ onSectionReady }: CareerPortalSectionProps
         body: JSON.stringify({
           career_slug: formSlug.trim() || null,
           career_logo_url: formLogoUrl.trim() || null,
-          career_vision: formVision.trim() || null,
+          career_vision: formVision.trim().slice(0, 400) || null,
         }),
       });
       const json = await res.json();
@@ -256,15 +256,19 @@ export function CareerPortalSection({ onSectionReady }: CareerPortalSectionProps
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="career-vision">Vision / about text</Label>
+            <Label htmlFor="career-vision">Vision / about text (max 400 characters)</Label>
             <Textarea
               id="career-vision"
               placeholder="Short description for candidates..."
               value={formVision}
-              onChange={(e) => setFormVision(e.target.value)}
+              onChange={(e) => setFormVision(e.target.value.slice(0, 400))}
+              maxLength={400}
               rows={4}
               className="min-h-[100px] touch-manipulation resize-y"
             />
+            {formVision.length > 0 && (
+              <span className="text-xs text-muted-foreground">{formVision.length}/400</span>
+            )}
           </div>
           <Button onClick={handleSaveCompany} disabled={savingCompany} className="min-h-10 px-4 touch-manipulation">
             {savingCompany ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}

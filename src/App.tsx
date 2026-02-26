@@ -36,6 +36,7 @@ import FinalResults from "./components/ai-interview/FinalResults";
 import ConversationalInterview from "./components/ai-interview/ConversationalInterview";
 import CandidateCompletion from "./components/ai-interview/CandidateCompletion";
 import CompanyCareerPage from "./pages/CompanyCareerPage";
+import CompanyCareerJobPage from "./pages/CompanyCareerJobPage";
 
 import { supabase } from "@/integrations/supabase/client";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -288,6 +289,7 @@ const App = () => {
             <Route path="/final-results/:interviewId" element={<FinalResults />} />
             
             {/* Public career page - no auth */}
+            <Route path="/careers/:companySlug/job/:jdId" element={<CompanyCareerJobPage />} />
             <Route path="/careers/:companySlug" element={<CompanyCareerPage />} />
             
             {/* Default route - redirect to login */}
