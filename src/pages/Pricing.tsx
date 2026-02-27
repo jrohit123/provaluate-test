@@ -17,7 +17,37 @@ interface Plan {
   active_jobs: number;
   status: string;
   currency?: string;
+  duration?: number;
+  max_token?: number;
 }
+
+// Static free plans from DB (plan_cost 0 excluded by API fetch)
+const STATIC_FREE_PLANS: Plan[] = [
+  {
+    plan_id: '1f173d9c-1e09-4823-8045-d112353be7ed',
+    plan_name: 'Multi_User_Free',
+    plan_cost: 0,
+    max_cvs: 15,
+    max_users: 3,
+    active_jobs: 2,
+    status: 'Active',
+    currency: 'INR',
+    duration: 30,
+    max_token: 1000,
+  },
+  {
+    plan_id: '2dce0e46-f893-4b5c-a087-ca16965a15a5',
+    plan_name: 'FreeTrial-30',
+    plan_cost: 0,
+    max_cvs: 15,
+    max_users: 1,
+    active_jobs: 2,
+    status: 'Active',
+    currency: 'INR',
+    duration: 30,
+    max_token: 1000,
+  },
+];
 
 const Pricing = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -124,7 +154,7 @@ const Pricing = () => {
     <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header Section */}
       <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-10 xl:px-12 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-2 sm:space-x-3">
               <div>
@@ -143,8 +173,8 @@ const Pricing = () => {
         </div>
       </header>
 
-      {/* Pricing Header */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      {/* Pricing Header – use most of viewport width */}
+      <section className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-10 xl:px-12 py-16">
         <div className="text-center mb-12">
           <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
             Simple, Transparent Pricing
@@ -189,12 +219,64 @@ const Pricing = () => {
           </div>
         </div>
 
-        {/* Plans Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+        {/* Plans Grid – one row when space allows, no scroll */}
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-6 mb-12">
+          {/* Static free plans – same styling as paid plans */}
+          {STATIC_FREE_PLANS.map((plan) => (
+            <Card
+              key={plan.plan_id}
+              className="border-2 border-gray-200 hover:border-indigo-300 transition-all duration-300 flex flex-col"
+            >
+              <CardHeader className="pb-4">
+                <CardTitle className="text-2xl mb-2">{plan.plan_name.replace(/_/g, ' ')}</CardTitle>
+                <CardDescription className="text-gray-600">
+                  Perfect for growing teams
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex-1 flex flex-col">
+                <div className="mb-6">
+                  <div className="flex items-baseline">
+                    <span className="text-4xl font-bold text-gray-900">₹0</span>
+                    <span className="text-gray-600 ml-2">/ {plan.duration} days</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Free trial
+                  </p>
+                </div>
+                <ul className="space-y-3 mb-6 flex-1">
+                  <li className="flex items-start space-x-3">
+                    <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm text-gray-700"><strong>{plan.max_cvs}</strong> CVs</span>
+                  </li>
+                  <li className="flex items-start space-x-3">
+                    <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm text-gray-700"><strong>{plan.max_users}</strong> team member{plan.max_users > 1 ? 's' : ''}</span>
+                  </li>
+                  <li className="flex items-start space-x-3">
+                    <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm text-gray-700"><strong>{plan.active_jobs}</strong> active job descriptions</span>
+                  </li>
+                  <li className="flex items-start space-x-3">
+                    <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm text-gray-700">AI-powered resume screening</span>
+                  </li>
+                  <li className="flex items-start space-x-3">
+                    <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm text-gray-700">Custom evaluation criteria</span>
+                  </li>
+                  <li className="flex items-start space-x-3">
+                    <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm text-gray-700">Standard support</span>
+                  </li>
+                </ul>
+                <Button onClick={() => handleSelectPlan(plan)} variant="outline" className="w-full h-11">
+                  Get Started
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
           {plans.length === 0 ? (
-            <div className="col-span-full text-center py-12">
-              <p className="text-gray-600">No plans available at the moment.</p>
-            </div>
+            null
           ) : (
             plans.map((plan) => {
               // Calculate prices using real-time exchange rate
@@ -315,14 +397,19 @@ const Pricing = () => {
             })
           )}
 
-          {/* One-time plans – coming soon (after Mastery / last plan) */}
-          <Card className="border-2 border-dashed border-emerald-500 flex flex-col opacity-95">
+          {/* One-time plans – coming soon (commented out for now) */}
+          {/* <Card className="border-2 border-dashed border-emerald-500 flex flex-col opacity-95">
             <CardContent className="flex-1 flex flex-col items-center justify-center py-12 px-4">
               <p className="text-lg font-semibold text-gray-900 text-center">
                 One-time plans coming soon
               </p>
             </CardContent>
-          </Card>
+          </Card> */}
+        </div>
+
+        {/* One-time plans coming soon */}
+        <div className="bg-white rounded-lg shadow-lg border border-gray-200 px-6 py-6 mb-8">
+          <p className="text-center text-gray-700 font-medium">One-time plans coming soon...</p>
         </div>
 
         {/* Features Comparison */}
@@ -392,7 +479,7 @@ const Pricing = () => {
 
       {/* Footer */}
       <footer className="bg-white border-t mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-10 xl:px-12 py-8">
           <div className="text-center text-gray-600">
             <p>© 2025 ProValuate. All rights reserved.</p>
             <p className="text-sm mt-2">

@@ -4,7 +4,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { BarChart3, User, Eye, Download, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Filter, Check, Briefcase, Grid, CheckCircle } from 'lucide-react';
+import { BarChart3, User, Eye, Download, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Filter, Check, Briefcase, Grid } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -691,6 +691,111 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     return 'bg-orange-500';
   };
 
+  // Parse detailed_assessment into Strengths (green), Ambiguous (yellow), Weaknesses (red), Overall Summary (blue)
+  const parseDetailedAssessment = (text: string): { strengths: string[]; ambiguous: string[]; weaknesses: string[]; overallSummary: string } | null => {
+    if (!text || !text.trim()) return null;
+    const lines = text.replace(/\r\n/g, '\n').split('\n');
+    const strengths: string[] = [];
+    const ambiguous: string[] = [];
+    const weaknesses: string[] = [];
+    let overallSummary = '';
+    const strengthHeaders = ['Strengths:', 'Key Strengths:'];
+    const ambiguousHeaders = ['Ambiguous:'];
+    const weaknessHeaders = ['Weaknesses:', 'Notable Gaps:'];
+    const overallHeaders = ['Overall Summary:', 'Experience Relevance:', 'Employment History:', 'Overall Fit Assessment:'];
+    type Section = 'strengths' | 'ambiguous' | 'weaknesses' | 'overall';
+    let currentSection: Section | null = null;
+    const isBullet = (line: string) => /^[-*]\s*/.test(line.trim()) || line.trim().startsWith('•');
+
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      const trimmed = raw.trim();
+      const clean = trimmed.replace(/\*/g, '').trim();
+      const lineLower = clean.toLowerCase();
+
+      if (strengthHeaders.some(h => lineLower === h.toLowerCase() || lineLower.startsWith(h.toLowerCase()))) {
+        currentSection = 'strengths';
+        continue;
+      }
+      if (ambiguousHeaders.some(h => lineLower === h.toLowerCase() || lineLower.startsWith(h.toLowerCase()))) {
+        currentSection = 'ambiguous';
+        continue;
+      }
+      if (weaknessHeaders.some(h => lineLower === h.toLowerCase() || lineLower.startsWith(h.toLowerCase()))) {
+        currentSection = 'weaknesses';
+        continue;
+      }
+      if (overallHeaders.some(h => lineLower === h.toLowerCase() || lineLower.startsWith(h.toLowerCase()))) {
+        currentSection = 'overall';
+        continue;
+      }
+
+      if (!currentSection) continue;
+
+      if (currentSection === 'overall') {
+        if (trimmed) overallSummary += (overallSummary ? '\n\n' : '') + clean;
+      } else {
+        if (isBullet(raw)) {
+          const bulletText = trimmed.replace(/^[-*•]\s*/, '').replace(/\*/g, '').trim();
+          if (bulletText && currentSection === 'strengths') strengths.push(bulletText);
+          else if (bulletText && currentSection === 'ambiguous') ambiguous.push(bulletText);
+          else if (bulletText && currentSection === 'weaknesses') weaknesses.push(bulletText);
+        }
+      }
+    }
+
+    const hasAny = strengths.length > 0 || ambiguous.length > 0 || weaknesses.length > 0 || overallSummary.trim().length > 0;
+    return hasAny ? { strengths, ambiguous, weaknesses, overallSummary: overallSummary.trim() } : null;
+  };
+
+  // Render detailed_assessment with green (strengths), yellow (ambiguous), red (weaknesses), blue (overall summary) — one combined box per section, no icons
+  const renderColoredSummary = (text: string) => {
+    const parsed = parseDetailedAssessment(text);
+    if (parsed) {
+      return (
+        <div className="space-y-4 text-left">
+          {parsed.strengths.length > 0 && (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-3 sm:p-4">
+              <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Strengths</h5>
+              <ul className="list-disc list-inside space-y-1.5 text-sm text-gray-800">
+                {parsed.strengths.map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {parsed.ambiguous.length > 0 && (
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 sm:p-4">
+              <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Ambiguous</h5>
+              <ul className="list-disc list-inside space-y-1.5 text-sm text-gray-800">
+                {parsed.ambiguous.map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {parsed.weaknesses.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 sm:p-4">
+              <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Shortcomings</h5>
+              <ul className="list-disc list-inside space-y-1.5 text-sm text-gray-800">
+                {parsed.weaknesses.map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {parsed.overallSummary && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 sm:p-4">
+              <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Overall Summary</h5>
+              <p className="text-sm text-gray-800 whitespace-pre-line">{parsed.overallSummary}</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+    return renderSummaryText(text);
+  };
+
   // Function to process summary text - handle JSON/object/array gracefully, remove asterisks and format headings
   const processSummaryText = (text: string) => {
     if (!text) return [];
@@ -733,11 +838,15 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
           // Render common keys in a sensible order
           const preferredOrder = [
             'Summary',
+            'Strengths',
             'Key Strengths',
+            'Ambiguous',
+            'Weaknesses',
             'Notable Gaps',
             'Experience Relevance',
             'Employment History',
             'Overall Fit Assessment',
+            'Overall Summary',
             'Recommendation'
           ];
 
@@ -1402,21 +1511,65 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
               ))}
             </div>
 
-            {/* Summary Section */}
-            {candidate.detailedAssessment && (
-              <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-blue-50 rounded-lg">
-                <h4 className="font-semibold text-sm sm:text-base text-gray-900 mb-2 text-left">Summary</h4>
-                <div className="text-left">
-                  {renderSummaryText(candidate.detailedAssessment)}
+            {/* Overview card: one card, no gaps; coloured blocks with headers flow together */}
+            {candidate.detailedAssessment && (() => {
+              const parsed = parseDetailedAssessment(candidate.detailedAssessment);
+              if (parsed) {
+                return (
+                  <div className="mt-4 sm:mt-6 rounded-lg border border-gray-300 overflow-hidden shadow-sm">
+                    <div className="text-left">
+                      {parsed.strengths.length > 0 && (
+                        <div className="bg-green-50 px-3 sm:px-4 py-3">
+                          <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Strengths</h5>
+                          <div className="space-y-1.5 text-sm text-gray-800">
+                            {parsed.strengths.map((item, i) => (
+                              <p key={i} className="pl-0">- {item}</p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {parsed.ambiguous.length > 0 && (
+                        <div className="bg-yellow-50 px-3 sm:px-4 py-3">
+                          <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Clarifications</h5>
+                          <div className="space-y-1.5 text-sm text-gray-800">
+                            {parsed.ambiguous.map((item, i) => (
+                              <p key={i} className="pl-0">- {item}</p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {parsed.weaknesses.length > 0 && (
+                        <div className="bg-red-50 px-3 sm:px-4 py-3">
+                          <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Shortcomings</h5>
+                          <div className="space-y-1.5 text-sm text-gray-800">
+                            {parsed.weaknesses.map((item, i) => (
+                              <p key={i} className="pl-0">- {item}</p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {parsed.overallSummary && (
+                        <div className="bg-blue-50 px-3 sm:px-4 py-3">
+                          <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Summary</h5>
+                          <p className="text-sm text-gray-800 whitespace-pre-line">{parsed.overallSummary}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <div className="mt-4 sm:mt-6 rounded-lg border border-gray-300 bg-gray-100/80 p-3 sm:p-4 shadow-sm">
+                  <div className="text-left text-gray-800">{renderSummaryText(candidate.detailedAssessment)}</div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
-            {/* Recommendation Section */}
+            {/* Recommendation (grey card) */}
             {candidate.recommendation && (
-              <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-gray-50 rounded-lg">
-                <h4 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Recommendation</h4>
-                <div>
+              <div className="mt-4 sm:mt-6 rounded-lg border border-gray-300 bg-gray-100/80 p-3 sm:p-4 shadow-sm">
+                <h4 className="font-semibold text-sm sm:text-base text-gray-900 mb-3">Recommendation</h4>
+                <div className="text-gray-800">
                   {renderSummaryText(candidate.recommendation)}
                 </div>
               </div>

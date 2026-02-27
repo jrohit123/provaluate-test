@@ -46,19 +46,70 @@ function stripSpeechReportTitleLine(raw: string): string {
   return withoutPlain;
 }
 
-/** Parse speech report into section/content rows for table display. Returns [] if no clear sections. */
+/** Parse speech report into section/content rows for table display. Returns [] if no clear sections.
+ *  Format A (primary): bold **Section** headers — required by the prompt.
+ *  Format B (fallback): plain-text section headers on their own line — for older/inconsistent LLM output.
+ */
 function parseSpeechReportSections(reportText: string): { section: string; content: string }[] {
   const text = reportText.replace(/''/g, "'").trim();
   const sections: { section: string; content: string }[] = [];
-  const regex = /\*\*([^*]+)\*\*\s*:?\s*([\s\S]*?)(?=\*\*[^*]+\*\*\s*:?\s*|$)/gi;
+
+  // Format A: bold **Section Name** headers
+  const regexA = /\*\*([^*]+)\*\*\s*:?\s*([\s\S]*?)(?=\*\*[^*]+\*\*\s*:?\s*|$)/gi;
   let m;
-  while ((m = regex.exec(text)) !== null) {
+  while ((m = regexA.exec(text)) !== null) {
     const section = m[1].trim();
     const content = m[2].trim();
-    if (section && (content || section.toLowerCase().includes('where') || section.toLowerCase().includes('overall') || section.toLowerCase().includes('what'))) {
+    if (section && (content || /overall|where|what|comparison|progress/i.test(section))) {
       sections.push({ section, content: content || '—' });
     }
   }
+  if (sections.length >= 2) return sections;
+
+  // Format B fallback: plain-text known section/subsection headers on their own line (no bold)
+  // Matches section names the prompt always uses, with or without trailing colon
+  const KNOWN_HEADERS = [
+    /^overall$/i,
+    /^what the data tells you$/i,
+    /^speaking pace$/i,
+    /^filler words?\s*(\/)?\s*(filler density)?$/i,
+    /^filler density$/i,
+    /^voice confidence$/i,
+    /^stress$/i,
+    /^pause(\s*(and|&)\s*pacing)?(\s*score)?$/i,
+    /^comparison with previous interviews?$/i,
+    /^progress over your interviews?$/i,
+    /^where you did well$/i,
+  ];
+  const isKnownHeader = (line: string) => {
+    const t = line.trim().replace(/:$/, '').trim();
+    return t.length > 0 && KNOWN_HEADERS.some((p) => p.test(t));
+  };
+
+  const lines = text.split('\n');
+  let curSection = '';
+  let curContent: string[] = [];
+  const flush = () => {
+    if (curSection) {
+      sections.push({
+        section: curSection,
+        content: curContent.join(' ').replace(/\s+/g, ' ').trim() || '—',
+      });
+    }
+  };
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (isKnownHeader(trimmed)) {
+      flush();
+      curSection = trimmed.replace(/:$/, '').trim();
+      curContent = [];
+    } else if (curSection) {
+      curContent.push(trimmed);
+    }
+  }
+  flush();
+
   return sections;
 }
 
@@ -83,10 +134,11 @@ interface ActionPlanItem {
 
 /**
  * Parse action plan text into structured items (Sr No, Action Name, Addresses, Description, Expected outcome).
- * Supports two formats:
- * - "1. Action name: Title" then **Addresses:**, **Description:**, **Expected outcome:** (prompt output)
- * - "1. **Title**" then same labels (legacy)
- * Returns empty array if format doesn't match.
+ * Supports three formats:
+ * - Format A: "1. Action name: Title" then **Addresses:**, **Description:**, **Expected outcome:**
+ * - Format B: "1. **Title**" then same labels (current prompt output)
+ * - Format C: "1. Title" (plain, no bold) then same labels (fallback for older/inconsistent LLM output)
+ * Returns empty array only if no items could be extracted at all.
  */
 function parseActionPlanItems(raw: string): ActionPlanItem[] {
   const text = raw.replace(/''/g, "'").trim();
@@ -95,7 +147,6 @@ function parseActionPlanItems(raw: string): ActionPlanItem[] {
   // Format A: "1. Action name: Pace Control Practice" then **Addresses:**, **Description:**, **Expected outcome:**
   const blocksA = text.split(/(?:^|\n)\s*(\d+)\.\s*Action name:\s*/i);
   if (blocksA.length > 1) {
-    // split with capture: [preamble, "1", block1, "2", block2, ...]
     for (let idx = 1; idx + 1 < blocksA.length; idx += 2) {
       const srNo = parseInt(blocksA[idx], 10) || items.length + 1;
       const rest = (blocksA[idx + 1] ?? '').trim();
@@ -110,7 +161,7 @@ function parseActionPlanItems(raw: string): ActionPlanItem[] {
     if (items.length > 0) return items;
   }
 
-  // Format B (legacy): "1. **Action Name**" then block with **Addresses:**, **Description:**, **Expected outcome:**
+  // Format B: "1. **Action Name**" then **Addresses:**, **Description:**, **Expected outcome:**
   const blockRegex = /(\d+)\.\s*\*\*([^*]+)\*\*\s*([\s\S]*?)(?=\n\s*\d+\.\s*\*\*|$)/g;
   let m;
   while ((m = blockRegex.exec(text)) !== null) {
@@ -121,6 +172,26 @@ function parseActionPlanItems(raw: string): ActionPlanItem[] {
     const description = block.match(/\*\*Description:\*\*\s*([\s\S]*?)(?=\*\*Expected outcome:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
     const expectedOutcome = block.match(/\*\*Expected outcome:\*\*\s*([\s\S]*?)(?=\*\*Addresses:\*\*|\*\*Description:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
     items.push({ srNo, actionName, addresses, description, expectedOutcome });
+  }
+  if (items.length > 0) return items;
+
+  // Format C (fallback): "1. Plain Title" (no bold, no "Action name:" prefix) then **Addresses:**, **Description:**, **Expected outcome:**
+  // Catches older/inconsistent LLM outputs so they also render as a table.
+  const blocksC = text.split(/(?:^|\n)\s*(\d+)\.\s+(?!\*\*)(?!Action name:)/i);
+  if (blocksC.length > 1) {
+    for (let idx = 1; idx + 1 < blocksC.length; idx += 2) {
+      const srNo = parseInt(blocksC[idx], 10) || items.length + 1;
+      const rest = (blocksC[idx + 1] ?? '').trim();
+      const firstLine = rest.split(/\n/)[0] ?? '';
+      // Only treat as an item if the block actually contains at least one of the expected labels
+      if (!/\*\*(Addresses|Description|Expected outcome):/i.test(rest)) continue;
+      const actionName = firstLine.replace(/\*\*(Addresses|Description|Expected outcome):/i, '').trim();
+      const block = rest.replace(/^[^\n]*\n?/, '').trim();
+      const addresses = block.match(/\*\*Addresses:\*\*\s*([\s\S]*?)(?=\*\*Description:\*\*|\*\*Expected outcome:\*\*|\n\s*\d+\.\s|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
+      const description = block.match(/\*\*Description:\*\*\s*([\s\S]*?)(?=\*\*Expected outcome:\*\*|\n\s*\d+\.\s|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
+      const expectedOutcome = block.match(/\*\*Expected outcome:\*\*\s*([\s\S]*?)(?=\*\*Addresses:\*\*|\*\*Description:\*\*|\n\s*\d+\.\s|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
+      items.push({ srNo, actionName, addresses, description, expectedOutcome });
+    }
   }
   return items;
 }
