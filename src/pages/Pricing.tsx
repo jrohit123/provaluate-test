@@ -21,34 +21,6 @@ interface Plan {
   max_token?: number;
 }
 
-// Static free plans from DB (plan_cost 0 excluded by API fetch)
-const STATIC_FREE_PLANS: Plan[] = [
-  {
-    plan_id: '1f173d9c-1e09-4823-8045-d112353be7ed',
-    plan_name: 'Multi_User_Free',
-    plan_cost: 0,
-    max_cvs: 15,
-    max_users: 3,
-    active_jobs: 2,
-    status: 'Active',
-    currency: 'INR',
-    duration: 30,
-    max_token: 1000,
-  },
-  {
-    plan_id: '2dce0e46-f893-4b5c-a087-ca16965a15a5',
-    plan_name: 'FreeTrial-30',
-    plan_cost: 0,
-    max_cvs: 15,
-    max_users: 1,
-    active_jobs: 2,
-    status: 'Active',
-    currency: 'INR',
-    duration: 30,
-    max_token: 1000,
-  },
-];
-
 const Pricing = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,7 +65,6 @@ const Pricing = () => {
         .from('plans')
         .select('*')
         .eq('status', 'Active')
-        .gt('plan_cost', 0)
         .order('plan_cost', { ascending: true });
 
       if (error) throw error;
@@ -138,6 +109,9 @@ const Pricing = () => {
       description: `You selected ${plan.plan_name}. Please sign up to get started.`,
     });
   };
+
+  const freePlans = plans.filter((p) => Number(p.plan_cost) === 0);
+  const paidPlans = plans.filter((p) => Number(p.plan_cost) > 0);
 
   if (loading) {
     return (
@@ -221,8 +195,8 @@ const Pricing = () => {
 
         {/* Plans Grid – one row when space allows, no scroll */}
         <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-6 mb-12">
-          {/* Static free plans – same styling as paid plans */}
-          {STATIC_FREE_PLANS.map((plan) => (
+          {/* Free plans from DB – only plans with status = Active and plan_cost = 0 */}
+          {freePlans.map((plan) => (
             <Card
               key={plan.plan_id}
               className="border-2 border-gray-200 hover:border-indigo-300 transition-all duration-300 flex flex-col"
@@ -237,7 +211,7 @@ const Pricing = () => {
                 <div className="mb-6">
                   <div className="flex items-baseline">
                     <span className="text-4xl font-bold text-gray-900">₹0</span>
-                    <span className="text-gray-600 ml-2">/ {plan.duration} days</span>
+                    <span className="text-gray-600 ml-2">/ {plan.duration ?? 30} days</span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
                     Free trial
@@ -275,10 +249,7 @@ const Pricing = () => {
               </CardContent>
             </Card>
           ))}
-          {plans.length === 0 ? (
-            null
-          ) : (
-            plans.map((plan) => {
+          {paidPlans.map((plan) => {
               // Calculate prices using real-time exchange rate
               const monthlyBasePrice = currency === 'USD' ? Math.ceil(plan.plan_cost / exchangeRate) : plan.plan_cost;
               const annualBasePrice = plan.plan_cost * 12;
@@ -394,8 +365,7 @@ const Pricing = () => {
                   </CardContent>
                 </Card>
               );
-            })
-          )}
+          })}
 
           {/* One-time plans – coming soon (commented out for now) */}
           {/* <Card className="border-2 border-dashed border-emerald-500 flex flex-col opacity-95">
