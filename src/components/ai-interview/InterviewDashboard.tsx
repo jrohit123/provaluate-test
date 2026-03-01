@@ -558,7 +558,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                             <BarChart3 className="w-4 h-4 text-gray-400 flex-shrink-0" />
                             <div>
                               <div className="text-xs text-gray-500">Score</div>
-                              <div className="font-medium text-gray-900">{interview.overall_score}</div>
+                              <div className="font-medium text-gray-900">{interview.overall_score != null ? (Math.round(Number(interview.overall_score) * 10) / 10).toFixed(1) : '—'}</div>
                             </div>
                           </div>
                         )}
@@ -567,7 +567,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => window.open(`/final-results/${interview.id}`, '_blank')}
+                              onClick={() => window.open(`/final-results/${interview.id}?variant=recruiter`, '_blank')}
                               className="w-full"
                             >
                               <BarChart3 className="w-4 h-4 mr-2" />
@@ -859,7 +859,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => window.open(`/final-results/${interview.id}`, '_blank')}
+                              onClick={() => window.open(`/final-results/${interview.id}?variant=recruiter`, '_blank')}
                               title={interview.status === 'terminated' ? 'View Interview Details (Terminated)' : 'View Final Results'}
                               className="h-8 w-8 p-0"
                             >
@@ -869,7 +869,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                         </td>
                         <td className="py-3 px-4 border-r border-gray-200">
                           <div className="flex items-center justify-center">
-                            <span className="text-sm">{interview.overall_score}</span>
+                            <span className="text-sm">{interview.overall_score != null ? (Math.round(Number(interview.overall_score) * 10) / 10).toFixed(1) : '—'}</span>
                           </div> 
                         </td>
                         {/* Decision Column */}

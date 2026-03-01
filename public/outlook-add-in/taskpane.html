@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ProValuate - Assess Resumes</title>
+  <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Segoe UI, Tahoma, sans-serif; margin: 12px; font-size: 14px; }
+    h2 { margin: 0 0 12px 0; font-size: 16px; }
+    label { display: block; margin-top: 10px; margin-bottom: 4px; font-weight: 600; }
+    select { width: 100%; padding: 6px 8px; margin-bottom: 8px; }
+    button { margin-top: 12px; padding: 8px 16px; background: #0078d4; color: white; border: none; cursor: pointer; font-size: 14px; }
+    button:hover { background: #106ebe; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    #status { margin-top: 12px; padding: 8px; background: #f5f5f5; border-radius: 4px; min-height: 40px; font-size: 13px; white-space: pre-wrap; }
+    #status.error { background: #fde; color: #c00; }
+    #status.success { background: #dfd; color: #060; }
+    .link { color: #0078d4; text-decoration: none; }
+    .link:hover { text-decoration: underline; }
+    .settings-link { margin-top: 16px; font-size: 12px; }
+    .hint { font-size: 12px; color: #666; margin-top: 8px; }
+    .addin-logo { height: 32px; width: auto; display: block; margin-bottom: 8px; }
+    .secondary-btn { margin: 4px 0; padding: 6px 12px; font-size: 13px; background: #505a64; color: white; border: none; cursor: pointer; }
+    .secondary-btn:hover { background: #3d454d; }
+    .attachment-item { margin: 6px 0; }
+    .attachment-item label { font-weight: normal; display: inline; margin-left: 6px; }
+  </style>
+</head>
+<body>
+  <div id="signin-prompt" style="display: none;">
+    <h2>ProValuate</h2>
+    <p>Sign in to ProValuate to use the add-in. Your User ID and Company ID will be filled automatically.</p>
+    <p><a href="#" id="signin-link" class="link" target="_self">Sign in to ProValuate</a></p>
+    <p class="hint">You will be redirected to Settings with your details; save and you can assess resumes.</p>
+  </div>
+  <div id="main-content">
+    <!-- Logo shown in header via manifest icons -->
+    <!-- <p><img src="/favicon.png" alt="ProValuate" class="addin-logo" /></p> -->
+    <h2>ProValuate</h2>
+    <p>Assess resume attachments in this email against a job description.</p>
+    <div id="attachments-section">
+      <label>Resume attachments</label>
+      <p class="hint">Select which attachments to assess, then click Assess resumes.</p>
+      <button type="button" id="load-attachments" class="secondary-btn">Load attachments</button>
+      <div id="attachment-list"></div>
+    </div>
+    <label for="jd">Job description</label>
+    <select id="jd">
+      <option value="">-- Select JD --</option>
+    </select>
+    <label for="criteria">Criteria</label>
+    <select id="criteria">
+      <option value="">-- Select criteria --</option>
+    </select>
+    <button id="assess" disabled>Assess resumes</button>
+    <div id="status"></div>
+    <p class="settings-link"><a href="settings.html?v=2" class="link">Settings</a> &middot; <a href="https://flask-6421997997235322.kloudbeansite.com/api/outlook/register-start" id="register-link" target="_blank" class="link">Sign in for Outlook</a></p>
+  </div>
+  <script type="text/javascript" src="taskpane.js?v=3"></script>
+</body>
+</html>

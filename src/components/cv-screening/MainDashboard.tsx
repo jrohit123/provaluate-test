@@ -22,8 +22,8 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
   const { user } = useAuth();
   const isMobile = useIsMobile();
   
-  // State for browser extension info modal
-  const [isExtensionInfoOpen, setIsExtensionInfoOpen] = useState(false);
+  // State for email plugin info modal (Gmail / Outlook choice)
+  const [isEmailPluginInfoOpen, setIsEmailPluginInfoOpen] = useState(false);
   // State for collapsible sections (mobile only) - closed by default
   const [isCVScreeningOpen, setIsCVScreeningOpen] = useState(false);
   const [isInterviewOpen, setIsInterviewOpen] = useState(false);
@@ -164,21 +164,21 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
         </div>
         {/* Extension above Guided Tour on mobile (flex-col); same row on desktop (sm:flex-row) */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-          <span data-tour="browser-extension" className="inline-flex w-full sm:w-auto order-1">
+          <span data-tour="email-plugin" className="inline-flex w-full sm:w-auto order-1">
             <Button
               size="sm"
               onClick={() => {
                 UiAnalyticsService.track({
-                  name: 'dashboard_click_browser_extension_info',
+                  name: 'dashboard_click_email_plugin_info',
                   area: 'cv_screening_dashboard',
                 });
-                setIsExtensionInfoOpen(true);
+                setIsEmailPluginInfoOpen(true);
               }}
               className="flex items-center justify-center gap-2 w-full sm:w-auto"
             >
               <Puzzle className="w-4 h-4" />
-              <span className="hidden sm:inline">Browser Extension</span>
-              <span className="sm:hidden">Extension</span>
+              <span className="hidden sm:inline">Email Plugin</span>
+              <span className="sm:hidden">Plugin</span>
             </Button>
           </span>
           <Button 
@@ -200,10 +200,10 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
         </div>
       </div>
 
-      {/* Browser Extension Info Modal */}
+      {/* Email Plugin Info Modal (Gmail / Outlook) */}
       <BrowserExtensionInfo 
-        open={isExtensionInfoOpen} 
-        onOpenChange={setIsExtensionInfoOpen} 
+        open={isEmailPluginInfoOpen} 
+        onOpenChange={setIsEmailPluginInfoOpen} 
       />
 
       {/* Top Cards Row */}

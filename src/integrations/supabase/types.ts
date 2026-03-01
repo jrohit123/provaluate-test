@@ -256,6 +256,87 @@ export interface Database {
         Insert: Omit<Contract, 'id' | 'created_at'>;
         Update: Partial<Omit<Contract, 'id' | 'created_at'>>;
       }
+      candidates: {
+        Row: {
+          candidate_id: string
+          auth_user_id: string
+          email: string
+          first_name: string | null
+          last_name: string | null
+          email_confirmed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          candidate_id?: string
+          auth_user_id: string
+          email: string
+          first_name?: string | null
+          last_name?: string | null
+          email_confirmed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          candidate_id?: string
+          auth_user_id?: string
+          email?: string
+          first_name?: string | null
+          last_name?: string | null
+          email_confirmed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      jd_candidates: {
+        Row: {
+          id: string
+          candidate_id: string
+          title: string | null
+          jd_file: string | null
+          extracted_text: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          candidate_id: string
+          title?: string | null
+          jd_file?: string | null
+          extracted_text?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          candidate_id?: string
+          title?: string | null
+          jd_file?: string | null
+          extracted_text?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      candidate_profile_details: {
+        Row: {
+          candidate_id: string
+          profile_data: Json
+          resume_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          candidate_id: string
+          profile_data?: Json
+          resume_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          candidate_id?: string
+          profile_data?: Json
+          resume_url?: string | null
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never

@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
 import {
   UserPlus,
-  Settings,
   Copy,
   Send,
   FileText,
@@ -18,7 +17,8 @@ import {
   Link,
   ChevronDown,
   ChevronUp,
-  Upload
+  Upload,
+  ExternalLink
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,8 +29,17 @@ import { Label } from '@/components/ui/label';
 import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
 import { useInterviewCurrentStep, useInterviewNavigateToStep, INTERVIEW_WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
 
+/** When provided, JDs are loaded from this list (e.g. candidate's jd_candidates) instead of company tables. Recruiter flow unchanged when omitted. */
+export type InjectedJD = { jd_id: string; title: string | null; extracted_text?: string | null; jd_file?: string | null; created_at?: string };
+
 interface HRInterviewCreatorProps {
   onSectionReady?: () => void;
+  /** Optional: use these JDs instead of loading from jd_for_interview + job_descriptions (e.g. for candidate dashboard from jd_candidates). */
+  injectedJobDescriptions?: InjectedJD[];
+  /** Optional: called when JDs should be refreshed. Used when injectedJobDescriptions is provided. */
+  injectedLoadJobDescriptions?: () => Promise<void>;
+  /** Optional: when set, creates interview in candidate flow (sends candidate_id, null user_id/company_id). */
+  candidateId?: string;
 }
 
 interface Candidate {
@@ -71,13 +80,25 @@ interface CustomParameters {
   [key: string]: CustomParameter;
 }
 
-const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
+const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedLoadJobDescriptions, candidateId }: HRInterviewCreatorProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+  const location = useLocation();
   const interviewCurrentStep = useInterviewCurrentStep();
   const interviewNavigateToStep = useInterviewNavigateToStep();
-  
+  const pathname = location.pathname;
+  const isCandidateFlow = !!candidateId;
+  const candidateWorkflowPaths = ['/candidate-dashboard/jds/configure', '/candidate-dashboard/jds/create', '/candidate-dashboard/interviews'] as const;
+  const candidateCurrentStep = pathname.includes('/jds/create') ? 1 : pathname.includes('/interviews') ? 2 : 0;
+  const candidateNavigateToStep = (stepIndex: number) => {
+    if (stepIndex >= 0 && stepIndex < candidateWorkflowPaths.length) {
+      navigate(candidateWorkflowPaths[stepIndex]);
+    }
+  };
+  const currentStep = isCandidateFlow ? candidateCurrentStep : interviewCurrentStep;
+  const navigateToStep = isCandidateFlow ? candidateNavigateToStep : interviewNavigateToStep;
+
   const [formData, setFormData] = useState<FormData>({
     candidates: [{ name: '', email: '' }],
     position: '',
@@ -100,9 +121,48 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
   const [expandedParameters, setExpandedParameters] = useState(new Set());
   const [structuredQuestions, setStructuredQuestions] = useState<any[]>([]);
   const [sendingEmails, setSendingEmails] = useState(new Set());
+  /** When candidateId is set: logged-in candidate from candidates table (name, email) for creating interview for self. */
+  const [loggedInCandidate, setLoggedInCandidate] = useState<{ name: string; email: string } | null>(null);
+  const [loggedInCandidateLoading, setLoggedInCandidateLoading] = useState(false);
 
-  // Check for selected candidates from View All Results
+  // Effective JD list: use injected (candidate jd_candidates) or internal (recruiter company JDs)
+  const effectiveJobDescriptions = injectedJobDescriptions ?? jobDescriptions;
+
+  // Fetch logged-in candidate profile when in candidate flow (for name/email in create)
   useEffect(() => {
+    if (!candidateId) {
+      setLoggedInCandidate(null);
+      return;
+    }
+    let cancelled = false;
+    setLoggedInCandidateLoading(true);
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('candidates')
+          .select('first_name, last_name, email')
+          .eq('candidate_id', candidateId)
+          .single();
+        if (cancelled) return;
+        if (error || !data) {
+          setLoggedInCandidate(null);
+          return;
+        }
+        const first = (data.first_name ?? '').trim();
+        const last = (data.last_name ?? '').trim();
+        const name = [first, last].filter(Boolean).join(' ') || 'Candidate';
+        const email = (data.email ?? '').trim();
+        setLoggedInCandidate({ name, email });
+      } finally {
+        if (!cancelled) setLoggedInCandidateLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [candidateId]);
+
+  // Check for selected candidates from View All Results (recruiter flow only)
+  useEffect(() => {
+    if (candidateId) return;
     const selectedCandidates = sessionStorage.getItem('selectedCandidatesForInterview');
     if (selectedCandidates) {
       try {
@@ -188,7 +248,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
 
   // Handle job description selection
   const handleJobDescriptionSelect = async (jdId: string) => {
-    const selectedJD = jobDescriptions.find(jd => jd.jd_id === jdId);
+    const selectedJD = effectiveJobDescriptions.find((jd: { jd_id: string }) => jd.jd_id === jdId);
     if (selectedJD) {
       // Set the role name from the selected JD title
       setFormData(prev => ({ ...prev, position: selectedJD.title }));
@@ -410,7 +470,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
         }
         
         // Set the interview type, mode, and personalized questions FIRST
-        if (interviewType && ['technical', 'behavioral', 'mixed'].includes(interviewType)) {
+        if (interviewType && ['functional', 'behavioral', 'mixed'].includes(interviewType)) {
           console.log(`✅ Setting interview_type from database: ${interviewType}`);
         }
         
@@ -423,7 +483,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
         
         setFormData(prev => ({
           ...prev,
-          interviewType: (interviewType && ['technical', 'behavioral', 'mixed'].includes(interviewType)) ? interviewType : prev.interviewType,
+          interviewType: (interviewType && ['functional', 'behavioral', 'mixed'].includes(interviewType)) ? interviewType : prev.interviewType,
           interviewMode: detectedMode, // Auto-update mode based on database content
           personalizedQuestionsEnabled: !!personalizedQuestions,
           personalizedQuestions: personalizedQuestions || []
@@ -608,21 +668,21 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
     }
     
     // Calculate total questions (technical + personalized) - use same logic as AIsetup
-    let technicalQuestions = 0;
+    let functionalQuestions = 0;
     Object.values(paramsToUse).forEach(param => {
       const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
       const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
       const questionsPerParam = (minQuestions + maxQuestions) / 2;
-      technicalQuestions += questionsPerParam;
+      functionalQuestions += questionsPerParam;
     });
     
     // Round to nearest whole number for technical questions (no decimals)
-    technicalQuestions = Math.round(technicalQuestions);
+    functionalQuestions = Math.round(functionalQuestions);
     
     // Ensure minimum of 1 technical question
-    technicalQuestions = Math.max(1, technicalQuestions);
+    functionalQuestions = Math.max(1, functionalQuestions);
     
-    const totalQuestions = technicalQuestions + personalizedQuestions.length;
+    const totalQuestions = functionalQuestions + personalizedQuestions.length;
     
     // Total duration = base duration + personalized questions duration
     const totalDuration = baseDuration + personalizedDuration;
@@ -632,7 +692,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
       personalizedDuration,
       baseDuration,
       totalDuration,
-      technicalQuestions,
+      functionalQuestions,
       totalQuestions,
       usingProvidedParams: !!parameters
     });
@@ -692,12 +752,13 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
   };
 
 
-  // Load job descriptions on component mount
+  // Load job descriptions on component mount (recruiter only; candidate uses injected list)
   useEffect(() => {
+    if (injectedJobDescriptions != null) return;
     if (user?.profile?.company_id) {
       loadJobDescriptions();
     }
-  }, [user?.profile?.company_id]);
+  }, [user?.profile?.company_id, injectedJobDescriptions]);
 
   useEffect(() => {
     if (formData.position) {
@@ -804,11 +865,11 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
     const link = interviewLink || '{INTERVIEW_LINK}';
     
     switch (interviewType) {
-      case 'technical':
+      case 'functional':
         return {
           ...baseTemplate,
           subject: `Technical Interview Invitation - ${formData.position} Position`,
-          body: `${baseTemplate.greeting}You have been invited to complete a technical interview for the ${formData.position} position.\n\nThis interview will assess your technical skills and problem-solving abilities. Please ensure you have a stable internet connection and a quiet environment.\n\nPlease click the link below to start your interview:\n${link}\n\nGood luck!${baseTemplate.closing}`
+          body: `${baseTemplate.greeting}You have been invited to complete a functional interview for the ${formData.position} position.\n\nThis interview will assess your technical skills and problem-solving abilities. Please ensure you have a stable internet connection and a quiet environment.\n\nPlease click the link below to start your interview:\n${link}\n\nGood luck!${baseTemplate.closing}`
         };
       case 'behavioral':
         return {
@@ -820,7 +881,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
         return {
           ...baseTemplate,
           subject: `Comprehensive Interview Invitation - ${formData.position} Position`,
-          body: `${baseTemplate.greeting}You have been invited to complete a comprehensive interview for the ${formData.position} position.\n\nThis interview will cover both technical skills and behavioral competencies. Please ensure you have a stable internet connection and are prepared to discuss your experience and technical knowledge.\n\nPlease click the link below to start your interview:\n${link}\n\nGood luck!${baseTemplate.closing}`
+          body: `${baseTemplate.greeting}You have been invited to complete a comprehensive interview for the ${formData.position} position.\n\nThis interview will cover both functional skills and behavioral competencies. Please ensure you have a stable internet connection and are prepared to discuss your experience and technical knowledge.\n\nPlease click the link below to start your interview:\n${link}\n\nGood luck!${baseTemplate.closing}`
         };
       default:
         return {
@@ -1047,15 +1108,33 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
   };
 
   const createInterview = async () => {
-    // Validate all candidates have names and emails
-    const hasValidCandidates = formData.candidates.every(candidate => 
-      candidate.name.trim() && candidate.email.trim()
-    );
-    
-    if (!hasValidCandidates || !formData.position) {
+    // Candidate flow: require loaded profile; recruiter flow: require form candidates
+    if (candidateId) {
+      if (!loggedInCandidate?.name?.trim() || !loggedInCandidate?.email?.trim()) {
+        toast({
+          title: "Profile required",
+          description: "Your profile is still loading. Please wait or try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      const hasValidCandidates = formData.candidates.every(candidate =>
+        candidate.name.trim() && candidate.email.trim()
+      );
+      if (!hasValidCandidates || !formData.position) {
+        toast({
+          title: "Form Validation Error",
+          description: "Please fill in all candidate names, emails, and position",
+        });
+        return;
+      }
+    }
+
+    if (!formData.position) {
       toast({
         title: "Form Validation Error",
-        description: "Please fill in all candidate names, emails, and position",
+        description: "Please select a role/position",
       });
       return;
     }
@@ -1079,12 +1158,15 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
     }
 
     setIsCreating(true);
+
+    const candidatesToCreate = candidateId && loggedInCandidate
+      ? [{ name: loggedInCandidate.name, email: loggedInCandidate.email }]
+      : formData.candidates;
     
     try {
       const createdInterviewsList: CreatedInterview[] = [];
       
-      // Create interviews for all candidates
-      for (const candidate of formData.candidates) {
+      for (const candidate of candidatesToCreate) {
         console.log(`📤 Current formData before API call:`, {
           totalQuestions: formData.totalQuestions,
           duration: formData.duration,
@@ -1108,8 +1190,10 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
             interview_mode: formData.interviewMode,
             personalized_questions_enabled: formData.personalizedQuestionsEnabled,
             personalized_questions: formData.personalizedQuestions,
-            company_id: user?.profile?.company_id,
-            user_id: user?.id
+            ...(candidateId
+              ? { candidate_id: candidateId, company_id: null, user_id: null }
+              : { company_id: user?.profile?.company_id, user_id: user?.id }
+            ),
           }),
         });
 
@@ -1225,143 +1309,170 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
     return () => clearTimeout(t);
   }, [onSectionReady]);
 
+  const isCandidate = !!candidateId;
+  const titleClass = isCandidate ? 'text-sky-800' : 'text-primary-800';
+  const statBgClass = isCandidate ? 'bg-sky-50 border-sky-200' : 'bg-blue-50 border-blue-200';
+  const statNumClass = isCandidate ? 'text-sky-800' : 'text-blue-800';
+  const statLabelClass = isCandidate ? 'text-sky-600' : 'text-blue-600';
+  const statSubClass = isCandidate ? 'text-sky-500' : 'text-blue-500';
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen w-full min-w-0 overflow-x-hidden">
       <div className="lg:hidden">
         <CompactStepProgress
-          current={interviewCurrentStep}
+          current={currentStep}
           total={INTERVIEW_WORKFLOW_STEPS.length}
           steps={INTERVIEW_WORKFLOW_STEPS}
-          onStepClick={interviewNavigateToStep}
+          onStepClick={navigateToStep}
+          allowClickAnyStep={isCandidateFlow}
+          theme={isCandidateFlow ? 'candidate' : 'default'}
         />
       </div>
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
       <div className="mb-4 sm:mb-6">
-        <h2 className="text-xl sm:text-2xl font-bold text-primary-800 mb-2">Final Overview</h2>
-        <p className="text-sm sm:text-base text-muted-foreground">Set up an interview and generate a link for your candidate</p>
+        <h2 className={`text-xl sm:text-2xl font-bold mb-2 ${titleClass}`}>Final Overview</h2>
+        {!candidateId && (
+          <p className="text-sm sm:text-base text-muted-foreground">Set up an interview and generate a link for your candidate</p>
+        )}
       </div>
 
       {/* Interview Configuration Section */}
-      <Card className="animate-fade-in" data-tour="ai-interview-area">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            Send the Interview
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-6">
-            {/* Candidates Section */}
+      <Card className="animate-fade-in overflow-hidden" data-tour="ai-interview-area">
+        <CardContent className="space-y-6 pt-4 sm:pt-6 px-3 sm:px-6 pb-4 sm:pb-6">
+          <div className="space-y-6 min-w-0">
+            {/* Candidates Section: recruiter = import/add + name/email inputs; candidate = read-only self */}
             <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <Label className="text-sm sm:text-base font-semibold">Candidates *</Label>
-                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    onChange={handleImportCandidates}
-                    className="hidden"
-                    id="import-candidates-file"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => document.getElementById('import-candidates-file')?.click()}
-                    className="flex items-center gap-2 w-full sm:w-auto"
-                  >
-                    <Upload className="h-4 w-4" />
-                    Import Candidates
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addCandidate}
-                    className="flex items-center gap-2 w-full sm:w-auto"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Candidate
-                  </Button>
-                </div>
-              </div>
-              
-              {formData.candidates.map((candidate, index) => (
-                <div key={index} className="border rounded-lg p-3 sm:p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs sm:text-sm font-medium text-gray-700">
-                      Candidate {index + 1}
-                    </span>
-                    {formData.candidates.length > 1 && (
+              {candidateId ? (
+                <>
+                  <Label className="text-sm sm:text-base font-semibold">Candidate</Label>
+                  {loggedInCandidateLoading ? (
+                    <div className="flex items-center gap-2 text-gray-600 py-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading your profile…
+                    </div>
+                  ) : loggedInCandidate ? (
+                    <p className="text-sm text-gray-700 py-2">
+                      Interview for: <span className="font-medium text-gray-900">{loggedInCandidate.name}</span>
+                      {loggedInCandidate.email && (
+                        <> ({loggedInCandidate.email})</>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-amber-700 py-2">Unable to load your profile. Please try again or contact support.</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <Label className="text-sm sm:text-base font-semibold">Candidates *</Label>
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        onChange={handleImportCandidates}
+                        className="hidden"
+                        id="import-candidates-file"
+                      />
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        onClick={() => removeCandidate(index)}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => document.getElementById('import-candidates-file')?.click()}
+                        className="flex items-center gap-2 w-full sm:w-auto"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Upload className="h-4 w-4" />
+                        Import Candidates
                       </Button>
-                    )}
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor={`candidate-name-${index}`}>Name *</Label>
-                      <Input
-                        id={`candidate-name-${index}`}
-                        value={candidate.name}
-                        onChange={(e) => handleCandidateChange(index, 'name', e.target.value)}
-                        placeholder="Enter candidate's full name"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor={`candidate-email-${index}`}>Email *</Label>
-                      <Input
-                        id={`candidate-email-${index}`}
-                        type="email"
-                        value={candidate.email}
-                        onChange={(e) => handleCandidateChange(index, 'email', e.target.value)}
-                        placeholder="candidate@example.com"
-                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addCandidate}
+                        className="flex items-center gap-2 w-full sm:w-auto"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add Candidate
+                      </Button>
                     </div>
                   </div>
-                </div>
-              ))}
+                  {formData.candidates.map((candidate, index) => (
+                    <div key={index} className="border rounded-lg p-3 sm:p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs sm:text-sm font-medium text-gray-700">
+                          Candidate {index + 1}
+                        </span>
+                        {formData.candidates.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeCandidate(index)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label htmlFor={`candidate-name-${index}`}>Name *</Label>
+                          <Input
+                            id={`candidate-name-${index}`}
+                            value={candidate.name}
+                            onChange={(e) => handleCandidateChange(index, 'name', e.target.value)}
+                            placeholder="Enter candidate's full name"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor={`candidate-email-${index}`}>Email *</Label>
+                          <Input
+                            id={`candidate-email-${index}`}
+                            type="email"
+                            value={candidate.email}
+                            onChange={(e) => handleCandidateChange(index, 'email', e.target.value)}
+                            placeholder="candidate@example.com"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
 
             {/* Select Role Section */}
             <div className="space-y-2">
               <Label className="text-sm sm:text-base">Select Role *</Label>
               <Select onValueChange={handleJobDescriptionSelect}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
                   <SelectValue placeholder="Select a role from existing job descriptions..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {jobDescriptions.map(jd => (
+                  {effectiveJobDescriptions.map((jd: { jd_id: string; title: string | null }) => (
                     <SelectItem key={jd.jd_id} value={jd.jd_id}>
-                      {jd.title}
+                      {jd.title ?? 'Untitled'}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Custom Instructions Section */}
-            <div className="space-y-2">
-              <Label htmlFor="customInstructions" className="text-sm sm:text-base">Custom Instructions (Optional)</Label>
-              <Textarea
-                id="customInstructions"
-                name="customInstructions"
-                value={formData.customInstructions}
-                onChange={handleInputChange}
-                placeholder="Any specific instructions or focus areas for this interview..."
-                rows={3}
-                className="text-sm sm:text-base"
-              />
-            </div>
-            
+            {/* Custom Instructions Section (recruiter only) */}
+            {!candidateId && (
+              <div className="space-y-2">
+                <Label htmlFor="customInstructions" className="text-sm sm:text-base">Custom Instructions (Optional)</Label>
+                <Textarea
+                  id="customInstructions"
+                  name="customInstructions"
+                  value={formData.customInstructions}
+                  onChange={handleInputChange}
+                  placeholder="Any specific instructions or focus areas for this interview..."
+                  rows={3}
+                  className="text-sm sm:text-base"
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="interviewMode" className="text-sm sm:text-base">Interview Mode *</Label>
               <Select
@@ -1370,7 +1481,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
                   setFormData(prev => ({ ...prev, interviewMode: value }))
                 }
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
                   <SelectValue placeholder="Select interview mode..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -1392,33 +1503,32 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
       {formData.position && Object.keys(customParameters).length > 0 && formData.interviewMode === 'ai' && (
         <Card className="animate-fade-in">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              Interview Summary for {formData.position}
+            <CardTitle>
+              {formData.position}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Stats Overview */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-              <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200 text-center">
-                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.totalQuestions || 'Calculating...'}</div>
-                <div className="text-xs sm:text-sm text-blue-600 font-medium">Total Questions</div>
-                <div className="text-xs text-blue-500">Based on parameters</div>
+              <div className={`rounded-lg p-3 sm:p-4 border text-center ${statBgClass}`}>
+                <div className={`text-xl sm:text-2xl font-bold ${statNumClass}`}>{formData.totalQuestions || 'Calculating...'}</div>
+                <div className={`text-xs sm:text-sm font-medium ${statLabelClass}`}>Total Questions</div>
+                <div className={`text-xs ${statSubClass}`}>Based on parameters</div>
               </div>
-              <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200 text-center">
-                <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.duration != null ? Math.round(Number(formData.duration)) : 'Calculating...'} min</div>
-                <div className="text-xs sm:text-sm text-blue-600 font-medium">Duration</div>
-                <div className="text-xs text-blue-500">Auto-calculated</div>
+              <div className={`rounded-lg p-3 sm:p-4 border text-center ${statBgClass}`}>
+                <div className={`text-xl sm:text-2xl font-bold ${statNumClass}`}>{formData.duration != null ? Math.round(Number(formData.duration)) : 'Calculating...'} min</div>
+                <div className={`text-xs sm:text-sm font-medium ${statLabelClass}`}>Duration</div>
+                <div className={`text-xs ${statSubClass}`}>Auto-calculated</div>
               </div>
-              <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200 text-center">
-                <div className="text-xl sm:text-2xl font-bold text-blue-800">{Object.keys(customParameters).length}</div>
-                <div className="text-xs sm:text-sm text-blue-600 font-medium">Parameters</div>
-                <div className="text-xs text-blue-500">Assessment areas</div>
+              <div className={`rounded-lg p-3 sm:p-4 border text-center ${statBgClass}`}>
+                <div className={`text-xl sm:text-2xl font-bold ${statNumClass}`}>{Object.keys(customParameters).length}</div>
+                <div className={`text-xs sm:text-sm font-medium ${statLabelClass}`}>Parameters</div>
+                <div className={`text-xs ${statSubClass}`}>Assessment areas</div>
               </div>
-              <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200 text-center">
-                <div className="text-xl sm:text-2xl font-bold text-blue-800">{calculateTotalWeightage()}%</div>
-                <div className="text-xs sm:text-sm text-blue-600 font-medium">Weightage</div>
-                <div className="text-xs text-blue-500">Total weightage</div>
+              <div className={`rounded-lg p-3 sm:p-4 border text-center ${statBgClass}`}>
+                <div className={`text-xl sm:text-2xl font-bold ${statNumClass}`}>{calculateTotalWeightage()}%</div>
+                <div className={`text-xs sm:text-sm font-medium ${statLabelClass}`}>Weightage</div>
+                <div className={`text-xs ${statSubClass}`}>Total weightage</div>
               </div>
             </div>
 
@@ -1552,15 +1662,12 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
             {/* Personalized Questions Section */}
             {formData.personalizedQuestionsEnabled && formData.personalizedQuestions.length > 0 && (
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <div className="h-4 w-4 bg-blue-600 rounded flex items-center justify-center">
-                    <div className="h-2 w-2 bg-white rounded-full"></div>
-                  </div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">
                   Personalized Questions
                 </h3>
                 
                 <p className="text-sm text-gray-600 mb-4">
-                  These personal questions will be asked before technical questions. They are for review only and won't be scored.
+                  These personal questions will be asked before functional questions. They are for review only and won't be scored.
                 </p>
                 
                 <div className="space-y-3">
@@ -1668,7 +1775,7 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
                     {question.expectedAnswer && (
                       <div className="mt-3">
                         <div className="text-xs font-medium text-gray-600 mb-1">Expected Answer:</div>
-                        <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded border">
+                        <div className={`text-xs text-gray-600 p-2 rounded border ${isCandidate ? 'bg-sky-50' : 'bg-blue-50'}`}>
                           {question.expectedAnswer}
                         </div>
                       </div>
@@ -1681,15 +1788,12 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
             {/* Personalized Questions Section */}
             {formData.personalizedQuestionsEnabled && formData.personalizedQuestions.length > 0 && (
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <div className="h-4 w-4 bg-blue-600 rounded flex items-center justify-center">
-                    <div className="h-2 w-2 bg-white rounded-full"></div>
-                  </div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">
                   Personalized Questions
                 </h3>
                 
                 <p className="text-sm text-gray-600 mb-4">
-                  These personal questions will be asked before technical questions. They are for review only and won't be scored.
+                  These personal questions will be asked before functional questions. They are for review only and won't be scored.
                 </p>
                 
                 <div className="space-y-3">
@@ -1719,8 +1823,8 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
       <div className="flex justify-center">
         <Button
           onClick={createInterview}
-          disabled={isCreating}
-          className="px-6 sm:px-8 py-2 w-full sm:w-auto"
+          disabled={isCreating || (!!candidateId && (loggedInCandidateLoading || !loggedInCandidate))}
+          className={isCandidate ? 'px-6 sm:px-8 py-2 w-full sm:w-auto bg-sky-600 hover:bg-sky-700 text-white' : 'px-6 sm:px-8 py-2 w-full sm:w-auto'}
           size="default"
         >
           {isCreating ? (
@@ -1744,140 +1848,117 @@ const HRInterviewCreator = ({ onSectionReady }: HRInterviewCreatorProps) => {
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <Link className="h-5 w-5" />
-                Interview Links ({createdInterviews.length})
+                {candidateId ? 'Your interview link' : `Interview Links (${createdInterviews.length})`}
               </CardTitle>
-              <Button
-                onClick={async () => {
-                  if (sendingEmails.size > 0) return; // Prevent multiple clicks
-                  
-                  try {
-                    // Add all interviews to sending state
-                    const allInterviewIds = createdInterviews.map(interview => interview.interview_id);
-                    setSendingEmails(new Set(allInterviewIds));
-                    
-                    const interviewType = formData.interviewType || 'mixed';
-                    let successCount = 0;
-                    let failCount = 0;
-                    
-                    // Send emails to all candidates
-                    for (const interview of createdInterviews) {
-                      try {
-                        const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
-                        
-                        const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.SEND_INTERVIEW_EMAIL), {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json',
-                          },
-                          body: JSON.stringify({
-                            candidate_email: interview.candidate_email,
-                            candidate_name: interview.candidate_name,
-                            interview_link: interviewLink,
-                            position: formData.position,
-                            interview_type: interviewType
-                          })
-                        });
-                        
-                        const result = await response.json();
-                        
-                        if (result.success) {
-                          successCount++;
-                        } else {
-                          failCount++;
-                        }
-                      } catch (error) {
-                        failCount++;
+              {!candidateId && (
+                <Button
+                  onClick={async () => {
+                    if (sendingEmails.size > 0) return;
+                    try {
+                      const allInterviewIds = createdInterviews.map(interview => interview.interview_id);
+                      setSendingEmails(new Set(allInterviewIds));
+                      const interviewType = formData.interviewType || 'mixed';
+                      let successCount = 0;
+                      let failCount = 0;
+                      for (const interview of createdInterviews) {
+                        try {
+                          const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
+                          const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.SEND_INTERVIEW_EMAIL), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              candidate_email: interview.candidate_email,
+                              candidate_name: interview.candidate_name,
+                              interview_link: interviewLink,
+                              position: formData.position,
+                              interview_type: interviewType
+                            })
+                          });
+                          const result = await response.json();
+                          if (result.success) successCount++; else failCount++;
+                        } catch { failCount++; }
                       }
+                      if (successCount > 0 && failCount === 0) {
+                        toast({ title: "All Emails Sent Successfully", description: `Interview emails sent to all ${successCount} candidates` });
+                      } else if (successCount > 0 && failCount > 0) {
+                        toast({ title: "Partial Success", description: `Sent to ${successCount} candidates, ${failCount} failed`, variant: "destructive" });
+                      } else {
+                        toast({ title: "All Emails Failed", description: "Failed to send emails to all candidates", variant: "destructive" });
+                      }
+                    } catch (error) {
+                      toast({ title: "Email Error", description: "Failed to send emails. Please try again.", variant: "destructive" });
+                    } finally {
+                      setSendingEmails(new Set());
                     }
-                    
-                    // Show summary toast
-                    if (successCount > 0 && failCount === 0) {
-                      toast({
-                        title: "All Emails Sent Successfully",
-                        description: `Interview emails sent to all ${successCount} candidates`,
-                      });
-                    } else if (successCount > 0 && failCount > 0) {
-                      toast({
-                        title: "Partial Success",
-                        description: `Sent to ${successCount} candidates, ${failCount} failed`,
-                        variant: "destructive",
-                      });
-                    } else {
-                      toast({
-                        title: "All Emails Failed",
-                        description: "Failed to send emails to all candidates",
-                        variant: "destructive",
-                      });
-                    }
-                  } catch (error) {
-                    toast({
-                      title: "Email Error",
-                      description: "Failed to send emails. Please try again.",
-                      variant: "destructive",
-                    });
-                  } finally {
-                    // Clear all sending states
-                    setSendingEmails(new Set());
-                  }
-                }}
-                size="sm"
-                disabled={sendingEmails.size > 0}
-              >
-                {sendingEmails.size > 0 ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-2" />
-                    Send All Emails
-                  </>
-                )}
-              </Button>
+                  }}
+                  size="sm"
+                  disabled={sendingEmails.size > 0}
+                >
+                  {sendingEmails.size > 0 ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending...</>
+                  ) : (
+                    <><Send className="h-4 w-4 mr-2" />Send All Emails</>
+                  )}
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Individual Interview Links */}
-            {createdInterviews.map((interview, index) => (
-              <div key={interview.interview_id} className="bg-gray-50 rounded-lg p-3 sm:p-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 gap-2">
-                  <p className="text-xs sm:text-sm font-medium text-gray-800 break-words">
-                    {interview.candidate_name} ({interview.candidate_email})
-                  </p>
-                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                    Interview {index + 1}
-                  </span>
+            {createdInterviews.map((interview, index) => {
+              const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
+              return (
+                <div key={interview.interview_id} className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                  {!candidateId && (
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 gap-2">
+                      <p className="text-xs sm:text-sm font-medium text-gray-800 break-words">
+                        {interview.candidate_name} ({interview.candidate_email})
+                      </p>
+                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        Interview {index + 1}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-3">
+                    <Input
+                      value={interviewLink}
+                      readOnly
+                      className="font-mono text-xs sm:text-sm flex-1"
+                    />
+                    {candidateId ? (
+                      <Button
+                        size="sm"
+                        className="w-full sm:w-auto shrink-0 bg-sky-600 hover:bg-sky-700 text-white"
+                        onClick={() => window.open(interviewLink, '_blank', 'noopener,noreferrer')}
+                      >
+                        <ExternalLink className="h-4 w-4 sm:mr-2" />
+                        Open in new tab
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={() => copyInterviewLink(interview.interview_id)}
+                        size="sm"
+                        className="w-full sm:w-auto"
+                      >
+                        <Copy className="h-4 w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Copy</span>
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-3">
-                  <Input
-                    value={`${window.location.origin}/interview/${interview.interview_id}`}
-                    readOnly
-                    className="font-mono text-xs sm:text-sm"
-                  />
-                  <Button
-                    onClick={() => copyInterviewLink(interview.interview_id)}
-                    size="sm"
-                    className="w-full sm:w-auto"
-                  >
-                    <Copy className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Copy</span>
-                  </Button>
+              );
+            })}
+            {!candidateId && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
+                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                  <p className="font-medium text-blue-800">Total Interviews</p>
+                  <p className="text-blue-600 font-mono">{createdInterviews.length}</p>
+                </div>
+                <div className="bg-green-50 rounded-lg p-3">
+                  <p className="font-medium text-green-800">Status</p>
+                  <p className="text-green-600">Ready for candidates</p>
                 </div>
               </div>
-            ))}
-            
-            {/* Summary */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
-              <div className="bg-blue-50 rounded-lg p-3">
-                <p className="font-medium text-blue-800">Total Interviews</p>
-                <p className="text-blue-600 font-mono">{createdInterviews.length}</p>
-              </div>
-              <div className="bg-green-50 rounded-lg p-3">
-                <p className="font-medium text-green-800">Status</p>
-                <p className="text-green-600">Ready for candidates</p>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       )}

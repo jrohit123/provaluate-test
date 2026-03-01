@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -7,7 +7,6 @@ import { API_CONFIG, buildApiUrl, apiCall } from '@/constants/api';
 import { INTERVIEW_CONSTANTS } from '@/constants/interview';
 import { JobDescription, StructuredQuestion, CustomParameters } from '@/types/interview';
 import {
-  Settings,
   FileText,
   Plus,
   Trash2,
@@ -17,9 +16,11 @@ import {
   Loader2,
   X,
   Upload,
-  Maximize2
+  Maximize2,
+  HelpCircle
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,8 +32,17 @@ import StructuredInterviewSetup from './StructuredInterviewSetup';
 import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
 import { useInterviewCurrentStep, useInterviewNavigateToStep, INTERVIEW_WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
 
+/** When provided, JDs are loaded from this list (e.g. candidate's jd_candidates) instead of company tables. Recruiter flow unchanged when omitted. */
+export type InjectedJD = { jd_id: string; title: string | null; extracted_text?: string | null; jd_file?: string | null; created_at?: string };
+
 interface AIsetupProps {
   onSectionReady?: () => void;
+  /** Optional: use these JDs instead of loading from jd_for_interview + job_descriptions (e.g. for candidate dashboard from jd_candidates). */
+  injectedJobDescriptions?: InjectedJD[];
+  /** Optional: called when JDs should be refreshed (e.g. refetch jd_candidates). Used when injectedJobDescriptions is provided. */
+  injectedLoadJobDescriptions?: () => Promise<void>;
+  /** When set, uploads go to jd_candidates (candidate_id) instead of jd_for_interview (company_id). Use for candidate dashboard. */
+  candidateId?: string;
 }
 
 interface FormData {
@@ -41,7 +51,7 @@ interface FormData {
   jobDescription: string;
   duration: number;
   totalQuestions: number;
-  interviewType: 'technical' | 'behavioral' | 'mixed';
+  interviewType: 'functional' | 'behavioral' | 'mixed';
   interviewMode: 'ai' | 'structured';
   personalizedQuestionsEnabled: boolean;
   personalizedQuestions: Array<{question: string, timeLimit: number}>;
@@ -63,11 +73,24 @@ interface CustomParameter {
 
 
 
-const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
+const CANDIDATE_WORKFLOW_PATHS = ['/candidate-dashboard/jds/configure', '/candidate-dashboard/jds/create', '/candidate-dashboard/interviews'] as const;
+
+const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedLoadJobDescriptions, candidateId }: AIsetupProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const interviewCurrentStep = useInterviewCurrentStep();
   const interviewNavigateToStep = useInterviewNavigateToStep();
+  const pathname = location.pathname;
+  const isCandidateFlow = !!candidateId;
+  const candidateCurrentStep = pathname.includes('/jds/create') ? 1 : pathname.includes('/interviews') ? 2 : 0;
+  const candidateNavigateToStep = (stepIndex: number) => {
+    if (stepIndex >= 0 && stepIndex < CANDIDATE_WORKFLOW_PATHS.length) {
+      navigate(CANDIDATE_WORKFLOW_PATHS[stepIndex]);
+    }
+  };
+  const currentStep = isCandidateFlow ? candidateCurrentStep : interviewCurrentStep;
+  const navigateToStep = isCandidateFlow ? candidateNavigateToStep : interviewNavigateToStep;
   
   const [formData, setFormData] = useState<FormData>({
     position: '',
@@ -82,6 +105,8 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
   });
 
   const [jobDescriptions, setJobDescriptions] = useState<JobDescription[]>([]);
+  // Effective JD list: use injected (candidate jd_candidates) or internal (recruiter company JDs)
+  const effectiveJobDescriptions = injectedJobDescriptions ?? jobDescriptions;
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -202,7 +227,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
 
   // Handle job description selection from both CV screening and AI interview
   const handleJobDescriptionSelect = async (jdId: string) => {
-    const selectedJD = jobDescriptions.find(jd => jd.jd_id === jdId);
+    const selectedJD = effectiveJobDescriptions.find((jd: { jd_id: string }) => jd.jd_id === jdId);
     if (selectedJD) {
       // Set the role name from the selected JD title
       setFormData(prev => ({ ...prev, position: selectedJD.title }));
@@ -420,31 +445,46 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
 
       console.log('🔄 Cleaned text length:', cleanedText.length);
 
-      // Save JD record to jd_for_interview table
-      console.log('🔄 Saving JD record to database...');
-      const { data: jdData, error: jdError } = await supabase
-        .from('jd_for_interview')
-        .insert({
-          title: formData.newRole,
-          jd_file: uploadData.path,
-          extracted_text: cleanedText,
-          company_id: user?.profile?.company_id
-        })
-        .select()
-        .single();
-
-      if (jdError) {
-        console.error('❌ Database insert error:', jdError);
-        throw new Error(`Database insert failed: ${jdError.message}`);
+      // Save JD: candidate → jd_candidates; recruiter → jd_for_interview
+      if (candidateId) {
+        console.log('🔄 Saving JD record to jd_candidates (candidate)...');
+        const { data: jdData, error: jdError } = await supabase
+          .from('jd_candidates')
+          .insert({
+            candidate_id: candidateId,
+            title: formData.newRole,
+            jd_file: uploadData.path,
+            extracted_text: cleanedText
+          })
+          .select()
+          .single();
+        if (jdError) {
+          console.error('❌ jd_candidates insert error:', jdError);
+          throw new Error(`Database insert failed: ${jdError.message}`);
+        }
+        console.log('✅ JD record saved to jd_candidates:', jdData);
+        setFormData(prev => ({ ...prev, jobDescription: cleanedText }));
+        if (injectedLoadJobDescriptions) await injectedLoadJobDescriptions();
+      } else {
+        console.log('🔄 Saving JD record to jd_for_interview (recruiter)...');
+        const { data: jdData, error: jdError } = await supabase
+          .from('jd_for_interview')
+          .insert({
+            title: formData.newRole,
+            jd_file: uploadData.path,
+            extracted_text: cleanedText,
+            company_id: user?.profile?.company_id
+          })
+          .select()
+          .single();
+        if (jdError) {
+          console.error('❌ Database insert error:', jdError);
+          throw new Error(`Database insert failed: ${jdError.message}`);
+        }
+        console.log('✅ JD record saved to database:', jdData);
+        setFormData(prev => ({ ...prev, jobDescription: cleanedText }));
+        await loadJobDescriptions();
       }
-      console.log('✅ JD record saved to database:', jdData);
-      
-      // Update form data with cleaned text
-      setFormData(prev => ({ ...prev, jobDescription: cleanedText }));
-      console.log('✅ Form data updated with extracted text');
-      
-      // Reload job descriptions to include the newly uploaded one
-      await loadJobDescriptions();
       console.log('✅ Job descriptions reloaded');
       
       // Load existing parameters for this role (if any)
@@ -720,28 +760,28 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
       return;
     }
 
-    let technicalQuestions = 0; // Will be calculated and rounded to whole number
+    let functionalQuestions = 0; // Will be calculated and rounded to whole number
 
     // Calculate questions per parameter: (min + max) ÷ 2, then round to nearest whole number
     Object.values(parameters).forEach(param => {
       const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
       const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
       const questionsPerParam = (minQuestions + maxQuestions) / 2;
-      technicalQuestions += questionsPerParam;
+      functionalQuestions += questionsPerParam;
     });
 
     // Round to nearest whole number for technical questions (no decimals)
-    technicalQuestions = Math.round(technicalQuestions);
+    functionalQuestions = Math.round(functionalQuestions);
     
     // Ensure minimum of 1 technical question
-    technicalQuestions = Math.max(1, technicalQuestions);
+    functionalQuestions = Math.max(1, functionalQuestions);
     
     // Add personalized questions to total
     const personalizedQuestionsCount = formData.personalizedQuestionsEnabled ? formData.personalizedQuestions.length : 0;
-    const totalQuestions = technicalQuestions + personalizedQuestionsCount;
+    const totalQuestions = functionalQuestions + personalizedQuestionsCount;
     
     console.log('🔍 calculateDuration debug:', {
-      technicalQuestions,
+      functionalQuestions,
       personalizedQuestionsEnabled: formData.personalizedQuestionsEnabled,
       personalizedQuestions: formData.personalizedQuestions,
       personalizedQuestionsCount,
@@ -793,7 +833,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
     
     console.log('🔄 Duration calculation summary:', {
       parameters: Object.keys(parameters).length,
-      technicalQuestions,
+      functionalQuestions,
       personalizedQuestionsCount,
       totalQuestions,
       calculatedDuration: calculatedDuration.toFixed(2),
@@ -801,7 +841,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
       finalDuration,
       breakdown: {
         answerTime: (calculatedDuration - 2).toFixed(2),
-        readingTime: (technicalQuestions * 0.5).toFixed(2),
+        readingTime: (functionalQuestions * 0.5).toFixed(2),
         buffer: 2
       },
       parameterDetails: Object.values(parameters).map(p => ({
@@ -816,7 +856,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
     console.log('🔄 Setting form data:', {
       previousDuration: formData.duration,
       calculatedDuration: finalDuration,
-      technicalQuestions,
+      functionalQuestions,
       personalizedQuestionsCount,
       totalQuestions
     });
@@ -1060,12 +1100,13 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
     }
   };
 
-  // Load job descriptions on component mount
+  // Load job descriptions on component mount (recruiter only; candidate uses injected list)
   useEffect(() => {
+    if (injectedJobDescriptions != null) return; // Candidate: no company load
     if (user?.profile?.company_id) {
       loadJobDescriptions(); // Load existing JDs from CV screening and AI interview
     }
-  }, [user?.profile?.company_id]);
+  }, [user?.profile?.company_id, injectedJobDescriptions]);
 
   useEffect(() => {
     // Immediately clear parameters when position changes to prevent showing old parameters
@@ -1309,28 +1350,28 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
     const totalDuration = Math.round(baseDuration + personalizedDuration);
     
     // Calculate total questions (technical + personalized) - use same logic as calculateDuration
-    let technicalQuestions = 0;
+    let functionalQuestions = 0;
     Object.values(paramsToUse).forEach(param => {
       const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
       const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
       const questionsPerParam = (minQuestions + maxQuestions) / 2;
-      technicalQuestions += questionsPerParam;
+      functionalQuestions += questionsPerParam;
     });
     
     // Round to nearest whole number for technical questions (no decimals)
-    technicalQuestions = Math.round(technicalQuestions);
+    functionalQuestions = Math.round(functionalQuestions);
     
     // Ensure minimum of 1 technical question
-    technicalQuestions = Math.max(1, technicalQuestions);
+    functionalQuestions = Math.max(1, functionalQuestions);
     
-    const totalQuestions = technicalQuestions + personalizedQuestions.length;
+    const totalQuestions = functionalQuestions + personalizedQuestions.length;
     
     console.log('🔄 Duration recalculation:', {
       personalizedQuestions: personalizedQuestions.length,
       personalizedDuration,
       baseDuration,
       totalDuration,
-      technicalQuestions,
+      functionalQuestions,
       totalQuestions,
       usingProvidedParams: !!parameters
     });
@@ -1445,45 +1486,96 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
     return () => clearTimeout(t);
   }, [onSectionReady]);
 
+  const isCandidate = !!candidateId;
+  const titleClass = isCandidate ? 'text-sky-800' : 'text-primary-800';
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen w-full min-w-0 overflow-x-hidden">
       {/* Mobile step progress (interview workflow) */}
       <div className="lg:hidden">
         <CompactStepProgress
-          current={interviewCurrentStep}
+          current={currentStep}
           total={INTERVIEW_WORKFLOW_STEPS.length}
           steps={INTERVIEW_WORKFLOW_STEPS}
-          onStepClick={interviewNavigateToStep}
+          onStepClick={navigateToStep}
+          allowClickAnyStep={isCandidateFlow}
+          theme={isCandidateFlow ? 'candidate' : 'default'}
         />
       </div>
-      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-      <div className="mb-4 sm:mb-6">
-        <h2 className="text-xl sm:text-2xl font-bold text-primary-800 mb-2">Interview Parameters Setup</h2>
-        <p className="text-sm sm:text-base text-muted-foreground">Select the role and configure the interview settings</p>
+      <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
+      <div className="mb-4 sm:mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className={`text-xl sm:text-2xl font-bold mb-2 ${titleClass}`}>Interview Parameters Setup</h2>
+          <p className="text-sm sm:text-base text-muted-foreground">Select the role and configure the interview settings</p>
+        </div>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="icon" className="shrink-0 rounded-full h-9 w-9" aria-label="Help">
+              <HelpCircle className="h-5 w-5" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-full max-w-md sm:max-w-lg max-h-[85vh] overflow-y-auto" align="end" side="bottom">
+            <div className="space-y-4 text-sm">
+              <h3 className="font-semibold text-base border-b pb-2">Interview Parameters Setup — Help</h3>
+
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">Interview modes</h4>
+                <ul className="list-disc list-inside space-y-1 text-gray-600">
+                  <li><strong>AI Interview (Dynamic):</strong> Questions are generated dynamically based on candidate responses.</li>
+                  <li><strong>Structured Interview (Pre-defined):</strong> Pre-defined questions and parameters set by HR.</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">Interview types (AI mode)</h4>
+                <ul className="list-disc list-inside space-y-1 text-gray-600">
+                  <li><strong>Functional:</strong> Focus on functional skills and problem-solving.</li>
+                  <li><strong>Behavioral:</strong> Focus on soft skills and communication.</li>
+                  <li><strong>Mixed:</strong> Combination of both functional and behavioral aspects.</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">How to create parameters (existing JD)</h4>
+                <ol className="list-decimal list-inside space-y-1 text-gray-600">
+                  <li>Select a job description from the <strong>Select Role</strong> dropdown.</li>
+                  <li>Choose <strong>Interview Mode</strong> (AI or Structured) and, for AI, the <strong>Interview Type</strong>.</li>
+                  <li>Click <strong>Generate AI Parameters</strong> to create assessment parameters from the job description.</li>
+                  <li>Modify parameters as needed: weights, questions, bullet points, timer, level of question, and any other settings. Ensure parameter <strong>weights total 100%</strong>.</li>
+                  <li>Click <strong>Save Parameters</strong> when done.</li>
+                </ol>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">How to save a new role (step by step)</h4>
+                <ol className="list-decimal list-inside space-y-1 text-gray-600">
+                  <li>Enter the new role name in the <strong>New Role (Optional)</strong> field.</li>
+                  <li>Upload a job description (PDF, DOCX, or TXT) or paste it into the Job Description area.</li>
+                  <li>Select the new role from the &quot;Select Role&quot; dropdown after it appears, or ensure the job description is filled.</li>
+                  <li>Generate and save parameters as above; the new role will be associated with this configuration.</li>
+                </ol>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Interview Configuration Section */}
-      <Card className="animate-fade-in" data-tour="setup-area">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            Interview Configuration
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      <Card className="animate-fade-in overflow-hidden" data-tour="setup-area">
+        <CardContent className="space-y-6 pt-4 sm:pt-6 px-3 sm:px-6 pb-4 sm:pb-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Left Column */}
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0">
               <div className="space-y-2">
                 <Label className="text-sm sm:text-base">Select Role *</Label>
                 <Select onValueChange={handleJobDescriptionSelect}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
                     <SelectValue placeholder="Select a role from existing job descriptions..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {jobDescriptions.map(jd => (
+                    {effectiveJobDescriptions.map((jd: { jd_id: string; title: string | null }) => (
                       <SelectItem key={jd.jd_id} value={jd.jd_id}>
-                        {jd.title}
+                        {jd.title ?? 'Untitled'}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1510,7 +1602,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                     setFormData(prev => ({ ...prev, interviewMode: value }))
                   }
                 >
-                  <SelectTrigger className="w-full h-14">
+                  <SelectTrigger className="w-full min-h-[44px] h-12 sm:h-14 touch-manipulation">
                     <SelectValue placeholder="Select interview mode..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -1534,10 +1626,6 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-500">
-                  AI Interview: Dynamic questions generated based on candidate responses<br className="hidden sm:block"/>
-                  Structured Interview: Pre-defined questions and parameters set by HR
-                </p>
               </div>
 
               {formData.interviewMode === 'ai' && (
@@ -1545,7 +1633,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                   <Label htmlFor="interviewType" className="text-sm sm:text-base">Interview Type *</Label>
                   <Select 
                     value={formData.interviewType} 
-                    onValueChange={async (value: 'technical' | 'behavioral' | 'mixed') => {
+                    onValueChange={async (value: 'functional' | 'behavioral' | 'mixed') => {
                       setFormData(prev => ({ ...prev, interviewType: value }));
                       // Trigger parameter loading when interview type changes
                       if (formData.position) {
@@ -1553,20 +1641,15 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                       }
                     }}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
                       <SelectValue placeholder="Select interview type..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="technical">Technical</SelectItem>
+                      <SelectItem value="functional">Functional</SelectItem>
                       <SelectItem value="behavioral">Behavioral</SelectItem>
-                      <SelectItem value="mixed">Mixed (Technical + Behavioral)</SelectItem>
+                      <SelectItem value="mixed">Mixed (Functional + Behavioral)</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-gray-500">
-                    Technical: Focus on technical skills and problem-solving<br/>
-                    Behavioral: Focus on soft skills and communication<br/>
-                    Mixed: Combination of both technical and behavioral aspects
-                  </p>
                 </div>
               )}
 
@@ -1584,7 +1667,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                 <div
                   className={`border-2 border-dashed rounded-lg p-4 sm:p-6 text-center transition-colors ${
                     isDragOver 
-                      ? 'border-primary-500 bg-primary-50' 
+                      ? (candidateId ? 'border-sky-500 bg-sky-50' : 'border-primary-500 bg-primary-50')
                       : 'border-gray-300 hover:border-gray-400'
                   }`}
                   onDragOver={handleDragOver}
@@ -1695,12 +1778,12 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
         <Card className="animate-fade-in">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+              {/*<div className="w-2 h-2 bg-blue-500 rounded-full"></div>*/}
               Interview Summary
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-sm mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 text-sm mb-4">
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
                 <div className="text-blue-600 font-medium text-xs sm:text-sm">Total Questions</div>
                 <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.totalQuestions || 'Calculating...'}</div>
@@ -1724,61 +1807,6 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                 <div className="text-xs text-blue-600">Total weightage</div>
               </div>
             </div>
-            
-            {/* Editable Duration and Questions Fields - Only for AI Interviews */}
-            {formData.interviewMode === 'ai' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="duration" className="text-sm sm:text-base">Duration (minutes)</Label>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                  <Input
-                    id="duration"
-                    type="number"
-                    name="duration"
-                    value={formData.duration != null ? Math.round(Number(formData.duration)) : ''}
-                    onChange={handleInputChange}
-                    min="5"
-                    max="120"
-                    placeholder="Auto-calculated"
-                    className="text-sm sm:text-base"
-                  />
-                  <div className="text-xs sm:text-sm text-gray-500 min-w-fit">
-                    {formData.duration != null ? `${Math.round(Number(formData.duration))} min` : 'Calculating...'}
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500">
-                  Duration includes answer time + 30 seconds reading time per question + 2 min buffer. You can edit this value manually.
-                </p>
-                <div className="text-xs text-blue-600 font-medium">
-                  💡 Formula: Sum of (questions × (answer time + 0.5 min reading)) for each parameter + 2 min buffer = {formData.duration != null ? Math.round(Number(formData.duration)) : 'Calculating...'} min
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="totalQuestions" className="text-sm sm:text-base">Total Questions</Label>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                  <Input
-                    id="totalQuestions"
-                    type="number"
-                    name="totalQuestions"
-                    value={formData.totalQuestions}
-                    onChange={handleInputChange}
-                    min="1"
-                    max="30"
-                    step="1"
-                    placeholder="Auto-calculated"
-                    className="text-sm sm:text-base"
-                  />
-                  <div className="text-xs sm:text-sm text-gray-500 min-w-fit">
-                    {formData.totalQuestions ? `${formData.totalQuestions} questions` : 'Calculating...'}
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500">
-                  Total questions = Sum of (min+max)/2 for each parameter, rounded to nearest whole number. You can edit this value manually.
-                </p>
-              </div>
-            </div>
-            )}
 
           </CardContent>
         </Card>
@@ -1788,12 +1816,10 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
       {formData.interviewMode === 'ai' ? (
         <div>
 
-        {/* AI Interview - Interview Questions Configuration Section */}
+        {/* AI Interview - Parameters Section */}
         <Card className="animate-fade-in">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5" />
-              Interview Questions Configuration for {formData.position || 'Selected Role'}
+            <CardTitle>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -1805,7 +1831,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                 <Button
                   onClick={() => generateDynamicParameters(true)} // Always force fresh generation
                   disabled={isLoadingParameters || !formData.position}
-                  className="flex items-center gap-2 w-full sm:w-auto"
+                  className={isCandidate ? 'flex items-center gap-2 w-full sm:w-auto bg-sky-600 hover:bg-sky-700 text-white' : 'flex items-center gap-2 w-full sm:w-auto'}
                   title="Generate completely new parameters, ignoring any cached versions"
                 >
                   {isLoadingParameters ? (
@@ -1827,7 +1853,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                 <Button
                   onClick={saveParameters}
                   disabled={isSavingParameters || Math.abs(calculateTotalWeightage() - 100) > 0.01}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
+                  className={isCandidate ? 'flex items-center gap-2 bg-sky-600 hover:bg-sky-700 text-white w-full sm:w-auto' : 'flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto'}
                 >
                   {isSavingParameters ? (
                     <>
@@ -1997,7 +2023,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                               </div>
                             </div>
                             <div className="space-y-2">
-                              <Label className="text-xs sm:text-sm" title="Time allocated for candidate to answer (question reading time is additional)">Answer Time (min)</Label>
+                              <Label className="text-xs sm:text-sm" title="Time allocated for candidate to answer (question reading time is additional)">Answer Time (minutes)</Label>
                               <div className="text-base sm:text-lg font-semibold text-gray-900">
                                 {param.max_time}
                               </div>
@@ -2278,7 +2304,7 @@ const HRInterviewCreator = ({ onSectionReady }: AIsetupProps) => {
                   {formData.personalizedQuestionsEnabled && (
                     <div className="space-y-3">
                       <p className="text-xs text-blue-600">
-                        Add 1-2 personal questions that will be asked before technical questions. These are for review only and won't be scored.
+                        Add 1-2 personal questions that will be asked before functional questions. These are for review only and won't be scored.
                       </p>
                       
                       {formData.personalizedQuestions.map((question, index) => (

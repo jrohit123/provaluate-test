@@ -306,7 +306,20 @@ serve(async (req) => {
       });
     }
 
-    // 9. Return success only after password test passes
+    // 9. Check if user is a candidate (for redirect: candidate-login vs main login)
+    let isCandidate = false;
+    try {
+      const { data: candidateRow } = await client
+        .from("candidates")
+        .select("candidate_id")
+        .eq("auth_user_id", verifiedUser.id)
+        .maybeSingle();
+      isCandidate = !!candidateRow;
+    } catch (e) {
+      console.warn("Could not check candidates table for redirect:", e);
+    }
+
+    // 10. Return success only after password test passes
     console.log(`✅ All checks passed - Password is ready for use`);
     return new Response(JSON.stringify({ 
       success: true, 
@@ -317,6 +330,7 @@ serve(async (req) => {
         email_confirmed_at: verifiedUser.email_confirmed_at,
         confirmed_at: verifiedUser.confirmed_at,
       },
+      isCandidate,
       debug: {
         password_set: true,
         email_confirmed: !!verifiedUser.email_confirmed_at,

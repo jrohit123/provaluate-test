@@ -568,7 +568,7 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
           
           <CardContent className="space-y-4">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-            <span className="text-sm font-medium text-primary-700 whitespace-nowrap">Select saved criteria:</span>
+            <span className="text-sm font-medium text-primary-700 whitespace-nowrap">Select criteria grid:</span>
             <Select value={selectedGridId} onValueChange={handleGridSelect}>
               <SelectTrigger className="w-full sm:w-[200px] h-11 sm:h-10">
                 <SelectValue placeholder="Choose evaluation criteria..." />

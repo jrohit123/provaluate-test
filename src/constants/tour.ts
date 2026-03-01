@@ -65,14 +65,14 @@ export const MAIN_TOUR_STEPS: TourStep[] = [
     placement: 'bottom',
   },
   {
-    target: '[data-tour="browser-extension"]',
-    content: 'Extension: pull JDs and criteria from job boards into ProValuate (desktop only).',
+    target: '[data-tour="email-plugin"]',
+    content: 'Email plugin: evaluate resumes from Gmail or Outlook. Choose your provider to get the extension or add-in.',
     placement: 'bottom',
     disableScrolling: false,
   },
 ];
 
-/** Main tour uses sidebar-trigger on mobile (sidebar is in Sheet). Extension step always included (button always visible). */
+/** Main tour uses sidebar-trigger on mobile (sidebar is in Sheet). Email plugin step always included (button always visible). */
 export function getMainTourSteps(isMobile: boolean): TourStep[] {
   const steps = MAIN_TOUR_STEPS.map((s) => ({ ...s }));
   const sidebarIdx = steps.findIndex((s) => s.target === '[data-tour="sidebar"]');

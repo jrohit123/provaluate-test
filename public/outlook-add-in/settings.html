@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ProValuate Add-in Settings</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Segoe UI, Tahoma, sans-serif; margin: 16px; max-width: 480px; }
+    h2 { font-size: 18px; margin-bottom: 12px; }
+    label { display: block; margin-top: 12px; margin-bottom: 4px; font-weight: 600; }
+    input { width: 100%; padding: 8px; margin-bottom: 8px; }
+    button { margin-top: 16px; padding: 8px 20px; background: #0078d4; color: white; border: none; cursor: pointer; }
+    button:hover { background: #106ebe; }
+    .hint { font-size: 12px; color: #666; margin-top: 2px; }
+    #saved { margin-top: 12px; color: #060; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h2>ProValuate Outlook Add-in Settings</h2>
+  <p>If you arrived here after signing in, the fields below are pre-filled. Click Save to return to the task pane and assess resumes.</p>
+  <label for="company_id">Company ID</label>
+  <input type="text" id="company_id" placeholder="Auto-filled when you sign in">
+  <span class="hint">Your company ID (auto-filled when you use &quot;Sign in to ProValuate&quot; in the task pane)</span>
+  <label for="user_id">User ID</label>
+  <input type="text" id="user_id" placeholder="Auto-filled when you sign in">
+  <span class="hint">Your ProValuate user ID (auto-filled when you use &quot;Sign in to ProValuate&quot; in the task pane)</span>
+  <button id="save">Save</button>
+  <div id="saved"></div>
+  <script type="text/javascript" src="settings.js?v=2"></script>
+</body>
+</html>

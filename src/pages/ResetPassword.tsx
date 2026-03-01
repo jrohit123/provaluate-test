@@ -56,11 +56,14 @@ const ResetPassword = () => {
         const tokenAccess = searchParams.get('access_token');
         const tokenRefresh = searchParams.get('refresh_token');
         const tokenType = searchParams.get('type');
-        
+        const userType = searchParams.get('user'); // 'recruiter' | 'candidate' for post-reset redirect
         if (tokenAccess) {
           sessionStorage.setItem('reset_access_token', tokenAccess);
           if (tokenRefresh) sessionStorage.setItem('reset_refresh_token', tokenRefresh);
           if (tokenType) sessionStorage.setItem('reset_type', tokenType);
+        }
+        if (userType === 'recruiter' || userType === 'candidate') {
+          sessionStorage.setItem('reset_redirect_user', userType);
         }
       }
       
@@ -253,21 +256,22 @@ const ResetPassword = () => {
       if (data?.success) {
         console.log('✅ Password confirmed successfully:', data);
         setMessage('Password updated successfully! Redirecting to login...');
-        
-        // Sign out the temporary session
-        await supabase.auth.signOut();
-        
-        // Clear any cached auth state and stored tokens
-        localStorage.removeItem('recruitai_auth');
-        sessionStorage.removeItem('reset_access_token');
-        sessionStorage.removeItem('reset_refresh_token');
-        sessionStorage.removeItem('reset_type');
-        setInviteToken(null); // Clear stored token
-        
-        // Redirect after a short delay
+
+        // Redirect from Edge Function response (isCandidate set by confirm-password)
+        const loginPath = data?.isCandidate === true ? '/candidate-login' : '/login';
+
+        // Navigate first so auth listeners don't override with /login; then sign out and clear
+        const delayMs = 500;
         setTimeout(() => {
-          navigate('/login', { replace: true });
-        }, 2000);
+          navigate(loginPath, { replace: true });
+          supabase.auth.signOut();
+          localStorage.removeItem('recruitai_auth');
+          sessionStorage.removeItem('reset_access_token');
+          sessionStorage.removeItem('reset_refresh_token');
+          sessionStorage.removeItem('reset_type');
+          sessionStorage.removeItem('reset_redirect_user');
+          setInviteToken(null);
+        }, delayMs);
       } else {
         const errorMsg = data?.error || 'Failed to update password. Please try again.';
         console.error('❌ Password update failed:', errorMsg);

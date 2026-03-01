@@ -5,9 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Users, Clock, CheckCircle, Shield, Mail, FileText, BarChart, UserPlus, LogIn } from "lucide-react";
+import { Users, Clock, CheckCircle, Shield, Mail, FileText, BarChart, UserPlus, LogIn, Menu } from "lucide-react";
 import { SessionManager } from '@/utils/sessionManager';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 const PYTHON_API_BASE = import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com';
 
@@ -25,6 +26,7 @@ const Login = () => {
   const [resetMessage, setResetMessage] = useState('');
   const [resetError, setResetError] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -109,6 +111,18 @@ const Login = () => {
         }
 
         console.log('✅ Login successful for user:', data.user.id, data.user.email);
+        const { data: candidateRow } = await supabase.from('candidates').select('candidate_id').eq('auth_user_id', data.user.id).maybeSingle();
+        const { data: userProfile } = await supabase.from('users').select('user_id').eq('user_id', data.user.id).maybeSingle();
+        if (candidateRow && !userProfile) {
+          await supabase.auth.signOut();
+          toast({
+            title: 'Use candidate login',
+            description: 'This account is a candidate account. Please sign in on the candidate login page.',
+            variant: 'destructive',
+          });
+          setIsLoading(false);
+          return;
+        }
         await completeLogin(data.user.id);
       }
     } catch (error: any) {
@@ -135,8 +149,8 @@ const Login = () => {
         throw new Error('Please enter a valid email address.');
       }
 
-      // Get the current origin for the redirect URL
-      const redirectTo = `${window.location.origin}/reset-password`;
+      // Get the current origin for the redirect URL (user=recruiter so ResetPassword redirects back to main login)
+      const redirectTo = `${window.location.origin}/reset-password?user=recruiter`;
       
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
         redirectTo: redirectTo,
@@ -267,6 +281,17 @@ const Login = () => {
           // no-op
         }
 
+      // If user came from Outlook add-in sign-in link, redirect to add-in Settings with user_id and company_id
+      const searchParams = new URLSearchParams(window.location.search);
+      const redirectTo = searchParams.get('redirect');
+      if (redirectTo === 'outlook-add-in') {
+        const origin = window.location.origin;
+        const settingsUrl = `${origin}/outlook-add-in/settings.html?user_id=${encodeURIComponent(userId)}&company_id=${encodeURIComponent(companyId)}&api_base=${encodeURIComponent(PYTHON_API_BASE)}`;
+        window.location.href = settingsUrl;
+        setIsLoading(false);
+        return;
+      }
+
       // Show toast only on desktop
       if (!isMobile) {
         toast({
@@ -300,14 +325,53 @@ const Login = () => {
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 hidden sm:block"></h1>
             </div>
             <div className="flex items-center space-x-3 sm:space-x-6">
-              <a href="/pricing" className="text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
-                <span className="hidden sm:inline">Pricing</span>
-                <span className="sm:hidden">Pricing</span>
+              <Link to="/candidate-login" className="hidden sm:inline-block text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
+                Candidate login
+              </Link>
+              {/* Desktop: Pricing & Impact visible */}
+              <a href="/pricing" className="hidden sm:inline-block text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
+                Pricing
               </a>
-              <a href="/impact" className="text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
-                <span className="hidden sm:inline">Impact</span>
-                <span className="sm:hidden">Impact</span>
+              <a href="/impact" className="hidden sm:inline-block text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
+                Impact
               </a>
+              {/* Mobile: hamburger menu with Pricing & Impact */}
+              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <button
+                    type="button"
+                    className="sm:hidden p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+                    aria-label="Open menu"
+                  >
+                    <Menu className="h-6 w-6" />
+                  </button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-56">
+                  <nav className="flex flex-col gap-4 pt-8">
+                    <Link
+                      to="/candidate-login"
+                      className="text-base font-medium text-gray-700 hover:text-gray-900 transition-colors"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Candidate login
+                    </Link>
+                    <a
+                      href="/pricing"
+                      className="text-base font-medium text-gray-700 hover:text-gray-900 transition-colors"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Pricing
+                    </a>
+                    <a
+                      href="/impact"
+                      className="text-base font-medium text-gray-700 hover:text-gray-900 transition-colors"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Impact
+                    </a>
+                  </nav>
+                </SheetContent>
+              </Sheet>
               <a href="mailto:sales@aitamate.com?&subject=Provaluate&body=Hi,%0D%0A%0D%0AI'm facing an issue with ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors">
                 <Mail className="h-6 w-6 sm:h-8 sm:w-8" />
               </a>
@@ -320,10 +384,10 @@ const Login = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         <div className="text-center mb-8 sm:mb-12">
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-3 sm:mb-4 px-4">
-            AI-Powered Candidate Assessment System
+            Hiring-Risk Intelligence Platform
           </h2>
           <p className="text-base sm:text-lg lg:text-xl text-gray-600 max-w-3xl mx-auto px-4">
-            Upload job descriptions and resumes to get intelligent candidate rankings based on your custom criteria. Save time, improve accuracy, and make better hiring decisions.
+            Eliminate bias with weighted parameters, clear risk visibility, and structured evaluation. Hire on intelligence, not intuition.
           </p>
         </div>
 
@@ -334,8 +398,8 @@ const Login = () => {
               <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-green-200 flex items-center justify-center">
                 <Clock className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
               </div>
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">70% Time Saved</h3>
-              <p className="text-sm sm:text-base text-gray-600">Automated resume screening and ranking eliminates hours of manual review</p>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">Structured Evaluation</h3>
+              <p className="text-sm sm:text-base text-gray-600">Consistent, criteria-driven assessment—no more gut-feel or panel chaos.</p>
             </CardContent>
           </Card>
 
@@ -344,8 +408,8 @@ const Login = () => {
               <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-blue-200 flex items-center justify-center">
                 <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
               </div>
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">95% Accuracy</h3>
-              <p className="text-sm sm:text-base text-gray-600">AI-powered assessment ensures consistent and objective candidate evaluation</p>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">Risk Visibility</h3>
+              <p className="text-sm sm:text-base text-gray-600">See why Candidate A scored above B. Weighted parameters and clear risk—so you&apos;re not operating on intuition.</p>
             </CardContent>
           </Card>
 
@@ -354,8 +418,8 @@ const Login = () => {
               <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-purple-200 flex items-center justify-center">
                 <Shield className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
               </div>
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">Enterprise Ready</h3>
-              <p className="text-sm sm:text-base text-gray-600">Secure, scalable, and compliant with enterprise-grade security standards</p>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">Built for Leadership Hiring</h3>
+              <p className="text-sm sm:text-base text-gray-600">Mid to senior hiring with the rigor it deserves. Same process, different stakes—handled right.</p>
             </CardContent>
           </Card>
         </div>
@@ -478,7 +542,7 @@ const Login = () => {
             </Card>
             
             <div className="mt-6 sm:mt-8 text-center text-xs sm:text-sm text-gray-600 px-4">
-              <p>Automated JD parsing and resume ranking engine based on customized selection criteria</p>
+              <p>Structured evaluation from job description to interview. Built for mid to senior hiring.</p>
               <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-2">
                 <span className="text-gray-500">Powered by</span>
                 <a 
@@ -502,15 +566,12 @@ const Login = () => {
         {/* Call to Action Section */}
         <div className="bg-gradient-to-r from-purple-600 to-pink-500 py-4 sm:py-6 rounded-lg mx-4 sm:mx-0">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white mb-1">
-              ⚡ 30-Day Free Trial
+            <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white mb-2">
+              Start hiring on intelligence—not intuition.
             </h3>
-            <p className="text-base sm:text-lg lg:text-xl text-white mb-3 sm:mb-4">
-              Start assessing candidates today - no credit card required!
+            <p className="text-base sm:text-lg text-white/95 max-w-2xl mx-auto">
+              See why every candidate ranks the way they do. Weighted criteria, clear risk, and one place to run it all.
             </p>
-            <div className="flex items-center justify-center text-white">
-              <span className="text-sm sm:text-base lg:text-lg">⭐ Join 50+ companies already using ProValuate</span>
-            </div>
           </div>
         </div>
       </main>

@@ -253,12 +253,12 @@ const InterviewSession = () => {
   // Show loading state while creating interview
   if (isCreatingInterview) {
     return (
-              <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-100 flex items-center justify-center">
+              <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-sky-100 flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-6"></div>
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-sky-600 mx-auto mb-6"></div>
             <h2 className="text-2xl font-bold text-gray-800 mb-4">Creating Your Interview</h2>
             <p className="text-gray-600 text-lg">Setting up your personalized interview session...</p>
-            <div className="mt-6 flex items-center justify-center gap-2 text-blue-600">
+            <div className="mt-6 flex items-center justify-center gap-2 text-sky-600">
             <Target className="w-5 h-5" />
             <span>{location.state?.roleName || 'Role'}</span>
           </div>
@@ -949,7 +949,7 @@ const InterviewSession = () => {
       setAudioBlob(null);
       setTranscript('');
       
-      // Move to next personalized question or start technical questions
+      // Move to next personalized question or start functional questions
       if (currentPersonalizedQuestionIndex < personalizedQuestions.length - 1) {
         const nextIndex = currentPersonalizedQuestionIndex + 1;
         setCurrentPersonalizedQuestionIndex(nextIndex);
@@ -962,9 +962,9 @@ const InterviewSession = () => {
         setQuestionTimeRemaining(questionTimeInSeconds);
         setIsQuestionTimerActive(true);
       } else {
-        // All personalized questions answered, start technical questions
+        // All personalized questions answered, start functional questions
         setIsPersonalizedQuestionPhase(false);
-        await loadInterviewData(); // Load technical questions
+        await loadInterviewData(); // Load functional questions
       }
       
     } catch (error) {
@@ -978,11 +978,11 @@ const InterviewSession = () => {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-sky-100 relative overflow-hidden">
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-15 animate-blob animation-delay-2000"></div>
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-sky-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-sky-300 rounded-full mix-blend-multiply filter blur-xl opacity-15 animate-blob animation-delay-2000"></div>
       </div>
 
               {/* Header */}
@@ -994,12 +994,12 @@ const InterviewSession = () => {
                 <AitamateLogo size="default" showTagline={false} variant="default" />
                                   <div>
                     <h1 className="text-2xl font-bold text-slate-800">Live Interview Session</h1>
-                    <p className="text-blue-600 text-sm">Powered by AitamateAI</p>
+                    <p className="text-sky-600 text-sm">Powered by AitamateAI</p>
                   </div>
               </div>
               
               <div className="hidden lg:flex items-center gap-8 text-sm">
-                <div className="flex items-center gap-3 text-slate-600 hover:text-blue-600 transition-colors cursor-pointer group">
+                <div className="flex items-center gap-3 text-slate-600 hover:text-sky-600 transition-colors cursor-pointer group">
                   <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                     <User className="w-4 h-4 text-slate-600" />
                   </div>
@@ -1009,7 +1009,7 @@ const InterviewSession = () => {
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-3 text-slate-600 hover:text-blue-600 transition-colors cursor-pointer group">
+                <div className="flex items-center gap-3 text-slate-600 hover:text-sky-600 transition-colors cursor-pointer group">
                   <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                     <Target className="w-4 h-4 text-slate-600" />
                   </div>
@@ -1036,10 +1036,10 @@ const InterviewSession = () => {
             
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer group border border-slate-200">
-                <Clock className="w-5 h-5 text-blue-600 group-hover:scale-110 transition-transform" />
+                <Clock className="w-5 h-5 text-sky-600 group-hover:scale-110 transition-transform" />
                 <div>
                   <div className="text-slate-800 font-bold text-lg">{formatTime(timeRemaining)}</div>
-                  <div className="text-blue-600 text-xs">Time Remaining</div>
+                  <div className="text-sky-600 text-xs">Time Remaining</div>
                 </div>
               </div>
               
@@ -1080,7 +1080,7 @@ const InterviewSession = () => {
                   <button
                     onClick={toggleVideo}
                     className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 shadow-2xl ${
-                      isVideoOn ? 'bg-blue-600 hover:bg-blue-700 border border-blue-200' : 'bg-red-500 hover:bg-red-600'
+                      isVideoOn ? 'bg-sky-600 hover:bg-sky-700 border border-sky-200' : 'bg-red-500 hover:bg-red-600'
                     }`}
                   >
                     {isVideoOn ? <Video className="w-7 h-7 text-white" /> : <VideoOff className="w-7 h-7 text-white" />}
@@ -1098,14 +1098,14 @@ const InterviewSession = () => {
 
                 {/* Audio Level Indicator */}
                 {isRecording && (
-                  <div className="absolute top-6 right-6 bg-white/90 backdrop-blur-sm rounded-xl p-3 border border-blue-200 shadow-lg">
+                  <div className="absolute top-6 right-6 bg-white/90 backdrop-blur-sm rounded-xl p-3 border border-sky-200 shadow-lg">
                     <div className="flex items-center gap-2 mb-2">
-                      <Volume2 className="w-4 h-4 text-blue-600" />
+                      <Volume2 className="w-4 h-4 text-sky-600" />
                       <span className="text-gray-800 text-sm font-medium">Audio Level</span>
                     </div>
-                    <div className="w-32 h-2 bg-blue-100 rounded-full overflow-hidden">
+                    <div className="w-32 h-2 bg-sky-100 rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-blue-600 rounded-full transition-all duration-100"
+                        className="h-full bg-sky-600 rounded-full transition-all duration-100"
                         style={{ width: `${(audioLevel / 255) * 100}%` }}
                       ></div>
                     </div>
@@ -1118,8 +1118,8 @@ const InterviewSession = () => {
             {showWelcome && welcomeMessage && (
               <div className="bg-white rounded-3xl p-8 hover:shadow-2xl transition-all duration-300 border border-slate-200 shadow-lg mb-6">
                 <div className="text-center">
-                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <User className="w-8 h-8 text-blue-600" />
+                  <div className="w-16 h-16 bg-sky-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <User className="w-8 h-8 text-sky-600" />
                   </div>
                   <h2 className="text-2xl font-bold text-slate-800 mb-4">Welcome to Your Interview!</h2>
                   <p className="text-slate-600 text-lg leading-relaxed mb-6">
@@ -1127,11 +1127,11 @@ const InterviewSession = () => {
                   </p>
                   
                   {hasPersonalizedQuestions && personalizedQuestions.length > 0 && (
-                    <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
-                      <p className="text-blue-800 text-sm mb-2">
-                        This interview includes {personalizedQuestions.length} personal question{personalizedQuestions.length > 1 ? 's' : ''} that will be asked before the technical assessment.
+                    <div className="mb-6 p-4 bg-sky-50 rounded-xl border border-sky-200">
+                      <p className="text-sky-800 text-sm mb-2">
+                        This interview includes {personalizedQuestions.length} personal question{personalizedQuestions.length > 1 ? 's' : ''} that will be asked before the functional assessment.
                       </p>
-                      <p className="text-blue-600 text-xs">
+                      <p className="text-sky-600 text-xs">
                         These questions are for review only and won't be scored.
                       </p>
                     </div>
@@ -1141,7 +1141,7 @@ const InterviewSession = () => {
                     {hasPersonalizedQuestions && personalizedQuestions.length > 0 ? (
                       <button
                         onClick={startPersonalizedQuestions}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl transition-all duration-300 flex items-center gap-2 hover:scale-105 active:scale-95"
+                        className="bg-sky-600 hover:bg-sky-700 text-white px-8 py-3 rounded-xl transition-all duration-300 flex items-center gap-2 hover:scale-105 active:scale-95"
                       >
                         <CheckCircle className="w-5 h-5" />
                         Start with Personal Questions
@@ -1149,7 +1149,7 @@ const InterviewSession = () => {
                     ) : (
                       <button
                         onClick={() => setShowWelcome(false)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl transition-all duration-300 flex items-center gap-2 hover:scale-105 active:scale-95"
+                        className="bg-sky-600 hover:bg-sky-700 text-white px-8 py-3 rounded-xl transition-all duration-300 flex items-center gap-2 hover:scale-105 active:scale-95"
                       >
                         <CheckCircle className="w-5 h-5" />
                         Start Interview
@@ -1166,9 +1166,9 @@ const InterviewSession = () => {
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center animate-pulse ${
-                    isPersonalizedQuestionPhase ? 'bg-blue-100' : 'bg-blue-100'
+                    isPersonalizedQuestionPhase ? 'bg-sky-100' : 'bg-sky-100'
                   }`}>
-                    <HelpCircle className="w-6 h-6 text-blue-600" />
+                    <HelpCircle className="w-6 h-6 text-sky-600" />
                   </div>
                   <div>
                     <h3 className="text-2xl font-bold text-slate-800">
@@ -1222,10 +1222,10 @@ const InterviewSession = () => {
                         : !audioBlob 
                           ? 'bg-slate-300 text-slate-500 cursor-not-allowed' 
                           : isSubmitting || isProcessing
-                            ? 'bg-blue-500 text-white cursor-wait'
+                            ? 'bg-sky-500 text-white cursor-wait'
                             : isPersonalizedQuestionPhase
-                              ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                              : 'bg-blue-600 hover:bg-blue-700 text-white'
+                              ? 'bg-sky-600 hover:bg-sky-700 text-white'
+                              : 'bg-sky-600 hover:bg-sky-700 text-white'
                     }`}
                   >
                     {answerSubmitted ? (
@@ -1303,7 +1303,7 @@ const InterviewSession = () => {
                 </div>
               </div>
               
-              <div className={`bg-white rounded-2xl p-6 hover:bg-blue-50 transition-all duration-500 border border-blue-200 shadow-lg ${
+              <div className={`bg-white rounded-2xl p-6 hover:bg-sky-50 transition-all duration-500 border border-sky-200 shadow-lg ${
                 isTransitioning ? 'opacity-50 scale-95' : 'opacity-100 scale-100'
               }`}>
                 <div className="flex items-start gap-4">
@@ -1313,7 +1313,7 @@ const InterviewSession = () => {
                   <div className="flex-1">
                     {isTransitioning ? (
                       <div className="flex items-center gap-3">
-                        <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                        <Loader2 className="w-5 h-5 animate-spin text-sky-600" />
                         <p className="text-gray-600 text-lg">Generating next question...</p>
                       </div>
                     ) : (
@@ -1325,11 +1325,11 @@ const InterviewSession = () => {
                       </p>
                     )}
                     <div className="flex items-center gap-4 mt-4 text-sm">
-                      <div className="flex items-center gap-2 text-blue-600">
+                      <div className="flex items-center gap-2 text-sky-600">
                         <Sparkles className="w-4 h-4" />
                         <span>AI Generated</span>
                       </div>
-                      <div className="flex items-center gap-2 text-blue-600">
+                      <div className="flex items-center gap-2 text-sky-600">
                         <Target className="w-4 h-4" />
                         <span>{interviewData.position}</span>
                       </div>
@@ -1346,7 +1346,7 @@ const InterviewSession = () => {
             {/* Recording Status */}
             <div className="bg-white rounded-2xl p-6 hover:shadow-2xl transition-all duration-300 border border-slate-200 shadow-lg">
               <div className="flex items-center gap-4 mb-4">
-                <div className={`w-4 h-4 rounded-full ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-blue-400'} transition-all duration-300`}></div>
+                <div className={`w-4 h-4 rounded-full ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-sky-400'} transition-all duration-300`}></div>
                 <h3 className="text-xl font-bold text-slate-800">
                   {isRecording ? 'Recording...' : 'Ready to Record'}
                 </h3>
@@ -1382,7 +1382,7 @@ const InterviewSession = () => {
             {/* Transcript */}
             <div className="bg-white rounded-2xl p-6 hover:shadow-2xl transition-all duration-300 border border-slate-200 shadow-lg">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex items-center justify-center animate-pulse">
+                <div className="w-10 h-10 bg-gradient-to-r from-sky-500 to-sky-600 rounded-xl flex items-center justify-center animate-pulse">
                   <FileText className="w-5 h-5 text-white" />
                 </div>
                 <div>
@@ -1408,12 +1408,12 @@ const InterviewSession = () => {
               
               <div className="mt-4 flex justify-between text-xs text-slate-500">
                 <div className="flex items-center gap-2">
-                  <span className="hover:text-blue-600 transition-colors cursor-pointer">
+                  <span className="hover:text-sky-600 transition-colors cursor-pointer">
                     Words: {transcript.split(' ').filter(w => w.length > 0).length}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="hover:text-blue-600 transition-colors cursor-pointer">
+                  <span className="hover:text-sky-600 transition-colors cursor-pointer">
                     Duration: {isRecording ? '00:30' : '00:00'}
                   </span>
                 </div>
