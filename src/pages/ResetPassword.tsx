@@ -257,23 +257,8 @@ const ResetPassword = () => {
         console.log('✅ Password confirmed successfully:', data);
         setMessage('Password updated successfully! Redirecting to login...');
 
-        // Determine redirect from DB: candidate vs recruiter (before signOut)
-        let loginPath = '/login';
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user?.id) {
-            const { data: candidateRow } = await supabase
-              .from('candidates')
-              .select('candidate_id')
-              .eq('auth_user_id', user.id)
-              .maybeSingle();
-            if (candidateRow) {
-              loginPath = '/candidate-login';
-            }
-          }
-        } catch (e) {
-          console.warn('Could not determine user type for redirect, defaulting to /login', e);
-        }
+        // Redirect from Edge Function response (isCandidate set by confirm-password)
+        const loginPath = data?.isCandidate === true ? '/candidate-login' : '/login';
 
         // Sign out the temporary session
         await supabase.auth.signOut();
