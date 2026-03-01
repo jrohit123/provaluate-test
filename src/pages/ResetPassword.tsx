@@ -56,11 +56,14 @@ const ResetPassword = () => {
         const tokenAccess = searchParams.get('access_token');
         const tokenRefresh = searchParams.get('refresh_token');
         const tokenType = searchParams.get('type');
-        
+        const userType = searchParams.get('user'); // 'recruiter' | 'candidate' for post-reset redirect
         if (tokenAccess) {
           sessionStorage.setItem('reset_access_token', tokenAccess);
           if (tokenRefresh) sessionStorage.setItem('reset_refresh_token', tokenRefresh);
           if (tokenType) sessionStorage.setItem('reset_type', tokenType);
+        }
+        if (userType === 'recruiter' || userType === 'candidate') {
+          sessionStorage.setItem('reset_redirect_user', userType);
         }
       }
       
@@ -264,9 +267,12 @@ const ResetPassword = () => {
         sessionStorage.removeItem('reset_type');
         setInviteToken(null); // Clear stored token
         
-        // Redirect after a short delay
+        // Redirect to recruiter or candidate login based on who requested the reset
+        const redirectUser = sessionStorage.getItem('reset_redirect_user');
+        const loginPath = redirectUser === 'candidate' ? '/candidate-login' : '/login';
+        sessionStorage.removeItem('reset_redirect_user');
         setTimeout(() => {
-          navigate('/login', { replace: true });
+          navigate(loginPath, { replace: true });
         }, 2000);
       } else {
         const errorMsg = data?.error || 'Failed to update password. Please try again.';

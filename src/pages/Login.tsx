@@ -149,8 +149,8 @@ const Login = () => {
         throw new Error('Please enter a valid email address.');
       }
 
-      // Get the current origin for the redirect URL
-      const redirectTo = `${window.location.origin}/reset-password`;
+      // Get the current origin for the redirect URL (user=recruiter so ResetPassword redirects back to main login)
+      const redirectTo = `${window.location.origin}/reset-password?user=recruiter`;
       
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
         redirectTo: redirectTo,

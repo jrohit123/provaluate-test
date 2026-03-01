@@ -76,7 +76,7 @@ const CandidateLogin = () => {
       if (!emailRegex.test(resetEmail)) {
         throw new Error('Please enter a valid email address.');
       }
-      const redirectTo = `${window.location.origin}/reset-password`;
+      const redirectTo = `${window.location.origin}/reset-password?user=candidate`;
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
         redirectTo,
       });
