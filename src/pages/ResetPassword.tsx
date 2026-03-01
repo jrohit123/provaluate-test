@@ -256,21 +256,36 @@ const ResetPassword = () => {
       if (data?.success) {
         console.log('✅ Password confirmed successfully:', data);
         setMessage('Password updated successfully! Redirecting to login...');
-        
+
+        // Determine redirect from DB: candidate vs recruiter (before signOut)
+        let loginPath = '/login';
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user?.id) {
+            const { data: candidateRow } = await supabase
+              .from('candidates')
+              .select('candidate_id')
+              .eq('auth_user_id', user.id)
+              .maybeSingle();
+            if (candidateRow) {
+              loginPath = '/candidate-login';
+            }
+          }
+        } catch (e) {
+          console.warn('Could not determine user type for redirect, defaulting to /login', e);
+        }
+
         // Sign out the temporary session
         await supabase.auth.signOut();
-        
+
         // Clear any cached auth state and stored tokens
         localStorage.removeItem('recruitai_auth');
         sessionStorage.removeItem('reset_access_token');
         sessionStorage.removeItem('reset_refresh_token');
         sessionStorage.removeItem('reset_type');
-        setInviteToken(null); // Clear stored token
-        
-        // Redirect to recruiter or candidate login based on who requested the reset
-        const redirectUser = sessionStorage.getItem('reset_redirect_user');
-        const loginPath = redirectUser === 'candidate' ? '/candidate-login' : '/login';
         sessionStorage.removeItem('reset_redirect_user');
+        setInviteToken(null);
+
         setTimeout(() => {
           navigate(loginPath, { replace: true });
         }, 2000);
