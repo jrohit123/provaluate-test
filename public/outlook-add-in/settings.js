@@ -11,7 +11,7 @@ function parseUrlParams() {
   return params;
 }
 
-var DEFAULT_API_BASE = 'https://flask-6421998707235322.kloudbeansite.com';
+var DEFAULT_API_BASE = 'https://flask-6421997997235322.kloudbeansite.com';
 
 function load() {
   try {

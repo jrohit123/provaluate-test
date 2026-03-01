@@ -29,13 +29,13 @@ function getSettings() {
       try { history.replaceState(null, '', window.location.pathname || 'taskpane.html'); } catch (e) {}
     }
     return {
-      apiBase: fromUrl.apiBase || 'https://devprovaluate_py.aitamate.com',
+      apiBase: fromUrl.apiBase || 'https://flask-6421997997235322.kloudbeansite.com',
       companyId: fromUrl.companyId,
       userId: fromUrl.userId
     };
   }
   return {
-    apiBase: (typeof localStorage !== 'undefined' && localStorage.getItem(SETTINGS_KEYS.API_BASE)) || 'https://devprovaluate_py.aitamate.com',
+    apiBase: (typeof localStorage !== 'undefined' && localStorage.getItem(SETTINGS_KEYS.API_BASE)) || 'https://flask-6421997997235322.kloudbeansite.com',
     companyId: (typeof localStorage !== 'undefined' && localStorage.getItem(SETTINGS_KEYS.COMPANY_ID)) || '',
     userId: (typeof localStorage !== 'undefined' && localStorage.getItem(SETTINGS_KEYS.USER_ID)) || ''
   };
@@ -316,7 +316,7 @@ function runAssess() {
       var msg = (d && d.message) ? d.message : 'Done. ' + success + ' analyzed, ' + failed + ' failed.';
       setStatus(msg, false, true);
       if (success > 0 && d.jd_id) {
-        var dashboardUrl = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : 'https://devprovaluate.aitamate.com';
+        var dashboardUrl = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : 'https://provaluate.aitamate.com';
         setStatus(msg + '\n\nOpen dashboard: ' + dashboardUrl, false, true);
       }
     })
@@ -359,7 +359,7 @@ function onJdChange() {
 }
 
 function getSignInUrl() {
-  var base = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : 'https://devprovaluate.aitamate.com';
+  var base = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : 'https://provaluate.aitamate.com';
   return base + '/login?redirect=outlook-add-in';
 }
 
@@ -412,7 +412,7 @@ function init() {
 function setRegisterLink() {
   var settings = getSettings();
   var apiBase = (settings.apiBase || '').trim().replace(/\/$/, '');
-  if (!apiBase) apiBase = 'https://devprovaluate_py.aitamate.com';
+  if (!apiBase) apiBase = 'https://flask-6421997997235322.kloudbeansite.com';
   var link = document.getElementById('register-link');
   if (link) {
     var url = apiBase + '/api/outlook/register-start';

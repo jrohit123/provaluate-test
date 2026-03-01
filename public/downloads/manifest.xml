@@ -6,13 +6,13 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="ProValuate - Resume Evaluator"/>
   <Description DefaultValue="Evaluate resumes from this email against a job description. Select a JD and criteria, then click Assess."/>
-  <IconUrl DefaultValue="https://devprovaluate.aitamate.com/favicon.png"/>
-  <HighResolutionIconUrl DefaultValue="https://devprovaluate.aitamate.com/favicon.png"/>
+  <IconUrl DefaultValue="https://provaluate.aitamate.com/favicon.png"/>
+  <HighResolutionIconUrl DefaultValue="https://provaluate.aitamate.com/favicon.png"/>
   <SupportUrl DefaultValue="https://www.provaluate.com"/>
   <AppDomains>
     <AppDomain>https://www.provaluate.com</AppDomain>
-    <AppDomain>https://devprovaluate.aitamate.com</AppDomain>
-    <AppDomain>https://devprovaluate_py.aitamate.com</AppDomain>
+    <AppDomain>https://provaluate.aitamate.com</AppDomain>
+    <AppDomain>https://flask-6421997997235322.kloudbeansite.com</AppDomain>
     <AppDomain>https://login.microsoftonline.com</AppDomain>
   </AppDomains>
   <Hosts>
@@ -26,11 +26,11 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://devprovaluate.aitamate.com/outlook-add-in/taskpane.html?v=3"/>
+        <SourceLocation DefaultValue="https://provaluate.aitamate.com/outlook-add-in/taskpane.html?v=3"/>
         <RequestedHeight>450</RequestedHeight>
       </DesktopSettings>
       <TabletSettings>
-        <SourceLocation DefaultValue="https://devprovaluate.aitamate.com/outlook-add-in/taskpane.html?v=3"/>
+        <SourceLocation DefaultValue="https://provaluate.aitamate.com/outlook-add-in/taskpane.html?v=3"/>
         <RequestedHeight>450</RequestedHeight>
       </TabletSettings>
     </Form>
@@ -75,12 +75,12 @@
     </Hosts>
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon16" DefaultValue="https://devprovaluate.aitamate.com/favicon.png"/>
-        <bt:Image id="Icon32" DefaultValue="https://devprovaluate.aitamate.com/favicon.png"/>
-        <bt:Image id="Icon80" DefaultValue="https://devprovaluate.aitamate.com/favicon.png"/>
+        <bt:Image id="Icon16" DefaultValue="https://provaluate.aitamate.com/favicon.png"/>
+        <bt:Image id="Icon32" DefaultValue="https://provaluate.aitamate.com/favicon.png"/>
+        <bt:Image id="Icon80" DefaultValue="https://provaluate.aitamate.com/favicon.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://devprovaluate.aitamate.com/outlook-add-in/taskpane.html?v=3"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://provaluate.aitamate.com/outlook-add-in/taskpane.html?v=3"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GroupLabel" DefaultValue="ProValuate"/>
