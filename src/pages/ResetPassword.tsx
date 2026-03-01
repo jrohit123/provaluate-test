@@ -260,20 +260,18 @@ const ResetPassword = () => {
         // Redirect from Edge Function response (isCandidate set by confirm-password)
         const loginPath = data?.isCandidate === true ? '/candidate-login' : '/login';
 
-        // Sign out the temporary session
-        await supabase.auth.signOut();
-
-        // Clear any cached auth state and stored tokens
-        localStorage.removeItem('recruitai_auth');
-        sessionStorage.removeItem('reset_access_token');
-        sessionStorage.removeItem('reset_refresh_token');
-        sessionStorage.removeItem('reset_type');
-        sessionStorage.removeItem('reset_redirect_user');
-        setInviteToken(null);
-
+        // Navigate first so auth listeners don't override with /login; then sign out and clear
+        const delayMs = 500;
         setTimeout(() => {
           navigate(loginPath, { replace: true });
-        }, 2000);
+          supabase.auth.signOut();
+          localStorage.removeItem('recruitai_auth');
+          sessionStorage.removeItem('reset_access_token');
+          sessionStorage.removeItem('reset_refresh_token');
+          sessionStorage.removeItem('reset_type');
+          sessionStorage.removeItem('reset_redirect_user');
+          setInviteToken(null);
+        }, delayMs);
       } else {
         const errorMsg = data?.error || 'Failed to update password. Please try again.';
         console.error('❌ Password update failed:', errorMsg);
