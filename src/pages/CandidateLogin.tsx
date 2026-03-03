@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { SessionManager } from '@/utils/sessionManager';
-import { LogIn, User, ClipboardList, FileText, Mail } from 'lucide-react';
+import { LogIn, User, ClipboardList, FileText, Mail, UserPlus } from 'lucide-react';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 const CandidateLogin = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isSignup, setIsSignup] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
@@ -22,7 +23,7 @@ const CandidateLogin = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const isMobile = useIsMobile();
-  const { candidateSignIn } = useAuthContext();
+  const { candidateSignIn, candidateSignUp } = useAuthContext();
 
   const completeCandidateLogin = async (userId: string) => {
     const sessionData = await SessionManager.createSession(userId);
@@ -37,6 +38,19 @@ const CandidateLogin = () => {
     e.preventDefault();
     setIsLoading(true);
     try {
+      if (isSignup) {
+        const { error } = await candidateSignUp(email, password);
+        if (error) throw new Error(error.message);
+        toast({
+          title: 'Confirmation email sent',
+          description: `An email has been sent to ${email}. Please confirm your email, then sign in below.`,
+        });
+        setIsSignup(false);
+        setEmail('');
+        setPassword('');
+        setIsLoading(false);
+        return;
+      }
       const { user, error, needsOnboarding } = await candidateSignIn(email, password);
       if (error) {
         toast({
@@ -57,7 +71,7 @@ const CandidateLogin = () => {
       }
     } catch (err: unknown) {
       toast({
-        title: 'Login error',
+        title: isSignup ? 'Sign up error' : 'Login error',
         description: err instanceof Error ? err.message : 'Something went wrong.',
         variant: 'destructive',
       });
@@ -120,7 +134,9 @@ const CandidateLogin = () => {
             Your Interview & Profile Hub
           </h2>
           <p className="text-base sm:text-lg lg:text-xl text-gray-600 max-w-3xl mx-auto px-4">
-            Sign in to access your candidate profile, job descriptions, and interview results. Take interviews and view your reports in one place.
+            {isSignup
+              ? 'Create an account to build your profile and manage your interviews.'
+              : 'Sign in to access your candidate profile, job descriptions, and interview results. Take interviews and view your reports in one place.'}
           </p>
         </div>
 
@@ -164,14 +180,20 @@ const CandidateLogin = () => {
               <CardHeader className="space-y-1 px-4 sm:px-6 pt-4 sm:pt-6">
                 <div className="flex items-center justify-center space-x-2 mb-3 sm:mb-4">
                   <div className="bg-sky-600 p-2 rounded-lg">
-                    <LogIn className="h-5 w-5 text-white" />
+                    {isSignup ? (
+                      <UserPlus className="h-5 w-5 text-white" />
+                    ) : (
+                      <LogIn className="h-5 w-5 text-white" />
+                    )}
                   </div>
                   <CardTitle className="text-xl sm:text-2xl text-center">
-                    Welcome Back
+                    {isSignup ? 'Create candidate account' : 'Welcome Back'}
                   </CardTitle>
                 </div>
                 <CardDescription className="text-center text-sm sm:text-base">
-                  Enter your credentials to access your candidate dashboard
+                  {isSignup
+                    ? 'Sign up to build your profile and manage your interviews'
+                    : 'Enter your credentials to access your candidate dashboard'}
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
@@ -196,6 +218,7 @@ const CandidateLogin = () => {
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           required
+                          minLength={isSignup ? 6 : undefined}
                           className="min-h-[44px] h-11 text-base touch-manipulation"
                           disabled={isLoading}
                         />
@@ -205,19 +228,25 @@ const CandidateLogin = () => {
                         className="w-full min-h-[44px] h-11 bg-sky-600 hover:bg-sky-700 text-base touch-manipulation"
                         disabled={isLoading}
                       >
-                        {isLoading ? 'Please wait...' : 'Sign In'}
+                        {isLoading
+                          ? 'Please wait...'
+                          : isSignup
+                            ? 'Create account'
+                            : 'Sign In'}
                       </Button>
                     </form>
-                    <div className="mt-3 sm:mt-4 text-center">
-                      <button
-                        type="button"
-                        className="text-sky-600 hover:text-sky-800 underline text-xs sm:text-sm"
-                        onClick={() => setShowReset(true)}
-                        disabled={isLoading}
-                      >
-                        Forgot your password?
-                      </button>
-                    </div>
+                    {!isSignup && (
+                      <div className="mt-3 sm:mt-4 text-center">
+                        <button
+                          type="button"
+                          className="text-sky-600 hover:text-sky-800 underline text-xs sm:text-sm"
+                          onClick={() => setShowReset(true)}
+                          disabled={isLoading}
+                        >
+                          Forgot your password?
+                        </button>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <form onSubmit={handlePasswordReset} className="flex flex-col gap-2 sm:gap-3 mt-4">
@@ -248,11 +277,13 @@ const CandidateLogin = () => {
                 <div className="mt-4 sm:mt-6 text-center">
                   <button
                     type="button"
-                    onClick={() => navigate('/candidate-signup')}
+                    onClick={() => setIsSignup(!isSignup)}
                     className="text-sky-600 hover:text-sky-800 transition-colors text-xs sm:text-sm"
                     disabled={isLoading}
                   >
-                    Don&apos;t have an account? Create account
+                    {isSignup
+                      ? 'Already have an account? Sign in'
+                      : "Don't have an account? Create account"}
                   </button>
                 </div>
               </CardContent>

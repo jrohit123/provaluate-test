@@ -564,7 +564,7 @@ const Login = () => {
         </div>
         
         {/* Call to Action Section */}
-        <div className="bg-gradient-to-r from-purple-600 to-pink-500 py-4 sm:py-6 rounded-lg mx-4 sm:mx-0">
+        <div className="bg-gradient-to-r from-purple-600 to-pink-500 py-4 sm:py-6 rounded-lg mx-4 sm:mx-0 mt-8">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
             <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white mb-2">
               Start hiring on intelligence—not intuition.
