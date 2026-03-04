@@ -81,19 +81,21 @@ export class UsageTrackingService {
       // 2) Fetch plan info separately (selected_plan stores plan name, not FK)
       let maxCVs = 0;
       let planName = 'No Plan';
+      let planData: { plan_name?: string; max_cvs?: number; plan_cost?: number } | null = null;
 
       if (companyData.selected_plan) {
-        const { data: planData, error: planError } = await supabase
+        const { data: planRow, error: planError } = await supabase
           .from('plans')
-          .select('plan_name, max_cvs')
+          .select('plan_name, max_cvs, plan_cost')
           .eq('plan_name', companyData.selected_plan)
           .single();
 
         if (planError) {
           console.warn('Could not fetch plan data:', planError);
-        } else if (planData) {
-          maxCVs = planData.max_cvs ?? 0;
-          planName = planData.plan_name ?? companyData.selected_plan;
+        } else if (planRow) {
+          planData = planRow;
+          maxCVs = planRow.max_cvs ?? 0;
+          planName = planRow.plan_name ?? companyData.selected_plan;
         }
       }
 
@@ -102,7 +104,7 @@ export class UsageTrackingService {
       // ✅ UPDATED: Check subscription status and trial expiration
       const subscriptionStatus = companyData.subscription_status || '';
       const isExpired = subscriptionStatus === 'expired' || (trialStatus?.is_expired ?? false);
-      const isTrial = trialStatus?.is_trial ?? (planName === 'FreeTrial-30' || planName === 'Multi_User_Free');
+      const isTrial = trialStatus?.is_trial ?? (planData != null ? (planData.plan_cost ?? 0) === 0 : false);
       
       // Block processing if expired
       // Calculate available CVs: maxCVs - currentCount

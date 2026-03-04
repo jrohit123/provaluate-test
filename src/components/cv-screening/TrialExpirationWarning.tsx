@@ -195,12 +195,12 @@ export function TrialExpirationWarning() {
             <Button onClick={handleUpgrade} size="sm">
               {trialStatus.is_expired ? 'Upgrade Now' : 'Upgrade Plan'}
             </Button>
-            {trialStatus.days_remaining !== undefined && trialStatus.days_remaining > 0 && (
+            {/* {trialStatus.days_remaining !== undefined && trialStatus.days_remaining > 0 && (
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                 <Clock className="h-3 w-3" />
                 <span>{trialStatus.days_remaining} day(s) remaining</span>
               </div>
-            )}
+            )} */}
           </div>
         </AlertDescription>
       </Alert>

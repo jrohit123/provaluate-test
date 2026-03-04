@@ -91,18 +91,22 @@ export default function Onboarding() {
       }
       // Get selected plan details
       const plan = plans.find(p => p.plan_id === selectedPlanId);
-      // Debug logging
-      console.log('Selected plan:', plan);
-      console.log('typeof plan.duration:', typeof plan?.duration);
-      console.log('isNaN(plan.duration):', isNaN(plan?.duration));
-      if (!plan || typeof plan.duration !== 'number' || isNaN(plan.duration)) {
+      if (!plan) {
         setError('Selected plan is invalid. Please try again.');
         setLoading(false);
         return;
       }
-      // Create company
+      // Duration can be 0 (Forever Free) or a number; reject only if invalid number
+      const durationNum = plan.duration != null ? Number(plan.duration) : 0;
+      if (durationNum < 0 || (plan.duration != null && isNaN(durationNum))) {
+        setError('Selected plan is invalid. Please try again.');
+        setLoading(false);
+        return;
+      }
+      // Create company: Forever Free (duration 0) = no subscription_end; otherwise set end from duration
       const now = new Date();
-      const subscriptionEnd = new Date(now.getTime() + plan.duration * 24 * 60 * 60 * 1000);
+      const isForever = durationNum === 0;
+      const subscriptionEnd = isForever ? null : new Date(now.getTime() + durationNum * 24 * 60 * 60 * 1000);
       const { data: newCompany, error: createCompanyError } = await supabase
         .from('companies')
         .insert({
@@ -111,7 +115,7 @@ export default function Onboarding() {
           selected_plan: plan.plan_name,
           subscription_status: 'Active',
           subscription_start: now.toISOString(),
-          subscription_end: subscriptionEnd.toISOString(),
+          subscription_end: subscriptionEnd ? subscriptionEnd.toISOString() : null,
           created_at: now.toISOString(),
           updated_at: now.toISOString(),
         })

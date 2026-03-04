@@ -204,17 +204,19 @@ const Pricing = () => {
               <CardHeader className="pb-4">
                 <CardTitle className="text-2xl mb-2">{plan.plan_name.replace(/_/g, ' ')}</CardTitle>
                 <CardDescription className="text-gray-600">
-                  Perfect for growing teams
+                  Perfect for getting used to the system
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col">
                 <div className="mb-6">
                   <div className="flex items-baseline">
                     <span className="text-4xl font-bold text-gray-900">₹0</span>
-                    <span className="text-gray-600 ml-2">/ {plan.duration ?? 30} days</span>
+                    <span className="text-gray-600 ml-2">
+                      {plan.duration === 0 || plan.duration == null ? 'Forever' : `/ ${plan.duration ?? 30} days`}
+                    </span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    Free trial
+                    {plan.duration === 0 || plan.duration == null ? 'Free forever' : 'Free trial'}
                   </p>
                 </div>
                 <ul className="space-y-3 mb-6 flex-1">
@@ -276,7 +278,7 @@ const Pricing = () => {
                   <CardHeader className="pb-4">
                     <CardTitle className="text-2xl mb-2">{plan.plan_name}</CardTitle>
                     <CardDescription className="text-gray-600">
-                      Perfect for growing teams
+                      Perfect for getting used to the system
                     </CardDescription>
                   </CardHeader>
 

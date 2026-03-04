@@ -66,13 +66,13 @@ export const MAIN_TOUR_STEPS: TourStep[] = [
   },
   {
     target: '[data-tour="email-plugin"]',
-    content: 'Email plugin: evaluate resumes from Gmail or Outlook. Choose your provider to get the extension or add-in.',
+    content: 'Resume plugins: evaluate resumes from Gmail, Outlook, or LinkedIn. Choose your provider to get the extension or add-in.',
     placement: 'bottom',
     disableScrolling: false,
   },
 ];
 
-/** Main tour uses sidebar-trigger on mobile (sidebar is in Sheet). Email plugin step always included (button always visible). */
+/** Main tour uses sidebar-trigger on mobile (sidebar is in Sheet). Resume plugins step always included (button always visible). */
 export function getMainTourSteps(isMobile: boolean): TourStep[] {
   const steps = MAIN_TOUR_STEPS.map((s) => ({ ...s }));
   const sidebarIdx = steps.findIndex((s) => s.target === '[data-tour="sidebar"]');

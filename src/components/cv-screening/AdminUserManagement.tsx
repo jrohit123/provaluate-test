@@ -103,8 +103,8 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
   const maxUsers = plan?.max_users ?? null;
   const slotsLeft = maxUsers !== null ? maxUsers - users.length : null;
   
-  // Check if user is on trial plan
-  const isTrialPlan = company?.selected_plan === 'FreeTrial-30' || company?.selected_plan === 'Multi_User_Free';
+  // Check if user is on trial/free plan (plan_cost === 0)
+  const isTrialPlan = (plan?.plan_cost ?? 0) === 0;
 
   const handleInviteChange = (e: any) => {
     setInviteForm({ ...inviteForm, [e.target.name]: e.target.value });

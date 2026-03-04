@@ -38,10 +38,11 @@ export default function Signup() {
       setDomainBlockReason('');
       
       try {
-        // Fetch all paid plans
+        // Fetch all active paid plans
         const { data: paidPlans, error: plansError } = await supabase
           .from('plans')
           .select('*')
+          .eq('status', 'Active')
           .gt('plan_cost', 0);
         if (plansError) throw plansError;
         let plansList = paidPlans || [];
@@ -66,26 +67,38 @@ export default function Signup() {
               setDomainBlockReason(blockedDomain.reason || 'This domain is not allowed for registration');
               // Don't check free trial eligibility for blocked domains
             } else {
-              // Check if any company with this domain has used any trial plan (FreeTrial-30 or Multi_User_Free)
-              const { data: companiesWithTrial, error: trialError } = await supabase
-                .from('companies')
-                .select('company_id')
-                .eq('email_domain', domain)
-                .in('selected_plan', ['FreeTrial-30', 'Multi_User_Free']);
-              if (trialError) throw trialError;
-              trialEligible = !companiesWithTrial || companiesWithTrial.length === 0;
+              // Get plan names for free/trial plans (plan_cost = 0)
+              const { data: freePlanRows, error: freePlanNamesError } = await supabase
+                .from('plans')
+                .select('plan_name')
+                .eq('plan_cost', 0);
+              if (freePlanNamesError) throw freePlanNamesError;
+              const freePlanNames = (freePlanRows || []).map((p: { plan_name: string }) => p.plan_name);
+              // Check if any company with this domain has used a free/trial plan
+              if (freePlanNames.length === 0) {
+                trialEligible = true;
+              } else {
+                const { data: companiesWithTrial, error: trialError } = await supabase
+                  .from('companies')
+                  .select('company_id')
+                  .eq('email_domain', domain)
+                  .in('selected_plan', freePlanNames);
+                if (trialError) throw trialError;
+                trialEligible = !companiesWithTrial || companiesWithTrial.length === 0;
+              }
             }
           }
         }
         
         setFreeTrialEligible(trialEligible);
         
-        // Fetch both FreeTrial plans if eligible and domain not blocked
+        // Fetch active free/trial plans (plan_cost = 0) if eligible and domain not blocked
         if (trialEligible && !domainBlocked) {
           const { data: freeTrialPlans, error: freeTrialError } = await supabase
             .from('plans')
             .select('*')
-            .in('plan_name', ['FreeTrial-30', 'Multi_User_Free']);
+            .eq('plan_cost', 0)
+            .eq('status', 'Active');
           if (freeTrialError) throw freeTrialError;
           if (freeTrialPlans && freeTrialPlans.length > 0) {
             // Add trial plans at the beginning of the list
@@ -161,7 +174,9 @@ export default function Signup() {
       if (!plan) throw new Error('Invalid plan selection.');
       // Create company
       const now = new Date();
-      const subscriptionEnd = new Date(now.getTime() + plan.duration * 24 * 60 * 60 * 1000);
+      // Forever Free (duration 0) or null: no expiry; otherwise set subscription_end from duration
+      const isForever = plan.duration === 0 || plan.duration == null;
+      const subscriptionEnd = isForever ? null : new Date(now.getTime() + (plan.duration ?? 30) * 24 * 60 * 60 * 1000);
       const { data: newCompany, error: createCompanyError } = await supabase
         .from('companies')
         .insert({
@@ -170,7 +185,7 @@ export default function Signup() {
           selected_plan: plan.plan_name,
           subscription_status: 'active',
           subscription_start: now.toISOString(),
-          subscription_end: subscriptionEnd.toISOString(),
+          subscription_end: subscriptionEnd ? subscriptionEnd.toISOString() : null,
           created_at: now.toISOString(),
           updated_at: now.toISOString(),
         })

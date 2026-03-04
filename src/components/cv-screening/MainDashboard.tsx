@@ -22,7 +22,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
   const { user } = useAuth();
   const isMobile = useIsMobile();
   
-  // State for email plugin info modal (Gmail / Outlook choice)
+  // State for resume plugins modal (Gmail / Outlook / LinkedIn)
   const [isEmailPluginInfoOpen, setIsEmailPluginInfoOpen] = useState(false);
   // State for collapsible sections (mobile only) - closed by default
   const [isCVScreeningOpen, setIsCVScreeningOpen] = useState(false);
@@ -177,8 +177,8 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
               className="flex items-center justify-center gap-2 w-full sm:w-auto"
             >
               <Puzzle className="w-4 h-4" />
-              <span className="hidden sm:inline">Email Plugin</span>
-              <span className="sm:hidden">Plugin</span>
+              <span className="hidden sm:inline">Resume Plugins</span>
+              <span className="sm:hidden">Plugins</span>
             </Button>
           </span>
           <Button 
@@ -200,7 +200,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
         </div>
       </div>
 
-      {/* Email Plugin Info Modal (Gmail / Outlook) */}
+      {/* Resume Plugins Modal (Gmail / Outlook / LinkedIn) */}
       <BrowserExtensionInfo 
         open={isEmailPluginInfoOpen} 
         onOpenChange={setIsEmailPluginInfoOpen} 
