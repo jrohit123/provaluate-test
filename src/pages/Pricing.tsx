@@ -112,6 +112,8 @@ const Pricing = () => {
 
   const freePlans = plans.filter((p) => Number(p.plan_cost) === 0);
   const paidPlans = plans.filter((p) => Number(p.plan_cost) > 0);
+  const totalPlanCards = freePlans.length + paidPlans.length;
+  const gridCols = Math.max(1, Math.min(totalPlanCards, 6)); // spread plan cards; cap at 6
 
   if (loading) {
     return (
@@ -148,37 +150,39 @@ const Pricing = () => {
       </header>
 
       {/* Pricing Header – use most of viewport width */}
-      <section className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-10 xl:px-12 py-16">
-        <div className="text-center mb-12">
-          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+      <section className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-10 xl:px-12 py-8 sm:py-12 lg:py-16">
+        <div className="text-center mb-8 sm:mb-12">
+          <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold text-gray-900 mb-3 sm:mb-4">
             Simple, Transparent Pricing
           </h2>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-8">
+          <p className="text-base sm:text-lg md:text-xl text-gray-600 max-w-2xl mx-auto mb-6 sm:mb-8 px-1">
             Choose the perfect plan for your recruiting needs. All plans include access to our AI-powered resume screening and ranking engine.
           </p>
 
-          {/* Billing Toggle */}
-          <div className="flex items-center justify-center space-x-4 mb-6">
-            <span className={`text-sm font-medium ${!isAnnual ? 'text-gray-900' : 'text-gray-600'}`}>
-              Monthly
-            </span>
-            <Switch
-              checked={isAnnual}
-              onCheckedChange={setIsAnnual}
-              className="h-6 w-11"
-            />
-            <span className={`text-sm font-medium ${isAnnual ? 'text-gray-900' : 'text-gray-600'}`}>
-              Annual
-            </span>
-            {isAnnual && (
-              <Badge className="bg-green-100 text-green-800 ml-2 hover:bg-green-100">
-                Save 15%
-              </Badge>
-            )}
-          </div>
+          {/* Billing & Currency Toggles – stack on small screens */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-6">
+            {/* Billing Toggle */}
+            <div className="flex items-center justify-center gap-2 sm:space-x-4">
+              <span className={`text-sm font-medium ${!isAnnual ? 'text-gray-900' : 'text-gray-600'}`}>
+                Monthly
+              </span>
+              <Switch
+                checked={isAnnual}
+                onCheckedChange={setIsAnnual}
+                className="h-6 w-11"
+              />
+              <span className={`text-sm font-medium ${isAnnual ? 'text-gray-900' : 'text-gray-600'}`}>
+                Annual
+              </span>
+              {isAnnual && (
+                <Badge className="bg-green-100 text-green-800 ml-1 sm:ml-2 hover:bg-green-100 shrink-0">
+                  Save 15%
+                </Badge>
+              )}
+            </div>
 
-          {/* Currency Toggle */}
-          <div className="flex items-center justify-center space-x-4">
+            {/* Currency Toggle */}
+            <div className="flex items-center justify-center gap-2 sm:space-x-4">
             <span className={`text-sm font-medium ${currency === 'INR' ? 'text-gray-900' : 'text-gray-600'}`}>
               INR
             </span>
@@ -190,27 +194,33 @@ const Pricing = () => {
             <span className={`text-sm font-medium ${currency === 'USD' ? 'text-gray-900' : 'text-gray-600'}`}>
               USD
             </span>
+            </div>
           </div>
         </div>
 
-        {/* Plans Grid – one row when space allows, no scroll */}
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-6 mb-12">
+        {/* Plans Grid – 1 col mobile, 2 md, dynamic lg; one-time card full width below */}
+        <style>{`
+          .pricing-grid { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+          @media (min-width: 768px) { .pricing-grid { grid-template-columns: repeat(2, minmax(220px, 1fr)); } }
+          @media (min-width: 1024px) { .pricing-grid { grid-template-columns: repeat(${gridCols}, minmax(220px, 1fr)); } }
+        `}</style>
+        <div className="pricing-grid grid gap-4 sm:gap-6 mb-8 sm:mb-12">
           {/* Free plans from DB – only plans with status = Active and plan_cost = 0 */}
           {freePlans.map((plan) => (
             <Card
               key={plan.plan_id}
-              className="border-2 border-gray-200 hover:border-indigo-300 transition-all duration-300 flex flex-col"
+              className="border-2 border-gray-200 hover:border-indigo-300 transition-all duration-300 flex flex-col min-w-0"
             >
-              <CardHeader className="pb-4">
-                <CardTitle className="text-2xl mb-2">{plan.plan_name.replace(/_/g, ' ')}</CardTitle>
-                <CardDescription className="text-gray-600">
+              <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6">
+                <CardTitle className="text-xl sm:text-2xl mb-1 sm:mb-2">{plan.plan_name.replace(/_/g, ' ')}</CardTitle>
+                <CardDescription className="text-gray-600 text-sm">
                   Perfect for getting used to the system
                 </CardDescription>
               </CardHeader>
-              <CardContent className="flex-1 flex flex-col">
-                <div className="mb-6">
-                  <div className="flex items-baseline">
-                    <span className="text-4xl font-bold text-gray-900">₹0</span>
+              <CardContent className="flex-1 flex flex-col px-4 sm:px-6 pb-4 sm:pb-6">
+                <div className="mb-4 sm:mb-6">
+                  <div className="flex items-baseline flex-wrap gap-x-2">
+                    <span className="text-3xl sm:text-4xl font-bold text-gray-900">₹0</span>
                     <span className="text-gray-600 ml-2">
                       {plan.duration === 0 || plan.duration == null ? 'Forever' : `/ ${plan.duration ?? 30} days`}
                     </span>
@@ -219,33 +229,33 @@ const Pricing = () => {
                     {plan.duration === 0 || plan.duration == null ? 'Free forever' : 'Free trial'}
                   </p>
                 </div>
-                <ul className="space-y-3 mb-6 flex-1">
-                  <li className="flex items-start space-x-3">
-                    <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-gray-700"><strong>{plan.max_cvs}</strong> CVs</span>
+                <ul className="space-y-2 sm:space-y-3 mb-4 sm:mb-6 flex-1">
+                  <li className="flex items-start space-x-2 sm:space-x-3">
+                    <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-xs sm:text-sm text-gray-700"><strong>{plan.max_cvs}</strong> CVs</span>
                   </li>
-                  <li className="flex items-start space-x-3">
-                    <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-gray-700"><strong>{plan.max_users}</strong> team member{plan.max_users > 1 ? 's' : ''}</span>
+                  <li className="flex items-start space-x-2 sm:space-x-3">
+                    <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-xs sm:text-sm text-gray-700"><strong>{plan.max_users}</strong> team member{plan.max_users > 1 ? 's' : ''}</span>
                   </li>
-                  <li className="flex items-start space-x-3">
-                    <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-gray-700"><strong>{plan.active_jobs}</strong> active job descriptions</span>
+                  <li className="flex items-start space-x-2 sm:space-x-3">
+                    <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-xs sm:text-sm text-gray-700"><strong>{plan.active_jobs}</strong> active job descriptions</span>
                   </li>
-                  <li className="flex items-start space-x-3">
-                    <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-gray-700">AI-powered resume screening</span>
+                  <li className="flex items-start space-x-2 sm:space-x-3">
+                    <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-xs sm:text-sm text-gray-700">AI-powered resume screening</span>
                   </li>
-                  <li className="flex items-start space-x-3">
-                    <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-gray-700">Custom evaluation criteria</span>
+                  <li className="flex items-start space-x-2 sm:space-x-3">
+                    <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-xs sm:text-sm text-gray-700">Custom evaluation criteria</span>
                   </li>
-                  <li className="flex items-start space-x-3">
-                    <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-gray-700">Standard support</span>
+                  <li className="flex items-start space-x-2 sm:space-x-3">
+                    <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-xs sm:text-sm text-gray-700">Standard support</span>
                   </li>
                 </ul>
-                <Button onClick={() => handleSelectPlan(plan)} variant="outline" className="w-full h-11">
+                <Button onClick={() => handleSelectPlan(plan)} variant="outline" className="w-full h-10 sm:h-11 text-sm sm:text-base">
                   Get Started
                 </Button>
               </CardContent>
@@ -263,30 +273,30 @@ const Pricing = () => {
               return (
                 <Card
                   key={plan.plan_id}
-                  className={`border-2 transition-all duration-300 flex flex-col ${
+                  className={`border-2 transition-all duration-300 flex flex-col min-w-0 ${
                     plan.plan_name === 'Premium' || plan.plan_name === 'Standard'
-                      ? 'border-indigo-600 shadow-xl scale-105'
+                      ? 'border-indigo-600 shadow-xl scale-100 md:scale-105'
                       : 'border-gray-200 hover:border-indigo-300'
                   }`}
                 >
                   {plan.plan_name === 'Premium' || plan.plan_name === 'Standard' ? (
-                    <Badge className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-indigo-600 hover:bg-indigo-700">
+                    <Badge className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-indigo-600 hover:bg-indigo-700 text-xs sm:text-sm">
                       Most Popular
                     </Badge>
                   ) : null}
 
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-2xl mb-2">{plan.plan_name}</CardTitle>
-                    <CardDescription className="text-gray-600">
+                  <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6">
+                    <CardTitle className="text-xl sm:text-2xl mb-1 sm:mb-2">{plan.plan_name}</CardTitle>
+                    <CardDescription className="text-gray-600 text-sm">
                       Perfect for getting used to the system
                     </CardDescription>
                   </CardHeader>
 
-                  <CardContent className="flex-1 flex flex-col">
+                  <CardContent className="flex-1 flex flex-col px-4 sm:px-6 pb-4 sm:pb-6">
                     {/* Pricing */}
-                    <div className="mb-6">
-                      <div className="flex items-baseline">
-                        <span className="text-4xl font-bold text-gray-900">
+                    <div className="mb-4 sm:mb-6">
+                      <div className="flex items-baseline flex-wrap gap-x-2">
+                        <span className="text-3xl sm:text-4xl font-bold text-gray-900">
                           {currency === 'USD' ? '$' : '₹'}{displayPrice}
                         </span>
                         <span className="text-gray-600 ml-2">
@@ -294,7 +304,7 @@ const Pricing = () => {
                         </span>
                       </div>
                       {isAnnual && (
-                        <p className="text-sm text-green-600 font-medium mt-2">
+                        <p className="text-xs sm:text-sm text-green-600 font-medium mt-1 sm:mt-2">
                           {currency === 'USD' ? '$' : '₹'}{displayPrice}/year (Save 15%)
                         </p>
                       )}
@@ -309,40 +319,40 @@ const Pricing = () => {
                     </div>
 
                     {/* Features List */}
-                    <ul className="space-y-3 mb-6 flex-1">
-                      <li className="flex items-start space-x-3">
-                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-gray-700">
+                    <ul className="space-y-2 sm:space-y-3 mb-4 sm:mb-6 flex-1">
+                      <li className="flex items-start space-x-2 sm:space-x-3">
+                        <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-xs sm:text-sm text-gray-700">
                           <strong>{plan.max_cvs === 0 ? 'Unlimited' : isAnnual ? plan.max_cvs * 12 : plan.max_cvs}</strong> CVs {isAnnual ? 'per year' : 'per month'}
                         </span>
                       </li>
-                      <li className="flex items-start space-x-3">
-                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-gray-700">
+                      <li className="flex items-start space-x-2 sm:space-x-3">
+                        <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-xs sm:text-sm text-gray-700">
                           <strong>{plan.max_users || 'Unlimited'}</strong> team members
                         </span>
                       </li>
-                      <li className="flex items-start space-x-3">
-                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-gray-700">
+                      <li className="flex items-start space-x-2 sm:space-x-3">
+                        <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-xs sm:text-sm text-gray-700">
                           <strong>{plan.active_jobs || 'Unlimited'}</strong> active job descriptions
                         </span>
                       </li>
-                      <li className="flex items-start space-x-3">
-                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-gray-700">
+                      <li className="flex items-start space-x-2 sm:space-x-3">
+                        <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-xs sm:text-sm text-gray-700">
                           AI-powered resume screening
                         </span>
                       </li>
-                      <li className="flex items-start space-x-3">
-                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-gray-700">
+                      <li className="flex items-start space-x-2 sm:space-x-3">
+                        <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-xs sm:text-sm text-gray-700">
                           Custom evaluation criteria
                         </span>
                       </li>
-                      <li className="flex items-start space-x-3">
-                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-gray-700">
+                      <li className="flex items-start space-x-2 sm:space-x-3">
+                        <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-xs sm:text-sm text-gray-700">
                           Standard support
                         </span>
                       </li>
@@ -356,7 +366,7 @@ const Pricing = () => {
                           ? 'default'
                           : 'outline'
                       }
-                      className={`w-full h-11 ${
+                      className={`w-full h-10 sm:h-11 text-sm sm:text-base ${
                         plan.plan_name === 'Premium' || plan.plan_name === 'Standard'
                           ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
                           : ''
@@ -369,58 +379,54 @@ const Pricing = () => {
               );
           })}
 
-          {/* One-time plans – coming soon (commented out for now) */}
-          {/* <Card className="border-2 border-dashed border-emerald-500 flex flex-col opacity-95">
-            <CardContent className="flex-1 flex flex-col items-center justify-center py-12 px-4">
-              <p className="text-lg font-semibold text-gray-900 text-center">
-                One-time plans coming soon
+          {/* One-time plans – full width below plan cards so width follows grid */}
+          <Card className="border-2 border-dashed border-emerald-500 flex flex-col min-w-0" style={{ gridColumn: '1 / -1' }}>
+            <CardContent className="flex-1 flex flex-col items-center justify-center py-6 sm:py-8 px-4 text-center">
+              <p className="text-base sm:text-lg font-semibold text-gray-900">One-time plans</p>
+              <p className="text-xs sm:text-sm text-gray-600 mt-2 break-words">
+                Contact <a href="mailto:sales@aitamate.com" className="text-indigo-600 hover:underline">sales@aitamate.com</a> for more details.
               </p>
             </CardContent>
-          </Card> */}
-        </div>
-
-        {/* One-time plans coming soon */}
-        <div className="bg-white rounded-lg shadow-lg border border-gray-200 px-6 py-6 mb-8">
-          <p className="text-center text-gray-700 font-medium">One-time plans coming soon...</p>
+          </Card>
         </div>
 
         {/* Features Comparison */}
         <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          <div className="px-6 py-8">
-            <h3 className="text-2xl font-bold text-gray-900 mb-6">All plans include:</h3>
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="flex items-start space-x-3">
-                <Check className="h-6 w-6 text-green-600 flex-shrink-0" />
-                <div>
-                  <h4 className="font-semibold text-gray-900">AI-Powered Screening</h4>
-                  <p className="text-sm text-gray-600">
+          <div className="px-4 sm:px-6 py-6 sm:py-8">
+            <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">All plans include:</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              <div className="flex items-start space-x-2 sm:space-x-3">
+                <Check className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 flex-shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <h4 className="font-semibold text-gray-900 text-sm sm:text-base">AI-Powered Screening</h4>
+                  <p className="text-xs sm:text-sm text-gray-600">
                     Intelligent resume parsing and ranking
                   </p>
                 </div>
               </div>
-              <div className="flex items-start space-x-3">
-                <Check className="h-6 w-6 text-green-600 flex-shrink-0" />
-                <div>
-                  <h4 className="font-semibold text-gray-900">Custom Criteria</h4>
-                  <p className="text-sm text-gray-600">
+              <div className="flex items-start space-x-2 sm:space-x-3">
+                <Check className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 flex-shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <h4 className="font-semibold text-gray-900 text-sm sm:text-base">Custom Criteria</h4>
+                  <p className="text-xs sm:text-sm text-gray-600">
                     Define your own evaluation parameters
                   </p>
                 </div>
               </div>
-              <div className="flex items-start space-x-3">
-                <Check className="h-6 w-6 text-green-600 flex-shrink-0" />
-                <div>
-                  <h4 className="font-semibold text-gray-900">Secure & Compliant</h4>
-                  <p className="text-sm text-gray-600">
+              <div className="flex items-start space-x-2 sm:space-x-3">
+                <Check className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 flex-shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <h4 className="font-semibold text-gray-900 text-sm sm:text-base">Secure & Compliant</h4>
+                  <p className="text-xs sm:text-sm text-gray-600">
                     Enterprise-grade security standards
                   </p>
                 </div>
               </div>
-              <div className="flex items-start space-x-3">
-                <Check className="h-6 w-6 text-green-600 flex-shrink-0" />
-                <div>
-                  <h4 className="font-semibold text-gray-900">Team Collaboration</h4>
-                  <p className="text-sm text-gray-600">
+              <div className="flex items-start space-x-2 sm:space-x-3">
+                <Check className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 flex-shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <h4 className="font-semibold text-gray-900 text-sm sm:text-base">Team Collaboration</h4>
+                  <p className="text-xs sm:text-sm text-gray-600">
                     Invite your team and collaborate
                   </p>
                 </div>
@@ -430,19 +436,19 @@ const Pricing = () => {
         </div>
 
         {/* FAQ Section */}
-        <div className="mt-16 text-center">
-          <h3 className="text-2xl font-bold text-gray-900 mb-8">
+        <div className="mt-10 sm:mt-16 text-center px-2">
+          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-6 sm:mb-8">
             Questions about pricing?
           </h3>
-          <div className="bg-white rounded-lg shadow-lg p-8 max-w-2xl mx-auto">
-            <p className="text-gray-600 mb-4">
+          <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 md:p-8 max-w-2xl mx-auto">
+            <p className="text-sm sm:text-base text-gray-600 mb-4">
               We're here to help! Our team is ready to answer any questions about our plans and features.
             </p>
             <a
               href="mailto:sales@aitamate.com?subject=ProValuate%20Pricing%20Inquiry"
-              className="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+              className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-medium transition-colors text-sm sm:text-base"
             >
-              <Mail className="h-5 w-5" />
+              <Mail className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
               <span>Contact Sales</span>
             </a>
           </div>
@@ -450,14 +456,14 @@ const Pricing = () => {
       </section>
 
       {/* Footer */}
-      <footer className="bg-white border-t mt-16">
-        <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-10 xl:px-12 py-8">
-          <div className="text-center text-gray-600">
+      <footer className="bg-white border-t mt-10 sm:mt-16">
+        <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-10 xl:px-12 py-6 sm:py-8">
+          <div className="text-center text-gray-600 text-sm sm:text-base">
             <p>© 2025 ProValuate. All rights reserved.</p>
-            <p className="text-sm mt-2">
+            <p className="text-xs sm:text-sm mt-2 px-2">
               AI-powered resume evaluation and job matching platform for recruiters
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 mt-4 text-sm">
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 mt-4 text-xs sm:text-sm">
               <Link to="/privacy" className="text-indigo-600 hover:text-indigo-800">Privacy Policy</Link>
               <span>|</span>
               <Link to="/terms" className="text-indigo-600 hover:text-indigo-800">Terms</Link>
