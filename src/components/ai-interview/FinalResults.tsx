@@ -46,6 +46,52 @@ function stripSpeechReportTitleLine(raw: string): string {
   return withoutPlain;
 }
 
+/** Speech metric rating: within range (Good), slightly drifting (Average), or far from range (Needs Work). */
+type SpeechMetricRating = 'Good' | 'Average' | 'Needs Work';
+
+/** Get rating for a speech metric from its numeric value. Green = within range, Yellow = slightly drifting, Red = far. */
+function getSpeechMetricRating(metricKey: string, value: number): SpeechMetricRating {
+  switch (metricKey) {
+    case 'overall_speech_quality':
+      if (value >= 85 && value <= 100) return 'Good';
+      if (value >= 70 && value < 85) return 'Average';
+      return 'Needs Work';
+    case 'speaking_pace_wpm':
+      if (value >= 120 && value <= 160) return 'Good';
+      if ((value >= 100 && value < 120) || (value > 160 && value <= 180)) return 'Average';
+      return 'Needs Work';
+    case 'filler_words':
+      if (value <= 5) return 'Good';
+      if (value <= 10) return 'Average';
+      return 'Needs Work';
+    case 'filler_density':
+      if (value <= 5) return 'Good';
+      if (value <= 15) return 'Average';
+      return 'Needs Work';
+    case 'pause_quality_score':
+      if (value >= 80 && value <= 100) return 'Good';
+      if (value >= 65 && value < 80) return 'Average';
+      return 'Needs Work';
+    case 'voice_confidence':
+      if (value >= 80 && value <= 100) return 'Good';
+      if (value >= 55 && value < 80) return 'Average';
+      return 'Needs Work';
+    case 'stress_score':
+      if (value >= 0 && value <= 30) return 'Good';
+      if (value <= 60) return 'Average';
+      return 'Needs Work';
+    default:
+      return 'Average';
+  }
+}
+
+/** Tailwind and RGB for speech rating (Good=green, Average=amber, Needs Work=red). */
+const SPEECH_RATING_STYLES: Record<SpeechMetricRating, { bg: string; text: string; rgb: [number, number, number]; textRgb: [number, number, number] }> = {
+  Good: { bg: 'bg-green-50', text: 'text-green-700', rgb: [220, 252, 231], textRgb: [21, 128, 61] },
+  Average: { bg: 'bg-amber-50', text: 'text-amber-700', rgb: [254, 243, 199], textRgb: [180, 83, 9] },
+  'Needs Work': { bg: 'bg-red-50', text: 'text-red-700', rgb: [254, 226, 226], textRgb: [185, 28, 28] },
+};
+
 /** Parse speech report into section/content rows for table display. Returns [] if no clear sections.
  *  Format A (primary): bold **Section** headers — required by the prompt.
  *  Format B (fallback): plain-text section headers on their own line — for older/inconsistent LLM output.
@@ -1284,24 +1330,39 @@ const FinalResults = () => {
         const sum = vals.reduce((s: number, v: number) => s + v, 0);
         return formatter(sum / vals.length);
       };
-      const idealRanges: { name: string; getCandidate: () => string | null; ideal: string }[] = [
-        { name: 'Overall Speech Quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}/100`), ideal: '85-100' },
-        { name: 'Speaking Pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), ideal: '120-160 WPM' },
-        { name: 'Filler Words', getCandidate: () => avg('filler_words', (v) => v.toFixed(1)), ideal: '< 3-5 total' },
-        { name: 'Filler Density', getCandidate: () => avg('filler_density', (v) => `${v.toFixed(1)}%`), ideal: '< 2-5%' },
-        { name: 'Pause & Pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}/100`), ideal: '80-100' },
-        { name: 'Voice Confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}/100`), ideal: '80-100' },
-        { name: 'Stress Level', getCandidate: () => avg('stress_score', (v) => `${Math.round(v)}/100`), ideal: '0-30' },
+      const avgNum = (key: string): number | null => {
+        const vals = withBehavioral.map((a: any) => (a.behavioral ?? a.behavioral_metrics)?.[key]).filter((v: any) => typeof v === 'number');
+        if (vals.length === 0) return null;
+        return vals.reduce((s: number, v: number) => s + v, 0) / vals.length;
+      };
+      const idealRanges: { key: string; name: string; getCandidate: () => string | null; getNum: () => number | null; ideal: string }[] = [
+        { key: 'overall_speech_quality', name: 'Overall Speech Quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}`), getNum: () => avgNum('overall_speech_quality'), ideal: '85-100' },
+        { key: 'speaking_pace_wpm', name: 'Speaking Pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), getNum: () => avgNum('speaking_pace_wpm'), ideal: '120-160 WPM' },
+        { key: 'filler_words', name: 'Filler Words', getCandidate: () => avg('filler_words', (v) => `${Math.round(v)}`), getNum: () => avgNum('filler_words'), ideal: '< 3-5 total' },
+        { key: 'filler_density', name: 'Filler Density', getCandidate: () => avg('filler_density', (v) => `${Math.round(v)}%`), getNum: () => avgNum('filler_density'), ideal: '< 2-5%' },
+        { key: 'pause_quality_score', name: 'Pause & Pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}`), getNum: () => avgNum('pause_quality_score'), ideal: '80-100' },
+        { key: 'voice_confidence', name: 'Voice Confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}`), getNum: () => avgNum('voice_confidence'), ideal: '80-100' },
+        { key: 'stress_score', name: 'Stress Level', getCandidate: () => avg('stress_score', (v) => `${Math.round(v)}`), getNum: () => avgNum('stress_score'), ideal: '0-30' },
       ];
       const overallMetricsRows = idealRanges
-        .map((r) => ({ name: r.name, candidate: r.getCandidate(), ideal: r.ideal }))
-        .filter((r) => r.candidate != null) as { name: string; candidate: string; ideal: string }[];
+        .map((r) => {
+          const candidate = r.getCandidate();
+          const numVal = r.getNum();
+          if (candidate == null) return null;
+          const rating = numVal != null ? getSpeechMetricRating(r.key, numVal) : 'Average';
+          return { name: r.name, candidate, ideal: r.ideal, rating };
+        })
+        .filter((r): r is { name: string; candidate: string; ideal: string; rating: SpeechMetricRating } => r != null);
 
+      const excelRatingFill = (rating: SpeechMetricRating) => {
+        const argb = rating === 'Good' ? 'FFDCFCE7' : rating === 'Average' ? 'FFFEF3C7' : 'FFFEE2E2';
+        return { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } };
+      };
       speechSheet.getCell(speechRow, 1).value = 'Speech Analysis — Overall Metrics Summary';
       speechSheet.getCell(speechRow, 1).font = { bold: true, size: 12 };
-      speechSheet.mergeCells(speechRow, 1, speechRow, 3);
+      speechSheet.mergeCells(speechRow, 1, speechRow, 4);
       speechRow += 2;
-      speechSheet.addRow(['Metric name', 'Candidate score', 'Ideal range']);
+      speechSheet.addRow(['Metric name', 'Candidate score', 'Rating', 'Ideal range']);
       speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
         cell.fill = blueFill;
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
@@ -1309,11 +1370,13 @@ const FinalResults = () => {
         cell.alignment = { vertical: 'middle', wrapText: true };
       });
       overallMetricsRows.forEach((r) => {
-        speechSheet.addRow([r.name, r.candidate, r.ideal]);
-        speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
+        speechSheet.addRow([r.name, r.candidate, r.rating, r.ideal]);
+        const rn = speechSheet.rowCount;
+        speechSheet.getRow(rn).eachCell((cell, colNumber) => {
           cell.border = thinBorder;
           cell.font = { size: 10 };
           cell.alignment = { vertical: 'middle', wrapText: true };
+          if (colNumber === 2 || colNumber === 3) cell.fill = excelRatingFill(r.rating);
         });
       });
       speechRow = speechSheet.rowCount + 2;
@@ -2024,7 +2087,7 @@ const FinalResults = () => {
         currentPageNum++;
       });
 
-      // Page after all questions: Speech Analysis — Overall Metrics Summary (Metric | Candidate score | Ideal range)
+      // Page after all questions: Speech Analysis — Overall Metrics Summary (Metric | Candidate score | Rating | Ideal range)
       if (hasBehavioralData) {
         const withBehavioral = (reportData?.answers ?? []).filter((a: any) => {
           const b = a.behavioral ?? a.behavioral_metrics;
@@ -2036,18 +2099,29 @@ const FinalResults = () => {
           const sum = vals.reduce((s: number, v: number) => s + v, 0);
           return formatter(sum / vals.length);
         };
-        const idealRanges: { name: string; getCandidate: () => string | null; ideal: string }[] = [
-          { name: 'Overall Speech Quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}/100`), ideal: '85-100' },
-          { name: 'Speaking Pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), ideal: '120-160 WPM' },
-          { name: 'Filler Words', getCandidate: () => avg('filler_words', (v) => v.toFixed(1)), ideal: '< 3-5 total' },
-          { name: 'Filler Density', getCandidate: () => avg('filler_density', (v) => `${v.toFixed(1)}%`), ideal: '< 2-5%' },
-          { name: 'Pause & Pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}/100`), ideal: '80-100' },
-          { name: 'Voice Confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}/100`), ideal: '80-100' },
-          { name: 'Stress Level', getCandidate: () => avg('stress_score', (v) => `${Math.round(v)}/100`), ideal: '0-30' },
+        const avgNum = (key: string): number | null => {
+          const vals = withBehavioral.map((a: any) => (a.behavioral ?? a.behavioral_metrics)?.[key]).filter((v: any) => typeof v === 'number');
+          if (vals.length === 0) return null;
+          return vals.reduce((s: number, v: number) => s + v, 0) / vals.length;
+        };
+        const idealRanges: { key: string; name: string; getCandidate: () => string | null; getNum: () => number | null; ideal: string }[] = [
+          { key: 'overall_speech_quality', name: 'Overall Speech Quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}`), getNum: () => avgNum('overall_speech_quality'), ideal: '85-100' },
+          { key: 'speaking_pace_wpm', name: 'Speaking Pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), getNum: () => avgNum('speaking_pace_wpm'), ideal: '120-160 WPM' },
+          { key: 'filler_words', name: 'Filler Words', getCandidate: () => avg('filler_words', (v) => `${Math.round(v)}`), getNum: () => avgNum('filler_words'), ideal: '< 3-5 total' },
+          { key: 'filler_density', name: 'Filler Density', getCandidate: () => avg('filler_density', (v) => `${Math.round(v)}%`), getNum: () => avgNum('filler_density'), ideal: '< 2-5%' },
+          { key: 'pause_quality_score', name: 'Pause & Pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}`), getNum: () => avgNum('pause_quality_score'), ideal: '80-100' },
+          { key: 'voice_confidence', name: 'Voice Confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}`), getNum: () => avgNum('voice_confidence'), ideal: '80-100' },
+          { key: 'stress_score', name: 'Stress Level', getCandidate: () => avg('stress_score', (v) => `${Math.round(v)}`), getNum: () => avgNum('stress_score'), ideal: '0-30' },
         ];
         const overallMetricsRows = idealRanges
-          .map((r) => ({ name: r.name, candidate: r.getCandidate(), ideal: r.ideal }))
-          .filter((r) => r.candidate != null) as { name: string; candidate: string; ideal: string }[];
+          .map((r) => {
+            const candidate = r.getCandidate();
+            const numVal = r.getNum();
+            if (candidate == null) return null;
+            const rating = numVal != null ? getSpeechMetricRating(r.key, numVal) : 'Average';
+            return { name: r.name, candidate, ideal: r.ideal, rating };
+          })
+          .filter((r): r is { name: string; candidate: string; ideal: string; rating: SpeechMetricRating } => r != null);
         if (overallMetricsRows.length > 0) {
           const speechMargin = 8;
           const speechContentWidth = pageWidth - speechMargin * 2;
@@ -2060,17 +2134,26 @@ const FinalResults = () => {
           doc.setTextColor(60, 60, 60);
           doc.text('The table below shows the candidate\'s overall average for each speech metric across the entire interview, compared against professionally accepted benchmark ranges.', speechMargin, 28, { maxWidth: speechContentWidth });
           doc.setTextColor(0, 0, 0);
-          const overallTableBody = overallMetricsRows.map((r) => [r.name, r.candidate, r.ideal]);
-          const summaryCol0 = speechContentWidth * 0.38;
-          const summaryCol1 = speechContentWidth * 0.32;
-          const summaryCol2 = speechContentWidth * 0.30;
+          const overallTableBody = overallMetricsRows.map((r) => {
+            const style = SPEECH_RATING_STYLES[r.rating];
+            return [
+              r.name,
+              { content: r.candidate, styles: { fillColor: style.rgb, textColor: style.textRgb } },
+              { content: r.rating, styles: { fillColor: style.rgb, textColor: style.textRgb } },
+              r.ideal,
+            ];
+          });
+          const summaryCol0 = speechContentWidth * 0.28;
+          const summaryCol1 = speechContentWidth * 0.24;
+          const summaryCol2 = speechContentWidth * 0.24;
+          const summaryCol3 = speechContentWidth * 0.24;
           autoTable(doc, {
-            head: [['Metric name', 'Candidate score', 'Ideal range']],
+            head: [['Metric name', 'Candidate score', 'Rating', 'Ideal range']],
             body: overallTableBody,
             startY: 38,
             styles: { fontSize: 9, cellPadding: 3, ...tableBorder },
             headStyles: { fillColor: [30, 93, 168], textColor: 255, fontStyle: 'bold', fontSize: 9, ...tableBorder },
-            columnStyles: { 0: { cellWidth: summaryCol0 }, 1: { cellWidth: summaryCol1 }, 2: { cellWidth: summaryCol2 } },
+            columnStyles: { 0: { cellWidth: summaryCol0 }, 1: { cellWidth: summaryCol1 }, 2: { cellWidth: summaryCol2 }, 3: { cellWidth: summaryCol3 } },
             margin: { left: speechMargin, right: speechMargin },
             tableWidth: speechContentWidth,
           });
@@ -2425,38 +2508,59 @@ const FinalResults = () => {
               });
               if (withBehavioral.length === 0) return null;
 
-              const avg = (key, formatter = (v) => v) => {
-                const vals = withBehavioral.map((a) => (a.behavioral ?? a.behavioral_metrics)?.[key]).filter((v) => typeof v === 'number');
+              const avg = (key: string, formatter: (v: number) => string = (v) => String(v)) => {
+                const vals = withBehavioral.map((a) => (a.behavioral ?? a.behavioral_metrics)?.[key]).filter((v): v is number => typeof v === 'number');
                 if (vals.length === 0) return null;
                 const sum = vals.reduce((s, v) => s + v, 0);
                 return formatter(sum / vals.length);
               };
-              const metrics = [
-                { name: 'Overall speech quality', candidate: avg('overall_speech_quality', (v) => `${Math.round(v)}/100`) },
-                { name: 'Speaking pace (WPM)', candidate: avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`) },
-                { name: 'Filler words', candidate: avg('filler_words', (v) => `${v.toFixed(1)}`) },
-                { name: 'Filler density', candidate: avg('filler_density', (v) => `${v.toFixed(1)}%`) },
-                { name: 'Pause & pacing', candidate: avg('pause_quality_score', (v) => `${Math.round(v)}/100`) },
-                { name: 'Voice confidence', candidate: avg('voice_confidence', (v) => `${Math.round(v)}/100`) },
-                { name: 'Stress level', candidate: avg('stress_score', (v) => `${Math.round(v)}/100`) },
-              ].filter((m) => m.candidate != null);
+              const avgNum = (key: string): number | null => {
+                const vals = withBehavioral.map((a) => (a.behavioral ?? a.behavioral_metrics)?.[key]).filter((v): v is number => typeof v === 'number');
+                if (vals.length === 0) return null;
+                return vals.reduce((s, v) => s + v, 0) / vals.length;
+              };
+              const metricConfig = [
+                { key: 'overall_speech_quality', name: 'Overall speech quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}/100`), ideal: '85-100' },
+                { key: 'speaking_pace_wpm', name: 'Speaking pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), ideal: '120-160' },
+                { key: 'filler_words', name: 'Filler words', getCandidate: () => avg('filler_words', (v) => `${Math.round(v)}`), ideal: '< 3-5 total' },
+                { key: 'filler_density', name: 'Filler density', getCandidate: () => avg('filler_density', (v) => `${Math.round(v)}%`), ideal: '< 2-5%' },
+                { key: 'pause_quality_score', name: 'Pause & pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}/100`), ideal: '80-100' },
+                { key: 'voice_confidence', name: 'Voice confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}/100`), ideal: '80-100' },
+                { key: 'stress_score', name: 'Stress level', getCandidate: () => avg('stress_score', (v) => `${Math.round(v)}/100`), ideal: '0-30' },
+              ];
+              const metrics = metricConfig
+                .map((m) => {
+                  const candidate = m.getCandidate();
+                  const numVal = avgNum(m.key);
+                  if (candidate == null) return null;
+                  const rating = numVal != null ? getSpeechMetricRating(m.key, numVal) : 'Average';
+                  return { name: m.name, candidate, ideal: m.ideal, rating, numVal };
+                })
+                .filter((m): m is NonNullable<typeof m> => m != null);
 
               return (
                 <div className="overflow-x-auto">
                   <table className="w-full text-base sm:text-lg border border-gray-200 rounded-lg overflow-hidden">
                     <thead>
                       <tr className={`${tableHeaderBg} text-white`}>
-                        <th className="text-left py-3 px-4 font-semibold text-base sm:text-lg">Metric name</th>
-                        <th className="text-left py-3 px-4 font-semibold text-base sm:text-lg">Candidate score</th>
+                        <th className="text-left py-3 px-4 font-semibold text-base sm:text-lg">Metric</th>
+                        <th className="text-left py-3 px-4 font-semibold text-base sm:text-lg">Candidate Average</th>
+                        <th className="text-left py-3 px-4 font-semibold text-base sm:text-lg">Rating</th>
+                        <th className="text-left py-3 px-4 font-semibold text-base sm:text-lg">Ideal Range</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {metrics.map((m, i) => (
-                        <tr key={m.name} className={i % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                          <td className="py-3 px-4 text-gray-700">{m.name}</td>
-                          <td className="py-3 px-4 font-medium text-gray-900">{m.candidate}</td>
-                        </tr>
-                      ))}
+                      {metrics.map((m, i) => {
+                        const style = SPEECH_RATING_STYLES[m.rating];
+                        return (
+                          <tr key={m.name} className={i % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                            <td className="py-3 px-4 text-gray-700">{m.name}</td>
+                            <td className={`py-3 px-4 font-medium ${style.bg} ${style.text}`}>{m.candidate}</td>
+                            <td className={`py-3 px-4 font-medium ${style.bg} ${style.text}`}>{m.rating}</td>
+                            <td className="py-3 px-4 text-gray-600">{m.ideal}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

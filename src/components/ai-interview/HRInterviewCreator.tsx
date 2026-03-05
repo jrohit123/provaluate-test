@@ -1626,7 +1626,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                                   <div className="text-base font-semibold text-gray-900">{param.max_questions}</div>
                                 </div>
                                 <div className="text-center">
-                                  <div className="text-sm text-gray-500 mb-1">Time (min)</div>
+                                  <div className="text-sm text-gray-500 mb-1">Time (minutes)</div>
                                   <div className="text-base font-semibold text-gray-900">{param.max_time || 3}</div>
                                 </div>
                               </div>

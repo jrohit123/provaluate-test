@@ -804,8 +804,8 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       // Answer time per question (user configurable) - ensure it's a reasonable value
       let answerTime = typeof param.max_time === 'string' ? parseFloat(param.max_time) : (param.max_time || 3);
       
-      // Fix: Ensure answerTime is reasonable (1-10 minutes)
-      if (isNaN(answerTime) || answerTime < 1 || answerTime > 10) {
+      // Fix: Ensure answerTime is 1, 2, or 3 minutes only
+      if (isNaN(answerTime) || answerTime < 1 || answerTime > 3) {
         answerTime = 3; // Default to 3 minutes if invalid
       }
       
@@ -813,7 +813,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         original: param.max_time, 
         type: typeof param.max_time, 
         parsed: answerTime,
-        isValid: !isNaN(answerTime) && answerTime >= 1 && answerTime <= 10
+        isValid: !isNaN(answerTime) && answerTime >= 1 && answerTime <= 3
       });
       // Reading time per question (fixed at 30 seconds = 0.5 minutes)
       const readingTime = 0.5;
@@ -984,7 +984,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           acc[key] = {
             ...aiParam,
             // Preserve manual settings if they exist, otherwise use reasonable defaults
-            max_time: existingParam?.max_time || (aiParam.max_time && aiParam.max_time >= 1 && aiParam.max_time <= 10 ? aiParam.max_time : 3),
+            max_time: existingParam?.max_time || (aiParam.max_time && aiParam.max_time >= 1 && aiParam.max_time <= 3 ? aiParam.max_time : 3),
             level: existingParam?.level || aiParam.level || 'Regular',
             min_questions: existingParam?.min_questions || (aiParam.min_questions && aiParam.min_questions >= 1 && aiParam.min_questions <= 8 ? aiParam.min_questions : 2),
             max_questions: existingParam?.max_questions || (aiParam.max_questions && aiParam.max_questions >= 1 && aiParam.max_questions <= 8 ? aiParam.max_questions : 5),
@@ -2103,13 +2103,18 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                               />
                             </div>
                             <div className="space-y-2">
-                              <Label title="Time allocated for candidate to answer (question reading time is additional)">Answer Time (min)</Label>
+                              <Label title="Time allocated for candidate to answer (question reading time is additional)">Answer Time (minutes)</Label>
                               <Input
                                 type="number"
                                 min="1"
-                                max="10"
+                                max={param.requires_written_answer ? 5 : 3}
                                 value={param.max_time}
-                                onChange={(e) => updateParameter(key, 'max_time', e.target.value)}
+                                onChange={(e) => {
+                                const maxAllowed = param.requires_written_answer ? 5 : 3;
+                                const raw = e.target.value === '' ? maxAllowed : parseInt(e.target.value, 10);
+                                const clamped = isNaN(raw) ? 3 : Math.min(maxAllowed, Math.max(1, raw));
+                                updateParameter(key, 'max_time', clamped);
+                              }}
                               />
                             </div>
                             <div className="space-y-2">
@@ -2138,14 +2143,14 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                                   if (checked === true) {
                                     // Remember current max_time so we can restore it when unchecking
                                     setWrittenAnswerPrevMaxTime(prev => ({ ...prev, [key]: currentMax }));
-                                    // When enabling written answer, auto-increase max_time (5–6 min by complexity)
-                                    const suggested = param.level === 'Expert' ? 6 : 5;
+                                    // When enabling written answer, allow up to 5 min (speaking + writing takes more time)
+                                    const suggested = 5;
                                     if (currentMax < suggested) {
                                       updateParameter(key, 'max_time', suggested);
                                     }
                                   } else {
-                                    // When unchecking, revert to the max_time that was there before we checked
-                                    const restoreMax = writtenAnswerPrevMaxTime[key] ?? 3;
+                                    // When unchecking, revert to the value before we checked (capped at 3 for speaking only)
+                                    const restoreMax = Math.min(3, writtenAnswerPrevMaxTime[key] ?? 3);
                                     updateParameter(key, 'max_time', restoreMax);
                                     setWrittenAnswerPrevMaxTime(prev => {
                                       const next = { ...prev };
@@ -2359,11 +2364,13 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                               <Input
                                 type="number"
                                 min="1"
-                                max="10"
+                                max="3"
                                 value={question.timeLimit}
                                 onChange={(e) => {
                                   const newQuestions = [...formData.personalizedQuestions];
-                                  newQuestions[index].timeLimit = parseInt(e.target.value) || 3;
+                                  const raw = parseInt(e.target.value, 10);
+                                  const clamped = isNaN(raw) ? 3 : Math.min(3, Math.max(1, raw));
+                                  newQuestions[index].timeLimit = clamped;
                                   setFormData(prev => ({ ...prev, personalizedQuestions: newQuestions }));
                                   // Recalculate duration when changing time limit
                                   recalculateDurationWithPersonalizedQuestions(newQuestions);
