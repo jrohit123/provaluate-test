@@ -976,11 +976,16 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         const data = await response.json();
         const generatedParameters = data.parameters || {};
         
-        // Preserve existing manual settings and only use AI for missing fields
-        const paramsWithDefaults = Object.keys(generatedParameters).reduce((acc, key) => {
+        // Preserve existing manual settings and only use AI for missing fields.
+        // Use backend weight as-is (1-100) so total stays 100%; avoid clamping to 10-40 here.
+        const paramKeys = Object.keys(generatedParameters);
+        const defaultWeight = paramKeys.length > 0 ? Math.round(100 / paramKeys.length) : 25;
+        const paramsWithDefaults = paramKeys.reduce((acc, key) => {
           const existingParam = customParameters[key];
           const aiParam = generatedParameters[key];
-          
+          const rawWeight = existingParam?.weight ?? aiParam?.weight;
+          const weight = typeof rawWeight === 'number' && rawWeight >= 1 && rawWeight <= 100 ? rawWeight : defaultWeight;
+
           acc[key] = {
             ...aiParam,
             // Preserve manual settings if they exist, otherwise use reasonable defaults
@@ -988,7 +993,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
             level: existingParam?.level || aiParam.level || 'Regular',
             min_questions: existingParam?.min_questions || (aiParam.min_questions && aiParam.min_questions >= 1 && aiParam.min_questions <= 8 ? aiParam.min_questions : 2),
             max_questions: existingParam?.max_questions || (aiParam.max_questions && aiParam.max_questions >= 1 && aiParam.max_questions <= 8 ? aiParam.max_questions : 5),
-            weight: existingParam?.weight || (aiParam.weight && aiParam.weight >= 10 && aiParam.weight <= 40 ? aiParam.weight : 25),
+            weight,
             requires_written_answer: existingParam?.requires_written_answer ?? aiParam?.requires_written_answer
           };
           
