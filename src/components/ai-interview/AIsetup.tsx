@@ -432,16 +432,20 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       console.log('✅ Text extracted successfully, length:', extractedText.length);
       console.log('🔄 Extracted text preview:', extractedText.substring(0, 200) + '...');
 
-      // Clean the extracted text to remove binary data corruption (same as other systems)
+      // Clean the extracted text to remove binary data corruption while preserving line breaks
       const cleanedText = extractedText
-        .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, (ch) => (ch === '\n' || ch === '\r' ? ch : '')) // Remove control chars, keep newlines
         .replace(/\\u[0-9A-Fa-f]{4}/g, '') // Remove Unicode escape sequences
-        .replace(/\\[nrtbf]/g, ' ') // Replace escape sequences with spaces
-        .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, '') // Remove non-printable characters
+        .replace(/\\n/g, '\n') // Literal \n -> real newline
+        .replace(/\\r/g, '\r')
+        .replace(/\\[tbf]/g, ' ') // Tab, backspace, form feed -> space
+        .replace(/[^\x20-\x7E\u00A0-\u00FF\n\r]/g, '') // Remove non-printable, keep newlines
         .replace(/[&]{2,}/g, ' ') // Remove multiple ampersands
         .replace(/[0-9]{6,}/g, '') // Remove long sequences of numbers
-        .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-        .trim(); // Remove leading/trailing whitespace
+        .replace(/[ \t]+/g, ' ') // Collapse spaces/tabs only (preserve newlines)
+        .replace(/\r\n|\r/g, '\n') // Normalize line endings to \n
+        .replace(/\n{3,}/g, '\n\n') // At most 2 consecutive newlines
+        .trim();
 
       console.log('🔄 Cleaned text length:', cleanedText.length);
 
