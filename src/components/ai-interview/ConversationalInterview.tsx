@@ -76,6 +76,53 @@ import {
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
+/** Decode WebM blob in browser and return WAV Blob (no server ffmpeg). */
+async function extractWavFromWebMBlob(webmBlob: Blob): Promise<Blob | null> {
+  try {
+    const arrayBuffer = await webmBlob.arrayBuffer();
+    const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+    ctx.close();
+
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const length = audioBuffer.length;
+    const blockAlign = numChannels * 2;
+    const dataSize = length * blockAlign;
+    const totalSize = 44 + dataSize;
+    const buf = new ArrayBuffer(totalSize);
+    const view = new DataView(buf);
+    let offset = 0;
+    const write = (bytes: string) => { for (let i = 0; i < bytes.length; i++) view.setUint8(offset++, bytes.charCodeAt(i)); };
+    write('RIFF');
+    view.setUint32(offset, totalSize - 8, true); offset += 4;
+    write('WAVE');
+    write('fmt ');
+    view.setUint32(offset, 16, true); offset += 4;
+    view.setUint16(offset, 1, true); offset += 2;
+    view.setUint16(offset, numChannels, true); offset += 2;
+    view.setUint32(offset, sampleRate, true); offset += 4;
+    view.setUint32(offset, sampleRate * blockAlign, true); offset += 4;
+    view.setUint16(offset, blockAlign, true); offset += 2;
+    view.setUint16(offset, 16, true); offset += 2;
+    write('data');
+    view.setUint32(offset, dataSize, true); offset += 4;
+
+    const left = audioBuffer.getChannelData(0);
+    const right = numChannels > 1 ? audioBuffer.getChannelData(1) : left;
+    for (let i = 0; i < length; i++) {
+      const l = Math.max(-1, Math.min(1, left[i]));
+      const r = numChannels > 1 ? Math.max(-1, Math.min(1, right[i])) : l;
+      view.setInt16(offset, l < 0 ? l * 0x8000 : l * 0x7FFF, true); offset += 2;
+      if (numChannels > 1) { view.setInt16(offset, r < 0 ? r * 0x8000 : r * 0x7FFF, true); offset += 2; }
+    }
+    return new Blob([buf], { type: 'audio/wav' });
+  } catch (e) {
+    console.warn('Browser WAV extraction failed:', e);
+    return null;
+  }
+}
+
 // Fetch conversational phrase from backend
 const fetchInterviewPhrase = async (
   phraseType: 'welcome' | 'transition' | 'completion' | 'question_intro',
@@ -275,7 +322,7 @@ const ConversationalInterview = () => {
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const isTerminatedRef = useRef(false);
   const handleSubmitAnswerRef = useRef<(() => Promise<void>) | null>(null);
-  const stopQuestionRecordingRef = useRef<(() => void) | null>(null);
+  const stopQuestionRecordingRef = useRef<(() => Promise<{ audioBlob: Blob | null; questionVideoBlob: Blob | null }>) | null>(null);
   /** When true, submit runs from timer expiry; submit whatever transcript + written answer we have (don't block on empty written box) */
   const forceSubmitOnTimerExpiryRef = useRef(false);
   /** When true, do not reset question timer (user stopped recording on written question; timer must keep counting down) */
@@ -298,6 +345,8 @@ const ConversationalInterview = () => {
   const totalQuestionsRef = useRef<number | null>(null);
   /** Promise for previous question's media upload; awaited in generateNextQuestion before TTS */
   const pendingMediaUploadPromiseRef = useRef<Promise<void> | null>(null);
+  /** When set (timer expiry), use these blobs for submit so audio/video are never skipped */
+  const submitBlobsOverrideRef = useRef<{ audioBlob: Blob | null; questionVideoBlob: Blob | null } | null>(null);
 
   const terminateInterview = useCallback(async (reason) => {
     // Use consistent toast ID to prevent duplicate messages
@@ -1487,20 +1536,36 @@ const ConversationalInterview = () => {
 
     if (isSubmitting || answerSubmitted) return;
 
-    // Stop recording first if still recording, then auto-submit (transcript + any written answer)
+    // Stop recording first, wait for audio+video blobs so we never submit with missing media, then auto-submit
     if (isRecording) {
-      console.log('🔄 Question time expired - stopping recording and auto-submitting');
+      console.log('🔄 Question time expired - stopping recording, waiting for blobs, then auto-submitting');
       forceSubmitOnTimerExpiryRef.current = true;
-      if (stopQuestionRecordingRef.current) stopQuestionRecordingRef.current();
-      setTimeout(() => {
+      const stop = stopQuestionRecordingRef.current;
+      if (stop) {
+        (async () => {
+          try {
+            const blobs = await Promise.race([
+              stop(),
+              new Promise<{ audioBlob: Blob | null; questionVideoBlob: Blob | null }>((resolve) =>
+                setTimeout(() => resolve({ audioBlob: null, questionVideoBlob: null }), 30000)
+              ),
+            ]);
+            submitBlobsOverrideRef.current = blobs;
+            console.log('✅ Timer expiry: blobs ready for submit', { hasAudio: !!blobs.audioBlob, hasVideo: !!blobs.questionVideoBlob });
+          } catch (_) {
+            submitBlobsOverrideRef.current = { audioBlob: null, questionVideoBlob: null };
+          }
+          if (handleSubmitAnswerRef.current) handleSubmitAnswerRef.current();
+        })();
+      } else {
         if (handleSubmitAnswerRef.current) handleSubmitAnswerRef.current();
-      }, 1500);
+      }
       return;
     }
 
     // Recording already stopped: submit whatever we have (transcript + written answer in box)
     // For written questions this runs when timer expires while user is typing in the box
-    if (!isRecording && (audioBlob || currentQuestion?.requires_written_answer)) {
+    if (!isRecording && (questionVideoBlob || currentQuestion?.requires_written_answer)) {
       console.log('🔄 Timer expired while writing or after recording - submitting transcript + written answer');
       forceSubmitOnTimerExpiryRef.current = true;
       if (handleSubmitAnswerRef.current) handleSubmitAnswerRef.current();
@@ -1508,7 +1573,7 @@ const ConversationalInterview = () => {
     }
 
     console.log('⏰ Timer expired but no valid state to submit');
-  }, [isSubmitting, answerSubmitted, isRecording, audioBlob, currentQuestion?.requires_written_answer]);
+  }, [isSubmitting, answerSubmitted, isRecording, questionVideoBlob, currentQuestion?.requires_written_answer]);
 
   const interviewTimeRemaining = useCountdownTimer(
     interviewTimerSeconds,
@@ -2241,15 +2306,11 @@ const ConversationalInterview = () => {
      const handleSubmitAnswer = useCallback(async () => {
        console.log('🔍 Submit button clicked!');
        console.log('🔍 Current state:', {
-         transcript: transcript,
          transcriptLength: transcript?.length,
-         audioBlob: audioBlob,
-         audioBlobSize: audioBlob?.size,
+         questionVideoBlob: !!questionVideoBlob,
          isVideoOn: isVideoOn,
          isSubmitting: isSubmitting,
-         currentQuestion: currentQuestion,
          currentQuestionId: currentQuestion?.id,
-         currentQuestionQuestionId: currentQuestion?.question_id
        });
        
        // Prevent multiple submissions
@@ -2260,7 +2321,28 @@ const ConversationalInterview = () => {
 
        const isForceSubmitOnTimerExpiry = forceSubmitOnTimerExpiryRef.current;
        if (isForceSubmitOnTimerExpiry) forceSubmitOnTimerExpiryRef.current = false;
-       
+
+       // If blobs are already staged by timer expiry path, use them.
+       // Otherwise, if still recording, stop now and await blobs directly — never read from state.
+       const override = submitBlobsOverrideRef.current;
+       if (override) submitBlobsOverrideRef.current = null;
+
+       let questionVideoBlobToUse: Blob | null = override?.questionVideoBlob ?? questionVideoBlob;
+
+       if (!override && stopQuestionRecordingRef.current) {
+         try {
+           const blobs = await Promise.race([
+             stopQuestionRecordingRef.current(),
+             new Promise<{ audioBlob: Blob | null; questionVideoBlob: Blob | null }>((resolve) =>
+               setTimeout(() => resolve({ audioBlob: null, questionVideoBlob: null }), 8000)
+             ),
+           ]);
+           questionVideoBlobToUse = blobs.questionVideoBlob ?? questionVideoBlob;
+         } catch (_) {
+           questionVideoBlobToUse = questionVideoBlob;
+         }
+       }
+
        // Check for corrupted transcription
        if (transcript && isCorruptedTranscription(transcript)) {
          console.log('❌ Corrupted transcription detected:', transcript);
@@ -2309,60 +2391,7 @@ const ConversationalInterview = () => {
        const isLastQuestion = totalQuestionsRef.current != null && (currentQuestionIndex + 1) >= totalQuestionsRef.current;
        
        try {
-          // Last question: upload video first (current flow). Non-last: transcript-only, media uploaded later.
-           let questionVideoUrl: string | null = null;
-           if (isLastQuestion && questionVideoBlob) {
-           console.log('🔍 [Last question] Uploading question video...');
-           console.log('🔍 Video blob size:', questionVideoBlob?.size);
-           console.log('🔍 Video blob type:', questionVideoBlob?.type);
-           
-             try {
-               console.log('📤 Uploading question video...');
-               // Keep uploading status for video upload
-               
-               // Use FormData for efficient file upload instead of base64
-               const formData = new FormData();
-               formData.append('interview_id', interviewData.interviewId);
-               formData.append('question_order', currentQuestionIndex.toString());
-               formData.append('question_text', JSON.stringify(currentQuestion));
-               formData.append('video_file', questionVideoBlob, `question_${currentQuestionIndex}.webm`);
-               formData.append('video_format', 'webm');
-               formData.append('video_quality', 'very_low'); // Optimized for faster uploads
-
-               // Add timeout handling for video upload (optimized for faster processing)
-               const videoController = new AbortController();
-               const videoTimeout = setTimeout(() => videoController.abort(), API_CONFIG.TIMEOUTS.VIDEO_UPLOAD);
-               
-               try {
-                 const videoResponse = await apiCall(API_CONFIG.ENDPOINTS.UPLOAD_QUESTION_VIDEO, {
-                   method: 'POST',
-                   body: formData,
-                   signal: videoController.signal
-                 });
-                 
-                 clearTimeout(videoTimeout);
-                 
-                 if (videoResponse.ok) {
-                   const videoResult = await videoResponse.json();
-                   questionVideoUrl = videoResult.video_url;
-                   console.log('✅ Question video uploaded:', questionVideoUrl);
-                 } else {
-                   console.warn('⚠️ Question video upload failed, continuing without video');
-                 }
-               } catch (videoError) {
-                 clearTimeout(videoTimeout);
-                 if (videoError.name === 'AbortError') {
-                   console.warn('⚠️ Video upload timed out, continuing without video');
-                 } else {
-                   console.warn('⚠️ Question video upload error:', videoError);
-                 }
-               }
-             } catch (videoError) {
-               console.warn('⚠️ Question video upload error:', videoError);
-             }
-           }
-           
-           // Submit answer: last question sends media; non-last sends transcript only
+          // Submit transcript + video in one request; backend extracts audio for speech analysis
            console.log('🔄 Starting answer submission...');
            setSubmissionStatus('processing');
            const answerController = new AbortController();
@@ -2382,7 +2411,7 @@ const ConversationalInterview = () => {
              console.log('🔍 Final submission data:');
              console.log('🔍 interview_id:', interviewData.interviewId);
              console.log('🔍 transcript:', finalTranscript);
-             console.log('🔍 question_video_url:', questionVideoUrl);
+             console.log('🔍 Submitting transcript + video in one request');
              
              // Ensure we have valid question_id for first question
              const questionId = currentQuestion?.id || currentQuestion?.question_id || `q${currentQuestionIndex}`;
@@ -2404,38 +2433,26 @@ const ConversationalInterview = () => {
              console.log('🔍 question_order:', currentQuestionIndex);
              console.log('🔍 transcript length:', finalTranscript.length);
 
-            // Last question: include audio + video URL. Non-last: transcript only (media uploaded later).
-            let audioDataBase64: string | null = null;
-            if (isLastQuestion && audioBlob) {
-              audioDataBase64 = await new Promise<string>((resolve, reject) => {
-                try {
-                  const r = new FileReader();
-                  r.onload = () => resolve(String(r.result));
-                  r.onerror = reject;
-                  r.readAsDataURL(audioBlob);
-                } catch (e) {
-                  reject(e);
-                }
-              });
-            }
-
-            const submitPayload: Record<string, unknown> = {
-              interview_id: interviewData.interviewId,
-              question_id: questionId,
-              question_order: currentQuestionIndex,
-              transcript: finalTranscript,
-              ...(currentQuestion?.requires_written_answer === true ? { written_answer: (writtenAnswer || '').trim() } : (writtenAnswer?.trim() ? { written_answer: writtenAnswer.trim() } : {})),
-            };
-            if (isLastQuestion) {
-              submitPayload.audio_data = audioDataBase64 ?? undefined;
-              submitPayload.skip_transcription = true;
-              submitPayload.question_video_url = questionVideoUrl ?? undefined;
+            // Single request: transcript + video + audio (browser extracts WAV so server needs no ffmpeg).
+            const formData = new FormData();
+            formData.append('interview_id', interviewData.interviewId);
+            formData.append('question_id', questionId);
+            formData.append('question_order', String(currentQuestionIndex));
+            formData.append('transcript', finalTranscript);
+            if (currentQuestion?.requires_written_answer === true || (writtenAnswer && writtenAnswer.trim()))
+              formData.append('written_answer', (writtenAnswer || '').trim());
+            formData.append('video_duration', String(questionVideoDuration || 0));
+            formData.append('video_format', 'webm');
+            if (questionVideoBlobToUse) {
+              formData.append('video_file', questionVideoBlobToUse, `question_${currentQuestionIndex}.webm`);
+              const audioWavBlob = await extractWavFromWebMBlob(questionVideoBlobToUse);
+              if (audioWavBlob)
+                formData.append('audio_file', audioWavBlob, `question_${currentQuestionIndex}_audio.wav`);
             }
 
             const response = await apiCall(API_CONFIG.ENDPOINTS.SUBMIT_ANSWER, {
                method: 'POST',
-               headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify(submitPayload),
+               body: formData,
                signal: answerController.signal
              });
              
@@ -2448,21 +2465,6 @@ const ConversationalInterview = () => {
                // Check if interview is completed
                if (result.interview_completed) {
                  console.log('🏁 Interview completed after answer submission!');
-                 // If we did transcript-only for last (didn't know in advance), upload this question's media first
-                 if (!isLastQuestion && (questionVideoBlob || audioBlob)) {
-                   try {
-                     await uploadQuestionMedia({
-                       interviewId: interviewData.interviewId,
-                       questionId: currentQuestion?.id || currentQuestion?.question_id || `q${currentQuestionIndex}`,
-                       questionOrder: currentQuestionIndex,
-                       videoBlob: questionVideoBlob,
-                       audioBlob: audioBlob ?? null,
-                       duration: questionVideoDuration || 0,
-                     });
-                   } catch (e) {
-                     console.warn('⚠️ Last question media upload failed:', e);
-                   }
-                 }
                  if (finishInterviewRef.current) {
                    await finishInterviewRef.current();
                  } else {
@@ -2474,20 +2476,6 @@ const ConversationalInterview = () => {
                // "I don't know" flow: speak TTS phrase then generate simpler question (same timer)
                if (result.suggest_simpler && result.tts_phrase) {
                  console.log('🎤 Suggest simpler: speaking TTS phrase then generating simpler question');
-                 if (questionVideoBlob || audioBlob) {
-                   const qId = currentQuestion?.id || currentQuestion?.question_id || `q${currentQuestionIndex}`;
-                   pendingMediaUploadPromiseRef.current = uploadQuestionMedia({
-                     interviewId: interviewData.interviewId,
-                     questionId: qId,
-                     questionOrder: currentQuestionIndex,
-                     videoBlob: questionVideoBlob,
-                     audioBlob: audioBlob ?? null,
-                     duration: questionVideoDuration || 0,
-                   }).then(() => { pendingMediaUploadPromiseRef.current = null; }).catch((err) => {
-                     console.warn('⚠️ Background media upload failed:', err);
-                     pendingMediaUploadPromiseRef.current = null;
-                   });
-                 }
                  setQuestionVideoBlob(null);
                  setQuestionVideoDuration(0);
                  setAnswerSubmitted(true);
@@ -2508,26 +2496,8 @@ const ConversationalInterview = () => {
                  return;
                }
                
-               // Conversation history removed to reduce complexity
-               
-               // Start background upload for this question (awaited in generateNextQuestion before TTS)
-               if (questionVideoBlob || audioBlob) {
-                 const qId = currentQuestion?.id || currentQuestion?.question_id || `q${currentQuestionIndex}`;
-                 pendingMediaUploadPromiseRef.current = uploadQuestionMedia({
-                   interviewId: interviewData.interviewId,
-                   questionId: qId,
-                   questionOrder: currentQuestionIndex,
-                   videoBlob: questionVideoBlob,
-                   audioBlob: audioBlob ?? null,
-                   duration: questionVideoDuration || 0,
-                 }).then(() => { pendingMediaUploadPromiseRef.current = null; }).catch((err) => {
-                   console.warn('⚠️ Background media upload failed:', err);
-                   pendingMediaUploadPromiseRef.current = null;
-                 });
-               }
                setQuestionVideoBlob(null);
                setQuestionVideoDuration(0);
-               
                setAnswerSubmitted(true);
                setSubmissionStatus('submitted');
                dispatch(interviewActions.setSubmitting(false));
@@ -2609,7 +2579,7 @@ const ConversationalInterview = () => {
          dispatch(interviewActions.setSubmitting(false));
          setSubmissionStatus('idle');
        }
-     }, [transcript, audioBlob, isVideoOn, currentQuestion, currentQuestionIndex, interviewData.interviewId, spokenFeedback, generateNextQuestion, interviewData.candidateName, isSubmitting, questionVideoBlob, speakWithAI, writtenAnswer, uploadQuestionMedia, questionVideoDuration]);
+     }, [transcript, isVideoOn, currentQuestion, currentQuestionIndex, interviewData.interviewId, spokenFeedback, generateNextQuestion, interviewData.candidateName, isSubmitting, questionVideoBlob, speakWithAI, writtenAnswer, questionVideoDuration]);
 
   // Assign refs after functions are defined
   useEffect(() => {
@@ -2924,8 +2894,7 @@ const ConversationalInterview = () => {
         return;
       }
       
-      // Re-enable microphone recording ONLY to capture audio blob for upload (not for transcription)
-      let audioRecorder = null;
+      // Single stream: video + audio only. Mic is added to combined stream; audio is extracted from video on backend.
       let micStream = null;
       try {
         micStream = await navigator.mediaDevices.getUserMedia({
@@ -2933,41 +2902,22 @@ const ConversationalInterview = () => {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
-            sampleRate: 44100,
+            sampleRate: 22050,
             channelCount: 1
           }
         });
-        audioRecorder = new RecordRTC(micStream, {
-          type: 'audio',
-          mimeType: 'audio/wav',
-          numberOfAudioChannels: 1,
-          desiredSampRate: 44100,
-          recorderType: RecordRTC.StereoAudioRecorder,
-          quality: 10
-        });
         audioStreamRef.current = micStream;
       } catch (micErr) {
-        console.warn('⚠️ Failed to acquire microphone stream for audio blob:', micErr);
-        audioRecorder = null;
+        console.warn('⚠️ Failed to acquire microphone stream:', micErr);
       }
       const combinedStream = new MediaStream();
-      
-      // Add video tracks from camera stream
-      cameraStream.getVideoTracks().forEach(track => {
-        combinedStream.addTrack(track);
-      });
-
+      cameraStream.getVideoTracks().forEach(track => combinedStream.addTrack(track));
       if (micStream) {
-        micStream.getAudioTracks().forEach(track => {
-          combinedStream.addTrack(track);
-        });
+        micStream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
       }
-      
-      console.log('🎬 Combined stream created with video tracks:', combinedStream.getVideoTracks().length);
-      console.log('🎤 Combined stream created with audio tracks:', combinedStream.getAudioTracks().length);
-      
-      // Create recorder using the combined stream (video + audio); lower bitrate/quality for smaller files
-      const videoBitsPerSecond = isMobile ? 400000 : INTERVIEW_CONSTANTS.MEDIA.VIDEO_BITRATE;
+      console.log('🎬 Combined stream: video tracks=', combinedStream.getVideoTracks().length, 'audio tracks=', combinedStream.getAudioTracks().length);
+
+      const videoBitsPerSecond = INTERVIEW_CONSTANTS.MEDIA.VIDEO_BITRATE;
       const questionVideoRecorder = new RecordRTC(combinedStream, {
         type: 'video',
         mimeType: 'video/webm',
@@ -2978,23 +2928,14 @@ const ConversationalInterview = () => {
         videoBitsPerSecond,
         timeSlice: INTERVIEW_CONSTANTS.MEDIA.TIME_SLICE,
         ondataavailable: function(blob) {
-          console.log('🎥 Combined video+audio chunk available:', blob.type, blob.size);
+          console.log('🎥 Video+audio chunk:', blob.type, blob.size);
         }
       });
-      
-      // Start video recorder
       questionVideoRecorder.startRecording();
-      console.log('🎥 Video recording started');
-      
-      // Start browser Web Speech recognition for live transcript
+      console.log('🎥 Video+audio recording started (single stream)');
       startWebSpeech();
-      // Start audio recorder if available (for upload only, not transcription)
-      if (audioRecorder) {
-        audioRecorder.startRecording();
-      }
-      
-      // Store references
-      setMediaRecorder(audioRecorder);
+
+      setMediaRecorder(null);
       setVideoRecorder(questionVideoRecorder);
       
       // Initialize timer for first question when recording actually starts (after permissions are granted)
@@ -3714,7 +3655,10 @@ const ConversationalInterview = () => {
     };
   }, []);
 
-  const stopQuestionRecording = () => {
+  // Long enough for RecordRTC to finalize blobs after stop (e.g. 2-min recordings can take 10–20s)
+  const BLOB_WAIT_MS = 25000;
+
+  const stopQuestionRecording = (): Promise<{ audioBlob: Blob | null; questionVideoBlob: Blob | null }> => {
     // For written-answer questions, keep the timer running so the user sees time remaining while typing
     const isWrittenQuestion = currentQuestion?.requires_written_answer === true;
     if (!isWrittenQuestion) {
@@ -3730,74 +3674,92 @@ const ConversationalInterview = () => {
     if (!mediaRecorder && !videoRecorder) {
       setIsRecording(false);
       setIsVideoRecording(false);
-      return;
+      return Promise.resolve({ audioBlob: null, questionVideoBlob: null });
     }
-    
-    let audioBlobRetrieved = false;
-    let videoBlobRetrieved = false;
-    
-    // Stop Web Speech recognition
+
+    let resolveAudioRef: ((b: Blob | null) => void) | null = null;
+    let resolveVideoRef: ((b: Blob | null) => void) | null = null;
+    const audioPromise = new Promise<Blob | null>((resolve) => {
+      resolveAudioRef = resolve;
+      setTimeout(() => {
+        if (resolveAudioRef) {
+          resolveAudioRef(null);
+          resolveAudioRef = null;
+        }
+      }, BLOB_WAIT_MS);
+    });
+    const videoPromise = new Promise<Blob | null>((resolve) => {
+      resolveVideoRef = resolve;
+      setTimeout(() => {
+        if (resolveVideoRef) {
+          resolveVideoRef(null);
+          resolveVideoRef = null;
+        }
+      }, BLOB_WAIT_MS);
+    });
+
     stopWebSpeech();
-    
-    // Stop audio recording and capture blob for upload
-    if (mediaRecorder && mediaRecorder.stopRecording) {
-      try {
-        mediaRecorder.stopRecording(() => {
-          try {
-            const blob = mediaRecorder.getBlob();
-            if (blob && blob.size > 0) {
-              setAudioBlob(blob);
-            }
-          } catch (e) {
-            console.error('❌ Error retrieving audio blob:', e);
-          }
-        });
-      } catch (e) {
-        console.error('❌ Error stopping audio recorder:', e);
-      }
+    // No separate audio recorder; audio is in the video. Resolve audio as null.
+    if (resolveAudioRef) {
+      resolveAudioRef(null);
+      resolveAudioRef = null;
     }
-    
-    // Stop question video recording
+
+    // Stop video+audio recording (single stream)
     if (videoRecorder && videoRecorder.stopRecording) {
       try {
         videoRecorder.stopRecording(() => {
-                  try {
-          const videoBlob = videoRecorder.getBlob();
-          console.log('🎥 Retrieved camera video blob:', videoBlob);
-          console.log('🎥 Video blob size:', videoBlob?.size);
-          console.log('🎥 Video blob type:', videoBlob?.type);
-            
+          try {
+            const videoBlob = videoRecorder.getBlob();
+            console.log('🎥 Retrieved camera video blob:', videoBlob);
+            console.log('🎥 Video blob size:', videoBlob?.size);
+            console.log('🎥 Video blob type:', videoBlob?.type);
+
             if (videoBlob && videoBlob.size > 0) {
               setQuestionVideoBlob(videoBlob);
-              videoBlobRetrieved = true;
               console.log('✅ Camera video blob set successfully');
               toast.success(`Camera recording saved! (${(videoBlob.size / 1024 / 1024).toFixed(1)} MB)`);
+              if (resolveVideoRef) {
+                resolveVideoRef(videoBlob);
+                resolveVideoRef = null;
+              }
             } else {
               console.log('❌ Video blob is empty or null');
+              if (resolveVideoRef) {
+                resolveVideoRef(null);
+                resolveVideoRef = null;
+              }
             }
           } catch (blobError) {
             console.error('❌ Error getting video blob:', blobError);
             toast.error('Error processing video recording');
+            if (resolveVideoRef) {
+              resolveVideoRef(null);
+              resolveVideoRef = null;
+            }
           }
         });
       } catch (stopError) {
         console.error('❌ Error stopping video recording:', stopError);
+        if (resolveVideoRef) {
+          resolveVideoRef(null);
+          resolveVideoRef = null;
+        }
       }
+    } else if (resolveVideoRef) {
+      resolveVideoRef(null);
+      resolveVideoRef = null;
     }
-    
+
     // Ensure no lingering mic tracks
     if (audioStreamRef.current) {
       audioStreamRef.current.getTracks().forEach(track => track.stop());
       audioStreamRef.current = null;
     }
-    
-    // Don't stop videoStreamRef.current here as it's the camera stream
-    
-    // No audio fallback needed
-    
-    // Fallback for video
+
+    // Fallback for video (in case main callback is slow; promise may already have resolved)
     setTimeout(() => {
-      if (!videoBlobRetrieved && videoRecorder && videoRecorder.getBlob) {
+      if (videoRecorder && videoRecorder.getBlob) {
         try {
           const fallbackBlob = videoRecorder.getBlob();
           if (fallbackBlob && fallbackBlob.size > 0) {
@@ -3808,11 +3770,14 @@ const ConversationalInterview = () => {
         }
       }
     }, 2000);
-    
+
     setIsRecording(false);
     setIsVideoRecording(false);
-    
-    // Answer timer cleanup removed - will be handled dynamically
+
+    return Promise.all([audioPromise, videoPromise]).then(([a, v]) => ({
+      audioBlob: a,
+      questionVideoBlob: v,
+    }));
   };
 
   useEffect(() => {
@@ -4183,7 +4148,7 @@ const ConversationalInterview = () => {
            
                        <button
               onClick={handleSubmitAnswer}
-              disabled={!audioBlob || isSubmitting || !isVideoOn || answerSubmitted || (currentQuestion?.requires_written_answer === true && !writtenAnswer?.trim())}
+              disabled={!transcript?.trim() || isSubmitting || !isVideoOn || answerSubmitted || (currentQuestion?.requires_written_answer === true && !writtenAnswer?.trim()) || (!isRecording && !questionVideoBlob)}
               className={`flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-6 py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                 answerSubmitted || submissionStatus === 'submitted'
                   ? 'bg-[#1e5da8] text-white cursor-default animate-pulse'
@@ -4209,10 +4174,11 @@ const ConversationalInterview = () => {
                         : 'Submitting...'
                   : 'Submit Answer'
               }
-              {(!audioBlob || isSubmitting || !isVideoOn) && !answerSubmitted && (
-                <span className="text-xs ml-2">
-                  {!audioBlob ? '(No audio)' : !isVideoOn ? '(Camera off)' : ''}
-                </span>
+              {!isVideoOn && !answerSubmitted && (
+                <span className="text-xs ml-2">(Camera off)</span>
+              )}
+              {isVideoOn && !answerSubmitted && (!questionVideoBlob && !isRecording) && (
+                <span className="text-xs ml-2">(Start recording)</span>
               )}
             </button>
             
