@@ -19,7 +19,7 @@ interface BrowserExtensionInfoProps {
 const GMAIL_LOGO = '/assets/GMAIL%20LOGO.png';
 const OUTLOOK_LOGO = '/assets/OUTLOOK%20LOGO.png';
 const LINKEDIN_LOGO = '/assets/LINKEDIN%20LOGO.png';
-const ZOHO_LOGO = '/assets/ZOHO%20LOGO.png';
+const ZOHO_LOGO = '/assets/ZOHO%20LOGO.png?v=2';
 const GMAIL_PLUGIN_ZIP_URL = '/downloads/Gmail-Plugin.zip';
 const OUTLOOK_MANIFEST_URL = '/downloads/manifest.xml';
 const LINKEDIN_PLUGIN_ZIP_URL = '/downloads/Linkedin-Plugin.zip';
