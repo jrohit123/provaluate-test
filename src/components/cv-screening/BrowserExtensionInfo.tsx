@@ -87,7 +87,7 @@ export const BrowserExtensionInfo = ({
               onClick={() => setSelectedProvider('zoho')}
               className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-gray-200 hover:border-[#1e5da8] hover:bg-blue-50/50 transition-all duration-200 text-left"
             >
-              <img src={ZOHO_LOGO} alt="Zoho Mail" className="w-14 h-14 object-contain mb-3" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <img src={ZOHO_LOGO} alt="Zoho Mail" className="w-14 h-14 object-contain mb-3" />
               <span className="font-semibold text-gray-900">Zoho</span>
             </button>
             <button
