@@ -23,6 +23,7 @@ const ZOHO_LOGO = '/assets/ZOHO%20LOGO.png';
 const GMAIL_PLUGIN_ZIP_URL = '/downloads/Gmail-Plugin.zip';
 const OUTLOOK_MANIFEST_URL = '/downloads/manifest.xml';
 const LINKEDIN_PLUGIN_ZIP_URL = '/downloads/Linkedin-Plugin.zip';
+const ZOHO_PLUGIN_ZIP_URL = '/downloads/Zoho-Plugin.zip';
 
 function downloadFile(url: string, filename: string) {
   const a = document.createElement('a');
@@ -87,7 +88,7 @@ export const BrowserExtensionInfo = ({
               className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-gray-200 hover:border-[#1e5da8] hover:bg-blue-50/50 transition-all duration-200 text-left"
             >
               <img src={ZOHO_LOGO} alt="Zoho Mail" className="w-14 h-14 object-contain mb-3" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-              <span className="font-semibold text-gray-900">Zoho Mail</span>
+              <span className="font-semibold text-gray-900">Zoho</span>
             </button>
             <button
               type="button"
@@ -109,10 +110,15 @@ export const BrowserExtensionInfo = ({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-6">
           <DialogHeader className="flex-shrink-0">
-            <Button variant="ghost" size="sm" className="absolute left-4 top-4 gap-1" onClick={() => setSelectedProvider(null)}>
-              <ArrowLeft className="w-4 h-4" /> Back
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute left-4 top-4 gap-1 text-sm md:text-base"
+              onClick={() => setSelectedProvider(null)}
+            >
+              <ArrowLeft className="w-5 h-5" /> Back
             </Button>
-            <DialogTitle className="text-2xl font-bold text-primary-800 pt-6">
+            <DialogTitle className="text-2xl font-bold text-primary-800 pt-10">
               ProValuate for Gmail
             </DialogTitle>
             <DialogDescription className="text-base mt-2">
@@ -214,10 +220,15 @@ export const BrowserExtensionInfo = ({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-6">
           <DialogHeader className="flex-shrink-0">
-            <Button variant="ghost" size="sm" className="absolute left-4 top-4 gap-1" onClick={() => setSelectedProvider(null)}>
-              <ArrowLeft className="w-4 h-4" /> Back
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute left-4 top-4 gap-1 text-sm md:text-base"
+              onClick={() => setSelectedProvider(null)}
+            >
+              <ArrowLeft className="w-5 h-5" /> Back
             </Button>
-            <DialogTitle className="text-2xl font-bold text-primary-800 pt-6">
+            <DialogTitle className="text-2xl font-bold text-primary-800 pt-10">
               ProValuate for LinkedIn
             </DialogTitle>
             <DialogDescription className="text-base mt-2">
@@ -316,10 +327,15 @@ export const BrowserExtensionInfo = ({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-6">
           <DialogHeader className="flex-shrink-0">
-            <Button variant="ghost" size="sm" className="absolute left-4 top-4 gap-1" onClick={() => setSelectedProvider(null)}>
-              <ArrowLeft className="w-4 h-4" /> Back
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute left-4 top-4 gap-1 text-sm md:text-base"
+              onClick={() => setSelectedProvider(null)}
+            >
+              <ArrowLeft className="w-5 h-5" /> Back
             </Button>
-            <DialogTitle className="text-2xl font-bold text-primary-800 pt-6">
+            <DialogTitle className="text-2xl font-bold text-primary-800 pt-10">
               ProValuate for Zoho Mail
             </DialogTitle>
             <DialogDescription className="text-base mt-2">
@@ -372,14 +388,49 @@ export const BrowserExtensionInfo = ({
               )}
             </div>
 
+            <div className="border border-green-200 rounded-lg p-5 bg-green-50/50">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <FileArchive className="w-5 h-5 text-green-600" />
+                Installation Instructions (Zoho Add-on)
+              </h3>
+              <div className="bg-white rounded-lg p-4">
+                <ol className="space-y-2 text-sm text-gray-700 list-decimal list-inside">
+                  <li>Download and extract the Zoho plugin ZIP file below</li>
+                  <li>
+                    Open <strong>Chrome</strong> or <strong>Edge</strong> and go to{' '}
+                    <code className="bg-gray-100 px-1 rounded">chrome://extensions/</code> or{' '}
+                    <code className="bg-gray-100 px-1 rounded">edge://extensions/</code>
+                  </li>
+                  <li>Enable <strong>Developer mode</strong></li>
+                  <li>Click <strong>Load unpacked</strong> and select the extracted folder</li>
+                </ol>
+              </div>
+            </div>
+
             <div className="border border-purple-200 rounded-lg p-5 bg-purple-50/50">
               <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                <FileArchive className="w-5 h-5 text-purple-600" />
-                Zoho Add-on
+                <Globe className="w-5 h-5 text-purple-600" />
+                How to Use
               </h3>
               <p className="text-sm text-gray-700">
-                Download and install the Zoho Add-on from the link in the dashboard. Open an email with resume attachments in Zoho Mail, click the ProValuate button, select JD and Criteria, then click &quot;Assess Resumes&quot;.
+                Open an email with resume attachments in Zoho Mail (mail.zoho.com or mail.zoho.in), click the ProValuate icon, select JD and Criteria, then click &quot;Assess Resumes&quot;. Connect Zoho Mail once (link in the add-on modal) if you haven&apos;t already.
               </p>
+            </div>
+
+            <div className="border-2 border-primary-300 rounded-lg p-5 bg-primary-50">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Ready to Get Started?</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Download the Zoho Add-on package. The same package works for Chrome and Edge.
+              </p>
+              <Button
+                onClick={() => downloadFile(ZOHO_PLUGIN_ZIP_URL, 'Zoho-Plugin.zip')}
+                className="flex items-center gap-2"
+                size="lg"
+              >
+                <Download className="w-4 h-4" />
+                Download Zoho Add-on (ZIP)
+                <FileArchive className="w-4 h-4" />
+              </Button>
             </div>
           </div>
         </DialogContent>
@@ -392,10 +443,15 @@ export const BrowserExtensionInfo = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-6">
         <DialogHeader className="flex-shrink-0">
-          <Button variant="ghost" size="sm" className="absolute left-4 top-4 gap-1" onClick={() => setSelectedProvider(null)}>
-            <ArrowLeft className="w-4 h-4" /> Back
+          <Button
+            variant="ghost"
+            size="sm"
+            className="absolute left-4 top-4 gap-1 text-sm md:text-base"
+            onClick={() => setSelectedProvider(null)}
+          >
+            <ArrowLeft className="w-5 h-5" /> Back
           </Button>
-          <DialogTitle className="text-2xl font-bold text-primary-800 pt-6">
+          <DialogTitle className="text-2xl font-bold text-primary-800 pt-10">
             ProValuate for Outlook
           </DialogTitle>
           <DialogDescription className="text-base mt-2">
