@@ -19,7 +19,7 @@ interface BrowserExtensionInfoProps {
 const GMAIL_LOGO = '/assets/GMAIL%20LOGO.png';
 const OUTLOOK_LOGO = '/assets/OUTLOOK%20LOGO.png';
 const LINKEDIN_LOGO = '/assets/LINKEDIN%20LOGO.png';
-const ZOHO_LOGO = '/assets/ZOHO%20LOGO.png';
+const ZOHO_LOGO = '/assets/ZOHO_Logo.png';
 const GMAIL_PLUGIN_ZIP_URL = '/downloads/Gmail-Plugin.zip';
 const OUTLOOK_MANIFEST_URL = '/downloads/manifest.xml';
 const LINKEDIN_PLUGIN_ZIP_URL = '/downloads/Linkedin-Plugin.zip';
@@ -59,7 +59,7 @@ export const BrowserExtensionInfo = ({
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-primary-800">
-              Provaluate Plugins
+              ProValuate Plugins
             </DialogTitle>
             <DialogDescription className="text-base mt-2">
               Choose your provider to get started. Evaluate resumes from your inbox or LinkedIn without leaving Gmail, Outlook, Zoho, or LinkedIn.
