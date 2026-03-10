@@ -200,10 +200,11 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
         </div>
       </div>
 
-      {/* Resume Plugins Modal (Gmail / Outlook / LinkedIn) */}
+      {/* Resume Plugins Modal (Gmail / Outlook / LinkedIn / Zoho) */}
       <BrowserExtensionInfo 
         open={isEmailPluginInfoOpen} 
-        onOpenChange={setIsEmailPluginInfoOpen} 
+        onOpenChange={setIsEmailPluginInfoOpen}
+        userId={user?.id ?? user?.profile?.user_id} 
       />
 
       {/* Top Cards Row */}

@@ -12,11 +12,14 @@ import { Download, Mail, Globe, CheckCircle2, FileArchive, ArrowLeft, FileCode }
 interface BrowserExtensionInfoProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** ProValuate user ID (UUID) for Connect Zoho Mail link; optional */
+  userId?: string;
 }
 
 const GMAIL_LOGO = '/assets/GMAIL%20LOGO.png';
 const OUTLOOK_LOGO = '/assets/OUTLOOK%20LOGO.png';
 const LINKEDIN_LOGO = '/assets/LINKEDIN%20LOGO.png';
+const ZOHO_LOGO = '/assets/ZOHO%20LOGO.png';
 const GMAIL_PLUGIN_ZIP_URL = '/downloads/Gmail-Plugin.zip';
 const OUTLOOK_MANIFEST_URL = '/downloads/manifest.xml';
 const LINKEDIN_PLUGIN_ZIP_URL = '/downloads/Linkedin-Plugin.zip';
@@ -31,11 +34,14 @@ function downloadFile(url: string, filename: string) {
   document.body.removeChild(a);
 }
 
+const PYTHON_API_BASE = import.meta.env.VITE_PYTHON_URL || (typeof localStorage !== 'undefined' ? localStorage.getItem('provaluate_api_base') : null) || 'https://flask-6421997997235322.kloudbeansite.com';
+
 export const BrowserExtensionInfo = ({
   open,
   onOpenChange,
+  userId,
 }: BrowserExtensionInfoProps) => {
-  const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'outlook' | 'linkedin' | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'outlook' | 'linkedin' | 'zoho' | null>(null);
 
   // Reset to provider choice when modal closes
   useEffect(() => {
@@ -55,10 +61,10 @@ export const BrowserExtensionInfo = ({
               Provaluate Plugins
             </DialogTitle>
             <DialogDescription className="text-base mt-2">
-              Choose your provider to get started. Evaluate resumes from your inbox or LinkedIn without leaving Gmail, Outlook, or LinkedIn.
+              Choose your provider to get started. Evaluate resumes from your inbox or LinkedIn without leaving Gmail, Outlook, Zoho, or LinkedIn.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
             <button
               type="button"
               onClick={() => setSelectedProvider('gmail')}
@@ -74,6 +80,14 @@ export const BrowserExtensionInfo = ({
             >
               <img src={OUTLOOK_LOGO} alt="Outlook" className="w-14 h-14 object-contain mb-3" />
               <span className="font-semibold text-gray-900">Outlook</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedProvider('zoho')}
+              className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-gray-200 hover:border-[#1e5da8] hover:bg-blue-50/50 transition-all duration-200 text-left"
+            >
+              <img src={ZOHO_LOGO} alt="Zoho Mail" className="w-14 h-14 object-contain mb-3" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <span className="font-semibold text-gray-900">Zoho Mail</span>
             </button>
             <button
               type="button"
@@ -288,6 +302,84 @@ export const BrowserExtensionInfo = ({
                 Download LinkedIn plugin (ZIP)
                 <FileArchive className="w-4 h-4" />
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // Step 2: Zoho view (Connect Zoho Mail + Zoho Add-on)
+  if (selectedProvider === 'zoho') {
+    const zohoRegisterUrl = `${PYTHON_API_BASE.replace(/\/$/, '')}/api/zoho/register-start${userId ? `?user_id=${encodeURIComponent(userId)}` : ''}`;
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-6">
+          <DialogHeader className="flex-shrink-0">
+            <Button variant="ghost" size="sm" className="absolute left-4 top-4 gap-1" onClick={() => setSelectedProvider(null)}>
+              <ArrowLeft className="w-4 h-4" /> Back
+            </Button>
+            <DialogTitle className="text-2xl font-bold text-primary-800 pt-6">
+              ProValuate for Zoho Mail
+            </DialogTitle>
+            <DialogDescription className="text-base mt-2">
+              Connect your Zoho Mail account once, then assess resume attachments from the Zoho Add-on or dashboard.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className={instructionsSectionClass}>
+            <div className="border border-blue-200 rounded-lg p-5 bg-blue-50/50">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <Mail className="w-5 h-5 text-blue-600" />
+                What you need
+              </h3>
+              <ul className="space-y-2 text-sm text-gray-700">
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                  <span>Be logged in to ProValuate (this dashboard)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                  <span>Connect Zoho Mail once using the button below</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                  <span>Install the Zoho Add-on (Chrome/Edge) to assess resumes inside mail.zoho.com</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="border border-green-200 rounded-lg p-5 bg-green-50/50">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <Globe className="w-5 h-5 text-green-600" />
+                Connect Zoho Mail (one-time)
+              </h3>
+              <p className="text-sm text-gray-700 mb-4">
+                Click below to sign in with Zoho and allow ProValuate to read your mail. You only need to do this once.
+              </p>
+              <Button
+                onClick={() => window.open(zohoRegisterUrl, '_blank', 'noopener,noreferrer')}
+                className="flex items-center gap-2"
+                size="lg"
+              >
+                <Mail className="w-4 h-4" />
+                Connect Zoho Mail
+              </Button>
+              {!userId && (
+                <p className="text-xs text-amber-700 mt-2">
+                  For the best experience, ensure you are logged in to ProValuate before connecting.
+                </p>
+              )}
+            </div>
+
+            <div className="border border-purple-200 rounded-lg p-5 bg-purple-50/50">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <FileArchive className="w-5 h-5 text-purple-600" />
+                Zoho Add-on
+              </h3>
+              <p className="text-sm text-gray-700">
+                Download and install the Zoho Add-on from the link in the dashboard. Open an email with resume attachments in Zoho Mail, click the ProValuate button, select JD and Criteria, then click &quot;Assess Resumes&quot;.
+              </p>
             </div>
           </div>
         </DialogContent>
