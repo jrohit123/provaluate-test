@@ -5,18 +5,29 @@ export const TOUR_STORAGE_KEY = 'provaluate_onboarding_tour_completed';
 
 export const TOUR_SECTION_DONE_PREFIX = 'provaluate_tour_section_';
 
-/** Sections that have their own contextual tour when you first visit. */
-export const TOUR_SECTIONS: ActiveSection[] = [
-  'job-upload',
-  'evaluation-criteria',
-  'resume-upload',
-  'match-scorecard',
-  'settings',
-  'career-portal',
-  'setup',
-  'ai-interview',
-  'interview-dashboard',
-];
+export type PlanType = 'cv' | 'interview' | 'combo';
+
+/** Sections that have their own contextual tour when you first visit (plan-aware). */
+export function getTourSectionsForPlan(planType: PlanType): ActiveSection[] {
+  if (planType === 'interview') {
+    return ['settings', 'setup', 'ai-interview', 'interview-dashboard'];
+  }
+  if (planType === 'cv') {
+    return ['job-upload', 'evaluation-criteria', 'resume-upload', 'match-scorecard', 'settings', 'career-portal'];
+  }
+  // combo (and free tier): everything
+  return [
+    'job-upload',
+    'evaluation-criteria',
+    'resume-upload',
+    'match-scorecard',
+    'settings',
+    'career-portal',
+    'setup',
+    'ai-interview',
+    'interview-dashboard',
+  ];
+}
 
 export function getSectionTourStorageKey(section: ActiveSection): string {
   return `${TOUR_SECTION_DONE_PREFIX}${section}`;
@@ -47,7 +58,7 @@ export interface TourStep {
 
 // ----- Main tour (dashboard): short, informative steps -----
 
-export const MAIN_TOUR_STEPS: TourStep[] = [
+const MAIN_TOUR_STEPS_CV: TourStep[] = [
   {
     target: '[data-tour="dashboard-welcome"]',
     content: 'Welcome. This tour shows how to go from job description to ranked shortlist.',
@@ -66,15 +77,64 @@ export const MAIN_TOUR_STEPS: TourStep[] = [
   },
   {
     target: '[data-tour="email-plugin"]',
-    content: 'Resume plugins: evaluate resumes from Gmail, Outlook, or LinkedIn. Choose your provider to get the extension or add-in.',
+    content: 'Resume plugins: evaluate resumes from LinkedIn, Gmail, Outlook, or Zoho. Choose your provider to get the extension or add-in.',
     placement: 'bottom',
     disableScrolling: false,
   },
 ];
 
-/** Main tour uses sidebar-trigger on mobile (sidebar is in Sheet). Resume plugins step always included (button always visible). */
-export function getMainTourSteps(isMobile: boolean): TourStep[] {
-  const steps = MAIN_TOUR_STEPS.map((s) => ({ ...s }));
+const MAIN_TOUR_STEPS_INTERVIEW: TourStep[] = [
+  {
+    target: '[data-tour="dashboard-welcome"]',
+    content: 'Welcome. This tour shows how to go from interview setup to completed sessions and results.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="sidebar"]',
+    content: 'Sidebar: move between Interview steps (Setup → Send Interview → Interview Dashboard). Each section has its own short tour.',
+    placement: 'right',
+    disableScrolling: true,
+  },
+  {
+    target: '[data-tour="quick-actions"]',
+    content: 'Use Quick Actions to jump to Interview Setup, Send Interview, or the Interview Dashboard.',
+    placement: 'bottom',
+  },
+];
+
+const MAIN_TOUR_STEPS_COMBO: TourStep[] = [
+  {
+    target: '[data-tour="dashboard-welcome"]',
+    content: 'Welcome. This tour shows both flows: CV Screening (shortlist) and Interviews (sessions + results).',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="sidebar"]',
+    content: 'Sidebar: access CV Screening steps and Interview Management steps. Each section has its own short tour.',
+    placement: 'right',
+    disableScrolling: true,
+  },
+  {
+    target: '[data-tour="quick-actions"]',
+    content: 'Quick Actions: jump to CV Screening steps or Interview steps from one place.',
+    placement: 'bottom',
+  },
+  {
+    target: '[data-tour="email-plugin"]',
+    content: 'Resume plugins: evaluate resumes from LinkedIn, Gmail, Outlook, or Zoho. Choose your provider to get the extension or add-in.',
+    placement: 'bottom',
+    disableScrolling: false,
+  },
+];
+
+/**
+ * Main tour uses sidebar-trigger on mobile (sidebar is in Sheet).
+ * Plan-aware so interview-only users never see CV/plugin steps.
+ */
+export function getMainTourSteps(isMobile: boolean, planType: PlanType): TourStep[] {
+  const base =
+    planType === 'interview' ? MAIN_TOUR_STEPS_INTERVIEW : planType === 'cv' ? MAIN_TOUR_STEPS_CV : MAIN_TOUR_STEPS_COMBO;
+  const steps = base.map((s) => ({ ...s }));
   const sidebarIdx = steps.findIndex((s) => s.target === '[data-tour="sidebar"]');
   if (sidebarIdx >= 0 && isMobile) {
     steps[sidebarIdx] = { ...steps[sidebarIdx], target: '[data-tour="sidebar-trigger"]' };

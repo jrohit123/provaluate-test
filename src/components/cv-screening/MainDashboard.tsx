@@ -28,12 +28,13 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
   const [isCVScreeningOpen, setIsCVScreeningOpen] = useState(false);
   const [isInterviewOpen, setIsInterviewOpen] = useState(false);
   
-  // State for real data
+  // State for real data (CV: job_descriptions; Interview: jd_for_interview + interviews completed)
   const [stats, setStats] = useState({
     jobDescriptions: 0,
     criteriaSets: 0,
     assessments: 0,
-    interviewJobDescriptions: 0
+    interviewJobDescriptions: 0,
+    interviewsCompleted: 0,
   });
   const [loading, setLoading] = useState(true);
   const [planData, setPlanData] = useState<any>(null);
@@ -55,21 +56,24 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
         companyRes,
         usersCountRes,
         jobRowsRes,
-        interviewCountRes,
+        interviewJdCountRes,
         criteriaRes,
+        interviewsCompletedRes,
       ] = await Promise.all([
         supabase.from('companies').select('*').eq('company_id', cid).single(),
         supabase.from('users').select('*', { count: 'exact', head: true }).eq('company_id', cid).eq('user_status', 'active'),
         supabase.from('job_descriptions').select('jd_file, jd_id').eq('company_id', cid).eq('status', 'active'),
         supabase.from('jd_for_interview').select('*', { count: 'exact', head: true }).eq('company_id', cid),
         supabase.from('criteria').select('criteria_name, created_at, company_id, criteria_id').or(`company_id.eq.${cid},company_id.is.null`).order('created_at', { ascending: false }),
+        supabase.from('interviews').select('*', { count: 'exact', head: true }).eq('company_id', cid).in('status', ['completed', 'terminated']),
       ]);
 
       const companyData = companyRes.data;
       const userCount = usersCountRes.count ?? 0;
       const companyJobDescriptions = jobRowsRes.data ?? [];
       const jobCount = companyJobDescriptions.length;
-      const interviewJobCount = interviewCountRes.count ?? 0;
+      const interviewJobCount = interviewJdCountRes.count ?? 0;
+      const interviewsCompletedCount = interviewsCompletedRes.count ?? 0;
       const criteriaData = criteriaRes.data ?? [];
 
       setCompanyData(companyData);
@@ -91,6 +95,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
           .from('plans')
           .select('*')
           .eq('plan_name', companyData.selected_plan)
+          .eq('plan_type', companyData.plan_type || 'combo')
           .single();
         setPlanData(planData);
       }
@@ -127,7 +132,8 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
         jobDescriptions: jobCount,
         criteriaSets: criteriaCount,
         assessments: assessmentCount,
-        interviewJobDescriptions: jobCount + interviewJobCount,
+        interviewJobDescriptions: interviewJobCount,
+        interviewsCompleted: interviewsCompletedCount,
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -154,6 +160,17 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
     }
   }, [loading, user, onDashboardReady]);
 
+  // Avoid flashing combo-only UI while plan/company data is still loading.
+  // Once companyData is loaded: missing/empty plan_type -> treat as 'combo' (Free Tier behavior).
+  const hasResolvedCompany = companyData != null;
+  const rawPlanType = hasResolvedCompany ? (companyData?.plan_type ?? planData?.plan_type) : null;
+  const planType =
+    rawPlanType != null && String(rawPlanType).trim() !== ''
+      ? String(rawPlanType).toLowerCase()
+      : hasResolvedCompany
+        ? 'combo'
+        : null;
+
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
@@ -162,25 +179,27 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
         <p className="text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Welcome to your faster hiring workspace!</p>
         <h1 className="text-xl sm:text-2xl font-bold text-primary-800">Dashboard</h1>
         </div>
-        {/* Extension above Guided Tour on mobile (flex-col); same row on desktop (sm:flex-row) */}
+        {/* Extension above Guided Tour on mobile (flex-col); same row on desktop (sm:flex-row). Resume Plugins only for cv/combo. */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-          <span data-tour="email-plugin" className="inline-flex w-full sm:w-auto order-1">
-            <Button
-              size="sm"
-              onClick={() => {
-                UiAnalyticsService.track({
-                  name: 'dashboard_click_email_plugin_info',
-                  area: 'cv_screening_dashboard',
-                });
-                setIsEmailPluginInfoOpen(true);
-              }}
-              className="flex items-center justify-center gap-2 w-full sm:w-auto"
-            >
-              <Puzzle className="w-4 h-4" />
-              <span className="hidden sm:inline">Resume Plugins</span>
-              <span className="sm:hidden">Plugins</span>
-            </Button>
-          </span>
+          {(planType === 'cv' || planType === 'combo') && (
+            <span data-tour="email-plugin" className="inline-flex w-full sm:w-auto order-1">
+              <Button
+                size="sm"
+                onClick={() => {
+                  UiAnalyticsService.track({
+                    name: 'dashboard_click_email_plugin_info',
+                    area: 'cv_screening_dashboard',
+                  });
+                  setIsEmailPluginInfoOpen(true);
+                }}
+                className="flex items-center justify-center gap-2 w-full sm:w-auto"
+              >
+                <Puzzle className="w-4 h-4" />
+                <span className="hidden sm:inline">Resume Plugins</span>
+                <span className="sm:hidden">Plugins</span>
+              </Button>
+            </span>
+          )}
           <Button 
             size="sm"
             data-tour="guided-tour-trigger"
@@ -223,18 +242,31 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
             ) : planData ? (
               <div className="space-y-3">
                 <div className="space-y-2">
-                  <div className="text-2xl font-bold text-gray-900">{planData.plan_name}</div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {planData.plan_name}
+                    {planData.plan_type ? ` (${planData.plan_type === 'cv' ? 'CV Only' : planData.plan_type === 'interview' ? 'Interviews Only' : 'Combo'})` : ''}
+                  </div>
                   <div className="text-sm text-gray-600">
                     {planData.plan_cost ? `₹${planData.plan_cost}/month` : 'Free Plan'}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
-                  <div>
-                    <div className="font-medium text-gray-700">Max CVs</div>
-                    <div className="text-gray-600">
-                      {loading ? '...' : `${consumedCVs} / ${planData.max_cvs === 0 ? 'Unlimited' : planData.max_cvs}`}
+                  {planData.max_cvs != null && (
+                    <div>
+                      <div className="font-medium text-gray-700">Max CVs</div>
+                      <div className="text-gray-600">
+                        {loading ? '...' : `${consumedCVs} / ${planData.max_cvs === 0 ? 'Unlimited' : planData.max_cvs}`}
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  {planData.max_interviews != null && (
+                    <div>
+                      <div className="font-medium text-gray-700">Max Interviews</div>
+                      <div className="text-gray-600">
+                        {loading ? '...' : `${companyData?.interview_count ?? 0} / ${planData.max_interviews === 0 ? 'Unlimited' : planData.max_interviews}`}
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <div className="font-medium text-gray-700">Max Users</div>
                     <div className="text-gray-600">
@@ -269,37 +301,53 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
           </CardContent>
         </Card>
 
-        {/* Quick Stats Card */}
+        {/* Quick Stats Card - stats centred with equal spacing */}
         <Card className="animate-fade-in">
           <CardHeader>
             <CardTitle>Quick Stats</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-              <div className="text-center">
-                <div className="text-lg sm:text-2xl font-bold text-gray-900">
-                  {loading ? '...' : stats.jobDescriptions}
-                </div>
-                <div className="text-xs sm:text-sm text-gray-600">JOB DESCRIPTIONS</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg sm:text-2xl font-bold text-gray-900">
-                  {loading ? '...' : stats.criteriaSets}
-                </div>
-                <div className="text-xs sm:text-sm text-gray-600">CRITERIA SETS</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg sm:text-2xl font-bold text-gray-900">
-                  {loading ? '...' : stats.assessments}
-                </div>
-                <div className="text-xs sm:text-sm text-gray-600">ASSESSMENTS</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg sm:text-2xl font-bold text-gray-900">
-                  {loading ? '...' : stats.interviewJobDescriptions}
-                </div>
-                <div className="text-xs sm:text-sm text-gray-600 break-words">INTERVIEW JOB DESCRIPTIONS</div>
-              </div>
+          <CardContent className="flex flex-col items-center justify-center pt-12 pb-1 px-6">
+            <div className="flex flex-row flex-nowrap gap-6 sm:gap-8 w-full max-w-4xl justify-center items-stretch">
+              {/* CV-only: CV JDs, Evaluation criteria, Assessments */}
+              {(planType === 'cv' || planType === 'combo') && (
+                <>
+                  <div className="flex-1 min-w-0 flex flex-col items-center text-center">
+                    <div className="text-lg sm:text-2xl font-bold text-gray-900">
+                      {loading ? '...' : stats.jobDescriptions}
+                    </div>
+                    <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words">CV JDs CREATED</div>
+                  </div>
+                  <div className="flex-1 min-w-0 flex flex-col items-center text-center">
+                    <div className="text-lg sm:text-2xl font-bold text-gray-900">
+                      {loading ? '...' : stats.criteriaSets}
+                    </div>
+                    <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words">EVALUATION CRITERIA</div>
+                  </div>
+                  <div className="flex-1 min-w-0 flex flex-col items-center text-center">
+                    <div className="text-lg sm:text-2xl font-bold text-gray-900">
+                      {loading ? '...' : stats.assessments}
+                    </div>
+                    <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words">ASSESSMENTS</div>
+                  </div>
+                </>
+              )}
+              {/* Interview-only: Interview JDs, Interviews completed */}
+              {(planType === 'interview' || planType === 'combo') && (
+                <>
+                  <div className="flex-1 min-w-0 flex flex-col items-center text-center">
+                    <div className="text-lg sm:text-2xl font-bold text-gray-900">
+                      {loading ? '...' : stats.interviewJobDescriptions}
+                    </div>
+                    <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words">INTERVIEW JDs CREATED</div>
+                  </div>
+                  <div className="flex-1 min-w-0 flex flex-col items-center text-center">
+                    <div className="text-lg sm:text-2xl font-bold text-gray-900">
+                      {loading ? '...' : stats.interviewsCompleted}
+                    </div>
+                    <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words">INTERVIEWS COMPLETED</div>
+                  </div>
+                </>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -314,27 +362,28 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* CV Screening Section */}
-          <Collapsible 
-            open={isMobile ? isCVScreeningOpen : true} 
-            onOpenChange={isMobile ? setIsCVScreeningOpen : undefined}
-            disabled={!isMobile}
-          >
-            <div className={`mb-3 sm:mb-4 ${isMobile ? 'bg-blue-50 border border-blue-200 rounded-lg p-3' : ''}`}>
-              <CollapsibleTrigger 
-                asChild 
-                className={isMobile ? "w-full" : "pointer-events-none"}
-              >
-                <div className={`flex items-center justify-between ${isMobile ? 'cursor-pointer' : ''}`}>
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900">CV Screening</h3>
-                  {isMobile && (
-                    <ChevronDown className={`h-5 w-5 text-blue-600 transition-transform duration-200 ${isCVScreeningOpen ? 'rotate-180' : ''}`} />
-                  )}
-                </div>
-              </CollapsibleTrigger>
-            </div>
-            <CollapsibleContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {/* CV Screening Section - cv/combo only */}
+          {(planType === 'cv' || planType === 'combo') && (
+            <Collapsible 
+              open={isMobile ? isCVScreeningOpen : true} 
+              onOpenChange={isMobile ? setIsCVScreeningOpen : undefined}
+              disabled={!isMobile}
+            >
+              <div className={`mb-3 sm:mb-4 ${isMobile ? 'bg-blue-50 border border-blue-200 rounded-lg p-3' : ''}`}>
+                <CollapsibleTrigger 
+                  asChild 
+                  className={isMobile ? "w-full" : "pointer-events-none"}
+                >
+                  <div className={`flex items-center justify-between ${isMobile ? 'cursor-pointer' : ''}`}>
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900">CV Screening</h3>
+                    {isMobile && (
+                      <ChevronDown className={`h-5 w-5 text-blue-600 transition-transform duration-200 ${isCVScreeningOpen ? 'rotate-180' : ''}`} />
+                    )}
+                  </div>
+                </CollapsibleTrigger>
+              </div>
+              <CollapsibleContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {/* 1. Manage Job Descriptions */}
             <Button
               onClick={() => {
@@ -347,7 +396,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
               className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
             >
               <FileText className="w-5 h-5" />
-              <div className="font-semibold text-xs sm:text-sm text-center">1. Create Job Descriptions</div>
+              <div className="font-semibold text-xs sm:text-sm text-center">1. New Job Upload</div>
             </Button>
 
             {/* 2. Manage Evaluation Criteria */}
@@ -362,7 +411,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
               className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
             >
               <Wrench className="w-5 h-5" />
-              <div className="font-semibold text-xs sm:text-sm text-center">2. Set Up Evaluation Criteria</div>
+              <div className="font-semibold text-xs sm:text-sm text-center">2. Evaluation Criteria</div>
             </Button>
 
             {/* 3. Upload Resumes */}
@@ -377,7 +426,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
               className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
             >
               <Upload className="w-5 h-5" />
-              <div className="font-semibold text-xs sm:text-sm text-center">3. Upload Resumes</div>
+              <div className="font-semibold text-xs sm:text-sm text-center">3. Resume Upload</div>
             </Button>
 
             {/* 4. View Reports */}
@@ -392,13 +441,15 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
               className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
             >
               <BarChart3 className="w-5 h-5" />
-              <div className="font-semibold text-xs sm:text-sm text-center">4. View Reports</div>
+              <div className="font-semibold text-xs sm:text-sm text-center">4. View All Results</div>
             </Button>
               </div>
             </CollapsibleContent>
           </Collapsible>
+          )}
 
-          {/* Interview Management Section */}
+          {/* Interview Management Section - interview/combo only */}
+          {(planType === 'interview' || planType === 'combo') && (
           <div className="mt-4 sm:mt-6">
             <Collapsible 
               open={isMobile ? isInterviewOpen : true} 
@@ -432,7 +483,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                 className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
               >
                 <Cog className="w-5 h-5" />
-                <div className="font-semibold text-xs sm:text-sm text-center">Interview Configuration</div>
+                <div className="font-semibold text-xs sm:text-sm text-center">Interview Creation</div>
               </Button>
 
               {/* Assessment Manager */}
@@ -447,7 +498,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                 className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
               >
                 <Users className="w-5 h-5" />
-                <div className="font-semibold text-xs sm:text-sm text-center">Assessment Manager</div>
+                <div className="font-semibold text-xs sm:text-sm text-center">Send Interview</div>
               </Button>
 
               {/* Interview Dashboard */}
@@ -468,6 +519,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
               </CollapsibleContent>
             </Collapsible>
           </div>
+          )}
         </CardContent>
       </Card>
 

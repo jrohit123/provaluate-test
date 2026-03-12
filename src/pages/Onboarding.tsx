@@ -113,6 +113,7 @@ export default function Onboarding() {
           company_name: companyName,
           email_domain: domain,
           selected_plan: plan.plan_name,
+          plan_type: plan.plan_type, // cv / interview / combo
           subscription_status: 'Active',
           subscription_start: now.toISOString(),
           subscription_end: subscriptionEnd ? subscriptionEnd.toISOString() : null,
@@ -324,7 +325,8 @@ export default function Onboarding() {
               <SelectContent>
                 {plans.map(plan => (
                   <SelectItem key={plan.plan_id} value={plan.plan_id}>
-                    {plan.plan_name} - ₹{plan.plan_cost}
+                    {plan.plan_name}
+                    {plan.plan_type ? ` (${plan.plan_type === 'cv' ? 'CV Only' : plan.plan_type === 'interview' ? 'Interviews Only' : 'Combo'})` : ''} — ₹{plan.plan_cost}
                   </SelectItem>
                 ))}
               </SelectContent>

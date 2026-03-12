@@ -183,6 +183,7 @@ export default function Signup() {
           company_name: companyName,
           email_domain: domain,
           selected_plan: plan.plan_name,
+          plan_type: plan.plan_type, // cv / interview / combo
           subscription_status: 'active',
           subscription_start: now.toISOString(),
           subscription_end: subscriptionEnd ? subscriptionEnd.toISOString() : null,
@@ -375,7 +376,8 @@ export default function Signup() {
               <SelectContent>
                 {plans.map(plan => (
                   <SelectItem key={plan.plan_id} value={plan.plan_id}>
-                    {plan.plan_name} - ₹{plan.plan_cost}/month
+                    {plan.plan_name}
+                    {plan.plan_type ? ` (${plan.plan_type === 'cv' ? 'CV Only' : plan.plan_type === 'interview' ? 'Interviews Only' : 'Combo'})` : ''} — ₹{plan.plan_cost}/month
                   </SelectItem>
                 ))}
               </SelectContent>

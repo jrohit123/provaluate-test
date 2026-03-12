@@ -1492,23 +1492,42 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
             <div className="space-y-4">
               {candidate.scores
                 .filter(score => score.parameter !== 'Overall Assessment')
-                .map((score, idx) => (
-                <div key={idx} className="space-y-2">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 sm:gap-0">
-                    <span className="font-medium text-sm sm:text-base text-gray-900 break-words">{score.parameter}</span>
-                    <div className="text-left sm:text-right">
-                      <span className="text-base sm:text-lg font-bold text-gray-900">{Math.round(score.score * 10)}</span>
-                      <span className="text-xs sm:text-sm text-gray-500 sm:ml-4 block sm:inline">Weight: {score.weightage}%</span>
+                .map((score, idx) => {
+                  const rawScore =
+                    typeof score.score === 'number'
+                      ? score.score
+                      : parseFloat(score.score ?? 0);
+                  const clampedScore = Number.isFinite(rawScore)
+                    ? Math.max(0, Math.min(10, rawScore))
+                    : 0;
+                  const barWidth = clampedScore * 10;
+                  const displayScore = Number(clampedScore.toFixed(1))
+                    .toString()
+                    .replace(/\.0$/, '');
+                  return (
+                    <div key={idx} className="space-y-2">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 sm:gap-0">
+                        <span className="font-medium text-sm sm:text-base text-gray-900 break-words">
+                          {score.parameter}
+                        </span>
+                        <div className="text-left sm:text-right">
+                          <span className="text-base sm:text-lg font-bold text-gray-900">
+                            {displayScore}
+                          </span>
+                          <span className="text-xs sm:text-sm text-gray-500 sm:ml-4 block sm:inline">
+                            Weight: {score.weightage}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${barWidth}%` }}
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${Math.round(score.score * 10)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+                  );
+                })}
             </div>
 
             {/* Overview card: one card, no gaps; coloured blocks with headers flow together */}

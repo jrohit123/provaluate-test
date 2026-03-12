@@ -42,6 +42,15 @@ export interface JobDescriptionLimitInfo {
   planName: string;
 }
 
+export interface InterviewLimitInfo {
+  canStartInterview: boolean;
+  currentInterviewCount: number;
+  maxInterviews: number;
+  remainingInterviews: number;
+  planName: string;
+  planType: string | null;
+}
+
 export class UsageTrackingService {
   /**
    * Check if a company can process more CVs based on their plan limits
@@ -52,7 +61,7 @@ export class UsageTrackingService {
       // 1) Fetch company info
       const { data: companyData, error: companyError } = await supabase
         .from('companies')
-        .select('company_id, selected_plan, cv_processed_count, cv_processing_reset_date, subscription_status, subscription_end')
+        .select('company_id, selected_plan, plan_type, cv_processed_count, cv_processing_reset_date, subscription_status, subscription_end')
         .eq('company_id', companyId)
         .single();
 
@@ -81,13 +90,14 @@ export class UsageTrackingService {
       // 2) Fetch plan info separately (selected_plan stores plan name, not FK)
       let maxCVs = 0;
       let planName = 'No Plan';
-      let planData: { plan_name?: string; max_cvs?: number; plan_cost?: number } | null = null;
+      let planData: { plan_name?: string; max_cvs?: number; plan_cost?: number; plan_type?: string; max_interviews?: number | null } | null = null;
 
       if (companyData.selected_plan) {
         const { data: planRow, error: planError } = await supabase
           .from('plans')
-          .select('plan_name, max_cvs, plan_cost')
+          .select('plan_name, max_cvs, plan_cost, plan_type, max_interviews')
           .eq('plan_name', companyData.selected_plan)
+          .eq('plan_type', companyData.plan_type || 'combo')
           .single();
 
         if (planError) {
@@ -105,8 +115,32 @@ export class UsageTrackingService {
       const subscriptionStatus = companyData.subscription_status || '';
       const isExpired = subscriptionStatus === 'expired' || (trialStatus?.is_expired ?? false);
       const isTrial = trialStatus?.is_trial ?? (planData != null ? (planData.plan_cost ?? 0) === 0 : false);
+
+      // Effective plan type: null/missing → combo (same as free tier / full access)
+      const planType = (companyData.plan_type || planData?.plan_type || 'combo').toLowerCase();
+
+      // For interview-only plans, block CV processing entirely
+      if (planType === 'interview') {
+        return {
+          canProcessCV: false,
+          currentCVCount: currentCount,
+          maxCVs: maxCVs,
+          remainingCVs: 0,
+          planName,
+          resetDate: companyData.cv_processing_reset_date || new Date().toISOString(),
+          isTrial,
+          isExpired,
+          isExpiringSoon: trialStatus?.is_expiring_soon ?? false,
+          daysRemaining: trialStatus?.days_remaining ?? undefined,
+          cvsExhausted: true,
+          shouldForceUpgrade: true,
+          warningMessage:
+            trialStatus?.warning_message ??
+            'Aapke plan mein CV screening shamil nahi hai. CV screening use karne ke liye CV ya Combo plan pe switch kijiye.'
+        };
+      }
       
-      // Block processing if expired
+      // Block processing if expired (for CV/combo)
       // Calculate available CVs: maxCVs - currentCount
       // Negative currentCount means bonus CVs (e.g., -18 = 18 bonus CVs)
       // Available = maxCVs - currentCount = 50 - (-18) = 68 CVs
@@ -144,7 +178,7 @@ export class UsageTrackingService {
       // 1) Fetch company info
       const { data: companyData, error: companyError } = await supabase
         .from('companies')
-        .select('company_id, selected_plan')
+        .select('company_id, selected_plan, plan_type')
         .eq('company_id', companyId)
         .single();
 
@@ -164,8 +198,9 @@ export class UsageTrackingService {
       if (companyData.selected_plan) {
         const { data: planData, error: planError } = await supabase
           .from('plans')
-          .select('plan_name, active_jobs')
+          .select('plan_name, active_jobs, plan_type')
           .eq('plan_name', companyData.selected_plan)
+          .eq('plan_type', companyData.plan_type || 'combo')
           .single();
 
         if (planError) {
@@ -204,6 +239,134 @@ export class UsageTrackingService {
       };
     } catch (error) {
       console.error('Error checking JD processing limit:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a company can create more interview JDs (jd_for_interview) based on plan limits.
+   * Uses same plan field active_jobs; counts rows in jd_for_interview where is_active = true.
+   */
+  static async checkInterviewJDLimit(companyId: string): Promise<JobDescriptionLimitInfo> {
+    try {
+      const { data: companyData, error: companyError } = await supabase
+        .from('companies')
+        .select('company_id, selected_plan, plan_type')
+        .eq('company_id', companyId)
+        .single();
+
+      if (companyError || !companyData) {
+        if (companyError) console.error('Error fetching company data:', companyError);
+        throw new Error('Failed to fetch company information');
+      }
+
+      let maxActiveJDs = 0;
+      let planName = 'No Plan';
+
+      if (companyData.selected_plan) {
+        const { data: planData, error: planError } = await supabase
+          .from('plans')
+          .select('plan_name, active_jobs, plan_type')
+          .eq('plan_name', companyData.selected_plan)
+          .eq('plan_type', companyData.plan_type || 'combo')
+          .single();
+
+        if (!planError && planData) {
+          maxActiveJDs = planData.active_jobs ?? 0;
+          planName = planData.plan_name ?? companyData.selected_plan;
+        }
+      }
+
+      // Count active CV-screening JDs (job_descriptions.status = 'active')
+      const { count: activeCvJdCount, error: activeCvError } = await supabase
+        .from('job_descriptions')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', companyId)
+        .eq('status', 'active');
+
+      if (activeCvError) {
+        console.error('Error counting active CV JDs for interview limit:', activeCvError);
+        throw new Error('Failed to count active job descriptions for interview limit');
+      }
+
+      // Count active interview JDs (jd_for_interview.is_active = true)
+      const { count: activeInterviewJdCount, error: activeInterviewError } = await supabase
+        .from('jd_for_interview')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', companyId)
+        .eq('is_active', true);
+
+      if (activeInterviewError) {
+        console.error('Error counting active interview JDs:', activeInterviewError);
+        throw new Error('Failed to count active interview job descriptions');
+      }
+
+      // Shared pool: active_jobs cap is applied to combined active JDs from both tables
+      const currentActiveJDCount = (activeCvJdCount ?? 0) + (activeInterviewJdCount ?? 0);
+      const remainingJDs = maxActiveJDs === 0 ? -1 : maxActiveJDs - currentActiveJDCount;
+      const canCreateJD = maxActiveJDs === 0 || remainingJDs > 0;
+
+      return {
+        canCreateJD,
+        currentActiveJDCount,
+        maxActiveJDs,
+        remainingJDs,
+        planName
+      };
+    } catch (error) {
+      console.error('Error checking interview JD limit:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a company can start more interviews based on their plan limits (interview/combo plans only).
+   */
+  static async checkInterviewLimit(companyId: string): Promise<InterviewLimitInfo> {
+    try {
+      const { data: companyData, error: companyError } = await supabase
+        .from('companies')
+        .select('company_id, selected_plan, plan_type, interview_count')
+        .eq('company_id', companyId)
+        .single();
+
+      if (companyError || !companyData) {
+        throw new Error(companyError?.message ?? 'Company not found');
+      }
+
+      let maxInterviews = 0;
+      let planName = 'No Plan';
+      let planType: string | null = null;
+
+      if (companyData.selected_plan) {
+        const { data: planRow, error: planError } = await supabase
+          .from('plans')
+          .select('plan_name, plan_type, max_interviews')
+          .eq('plan_name', companyData.selected_plan)
+          .eq('plan_type', companyData.plan_type || 'combo')
+          .single();
+
+        if (!planError && planRow && planRow.max_interviews != null) {
+          maxInterviews = planRow.max_interviews;
+          planName = planRow.plan_name ?? companyData.selected_plan;
+          planType = planRow.plan_type ?? null;
+        }
+      }
+
+      const currentCount = companyData.interview_count ?? 0;
+      const remaining = maxInterviews === 0 ? -1 : maxInterviews - currentCount;
+      const canStartInterview = maxInterviews === 0 || remaining > 0;
+
+      return {
+        canStartInterview,
+        currentInterviewCount: currentCount,
+        maxInterviews,
+        remainingInterviews: remaining,
+        planName,
+        planType
+      };
+    } catch (error) {
+      console.error('Error checking interview limit:', error);
       throw error;
     }
   }
@@ -308,11 +471,23 @@ export class UsageTrackingService {
         throw new Error('Failed to record payment');
       }
 
+      // Look up plan details by ID so we can store name + type on the company
+      const { data: planRow, error: planLookupError } = await supabase
+        .from('plans')
+        .select('plan_name, plan_type')
+        .eq('plan_id', paymentData.plan_id)
+        .single();
+
+      if (planLookupError) {
+        console.warn('Could not look up plan for company update:', planLookupError);
+      }
+
       // Update company's subscription info
       await supabase
         .from('companies')
         .update({
-          selected_plan: paymentData.plan_id,
+          selected_plan: planRow?.plan_name ?? null,
+          plan_type: planRow?.plan_type ?? null,
           subscription_status: 'active',
           subscription_start: paymentData.subscription_start_date,
           subscription_end: paymentData.subscription_end_date,

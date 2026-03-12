@@ -28,6 +28,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
 import { useInterviewCurrentStep, useInterviewNavigateToStep, INTERVIEW_WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
+import { UsageTrackingService, type InterviewLimitInfo } from '@/services/usageTrackingService';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertTriangle } from 'lucide-react';
 
 /** When provided, JDs are loaded from this list (e.g. candidate's jd_candidates) instead of company tables. Recruiter flow unchanged when omitted. */
 export type InjectedJD = { jd_id: string; title: string | null; extracted_text?: string | null; jd_file?: string | null; created_at?: string };
@@ -124,6 +127,9 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
   /** When candidateId is set: logged-in candidate from candidates table (name, email) for creating interview for self. */
   const [loggedInCandidate, setLoggedInCandidate] = useState<{ name: string; email: string } | null>(null);
   const [loggedInCandidateLoading, setLoggedInCandidateLoading] = useState(false);
+  /** Interview limit from plan (recruiter flow only). Used to show limit-reached message and disable create button. */
+  const [interviewLimitInfo, setInterviewLimitInfo] = useState<InterviewLimitInfo | null>(null);
+  const [interviewLimitLoading, setInterviewLimitLoading] = useState(false);
 
   // Effective JD list: use injected (candidate jd_candidates) or internal (recruiter company JDs)
   const effectiveJobDescriptions = injectedJobDescriptions ?? jobDescriptions;
@@ -760,6 +766,27 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     }
   }, [user?.profile?.company_id, injectedJobDescriptions]);
 
+  // Recruiter flow: check interview limit from plan (interview/combo only)
+  useEffect(() => {
+    if (candidateId || !user?.profile?.company_id) {
+      setInterviewLimitInfo(null);
+      return;
+    }
+    let cancelled = false;
+    setInterviewLimitLoading(true);
+    UsageTrackingService.checkInterviewLimit(user.profile.company_id)
+      .then((info) => {
+        if (!cancelled) setInterviewLimitInfo(info);
+      })
+      .catch(() => {
+        if (!cancelled) setInterviewLimitInfo(null);
+      })
+      .finally(() => {
+        if (!cancelled) setInterviewLimitLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [candidateId, user?.profile?.company_id]);
+
   useEffect(() => {
     if (formData.position) {
       loadParameters();
@@ -1108,6 +1135,15 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
   };
 
   const createInterview = async () => {
+    // Recruiter flow: block if interview limit reached
+    if (!candidateId && interviewLimitInfo && !interviewLimitInfo.canStartInterview) {
+      toast({
+        title: "Interview Limit Reached",
+        description: `You've used all ${interviewLimitInfo.maxInterviews} interviews in your plan. Please upgrade to create more.`,
+        variant: "destructive",
+      });
+      return;
+    }
     // Candidate flow: require loaded profile; recruiter flow: require form candidates
     if (candidateId) {
       if (!loggedInCandidate?.name?.trim() || !loggedInCandidate?.email?.trim()) {
@@ -1819,11 +1855,36 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         </Card>
       )}
 
+      {/* Interview limit reached (recruiter flow only) */}
+      {!candidateId && interviewLimitInfo && !interviewLimitInfo.canStartInterview && (
+        <Alert variant="destructive" className="mb-4 border-2">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Interview Limit Reached</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>
+              You've used all {interviewLimitInfo.maxInterviews} interviews in your plan ({interviewLimitInfo.planName}
+              {interviewLimitInfo.planType ? ` • ${interviewLimitInfo.planType === 'cv' ? 'CV Only' : interviewLimitInfo.planType === 'interview' ? 'Interviews Only' : 'Combo'}` : ''}).
+              Upgrade your plan to create more interviews.
+            </p>
+            <Button
+              onClick={() => navigate('/dashboard?section=settings')}
+              size="sm"
+            >
+              Upgrade Plan
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Create Interview Link Button */}
       <div className="flex justify-center">
         <Button
           onClick={createInterview}
-          disabled={isCreating || (!!candidateId && (loggedInCandidateLoading || !loggedInCandidate))}
+          disabled={
+            isCreating ||
+            (!!candidateId && (loggedInCandidateLoading || !loggedInCandidate)) ||
+            (!candidateId && interviewLimitInfo !== null && !interviewLimitInfo.canStartInterview)
+          }
           className={isCandidate ? 'px-6 sm:px-8 py-2 w-full sm:w-auto bg-sky-600 hover:bg-sky-700 text-white' : 'px-6 sm:px-8 py-2 w-full sm:w-auto'}
           size="default"
         >
@@ -1831,6 +1892,11 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               Creating Interview Link...
+            </>
+          ) : !candidateId && interviewLimitInfo && !interviewLimitInfo.canStartInterview ? (
+            <>
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              Limit Reached — Upgrade to Create
             </>
           ) : (
             <>

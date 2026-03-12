@@ -2560,7 +2560,14 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                       .filter((score: any) => score.parameter !== 'Overall Assessment')
                       .map((score: any, idx: number) => {
                       const parameterScore = normalizeNumericScore(score?.score);
-                      const percentage = parameterScore !== null ? Math.round(parameterScore * 10) : null;
+                      const percentage =
+                        parameterScore !== null
+                          ? Math.max(0, Math.min(100, parameterScore * 10))
+                          : null;
+                      const displayScore =
+                        parameterScore !== null
+                          ? Number(parameterScore.toFixed(1)).toString().replace(/\.0$/, '')
+                          : '—';
 
                       return (
                         <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-2">
@@ -2575,7 +2582,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                           </div>
                           <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-0 sm:w-12">
                             <div className="text-left sm:text-right font-semibold text-xs sm:text-sm">
-                              {percentage !== null ? percentage : '—'}
+                              {displayScore}
                             </div>
                             <div className="text-right text-xs text-muted-foreground sm:w-20">
                               W: {score.weightage ?? 0}%

@@ -17,8 +17,12 @@ import {
   X,
   Upload,
   Maximize2,
-  HelpCircle
+  HelpCircle,
+  Settings
 } from 'lucide-react';
+import { UsageTrackingService } from '@/services/usageTrackingService';
+import type { JobDescriptionLimitInfo } from '@/services/usageTrackingService';
+import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
@@ -113,7 +117,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
   const [isExtractingText, setIsExtractingText] = useState(false);
   const [customParameters, setCustomParameters] = useState<CustomParameters>({});
   const [structuredQuestions, setStructuredQuestions] = useState<StructuredQuestion[]>([]);
-  const [isLoadingParameters, setIsLoadingParameters] = useState(true);
+  const [isLoadingParameters, setIsLoadingParameters] = useState(false);
   const [isSavingParameters, setIsSavingParameters] = useState(false);
   const [parametersSaved, setParametersSaved] = useState(false);
   const [isExpandDialogOpen, setIsExpandDialogOpen] = useState(false);
@@ -122,17 +126,40 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
   /** Per-parameter max_time before "Requires written answer" was checked; restored when unchecked */
   const [writtenAnswerPrevMaxTime, setWrittenAnswerPrevMaxTime] = useState<Record<string, number>>({});
 
+  // Interview JD limit + manage (jd_for_interview) – recruiter only
+  const [interviewJdLimitInfo, setInterviewJdLimitInfo] = useState<JobDescriptionLimitInfo | null>(null);
+  const [interviewJobDescriptions, setInterviewJobDescriptions] = useState<Array<{
+    id: string;
+    title: string;
+    created_at?: string;
+    updated_at?: string;
+    is_active: boolean;
+  }>>([]);
+  const [updatingInterviewStatus, setUpdatingInterviewStatus] = useState<string | null>(null);
+  const [isManageInterviewSectionExpanded, setIsManageInterviewSectionExpanded] = useState(false);
+
+  // CV screening JDs for manage dialog (job_descriptions – all statuses)
+  const [cvJobDescriptionsForManage, setCvJobDescriptionsForManage] = useState<Array<{
+    jd_id: string;
+    title: string;
+    status: string;
+    created_at?: string;
+    updated_at?: string;
+  }>>([]);
+  const [updatingCvStatus, setUpdatingCvStatus] = useState<string | null>(null);
+
   // Load job descriptions from both CV screening and AI interview tables
   const loadJobDescriptions = async () => {
     if (!user?.profile?.company_id) return;
     
-    let allJobDescriptions = [];
+    let allJobDescriptions: Array<{ jd_id: string; title: string | null; [key: string]: unknown }> = [];
     
     try {
+      setInterviewJobDescriptions([]);
       // Load from jd_for_interview table (AI interview) - FIRST
       const { data: interviewData, error: interviewError } = await supabase
         .from('jd_for_interview')
-        .select('id, title, jd_file, created_at, extracted_text')
+        .select('id, title, jd_file, created_at, extracted_text, is_active, updated_at')
         .eq('company_id', user.profile.company_id)
         .order('created_at', { ascending: false });
       
@@ -140,12 +167,18 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         console.error('Error loading AI interview JDs:', interviewError);
       } else {
         console.log('AI interview JDs loaded:', interviewData?.length || 0, interviewData);
-        // Map id to jd_id for consistency
         const mappedInterviewData = (interviewData || []).map(item => ({
           ...item,
           jd_id: item.id
         }));
         allJobDescriptions = [...allJobDescriptions, ...mappedInterviewData];
+        setInterviewJobDescriptions((interviewData || []).map(item => ({
+          id: item.id,
+          title: item.title ?? 'Untitled',
+          created_at: item.created_at,
+          updated_at: item.updated_at,
+          is_active: item.is_active ?? true
+        })));
       }
     } catch (error) {
       console.error('Error loading AI interview JDs:', error);
@@ -172,6 +205,113 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     
     setJobDescriptions(allJobDescriptions);
     console.log('Loaded job descriptions:', allJobDescriptions);
+  };
+
+  const checkInterviewJDLimit = async () => {
+    if (!user?.profile?.company_id || isCandidateFlow) return;
+    try {
+      const limitInfo = await UsageTrackingService.checkInterviewJDLimit(user.profile.company_id);
+      setInterviewJdLimitInfo(limitInfo);
+    } catch (error) {
+      console.error('Error checking interview JD limit:', error);
+    }
+  };
+
+  const getInterviewJDStatusConfig = (info: JobDescriptionLimitInfo | null) => {
+    if (!info) return 'healthy';
+    const { remainingJDs, maxActiveJDs, currentActiveJDCount } = info;
+    if (maxActiveJDs === 0) return 'healthy';
+    const usagePercentage = (currentActiveJDCount / maxActiveJDs) * 100;
+    if (remainingJDs <= 0) return 'critical';
+    if (remainingJDs <= 2 || usagePercentage >= 90) return 'warning';
+    if (remainingJDs <= 5 || usagePercentage >= 70) return 'caution';
+    return 'healthy';
+  };
+
+  const interviewJdStatusConfig = getInterviewJDStatusConfig(interviewJdLimitInfo);
+  const interviewJdStatusMap = {
+    healthy: { border: 'border-emerald-200', bg: 'bg-emerald-50/40', text: 'text-emerald-800', iconColor: 'text-emerald-500', badgeBg: 'bg-emerald-100', badgeText: 'text-emerald-800', progressColor: 'bg-emerald-500', message: `${interviewJdLimitInfo?.remainingJDs ?? 0} slots available` },
+    caution: { border: 'border-yellow-200', bg: 'bg-yellow-50/40', text: 'text-yellow-800', iconColor: 'text-yellow-500', badgeBg: 'bg-yellow-100', badgeText: 'text-yellow-800', progressColor: 'bg-yellow-500', message: `${interviewJdLimitInfo?.remainingJDs ?? 0} slots remaining` },
+    warning: { border: 'border-amber-200', bg: 'bg-amber-50/40', text: 'text-amber-800', iconColor: 'text-amber-500', badgeBg: 'bg-amber-100', badgeText: 'text-amber-800', progressColor: 'bg-amber-500', message: `Only ${interviewJdLimitInfo?.remainingJDs ?? 0} slot(s) remaining` },
+    critical: { border: 'border-red-200', bg: 'bg-red-50/40', text: 'text-red-800', iconColor: 'text-red-500', badgeBg: 'bg-red-100', badgeText: 'text-red-800', progressColor: 'bg-red-500', message: 'You must disable an interview JD to add new ones' }
+  };
+  const currentInterviewJdStatus = interviewJdStatusMap[interviewJdStatusConfig as keyof typeof interviewJdStatusMap] ?? interviewJdStatusMap.healthy;
+
+  const toggleInterviewJDStatus = async (id: string, currentIsActive: boolean) => {
+    if (!user?.profile?.company_id) return;
+    const newActive = !currentIsActive;
+    if (newActive) {
+      const limitInfo = await UsageTrackingService.checkInterviewJDLimit(user.profile.company_id);
+      if (!limitInfo.canCreateJD && limitInfo.maxActiveJDs > 0) {
+        toast.error(`You have reached your plan limit of ${limitInfo.maxActiveJDs} active interview JDs. Please disable another one first.`);
+        return;
+      }
+    }
+    setUpdatingInterviewStatus(id);
+    try {
+      const { error } = await supabase
+        .from('jd_for_interview')
+        .update({ is_active: newActive, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+      toast.success(`Interview JD ${newActive ? 'enabled' : 'disabled'} successfully.`);
+      await loadJobDescriptions();
+      await checkInterviewJDLimit();
+    } catch (err: unknown) {
+      toast.error((err as Error)?.message ?? 'Failed to update interview JD status.');
+    } finally {
+      setUpdatingInterviewStatus(null);
+    }
+  };
+
+  const loadCVJobDescriptionsForManage = async () => {
+    if (!user?.profile?.company_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('job_descriptions')
+        .select('jd_id, title, status, created_at, updated_at')
+        .eq('company_id', user.profile.company_id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setCvJobDescriptionsForManage((data || []).map((row) => ({
+        jd_id: row.jd_id,
+        title: row.title ?? 'Untitled',
+        status: row.status ?? 'active',
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      })));
+    } catch (err) {
+      console.error('Error loading CV JDs for manage:', err);
+      setCvJobDescriptionsForManage([]);
+    }
+  };
+
+  const toggleCVJDStatus = async (jdId: string, currentStatus: string) => {
+    if (!user?.profile?.company_id) return;
+    const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
+    if (newStatus === 'active') {
+      const limitInfo = await UsageTrackingService.checkInterviewJDLimit(user.profile.company_id);
+      if (!limitInfo.canCreateJD && limitInfo.maxActiveJDs > 0) {
+        toast.error(`You have reached your plan limit of ${limitInfo.maxActiveJDs} active JDs. Please disable another one first.`);
+        return;
+      }
+    }
+    setUpdatingCvStatus(jdId);
+    try {
+      const { error } = await supabase
+        .from('job_descriptions')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('jd_id', jdId);
+      if (error) throw error;
+      toast.success(`CV JD ${newStatus === 'active' ? 'enabled' : 'disabled'} successfully.`);
+      await loadJobDescriptions();
+      await loadCVJobDescriptionsForManage();
+      await checkInterviewJDLimit();
+    } catch (err: unknown) {
+      toast.error((err as Error)?.message ?? 'Failed to update CV JD status.');
+    } finally {
+      setUpdatingCvStatus(null);
+    }
   };
 
   // Helper function to convert resolved_jd attributes to plain text
@@ -449,6 +589,8 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
 
       console.log('🔄 Cleaned text length:', cleanedText.length);
 
+      const roleNameForSave = formData.newRole;
+
       // Save JD: candidate → jd_candidates; recruiter → jd_for_interview
       if (candidateId) {
         console.log('🔄 Saving JD record to jd_candidates (candidate)...');
@@ -456,7 +598,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           .from('jd_candidates')
           .insert({
             candidate_id: candidateId,
-            title: formData.newRole,
+            title: roleNameForSave,
             jd_file: uploadData.path,
             extracted_text: cleanedText
           })
@@ -467,14 +609,19 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           throw new Error(`Database insert failed: ${jdError.message}`);
         }
         console.log('✅ JD record saved to jd_candidates:', jdData);
-        setFormData(prev => ({ ...prev, jobDescription: cleanedText }));
         if (injectedLoadJobDescriptions) await injectedLoadJobDescriptions();
       } else {
+        if (interviewJdLimitInfo && !interviewJdLimitInfo.canCreateJD && interviewJdLimitInfo.maxActiveJDs > 0) {
+          toast.error(`You have reached your limit of ${interviewJdLimitInfo.maxActiveJDs} active interview JDs. Please disable one from Manage Interview JDs to add a new one.`);
+          setIsExtractingText(false);
+          setIsUploading(false);
+          return;
+        }
         console.log('🔄 Saving JD record to jd_for_interview (recruiter)...');
         const { data: jdData, error: jdError } = await supabase
           .from('jd_for_interview')
           .insert({
-            title: formData.newRole,
+            title: roleNameForSave,
             jd_file: uploadData.path,
             extracted_text: cleanedText,
             company_id: user?.profile?.company_id
@@ -486,16 +633,20 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           throw new Error(`Database insert failed: ${jdError.message}`);
         }
         console.log('✅ JD record saved to database:', jdData);
-        setFormData(prev => ({ ...prev, jobDescription: cleanedText }));
         await loadJobDescriptions();
+        await checkInterviewJDLimit();
       }
       console.log('✅ Job descriptions reloaded');
       
       // Load existing parameters for this role (if any)
-      if (formData.newRole) {
-        await loadParametersForPosition(formData.newRole);
-        console.log('✅ Parameters loaded for role:', formData.newRole);
+      if (roleNameForSave) {
+        await loadParametersForPosition(roleNameForSave);
+        console.log('✅ Parameters loaded for role:', roleNameForSave);
       }
+      
+      // Reset local form so flow matches candidate UX:
+      // show success, then let user select the new role from dropdown.
+      setFormData(prev => ({ ...prev, newRole: '', jobDescription: '' }));
       
       toast.success('JD uploaded and text extracted successfully!', { id: 'jd-upload-success' });
       console.log('🎉 Upload and extraction completed successfully!');
@@ -1117,6 +1268,12 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     }
   }, [user?.profile?.company_id, injectedJobDescriptions]);
 
+  // Interview JD limit – fetch on mount (recruiter only) and when manage dialog opens
+  useEffect(() => {
+    if (injectedJobDescriptions != null || !user?.profile?.company_id) return;
+    checkInterviewJDLimit();
+  }, [user?.profile?.company_id, injectedJobDescriptions]);
+
   useEffect(() => {
     // Immediately clear parameters when position changes to prevent showing old parameters
     console.log('🔄 Position changed to:', formData.position);
@@ -1519,50 +1676,56 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         </div>
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="icon" className="shrink-0 rounded-full h-9 w-9" aria-label="Help">
-              <HelpCircle className="h-5 w-5" />
+            <Button variant="outline" size="icon" className="shrink-0 rounded-full h-10 w-10" aria-label="Help">
+              <HelpCircle className="h-6 w-6" />
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-full max-w-md sm:max-w-lg max-h-[85vh] overflow-y-auto" align="end" side="bottom">
             <div className="space-y-4 text-sm">
-              <h3 className="font-semibold text-base border-b pb-2">Interview Parameters Setup — Help</h3>
+              <h3 className="font-semibold text-base border-b pb-2">Interview Parameters – Quick Help</h3>
 
+              {/* 1. Always start by saving a JD */}
               <div>
-                <h4 className="font-semibold text-gray-900 mb-1">Interview modes</h4>
-                <ul className="list-disc list-inside space-y-1 text-gray-600">
-                  <li><strong>AI Interview (Dynamic):</strong> Questions are generated dynamically based on candidate responses.</li>
-                  <li><strong>Structured Interview (Pre-defined):</strong> Pre-defined questions and parameters set by HR.</li>
-                </ul>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-1">Interview types (AI mode)</h4>
-                <ul className="list-disc list-inside space-y-1 text-gray-600">
-                  <li><strong>Functional:</strong> Focus on functional skills and problem-solving.</li>
-                  <li><strong>Behavioral:</strong> Focus on soft skills and communication.</li>
-                  <li><strong>Mixed:</strong> Combination of both functional and behavioral aspects.</li>
-                </ul>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-1">How to create parameters (existing JD)</h4>
+                <h4 className="font-semibold text-gray-900 mb-1">Create a new role (first time)</h4>
                 <ol className="list-decimal list-inside space-y-1 text-gray-600">
-                  <li>Select a job description from the <strong>Select Role</strong> dropdown.</li>
-                  <li>Choose <strong>Interview Mode</strong> (AI or Structured) and, for AI, the <strong>Interview Type</strong>.</li>
-                  <li>Click <strong>Generate AI Parameters</strong> to create assessment parameters from the job description.</li>
-                  <li>Modify parameters as needed: weights, questions, bullet points, timer, level of question, and any other settings. Ensure parameter <strong>weights total 100%</strong>.</li>
-                  <li>Click <strong>Save Parameters</strong> when done.</li>
+                  <li>Type the role name in <strong>New Role</strong> and upload the JD file.</li>
+                  <li>After upload, pick that role in <strong>Select Role</strong> to see the extracted JD text.</li>
                 </ol>
               </div>
 
+              {/* 2. Explain modes and types */}
               <div>
-                <h4 className="font-semibold text-gray-900 mb-1">How to save a new role (step by step)</h4>
+                <h4 className="font-semibold text-gray-900 mb-1">Modes &amp; types</h4>
+                <ul className="list-disc list-inside space-y-1 text-gray-600">
+                  <li><strong>AI Interview:</strong> AI generates questions from the JD and candidate answers.</li>
+                  <li><strong>Structured Interview:</strong> You define a fixed set of questions.</li>
+                  <li><strong>Functional / Behavioral / Mixed:</strong> For AI mode, choose what the AI should focus on.</li>
+                </ul>
+              </div>
+
+              {/* 3. How to set up each mode */}
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">Set up AI Interview</h4>
                 <ol className="list-decimal list-inside space-y-1 text-gray-600">
-                  <li>Enter the new role name in the <strong>New Role (Optional)</strong> field.</li>
-                  <li>Upload a job description (PDF, DOCX, or TXT) or paste it into the Job Description area.</li>
-                  <li>Select the new role from the &quot;Select Role&quot; dropdown after it appears, or ensure the job description is filled.</li>
-                  <li>Generate and save parameters as above; the new role will be associated with this configuration.</li>
+                  <li>Select your role in <strong>Select Role</strong>.</li>
+                  <li>Choose <strong>AI Interview</strong> and an <strong>Interview Type</strong>.</li>
+                  <li>Click <strong>Generate AI Parameters</strong>, adjust questions / weights (total 100%), then <strong>Save Parameters</strong>.</li>
                 </ol>
+                <p className="mt-1 text-gray-600">
+                  Optionally turn on <strong>Personalized Questions</strong> to add a few must‑ask questions on top of the AI‑generated ones.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-1">Set up Structured Interview</h4>
+                <ol className="list-decimal list-inside space-y-1 text-gray-600">
+                  <li>Select your role in <strong>Select Role</strong>.</li>
+                  <li>Choose <strong>Structured Interview</strong>.</li>
+                  <li>Add or edit questions, sections, and timing as needed, then <strong>Save Parameters</strong>.</li>
+                </ol>
+                <p className="mt-1 text-gray-600">
+                  You can also enable <strong>Personalized Questions</strong> here to define extra time‑boxed questions for this role.
+                </p>
               </div>
             </div>
           </PopoverContent>
@@ -1572,6 +1735,175 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       {/* Interview Configuration Section */}
       <Card className="animate-fade-in overflow-hidden" data-tour="setup-area">
         <CardContent className="space-y-6 pt-4 sm:pt-6 px-3 sm:px-6 pb-4 sm:pb-6">
+          {/* Manage Interview JDs – recruiter only */}
+          {!isCandidateFlow && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-gray-100">
+              <div className="flex flex-wrap items-center gap-2">
+                {interviewJdLimitInfo && (
+                  <p className={`text-xs font-medium ${
+                    interviewJdStatusConfig === 'critical' ? 'text-red-600' :
+                    interviewJdStatusConfig === 'warning' ? 'text-amber-600' :
+                    interviewJdStatusConfig === 'caution' ? 'text-yellow-600' : 'text-emerald-600'
+                  }`}>
+                    {interviewJdStatusConfig === 'critical'
+                      ? `Limit Reached: ${interviewJdLimitInfo.currentActiveJDCount}/${interviewJdLimitInfo.maxActiveJDs} active`
+                      : interviewJdStatusConfig === 'warning'
+                      ? `Almost Full: ${interviewJdLimitInfo.currentActiveJDCount}/${interviewJdLimitInfo.maxActiveJDs} active, ${interviewJdLimitInfo.remainingJDs} remaining`
+                      : interviewJdStatusConfig === 'caution'
+                      ? `Getting Full: ${interviewJdLimitInfo.currentActiveJDCount}/${interviewJdLimitInfo.maxActiveJDs} active, ${interviewJdLimitInfo.remainingJDs} remaining`
+                      : `${interviewJdLimitInfo.currentActiveJDCount}/${interviewJdLimitInfo.maxActiveJDs} active, ${interviewJdLimitInfo.remainingJDs} available`}
+                  </p>
+                )}
+              </div>
+              <Dialog open={isManageInterviewSectionExpanded} onOpenChange={(open) => {
+                setIsManageInterviewSectionExpanded(open);
+                if (open) {
+                  loadJobDescriptions();
+                  loadCVJobDescriptionsForManage();
+                  checkInterviewJDLimit();
+                }
+              }}>
+                <DialogTrigger asChild>
+                  <Button variant="default" size="sm" className="w-full sm:w-auto text-xs sm:text-sm h-9 sm:h-10">
+                    <Settings className="h-4 w-4 mr-1.5 sm:mr-2" />
+                    <span className="hidden sm:inline">Manage Job Descriptions</span>
+                    <span className="sm:hidden">Manage Jobs</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Manage Job Descriptions</DialogTitle>
+                    <DialogDescription>
+                      Enable or disable JDs from CV screening and Interview. Active JDs count toward your plan limit and appear in the role dropdown.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 mt-4">
+                    <div className={`rounded-lg border-2 ${currentInterviewJdStatus.border} ${currentInterviewJdStatus.bg} p-4`}>
+                      <div className="flex items-center gap-2 sm:gap-3 mb-3">
+                        <div className={`p-1.5 rounded-full ${currentInterviewJdStatus.bg.replace('/40', '')} border ${currentInterviewJdStatus.border} flex-shrink-0`}>
+                          <span className={`text-lg ${currentInterviewJdStatus.iconColor}`}>📋</span>
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-sm font-semibold text-gray-900">Status</h3>
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${currentInterviewJdStatus.badgeBg} ${currentInterviewJdStatus.badgeText}`}>
+                              {interviewJdStatusConfig === 'healthy' ? 'Available' : interviewJdStatusConfig === 'caution' ? 'Getting Full' : interviewJdStatusConfig === 'warning' ? 'Almost Full' : 'Limit Reached'}
+                            </span>
+                          </div>
+                          {interviewJdLimitInfo && interviewJdLimitInfo.maxActiveJDs > 0 && (
+                            <>
+                              <div className="mt-2 w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${currentInterviewJdStatus.progressColor} transition-all duration-500`}
+                                  style={{ width: `${Math.min(100, (interviewJdLimitInfo.currentActiveJDCount / interviewJdLimitInfo.maxActiveJDs) * 100)}%` }}
+                                />
+                              </div>
+                              <div className="flex items-center justify-between mt-1.5">
+                                <p className="text-xs text-gray-600">
+                                  {interviewJdLimitInfo.currentActiveJDCount} of {interviewJdLimitInfo.maxActiveJDs} active
+                                </p>
+                                <p className={`text-xs font-medium ${currentInterviewJdStatus.text}`}>
+                                  {currentInterviewJdStatus.message}
+                                </p>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {/* CV screening JDs (job_descriptions) */}
+                    {(cvJobDescriptionsForManage.length > 0) && (
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-semibold text-gray-700">CV screening JDs</h4>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {cvJobDescriptionsForManage.map((jd) => {
+                            const isActive = jd.status === 'active';
+                            const isDisabled = updatingCvStatus === jd.jd_id || (!isActive && (interviewJdLimitInfo?.remainingJDs ?? 0) <= 0 && (interviewJdLimitInfo?.maxActiveJDs ?? 0) > 0);
+                            return (
+                              <div
+                                key={jd.jd_id}
+                                className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-lg transition-colors gap-3 ${
+                                  isActive ? 'bg-green-50 border border-green-100' : 'bg-white border border-gray-100'
+                                } ${isDisabled ? 'opacity-70' : 'hover:shadow-sm'}`}
+                              >
+                                <div className="flex-1 min-w-0 w-full sm:w-auto">
+                                  <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">{jd.title}</p>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    Last updated: {new Date(jd.updated_at || jd.created_at || 0).toLocaleDateString()}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2 sm:gap-3 ml-0 sm:ml-2 w-full sm:w-auto justify-between sm:justify-start">
+                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                    {isActive ? 'Active' : 'Inactive'}
+                                  </span>
+                                  <Switch
+                                    checked={isActive}
+                                    onCheckedChange={() => !isDisabled && toggleCVJDStatus(jd.jd_id, jd.status)}
+                                    disabled={isDisabled}
+                                    className={`${isDisabled ? 'opacity-50' : ''} ${isActive ? 'data-[state=checked]:bg-green-500' : ''}`}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Interview JDs (jd_for_interview) */}
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-semibold text-gray-700">Interview JDs</h4>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {interviewJobDescriptions.map((jd) => {
+                          const isActive = jd.is_active;
+                          const isDisabled = updatingInterviewStatus === jd.id || (!isActive && (interviewJdLimitInfo?.remainingJDs ?? 0) <= 0 && (interviewJdLimitInfo?.maxActiveJDs ?? 0) > 0);
+                          return (
+                            <div
+                              key={jd.id}
+                              className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-lg transition-colors gap-3 ${
+                                isActive ? 'bg-green-50 border border-green-100' : 'bg-white border border-gray-100'
+                              } ${isDisabled ? 'opacity-70' : 'hover:shadow-sm'}`}
+                            >
+                              <div className="flex-1 min-w-0 w-full sm:w-auto">
+                                <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">{jd.title}</p>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  Last updated: {new Date(jd.updated_at || jd.created_at || 0).toLocaleDateString()}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 sm:gap-3 ml-0 sm:ml-2 w-full sm:w-auto justify-between sm:justify-start">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                  {isActive ? 'Active' : 'Inactive'}
+                                </span>
+                                <Switch
+                                  checked={isActive}
+                                  onCheckedChange={() => !isDisabled && toggleInterviewJDStatus(jd.id, jd.is_active)}
+                                  disabled={isDisabled}
+                                  className={`${isDisabled ? 'opacity-50' : ''} ${isActive ? 'data-[state=checked]:bg-green-500' : ''}`}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {(interviewJdLimitInfo?.remainingJDs ?? 0) <= 0 && (interviewJdLimitInfo?.maxActiveJDs ?? 0) > 0 && (
+                      <div className="p-3 rounded-lg bg-red-50 border border-red-100">
+                        <div className="flex">
+                          <span className="text-red-400 mr-2 flex-shrink-0">⚠️</span>
+                          <div>
+                            <h4 className="text-sm font-medium text-red-800">Active JD Limit Reached</h4>
+                            <p className="text-xs text-red-700 mt-0.5">
+                              You've reached your limit of {interviewJdLimitInfo.maxActiveJDs} active JDs. Deactivate one above (CV or Interview) to activate another or add a new one.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          )}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Left Column */}
             <div className="space-y-4 min-w-0">
@@ -1592,7 +1924,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="newRole" className="text-sm sm:text-base">New Role (Optional)</Label>
+                <Label htmlFor="newRole" className="text-sm sm:text-base">New Role *</Label>
                 <Input
                   id="newRole"
                   name="newRole"

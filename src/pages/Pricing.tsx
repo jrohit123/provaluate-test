@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Check, X, Mail } from 'lucide-react';
@@ -19,6 +18,8 @@ interface Plan {
   currency?: string;
   duration?: number;
   max_token?: number;
+  plan_type?: 'cv' | 'interview' | 'combo';
+  max_interviews?: number | null;
 }
 
 const Pricing = () => {
@@ -28,6 +29,7 @@ const Pricing = () => {
   const [currency, setCurrency] = useState<'INR' | 'USD'>('USD');
   const [exchangeRate, setExchangeRate] = useState(90); // Fallback rate
   const [loadingRate, setLoadingRate] = useState(false);
+  const [planTypeFilter, setPlanTypeFilter] = useState<'cv' | 'interview' | 'combo'>('combo');
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -112,7 +114,8 @@ const Pricing = () => {
 
   const freePlans = plans.filter((p) => Number(p.plan_cost) === 0);
   const paidPlans = plans.filter((p) => Number(p.plan_cost) > 0);
-  const totalPlanCards = freePlans.length + paidPlans.length;
+  const filteredPaidPlans = paidPlans.filter((p) => (p.plan_type || 'cv') === planTypeFilter);
+  const totalPlanCards = freePlans.length + filteredPaidPlans.length;
   const gridCols = Math.max(1, Math.min(totalPlanCards, 6)); // spread plan cards; cap at 6
 
   if (loading) {
@@ -160,7 +163,7 @@ const Pricing = () => {
           </p>
 
           {/* Billing & Currency Toggles – stack on small screens */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-6">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-6 flex-wrap">
             {/* Billing Toggle */}
             <div className="flex items-center justify-center gap-2 sm:space-x-4">
               <span className={`text-sm font-medium ${!isAnnual ? 'text-gray-900' : 'text-gray-600'}`}>
@@ -174,26 +177,58 @@ const Pricing = () => {
               <span className={`text-sm font-medium ${isAnnual ? 'text-gray-900' : 'text-gray-600'}`}>
                 Annual
               </span>
-              {isAnnual && (
-                <Badge className="bg-green-100 text-green-800 ml-1 sm:ml-2 hover:bg-green-100 shrink-0">
-                  Save 15%
-                </Badge>
-              )}
+            </div>
+
+            {/* Plan Type Toggle – centered between billing and currency */}
+            <div className="flex items-center justify-center gap-2 sm:space-x-2 bg-white rounded-full px-2 py-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setPlanTypeFilter('cv')}
+                className={`px-3 py-1 text-xs sm:text-sm rounded-full font-medium transition-colors ${
+                  planTypeFilter === 'cv'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-transparent text-gray-700 hover:bg-primary/10'
+                }`}
+              >
+                CV Only
+              </button>
+              <button
+                type="button"
+                onClick={() => setPlanTypeFilter('interview')}
+                className={`px-3 py-1 text-xs sm:text-sm rounded-full font-medium transition-colors ${
+                  planTypeFilter === 'interview'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-transparent text-gray-700 hover:bg-primary/10'
+                }`}
+              >
+                Interviews Only
+              </button>
+              <button
+                type="button"
+                onClick={() => setPlanTypeFilter('combo')}
+                className={`px-3 py-1 text-xs sm:text-sm rounded-full font-medium transition-colors ${
+                  planTypeFilter === 'combo'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-transparent text-gray-700 hover:bg-primary/10'
+                }`}
+              >
+                Combo
+              </button>
             </div>
 
             {/* Currency Toggle */}
             <div className="flex items-center justify-center gap-2 sm:space-x-4">
-            <span className={`text-sm font-medium ${currency === 'INR' ? 'text-gray-900' : 'text-gray-600'}`}>
-              INR
-            </span>
-            <Switch
-              checked={currency === 'USD'}
-              onCheckedChange={(checked) => setCurrency(checked ? 'USD' : 'INR')}
-              className="h-6 w-11"
-            />
-            <span className={`text-sm font-medium ${currency === 'USD' ? 'text-gray-900' : 'text-gray-600'}`}>
-              USD
-            </span>
+              <span className={`text-sm font-medium ${currency === 'INR' ? 'text-gray-900' : 'text-gray-600'}`}>
+                INR
+              </span>
+              <Switch
+                checked={currency === 'USD'}
+                onCheckedChange={(checked) => setCurrency(checked ? 'USD' : 'INR')}
+                className="h-6 w-11"
+              />
+              <span className={`text-sm font-medium ${currency === 'USD' ? 'text-gray-900' : 'text-gray-600'}`}>
+                USD
+              </span>
             </div>
           </div>
         </div>
@@ -230,10 +265,18 @@ const Pricing = () => {
                   </p>
                 </div>
                 <ul className="space-y-2 sm:space-y-3 mb-4 sm:mb-6 flex-1">
-                  <li className="flex items-start space-x-2 sm:space-x-3">
-                    <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-xs sm:text-sm text-gray-700"><strong>{plan.max_cvs}</strong> CVs</span>
-                  </li>
+                  {plan.max_cvs != null && (
+                    <li className="flex items-start space-x-2 sm:space-x-3">
+                      <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                      <span className="text-xs sm:text-sm text-gray-700"><strong>{plan.max_cvs}</strong> CVs</span>
+                    </li>
+                  )}
+                  {plan.max_interviews != null && (
+                    <li className="flex items-start space-x-2 sm:space-x-3">
+                      <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                      <span className="text-xs sm:text-sm text-gray-700"><strong>{plan.max_interviews}</strong> interviews</span>
+                    </li>
+                  )}
                   <li className="flex items-start space-x-2 sm:space-x-3">
                     <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
                     <span className="text-xs sm:text-sm text-gray-700"><strong>{plan.max_users}</strong> team member{plan.max_users > 1 ? 's' : ''}</span>
@@ -261,7 +304,7 @@ const Pricing = () => {
               </CardContent>
             </Card>
           ))}
-          {paidPlans.map((plan) => {
+          {filteredPaidPlans.map((plan) => {
               // Calculate prices using real-time exchange rate
               const monthlyBasePrice = currency === 'USD' ? Math.ceil(plan.plan_cost / exchangeRate) : plan.plan_cost;
               const annualBasePrice = plan.plan_cost * 12;
@@ -273,18 +316,8 @@ const Pricing = () => {
               return (
                 <Card
                   key={plan.plan_id}
-                  className={`border-2 transition-all duration-300 flex flex-col min-w-0 ${
-                    plan.plan_name === 'Premium' || plan.plan_name === 'Standard'
-                      ? 'border-indigo-600 shadow-xl scale-100 md:scale-105'
-                      : 'border-gray-200 hover:border-indigo-300'
-                  }`}
+                  className="border-2 border-gray-200 hover:border-indigo-300 transition-all duration-300 flex flex-col min-w-0"
                 >
-                  {plan.plan_name === 'Premium' || plan.plan_name === 'Standard' ? (
-                    <Badge className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-indigo-600 hover:bg-indigo-700 text-xs sm:text-sm">
-                      Most Popular
-                    </Badge>
-                  ) : null}
-
                   <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6">
                     <CardTitle className="text-xl sm:text-2xl mb-1 sm:mb-2">{plan.plan_name}</CardTitle>
                     <CardDescription className="text-gray-600 text-sm">
@@ -320,12 +353,22 @@ const Pricing = () => {
 
                     {/* Features List */}
                     <ul className="space-y-2 sm:space-y-3 mb-4 sm:mb-6 flex-1">
-                      <li className="flex items-start space-x-2 sm:space-x-3">
-                        <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                        <span className="text-xs sm:text-sm text-gray-700">
-                          <strong>{plan.max_cvs === 0 ? 'Unlimited' : isAnnual ? plan.max_cvs * 12 : plan.max_cvs}</strong> CVs {isAnnual ? 'per year' : 'per month'}
-                        </span>
-                      </li>
+                      {plan.max_cvs != null && (
+                        <li className="flex items-start space-x-2 sm:space-x-3">
+                          <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                          <span className="text-xs sm:text-sm text-gray-700">
+                            <strong>{plan.max_cvs === 0 ? 'Unlimited' : isAnnual ? plan.max_cvs * 12 : plan.max_cvs}</strong> CVs {isAnnual ? 'per year' : 'per month'}
+                          </span>
+                        </li>
+                      )}
+                      {plan.max_interviews != null && (
+                        <li className="flex items-start space-x-2 sm:space-x-3">
+                          <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                          <span className="text-xs sm:text-sm text-gray-700">
+                            <strong>{plan.max_interviews === 0 ? 'Unlimited' : isAnnual ? plan.max_interviews * 12 : plan.max_interviews}</strong> interviews {isAnnual ? 'per year' : 'per month'}
+                          </span>
+                        </li>
+                      )}
                       <li className="flex items-start space-x-2 sm:space-x-3">
                         <Check className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0 mt-0.5" />
                         <span className="text-xs sm:text-sm text-gray-700">
@@ -361,16 +404,8 @@ const Pricing = () => {
                     {/* CTA Button */}
                     <Button
                       onClick={() => handleSelectPlan(plan)}
-                      variant={
-                        plan.plan_name === 'Premium' || plan.plan_name === 'Standard'
-                          ? 'default'
-                          : 'outline'
-                      }
-                      className={`w-full h-10 sm:h-11 text-sm sm:text-base ${
-                        plan.plan_name === 'Premium' || plan.plan_name === 'Standard'
-                          ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                          : ''
-                      }`}
+                      variant="outline"
+                      className="w-full h-10 sm:h-11 text-sm sm:text-base"
                     >
                       Get Started
                     </Button>

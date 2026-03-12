@@ -66,23 +66,33 @@ export const RichTextEditor = ({
     isActive, 
     children, 
     disabled = false,
-    title 
+    title,
+    useActiveStyle = true,
   }: { 
     onClick: () => void; 
     isActive?: boolean; 
     children: React.ReactNode;
     disabled?: boolean;
     title?: string;
+    /** When false, do not switch to solid primary background when active (keeps styling static). */
+    useActiveStyle?: boolean;
   }) => (
     <Button
       type="button"
-      variant={isActive ? 'default' : 'ghost'}
+      variant={useActiveStyle && isActive ? 'default' : 'ghost'}
       size="sm"
-      onClick={onClick}
+      onMouseDown={(event) => {
+        event.preventDefault();
+        if (!disabled) {
+          onClick();
+        }
+      }}
       disabled={disabled}
       className={cn(
         'h-8 w-8 p-0',
-        isActive && 'bg-primary text-primary-foreground'
+        useActiveStyle && isActive
+          ? 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground'
+          : 'hover:bg-transparent hover:text-current'
       )}
       title={title}
     >
@@ -123,10 +133,11 @@ export const RichTextEditor = ({
         <div className="flex items-center gap-1 border-r pr-2 mr-2">
           <ToolbarButton
             onClick={() => editor.chain().focus().toggleHighlight().run()}
-            isActive={editor.isActive('highlight')}
+            // Keep highlight icon styling static to avoid distracting blinking as selection moves.
+            useActiveStyle={false}
             title="Highlight (Ctrl+Shift+H)"
           >
-            <Highlighter className="h-4 w-4" />
+            <Highlighter className="h-4 w-4 text-emerald-600" />
           </ToolbarButton>
         </div>
 
@@ -199,8 +210,9 @@ export const RichTextEditor = ({
 
       {/* Character count */}
       <div className="border-t bg-gray-50 px-4 py-2 text-xs text-gray-500">
-        {editor.storage.characterCount?.characters() || 0} characters
-        {editor.storage.characterCount?.words() && ` • ${editor.storage.characterCount.words()} words`}
+        {editor.storage.characterCount?.characters() ?? 0} characters
+        {(editor.storage.characterCount?.words() ?? 0) > 0 &&
+          ` • ${editor.storage.characterCount?.words()} words`}
       </div>
     </div>
   );
