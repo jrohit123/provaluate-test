@@ -36,6 +36,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
   const [selectedRechargePlan, setSelectedRechargePlan] = useState<string>('');
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [cancellingDowngrade, setCancellingDowngrade] = useState(false);
 
   // Compute admin status after all hooks
   const isAdmin = user?.profile?.role === 'admin';
@@ -253,7 +254,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
       if (isUpgrade) {
         endpoint = '/payments/upgrade-plan';
       } else if (isDowngrade) {
-        endpoint = '/payments/downgrade-plan';
+        endpoint = '/payments/schedule-downgrade';
       } else {
         // Same price - just update in database
       const { error } = await supabase
@@ -521,171 +522,18 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
           setSelectedNewPlan('');
           setChangingPlan(false);
         }
-      } else if (!isUpgrade) {
-        // Downgrade: User pays full plan cost, credit stored for next cycle
-        
-        // If order_id exists, proceed with payment
-        if (result.order_id && result.key_id) {
-          // Check if Razorpay is loaded
-          if (typeof window === 'undefined' || !(window as any).Razorpay) {
-            throw new Error('Razorpay SDK not loaded. Please refresh the page.');
-          }
-
-          const options = {
-            key: result.key_id,
-            amount: result.net_payment * 100,  // Convert to paise (full plan cost)
-            currency: 'INR',
-            order_id: result.order_id,
-            name: "aitamate",
-            description: `Downgrade to ${planName} plan${result.credit_stored > 0 ? ` (Credit ₹${result.credit_stored} will be applied to next cycle)` : ''}`,
-            prefill: {
-              name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
-              email: user?.email || "",
-              contact: ""
-            },
-            notes: {
-              company_id: company.company_id,
-              plan_name: planName,
-              action: 'downgrade'
-            },
-            theme: {
-              color: "#1A56DB"
-            },
-            handler: async function (response: any) {
-              try {
-                setChangingPlan(true);
-                const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
-                
-                // Wait for webhook to process (create subscription)
-                await new Promise(resolve => setTimeout(resolve, 3000));
-                
-                // Get subscription_id created by webhook
-                try {
-                  const subResponse = await fetch(`${API_BASE_URL}/payments/get-subscription-id`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      company_id: company.company_id
-                    })
-                  });
-                  
-                  const subData = await subResponse.json();
-                  
-                  if (subData.success && subData.subscription_id) {
-                    // Open Razorpay subscription checkout to activate subscription
-                    const subOptions = {
-                      key: subData.key_id,
-                      subscription_id: subData.subscription_id,
-                      name: "aitamate",
-                      description: `Activate ${planName} subscription`,
-                      prefill: {
-                        name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
-                        email: user?.email || "",
-                        contact: ""
-                      },
-                      notes: {
-                        company_id: company.company_id,
-                        plan_name: planName
-                      },
-                      theme: {
-                        color: "#1A56DB"
-                      },
-                      handler: async function (subResponse: any) {
-                        // Subscription activated!
-                        await loadCompanyData();
-                        toast({
-                          title: "Subscription Activated",
-                          description: `Your ${planName} subscription is now active. ${result.credit_stored > 0 ? `Credit ₹${result.credit_stored} will be applied to next billing cycle.` : 'Payments will be charged automatically.'}`,
-                        });
-                        setPlanChangeOpen(false);
-                        setSelectedNewPlan('');
-                        setChangingPlan(false);
-                      },
-                      modal: {
-                        ondismiss: function() {
-                          setChangingPlan(false);
-                        }
-                      }
-                    };
-                    
-                    const rzp2 = new (window as any).Razorpay(subOptions);
-                    
-                    rzp2.on('payment.failed', function (subResponse: any) {
-                      console.error('Subscription activation failed:', subResponse.error);
-                      toast({
-                        title: "Activation Failed",
-                        description: subResponse.error.description || "Subscription could not be activated. Please contact support.",
-                        variant: "destructive",
-                      });
-                      setChangingPlan(false);
-                    });
-                    
-                    rzp2.open();
-                  } else {
-                    // Fallback: Just refresh data if subscription not found
-                    await loadCompanyData();
-                    toast({
-                      title: "Plan Downgraded",
-                      description: result.message || `Successfully downgraded to ${planName} plan. ${result.credit_stored > 0 ? `Credit ₹${result.credit_stored} will be applied to next billing cycle.` : ''} Please activate subscription manually.`,
-                    });
-                    setPlanChangeOpen(false);
-                    setSelectedNewPlan('');
-                    setChangingPlan(false);
-                  }
-                } catch (subError: any) {
-                  // If subscription check fails, just refresh data
-                  console.error('Error getting subscription:', subError);
-                  await loadCompanyData();
-                  toast({
-                    title: "Plan Downgraded",
-                    description: result.message || `Successfully downgraded to ${planName} plan. ${result.credit_stored > 0 ? `Credit ₹${result.credit_stored} will be applied to next billing cycle.` : ''}`,
-                  });
-                  setPlanChangeOpen(false);
-                  setSelectedNewPlan('');
-                  setChangingPlan(false);
-                }
-              } catch (error: any) {
-                console.error('Error processing payment:', error);
-                toast({
-                  title: "Payment Error",
-                  description: error.message || "An error occurred. Please contact support.",
-                  variant: "destructive",
-                });
-                setChangingPlan(false);
-              }
-            },
-            modal: {
-              ondismiss: function() {
-                setChangingPlan(false);
-              }
-            }
-          };
-          
-          const rzp1 = new (window as any).Razorpay(options);
-          
-          rzp1.on('payment.failed', function (response: any) {
-            console.error('Payment failed:', response.error);
-            toast({
-              title: "Payment Failed",
-              description: response.error.description || "Payment could not be completed. Please try again.",
-              variant: "destructive",
-            });
-            setChangingPlan(false);
-          });
-          
-          rzp1.open();
-        } else {
-          // If no order_id returned (shouldn't happen, but handle gracefully)
+      } else if (isDowngrade) {
+        // Schedule downgrade at end of cycle – no payment today
+        if (result.success) {
           await loadCompanyData();
+          toast({
+            title: "Downgrade Scheduled",
+            description: result.message || `Downgrade to ${planName} scheduled. No charge today.`,
+          });
           setPlanChangeOpen(false);
           setSelectedNewPlan('');
-          
-          toast({
-            title: "Plan Downgraded",
-            description: result.message || `Successfully downgraded to ${planName} plan.`,
-          });
-          setChangingPlan(false);
         }
+        setChangingPlan(false);
       } else {
         // If no order_id/subscription_id returned (shouldn't happen, but handle gracefully)
         await loadCompanyData();
@@ -709,23 +557,15 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
     }
   };
 
-  type RechargeType = 'cv' | 'interview' | 'combo';
-
-  const openRechargeCheckout = async (rechargeType: RechargeType) => {
+  const handleTopUp = async () => {
     if (!user?.profile?.company_id || !plan) {
       toast({ title: "Error", description: "Missing company or plan information.", variant: "destructive" });
       return;
     }
     const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
-    const endpoint =
-      rechargeType === 'cv'
-        ? '/payments/recharge-cvs'
-        : rechargeType === 'interview'
-          ? '/payments/recharge-interviews'
-          : '/payments/recharge-combo';
     try {
       setRechargingCVs(true);
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      const response = await fetch(`${API_BASE_URL}/payments/topup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ company_id: user.profile.company_id })
@@ -738,18 +578,8 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
       if (typeof window === 'undefined' || !(window as any).Razorpay) {
         throw new Error('Razorpay SDK not loaded. Please refresh the page.');
       }
-      const desc =
-        rechargeType === 'cv'
-          ? `CV Recharge - Add ${orderData.cvs_to_add} CVs`
-          : rechargeType === 'interview'
-            ? `Interview Recharge - Add ${orderData.interviews_to_add} interviews`
-            : `Recharge - Add ${orderData.cvs_to_add} CVs & ${orderData.interviews_to_add} interviews`;
-      const successMsg =
-        rechargeType === 'cv'
-          ? `${orderData.cvs_to_add} CVs added. Cycle date unchanged.`
-          : rechargeType === 'interview'
-            ? `${orderData.interviews_to_add} interviews added.`
-            : `${orderData.cvs_to_add} CVs and ${orderData.interviews_to_add} interviews added.`;
+      const desc = `Top-up for ${plan.plan_name}`;
+      const successMsg = 'Top-up successful. Quotas have been reset for the current cycle.';
       const options = {
         key: orderData.key_id,
         amount: orderData.amount,
@@ -765,7 +595,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
         notes: {
           company_id: user.profile.company_id,
           plan_name: plan.plan_name,
-          recharge_type: rechargeType === 'cv' ? 'cv_topup' : rechargeType === 'interview' ? 'interview_topup' : 'combo_topup'
+          recharge_type: 'topup'
         },
         theme: { color: "#1A56DB" },
         handler: async function (rzpResponse: any) {
@@ -803,10 +633,6 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
       setRechargingCVs(false);
     }
   };
-
-  const handleCVRecharge = () => openRechargeCheckout('cv');
-  const handleInterviewRecharge = () => openRechargeCheckout('interview');
-  const handleComboRecharge = () => openRechargeCheckout('combo');
 
   const handleChangeCycleDate = async () => {
     if (!user?.profile?.company_id || !newCycleDay) {
@@ -1131,6 +957,37 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
     }
   };
 
+  const handleCancelDowngrade = async () => {
+    if (!user?.profile?.company_id || !company?.company_id) {
+      toast({ title: "Error", description: "Missing company information.", variant: "destructive" });
+      return;
+    }
+    const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
+    try {
+      setCancellingDowngrade(true);
+      const response = await fetch(`${API_BASE_URL}/payments/cancel-downgrade`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: company.company_id })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to cancel downgrade');
+      toast({
+        title: "Downgrade Cancelled",
+        description: data.message || "Your current plan will renew as usual.",
+      });
+      await loadCompanyData();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Could not cancel downgrade. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setCancellingDowngrade(false);
+    }
+  };
+
   const handleCancelSubscription = async () => {
     if (!user?.profile?.company_id) {
       toast({
@@ -1189,8 +1046,33 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
   // Only render UI if admin
   if (!isAdmin) return null;
 
+  const pendingPlanName = company?.pending_plan_id
+    ? (availablePlans.find(p => p.plan_id === company.pending_plan_id)?.plan_name ?? 'lower plan')
+    : null;
+  const pendingChangeDate = company?.pending_plan_change_at
+    ? new Date(company.pending_plan_change_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    : null;
+
   return (
     <Card className="mb-8" data-tour="settings-user-management">
+      {company?.pending_plan_id && (
+        <div className="mx-4 mt-4 rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm">
+          <span>
+            Scheduled downgrade to <strong>{pendingPlanName}</strong>
+            {pendingChangeDate && <> on {pendingChangeDate}</>}. No charge until then.
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-3 mt-2 sm:mt-0 sm:ml-2"
+            disabled={cancellingDowngrade}
+            onClick={handleCancelDowngrade}
+          >
+            {cancellingDowngrade ? 'Cancelling…' : 'Cancel downgrade'}
+          </Button>
+        </div>
+      )}
       <CardHeader>
         <CardTitle className="text-lg sm:text-xl">User Management</CardTitle>
         <div className="text-xs sm:text-sm text-muted-foreground mt-1">
@@ -1228,9 +1110,20 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
           <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             {!isTrialPlan && (
               <>
-                <Button variant="outline" onClick={handleRecharge} disabled={loading}>Recharge</Button>
-                {company?.subscription_status !== 'cancelled' && 
-                 company?.subscription_status !== 'expired' && 
+                <Button variant="outline" onClick={handleRecharge} disabled={loading}>
+                  Recharge Subscription
+                </Button>
+                {/* Top Up Usage - hidden for now
+                <Button
+                  variant="outline"
+                  onClick={handleTopUp}
+                  disabled={rechargingCVs || !plan}
+                >
+                  {rechargingCVs ? 'Processing...' : 'Top Up Usage'}
+                </Button>
+                */}
+                {company?.subscription_status !== 'cancelled' &&
+                 company?.subscription_status !== 'expired' &&
                  company?.razorpay_subscription_id && (
                   <Button 
                     variant="outline" 
@@ -1241,26 +1134,14 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                     {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
                   </Button>
                 )}
-                {(plan?.plan_type === 'cv' && (plan?.max_cvs ?? 0) > 0) && (
-                  <Button variant="outline" onClick={handleCVRecharge} disabled={rechargingCVs || !plan}>
-                    {rechargingCVs ? 'Processing...' : 'Recharge CVs'}
-                  </Button>
-                )}
-                {(plan?.plan_type === 'interview' && (plan?.max_interviews ?? 0) > 0) && (
-                  <Button variant="outline" onClick={handleInterviewRecharge} disabled={rechargingCVs || !plan}>
-                    {rechargingCVs ? 'Processing...' : 'Recharge Interviews'}
-                  </Button>
-                )}
-                {plan?.plan_type === 'combo' && (
-                  <Button variant="outline" onClick={handleComboRecharge} disabled={rechargingCVs || !plan}>
-                    {rechargingCVs ? 'Processing...' : 'Recharge CVs & Interviews'}
-                  </Button>
-                )}
               </>
             )}
+            {/* Change Billing Date - hidden for now
             <Dialog open={cycleDateOpen} onOpenChange={setCycleDateOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline">Change Cycle Date</Button>
+                <Button variant="outline" disabled>
+                  Change Cycle Date
+                </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -1312,7 +1193,6 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                           const targetDay = Math.min(newCycleDay, 28);
                           let calculatedDate = new Date(today.getFullYear(), today.getMonth(), targetDay);
                           
-                          // If date is before today, move to next month
                           const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
                           if (calculatedDate < todayStart) {
                             if (today.getMonth() === 11) {
@@ -1362,6 +1242,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                 </div>
               </DialogContent>
             </Dialog>
+            */}
             <Dialog open={planChangeOpen} onOpenChange={setPlanChangeOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline">Change Plan</Button>

@@ -636,8 +636,8 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       calculatedDuration += paramDuration;
     });
     
-    // Add 2 minutes buffer
-    calculatedDuration += 2;
+    // Add 4 minutes buffer
+    calculatedDuration += 4;
     
     // Ensure duration is within reasonable bounds (5-120 minutes) and round to whole minutes
     const finalDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
@@ -669,7 +669,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         const totalTimePerQuestion = answerTime + readingTime;
         calculatedDuration += avgQuestions * totalTimePerQuestion;
       });
-      calculatedDuration += 2; // Add buffer
+      calculatedDuration += 4; // Add buffer
       baseDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
     }
     
@@ -729,8 +729,8 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     // Add reading time (30 seconds per question)
     const readingTime = structuredQuestions.length * 0.5;
     
-    // Add 2 minutes buffer
-    const buffer = 2;
+    // Add 4 minutes buffer
+    const buffer = 4;
     
     // Total duration = question time + reading time + buffer
     const finalDuration = totalDuration + readingTime + buffer;
@@ -751,7 +751,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
 
   const calculateQuestionsFromDuration = (duration: number) => {
     // Calculate questions when user manually edits duration
-    const calculatedQuestions = (duration - 2) / 4;
+    const calculatedQuestions = (duration - 4) / 4;
     // Round to nearest whole number for interview questions
     const finalQuestions = Math.max(1, Math.min(30, Math.round(calculatedQuestions)));
     setFormData(prev => ({ ...prev, totalQuestions: finalQuestions }));

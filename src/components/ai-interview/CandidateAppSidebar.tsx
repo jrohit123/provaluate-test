@@ -18,7 +18,7 @@ const mainItem = {
 };
 
 const stepItems = [
-  { title: 'My Profile', icon: User, path: '/candidate-dashboard/profile' },
+  // { title: 'My Profile', icon: User, path: '/candidate-dashboard/profile' },
   { title: 'Customize Interview', icon: Settings, path: '/candidate-dashboard/jds/configure' },
   { title: 'Generate Interview', icon: UserPlus, path: '/candidate-dashboard/jds/create' },
   { title: 'Performance Report', icon: Briefcase, path: '/candidate-dashboard/interviews' },

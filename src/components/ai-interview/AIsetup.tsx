@@ -980,8 +980,8 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       console.log(`🔄 Parameter "${param.name}": ${avgQuestions} questions × ${totalTimePerQuestion} min = ${paramDuration} min`);
     });
     
-    // Add 2 minutes buffer
-    calculatedDuration += 2;
+    // Add 4 minutes buffer
+    calculatedDuration += 4;
     
     // Ensure duration is within reasonable bounds (5-120 minutes) and round to whole minutes
     const finalDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
@@ -992,12 +992,12 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       personalizedQuestionsCount,
       totalQuestions,
       calculatedDuration: calculatedDuration.toFixed(2),
-      buffer: 2,
+      buffer: 4,
       finalDuration,
       breakdown: {
-        answerTime: (calculatedDuration - 2).toFixed(2),
+        answerTime: (calculatedDuration - 4).toFixed(2),
         readingTime: (functionalQuestions * 0.5).toFixed(2),
-        buffer: 2
+        buffer: 4
       },
       parameterDetails: Object.values(parameters).map(p => ({
           name: p.name,
@@ -1036,8 +1036,8 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       calculatedDuration += avgQuestions * totalTimePerQuestion;
     });
     
-    // Add 2 minutes buffer
-    calculatedDuration += 2;
+    // Add 4 minutes buffer
+    calculatedDuration += 4;
     
     const finalDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
     // FIXED: Replace duration instead of adding to it
@@ -1048,7 +1048,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     // Calculate questions based on answer time + reading time from parameters
     if (!customParameters || Object.keys(customParameters).length === 0) {
       // Fallback to old logic if no parameters
-      const calculatedQuestions = (duration - 2) / 4;
+      const calculatedQuestions = (duration - 4) / 4;
       const finalQuestions = Math.max(1, Math.min(30, Math.round(calculatedQuestions)));
       // FIXED: Replace both duration and totalQuestions instead of just totalQuestions
       setFormData(prev => ({ ...prev, duration: duration, totalQuestions: finalQuestions }));
@@ -1075,7 +1075,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     }, 0);
     
     const avgTimePerQuestion = totalTimeForAllQuestions / totalQuestions;
-    const calculatedQuestions = (duration - 2) / avgTimePerQuestion;
+    const calculatedQuestions = (duration - 4) / avgTimePerQuestion;
     const finalQuestions = Math.max(1, Math.min(30, Math.round(calculatedQuestions)));
     // FIXED: Replace both duration and totalQuestions instead of just totalQuestions
     setFormData(prev => ({ ...prev, duration: duration, totalQuestions: finalQuestions }));
@@ -1508,7 +1508,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         const totalTimePerQuestion = answerTime + readingTime;
         calculatedDuration += avgQuestions * totalTimePerQuestion;
       });
-      calculatedDuration += 2; // Add buffer
+      calculatedDuration += 4; // Add buffer
       baseDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
     }
     

@@ -104,7 +104,7 @@ export function CandidateMainDashboard({ candidateId, candidateEmail, onNavigate
   }, [candidateId, candidateEmail]);
 
   const steps = [
-    { title: 'Profile overview', icon: User, path: '/candidate-dashboard/profile' },
+    // { title: 'Profile overview', icon: User, path: '/candidate-dashboard/profile' },
     { title: 'Interview config', icon: Settings, path: '/candidate-dashboard/jds/configure' },
     { title: 'Interview creation', icon: UserPlus, path: '/candidate-dashboard/jds/create' },
     { title: 'Interview dashboard', icon: Briefcase, path: '/candidate-dashboard/interviews' },
@@ -128,7 +128,7 @@ export function CandidateMainDashboard({ candidateId, candidateEmail, onNavigate
           <CardTitle className="text-base sm:text-lg md:text-xl text-gray-900">Quick Stats</CardTitle>
         </CardHeader>
         <CardContent className="px-3 sm:px-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
             <div className="text-center p-4 sm:p-5 rounded-lg bg-sky-50 border border-sky-100">
               <div className="text-2xl sm:text-3xl font-bold text-sky-800">
                 {loading ? '...' : stats.jobDescriptions}
@@ -141,12 +141,12 @@ export function CandidateMainDashboard({ candidateId, candidateEmail, onNavigate
               </div>
               <div className="text-sm sm:text-base text-gray-600 mt-1">INTERVIEWS COMPLETED</div>
             </div>
-            <div className="text-center p-4 sm:p-5 rounded-lg bg-sky-50 border border-sky-100">
+            {/* <div className="text-center p-4 sm:p-5 rounded-lg bg-sky-50 border border-sky-100">
               <div className="text-2xl sm:text-3xl font-bold text-sky-800">
                 {loading ? '...' : `${stats.profileSectionsCompleted}/${stats.profileSectionsTotal}`}
               </div>
               <div className="text-sm sm:text-base text-gray-600 mt-1">PROFILE SECTIONS COMPLETED</div>
-            </div>
+            </div> */}
           </div>
         </CardContent>
       </Card>

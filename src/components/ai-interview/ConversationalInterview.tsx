@@ -2433,7 +2433,17 @@ const ConversationalInterview = () => {
              console.log('🔍 question_order:', currentQuestionIndex);
              console.log('🔍 transcript length:', finalTranscript.length);
 
-            // Single request: transcript + video + audio (browser extracts WAV so server needs no ffmpeg).
+            // Extract WAV from WebM in browser so backend can run speech analysis without decoding WebM.
+            let audioBlobToSend: Blob | null = null;
+            if (questionVideoBlobToUse) {
+              try {
+                audioBlobToSend = await extractWavFromWebMBlob(questionVideoBlobToUse);
+                if (audioBlobToSend) console.log('✅ Client-side WAV extracted from WebM for speech analysis');
+              } catch (e) {
+                console.warn('WAV extraction from WebM failed, submitting video only:', e);
+              }
+            }
+
             const formData = new FormData();
             formData.append('interview_id', interviewData.interviewId);
             formData.append('question_id', questionId);
@@ -2445,9 +2455,9 @@ const ConversationalInterview = () => {
             formData.append('video_format', 'webm');
             if (questionVideoBlobToUse) {
               formData.append('video_file', questionVideoBlobToUse, `question_${currentQuestionIndex}.webm`);
-              const audioWavBlob = await extractWavFromWebMBlob(questionVideoBlobToUse);
-              if (audioWavBlob)
-                formData.append('audio_file', audioWavBlob, `question_${currentQuestionIndex}_audio.wav`);
+            }
+            if (audioBlobToSend) {
+              formData.append('audio_file', audioBlobToSend, `question_${currentQuestionIndex}_audio.wav`);
             }
 
             const response = await apiCall(API_CONFIG.ENDPOINTS.SUBMIT_ANSWER, {
@@ -3718,7 +3728,7 @@ const ConversationalInterview = () => {
             if (videoBlob && videoBlob.size > 0) {
               setQuestionVideoBlob(videoBlob);
               console.log('✅ Camera video blob set successfully');
-              toast.success(`Camera recording saved! (${(videoBlob.size / 1024 / 1024).toFixed(1)} MB)`);
+              toast.success('Camera recording saved!');
               if (resolveVideoRef) {
                 resolveVideoRef(videoBlob);
                 resolveVideoRef = null;
