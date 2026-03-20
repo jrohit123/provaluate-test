@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { API_CONFIG, buildApiUrl, apiCall } from '@/constants/api';
 import { INTERVIEW_CONSTANTS } from '@/constants/interview';
-import { JobDescription, StructuredQuestion, CustomParameters } from '@/types/interview';
+import { JobDescription, StructuredQuestion, CustomCompetencies, type CustomCompetency } from '@/types/interview';
 import {
   FileText,
   Plus,
@@ -62,21 +62,6 @@ interface FormData {
 }
 
 
-interface CustomParameter {
-  name: string;
-  description: string;
-  weight: number;
-  min_questions: number;
-  max_questions: number;
-  max_time: number;
-  level: 'Easy' | 'Regular' | 'Expert';
-  scoring_criteria: string[];
-  /** When set, overrides keyword-based detection for written-answer (e.g. SQL/code) scenarios. */
-  requires_written_answer?: boolean;
-}
-
-
-
 const CANDIDATE_WORKFLOW_PATHS = ['/candidate-dashboard/jds/configure', '/candidate-dashboard/jds/create', '/candidate-dashboard/interviews'] as const;
 
 const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedLoadJobDescriptions, candidateId }: AIsetupProps) => {
@@ -115,15 +100,15 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isExtractingText, setIsExtractingText] = useState(false);
-  const [customParameters, setCustomParameters] = useState<CustomParameters>({});
+  const [customCompetencies, setCustomCompetencies] = useState<CustomCompetencies>({});
   const [structuredQuestions, setStructuredQuestions] = useState<StructuredQuestion[]>([]);
-  const [isLoadingParameters, setIsLoadingParameters] = useState(false);
-  const [isSavingParameters, setIsSavingParameters] = useState(false);
-  const [parametersSaved, setParametersSaved] = useState(false);
+  const [isLoadingCompetencies, setIsLoadingCompetencies] = useState(false);
+  const [isSavingCompetencies, setIsSavingCompetencies] = useState(false);
+  const [competenciesSaved, setCompetenciesSaved] = useState(false);
   const [isExpandDialogOpen, setIsExpandDialogOpen] = useState(false);
   const [loadedPositions, setLoadedPositions] = useState<Set<string>>(new Set());
-  const [expandedParameters, setExpandedParameters] = useState<Set<string>>(new Set());
-  /** Per-parameter max_time before "Requires written answer" was checked; restored when unchecked */
+  const [expandedCompetencies, setExpandedCompetencies] = useState<Set<string>>(new Set());
+  /** Per-competency max_time before "Requires written answer" was checked; restored when unchecked */
   const [writtenAnswerPrevMaxTime, setWrittenAnswerPrevMaxTime] = useState<Record<string, number>>({});
 
   // Interview JD limit + manage (jd_for_interview) – recruiter only
@@ -315,12 +300,12 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
   };
 
   // Helper function to convert resolved_jd attributes to plain text
-  const convertResolvedJDToText = (parameter: any): string => {
-    if (!parameter || !parameter.attributes) {
+  const convertResolvedJDToText = (jdPayload: any): string => {
+    if (!jdPayload || !jdPayload.attributes) {
       return '';
     }
 
-    const attributes = parameter.attributes;
+    const attributes = jdPayload.attributes;
     let text = '';
 
     // Convert each attribute category to readable text
@@ -346,8 +331,8 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     });
 
     // Add attributes_summary if available
-    if (parameter.attributes_summary) {
-      text += `\nSummary:\n${parameter.attributes_summary}\n`;
+    if (jdPayload.attributes_summary) {
+      text += `\nSummary:\n${jdPayload.attributes_summary}\n`;
     }
 
     return text.trim();
@@ -378,9 +363,9 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         setFormData(prev => ({ ...prev, jobDescription: selectedJD.extracted_text }));
         showJDLoadedToast(selectedJD.title);
         
-        // Load existing parameters for this role (if any)
-        console.log('🔄 Role selection: Loading parameters for:', selectedJD.title);
-        await loadParametersForPosition(selectedJD.title);
+        // Load existing competencies for this role (if any)
+        console.log('🔄 Role selection: Loading competencies for:', selectedJD.title);
+        await loadCompetenciesForPosition(selectedJD.title);
         return;
       }
       
@@ -412,8 +397,8 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
               setFormData(prev => ({ ...prev, jobDescription: plainText }));
               showJDLoadedToast(selectedJD.title);
               
-              // Load existing parameters for this role (if any)
-              await loadParametersForPosition(selectedJD.title);
+          // Load existing competencies for this role (if any)
+              await loadCompetenciesForPosition(selectedJD.title);
               return; // Skip file extraction
             } else {
               console.log('⚠️ Resolved JD text too short, falling back to extraction');
@@ -475,8 +460,8 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
            setFormData(prev => ({ ...prev, jobDescription: extractedText }));
           showJDLoadedToast(selectedJD.title);
            
-           // Load existing parameters for this role (if any)
-           await loadParametersForPosition(selectedJD.title);
+          // Load existing competencies for this role (if any)
+           await loadCompetenciesForPosition(selectedJD.title);
          } else {
            console.error('Backend extraction failed:', response.status, response.statusText);
            // Fallback to title if extraction fails
@@ -638,10 +623,10 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       }
       console.log('✅ Job descriptions reloaded');
       
-      // Load existing parameters for this role (if any)
+      // Load existing competencies for this role (if any)
       if (roleNameForSave) {
-        await loadParametersForPosition(roleNameForSave);
-        console.log('✅ Parameters loaded for role:', roleNameForSave);
+        await loadCompetenciesForPosition(roleNameForSave);
+        console.log('✅ Competencies loaded for role:', roleNameForSave);
       }
       
       // Reset local form so flow matches candidate UX:
@@ -726,7 +711,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         [name]: value
       }));
       
-      // Trigger parameter loading when newRole changes and we're in AI mode
+      // Trigger competency loading when newRole changes and we're in AI mode
       // Only trigger if the value is substantial and user has stopped typing
       if (name === 'newRole' && formData.interviewMode === 'ai' && value.trim().length > 3) {
         // Clear any existing timeout
@@ -736,7 +721,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         // Add a delay to prevent loading while user is still typing
         (window as any).newRoleTimeout = setTimeout(() => {
           if (formData.newRole === value) { // Only load if the value hasn't changed
-            loadParametersForPosition(value.trim());
+            loadCompetenciesForPosition(value.trim());
           }
         }, 1500);
       }
@@ -745,28 +730,28 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
 
 
 
-  const loadParametersForPosition = async (position: string) => {
-    console.log('🔍 loadParametersForPosition called with:', { position, interviewMode: formData.interviewMode, isLoadingParameters });
+  const loadCompetenciesForPosition = async (position: string) => {
+    console.log('🔍 loadCompetenciesForPosition called with:', { position, interviewMode: formData.interviewMode, isLoadingCompetencies });
     
     if (!position) {
-      console.log('🔄 No position provided, clearing parameters');
-      setCustomParameters({});
-      setParametersSaved(false);
+      console.log('🔄 No position provided, clearing competencies');
+      setCustomCompetencies({});
+      setCompetenciesSaved(false);
       return;
     }
     
     // Only prevent if we're already loading the same position
     // Temporarily disabled to debug
-    // if (isLoadingParameters) {
-    //   console.log('🔄 Already loading parameters, skipping duplicate call for:', position);
+    // if (isLoadingCompetencies) {
+    //   console.log('🔄 Already loading competencies, skipping duplicate call for:', position);
     //   return;
     // }
     
-    console.log('🔄 Starting to load parameters for:', position);
-    setIsLoadingParameters(true);
+    console.log('🔄 Starting to load competencies for:', position);
+    setIsLoadingCompetencies(true);
     try {
-      console.log('🔄 Loading parameters for position:', position);
-      console.log('🔄 Current customParameters before loading:', Object.keys(customParameters));
+      console.log('🔄 Loading competencies for position:', position);
+      console.log('🔄 Current customCompetencies before loading:', Object.keys(customCompetencies));
       
       // Try to load from custom_role_parameters table first
       const { data, error } = await supabase
@@ -824,12 +809,12 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         if (detectedMode === 'ai') {
           setStructuredQuestions([]);
         } else if (detectedMode === 'structured') {
-          setCustomParameters({});
+          setCustomCompetencies({});
         }
         
         if (customParams && Object.keys(customParams).length > 0 && detectedMode === 'ai') {
-          // Load AI interview parameters and ensure they have max_time and level values
-          const paramsWithDefaults = Object.keys(customParams).reduce((acc, key) => {
+          // Load AI interview competencies and ensure they have max_time and level values
+          const competenciesWithDefaultsFromDb = Object.keys(customParams).reduce((acc, key) => {
             acc[key] = {
               ...customParams[key],
               max_time: customParams[key].max_time || 3, // Default to 3 minutes if not set
@@ -837,27 +822,27 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
               requires_written_answer: customParams[key].requires_written_answer
             };
             return acc;
-          }, {} as CustomParameters);
+          }, {} as CustomCompetencies);
           
-          console.log('🔄 Setting customParameters to:', paramsWithDefaults);
-          setCustomParameters(paramsWithDefaults);
-          setParametersSaved(true);
+          console.log('🔄 Setting customCompetencies to:', competenciesWithDefaultsFromDb);
+          setCustomCompetencies(competenciesWithDefaultsFromDb);
+          setCompetenciesSaved(true);
           
           // Calculate duration and questions - if personalized questions exist, use the combined function
           if (personalizedQuestions && personalizedQuestions.length > 0) {
             // Use the combined function that handles both technical and personalized questions
-            recalculateDurationWithPersonalizedQuestions(personalizedQuestions, paramsWithDefaults);
+            recalculateDurationWithPersonalizedQuestions(personalizedQuestions, competenciesWithDefaultsFromDb);
           } else {
             // Only technical questions, use the regular calculation
-            calculateDuration(paramsWithDefaults);
+            calculateDuration(competenciesWithDefaultsFromDb);
           }
           
           // Only show toast if we haven't loaded this position before (silent auto-load)
           const normalizedPosition = position.trim().toLowerCase();
           console.log('🔍 Toast check:', { position, normalizedPosition, loadedPositions: Array.from(loadedPositions), hasPosition: loadedPositions.has(normalizedPosition) });
-          // Removed toast - parameters load silently to avoid spam
+          // Removed toast - competencies load silently to avoid spam
             setLoadedPositions(prev => new Set(prev).add(normalizedPosition));
-          console.log('✅ Loaded existing AI parameters for', position);
+          console.log('✅ Loaded existing AI competencies for', position);
         } else if (hasValidStructuredQuestions && detectedMode === 'structured') {
           // Load structured interview questions
           // Parse structured_questions if it's a string
@@ -877,50 +862,46 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           
           console.log('🔄 Found structured interview questions:', questionsArray.length);
           setStructuredQuestions(questionsArray);
-          setParametersSaved(true);
+          setCompetenciesSaved(true);
           
           // Only show toast if we haven't loaded this position before (silent auto-load)
           const normalizedPosition = position.trim().toLowerCase();
-          // Removed toast - parameters load silently to avoid spam
+          // Removed toast - competencies load silently to avoid spam
             setLoadedPositions(prev => new Set(prev).add(normalizedPosition));
           console.log('✅ Loaded existing structured interview for', position);
         } else {
           console.log('🔄 Existing record found but no valid data, clearing state');
-          setCustomParameters({});
-          setParametersSaved(false);
+          setCustomCompetencies({});
+          setCompetenciesSaved(false);
         }
       } else {
-        // No existing parameters found, start with empty parameters
-        console.log('🔄 No existing parameters found for', position, '- clearing state');
-        setCustomParameters({});
-        setParametersSaved(false);
+        // No existing competencies found, start with empty competencies
+        console.log('🔄 No existing competencies found for', position, '- clearing state');
+        setCustomCompetencies({});
+        setCompetenciesSaved(false);
         // Removed toast - UI state is clear enough without notification
       }
     } catch (error) {
-      console.error('Error loading parameters:', error);
-      setCustomParameters({});
-      setParametersSaved(false);
+      console.error('Error loading competencies:', error);
+      setCustomCompetencies({});
+      setCompetenciesSaved(false);
     } finally {
-      setIsLoadingParameters(false);
+      setIsLoadingCompetencies(false);
     }
   };
 
-  const loadParameters = useCallback(async () => {
-    await loadParametersForPosition(formData.position);
-  }, [formData.position]);
-
-  const calculateDuration = (parameters: CustomParameters) => {
-    if (!parameters || Object.keys(parameters).length === 0) {
+  const calculateDuration = (competencies: CustomCompetencies) => {
+    if (!competencies || Object.keys(competencies).length === 0) {
       setFormData(prev => ({ ...prev, duration: 30, totalQuestions: 1 })); // Default fallback - minimum 1 question
       return;
     }
 
     let functionalQuestions = 0; // Will be calculated and rounded to whole number
 
-    // Calculate questions per parameter: (min + max) ÷ 2, then round to nearest whole number
-    Object.values(parameters).forEach(param => {
-      const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
-      const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
+    // Calculate questions per competency: (min + max) ÷ 2, then round to nearest whole number
+    Object.values(competencies).forEach(comp => {
+      const minQuestions = typeof comp.min_questions === 'string' ? parseFloat(comp.min_questions) : comp.min_questions;
+      const maxQuestions = typeof comp.max_questions === 'string' ? parseFloat(comp.max_questions) : comp.max_questions;
       const questionsPerParam = (minQuestions + maxQuestions) / 2;
       functionalQuestions += questionsPerParam;
     });
@@ -944,9 +925,9 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       formDataPersonalizedQuestions: formData.personalizedQuestions
     });
     
-    // Calculate duration based on answer time + reading time for each parameter
+    // Calculate duration based on answer time + reading time for each competency
     let calculatedDuration = 0;
-    Object.values(parameters).forEach(param => {
+    Object.values(competencies).forEach(param => {
       let minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
       let maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
       
@@ -977,7 +958,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       const paramDuration = avgQuestions * totalTimePerQuestion;
       calculatedDuration += paramDuration;
       
-      console.log(`🔄 Parameter "${param.name}": ${avgQuestions} questions × ${totalTimePerQuestion} min = ${paramDuration} min`);
+      console.log(`🔄 Competency "${param.name}": ${avgQuestions} questions × ${totalTimePerQuestion} min = ${paramDuration} min`);
     });
     
     // Add 4 minutes buffer
@@ -987,7 +968,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     const finalDuration = Math.round(Math.max(5, Math.min(120, calculatedDuration)));
     
     console.log('🔄 Duration calculation summary:', {
-      parameters: Object.keys(parameters).length,
+      competencies: Object.keys(competencies).length,
       functionalQuestions,
       personalizedQuestionsCount,
       totalQuestions,
@@ -999,7 +980,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         readingTime: (functionalQuestions * 0.5).toFixed(2),
         buffer: 4
       },
-      parameterDetails: Object.values(parameters).map(p => ({
+      competencyDetails: Object.values(competencies).map(p => ({
           name: p.name,
         max_time: p.max_time,
         max_time_type: typeof p.max_time,
@@ -1026,7 +1007,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
   const calculateDurationFromQuestions = (questions: number) => {
     // Calculate duration based on answer time + reading time from parameters
     let calculatedDuration = 0;
-    Object.values(customParameters).forEach(param => {
+    Object.values(customCompetencies).forEach(param => {
       const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
       const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
       const avgQuestions = (minQuestions + maxQuestions) / 2;
@@ -1046,7 +1027,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
 
   const calculateQuestionsFromDuration = (duration: number) => {
     // Calculate questions based on answer time + reading time from parameters
-    if (!customParameters || Object.keys(customParameters).length === 0) {
+    if (!customCompetencies || Object.keys(customCompetencies).length === 0) {
       // Fallback to old logic if no parameters
       const calculatedQuestions = (duration - 4) / 4;
       const finalQuestions = Math.max(1, Math.min(30, Math.round(calculatedQuestions)));
@@ -1057,7 +1038,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     
     // Calculate total time needed for all parameters
     let totalTimeForAllQuestions = 0;
-    Object.values(customParameters).forEach(param => {
+    Object.values(customCompetencies).forEach(param => {
       const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
       const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
       const answerTime = typeof param.max_time === 'string' ? parseFloat(param.max_time) : (param.max_time || 3);
@@ -1068,7 +1049,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     });
     
     // Calculate average time per question across all parameters
-    const totalQuestions = Object.values(customParameters).reduce((sum, param) => {
+    const totalQuestions = Object.values(customCompetencies).reduce((sum, param) => {
       const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
       const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
       return sum + (minQuestions + maxQuestions) / 2;
@@ -1081,7 +1062,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     setFormData(prev => ({ ...prev, duration: duration, totalQuestions: finalQuestions }));
   };
 
-  const generateDynamicParameters = async (forceFresh = false) => {
+  const generateDynamicCompetencies = async (forceFresh = false) => {
     if (!formData.position && !formData.newRole) {
       toast.error('Please select a position or enter a new role first');
       return;
@@ -1092,27 +1073,27 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       return;
     }
 
-    // Check if parameters already exist - if so, warn user
-    if (Object.keys(customParameters).length > 0) {
+    // Check if competencies already exist - if so, warn user
+    if (Object.keys(customCompetencies).length > 0) {
       const confirmGenerate = window.confirm(
-        'You already have parameters set. Generating AI parameters will enhance your existing parameters with AI-generated descriptions and scoring criteria, while preserving your manual settings (timing, questions, weights). Continue?'
+        'You already have competencies set. Generating AI competencies will enhance your existing competencies with AI-generated descriptions and scoring criteria, while preserving your manual settings (timing, questions, weights). Continue?'
       );
       if (!confirmGenerate) {
         return;
       }
     }
     
-    setIsLoadingParameters(true);
+    setIsLoadingCompetencies(true);
     try {
       const roleName = formData.newRole || formData.position;
-      console.log('🔄 Generating dynamic parameters for role:', roleName);
+      console.log('🔄 Generating dynamic competencies for role:', roleName);
       
       // First get the interview count for this role
       const countResponse = await apiCall(`${API_CONFIG.ENDPOINTS.GET_INTERVIEW_COUNT}/${encodeURIComponent(roleName)}`);
       const countData = await countResponse.json();
       const interviewCount = countData.interview_count || 1;
 
-      // Generate dynamic parameters using the backend API with JD text
+      // Generate dynamic competencies using the backend API with JD text
       const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.GENERATE_DYNAMIC_PARAMETERS), {
         method: 'POST',
         headers: {
@@ -1123,36 +1104,36 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           job_description: formData.jobDescription,
           interview_count: interviewCount,
           interview_type: formData.interviewType,
-          existing_parameters: customParameters // Send current parameters to preserve settings
+          existing_parameters: customCompetencies // API key unchanged: existing competency config
         })
       });
 
       if (response.ok) {
         const data = await response.json();
-        const generatedParameters = data.parameters || {};
+        const generatedCompetencies = data.parameters || {};
         
         // Preserve existing manual settings and only use AI for missing fields.
         // Use backend weight as-is (1-100) so total stays 100%; avoid clamping to 10-40 here.
-        const paramKeys = Object.keys(generatedParameters);
-        const defaultWeight = paramKeys.length > 0 ? Math.round(100 / paramKeys.length) : 25;
-        const paramsWithDefaults = paramKeys.reduce((acc, key) => {
-          const existingParam = customParameters[key];
-          const aiParam = generatedParameters[key];
-          const rawWeight = existingParam?.weight ?? aiParam?.weight;
+        const competencyKeys = Object.keys(generatedCompetencies);
+        const defaultWeight = competencyKeys.length > 0 ? Math.round(100 / competencyKeys.length) : 25;
+        const competenciesWithDefaults = competencyKeys.reduce((acc, key) => {
+          const existingComp = customCompetencies[key];
+          const aiComp = generatedCompetencies[key];
+          const rawWeight = existingComp?.weight ?? aiComp?.weight;
           const weight = typeof rawWeight === 'number' && rawWeight >= 1 && rawWeight <= 100 ? rawWeight : defaultWeight;
 
           acc[key] = {
-            ...aiParam,
+            ...aiComp,
             // Preserve manual settings if they exist, otherwise use reasonable defaults
-            max_time: existingParam?.max_time || (aiParam.max_time && aiParam.max_time >= 1 && aiParam.max_time <= 3 ? aiParam.max_time : 3),
-            level: existingParam?.level || aiParam.level || 'Regular',
-            min_questions: existingParam?.min_questions || (aiParam.min_questions && aiParam.min_questions >= 1 && aiParam.min_questions <= 8 ? aiParam.min_questions : 2),
-            max_questions: existingParam?.max_questions || (aiParam.max_questions && aiParam.max_questions >= 1 && aiParam.max_questions <= 8 ? aiParam.max_questions : 5),
+            max_time: existingComp?.max_time || (aiComp.max_time && aiComp.max_time >= 1 && aiComp.max_time <= 3 ? aiComp.max_time : 3),
+            level: existingComp?.level || aiComp.level || 'Regular',
+            min_questions: existingComp?.min_questions || (aiComp.min_questions && aiComp.min_questions >= 1 && aiComp.min_questions <= 8 ? aiComp.min_questions : 2),
+            max_questions: existingComp?.max_questions || (aiComp.max_questions && aiComp.max_questions >= 1 && aiComp.max_questions <= 8 ? aiComp.max_questions : 5),
             weight,
-            requires_written_answer: existingParam?.requires_written_answer ?? aiParam?.requires_written_answer
+            requires_written_answer: existingComp?.requires_written_answer ?? aiComp?.requires_written_answer
           };
           
-          console.log(`🔄 Parameter ${key} settings:`, {
+          console.log(`🔄 Competency ${key} settings:`, {
             name: acc[key].name,
             max_time: acc[key].max_time,
             level: acc[key].level,
@@ -1162,43 +1143,43 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           });
           
           return acc;
-        }, {} as CustomParameters);
+        }, {} as CustomCompetencies);
         
-        setCustomParameters(paramsWithDefaults);
-        setParametersSaved(false);
-        calculateDuration(paramsWithDefaults);
+        setCustomCompetencies(competenciesWithDefaults);
+        setCompetenciesSaved(false);
+        calculateDuration(competenciesWithDefaults);
         
         const method = data.cached ? 'cached' : 'fresh';
-        toast.success(`Generated ${method} parameters for ${roleName} (Interview #${interviewCount})`, { id: 'params-generated' });
+        toast.success(`Generated ${method} competencies for ${roleName} (Interview #${interviewCount})`, { id: 'params-generated' });
       } else {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate parameters');
+        throw new Error(errorData.error || 'Failed to generate competencies');
       }
     } catch (error) {
-      console.error('Error generating dynamic parameters:', error);
-      toast.error('Failed to generate dynamic parameters', { id: 'params-generate-error' });
+      console.error('Error generating dynamic competencies:', error);
+      toast.error('Failed to generate dynamic competencies', { id: 'params-generate-error' });
     } finally {
-      setIsLoadingParameters(false);
+      setIsLoadingCompetencies(false);
     }
   };
 
-  // Auto-generate and save parameters when job description is selected
-  const autoGenerateAndSaveParameters = async (jobDescriptionText: string) => {
+  // Auto-generate and save competencies when job description is selected
+  const autoGenerateAndSaveCompetencies = async (jobDescriptionText: string) => {
     const roleName = formData.newRole || formData.position;
     if (!roleName || !jobDescriptionText) {
       return;
     }
 
-    setIsLoadingParameters(true);
+    setIsLoadingCompetencies(true);
     try {
-      console.log('🔄 Auto-generating and saving parameters for role:', roleName);
+      console.log('🔄 Auto-generating and saving competencies for role:', roleName);
       
       // First get the interview count for this role
       const countResponse = await apiCall(`${API_CONFIG.ENDPOINTS.GET_INTERVIEW_COUNT}/${encodeURIComponent(roleName)}`);
       const countData = await countResponse.json();
       const interviewCount = countData.interview_count || 1;
 
-      // Generate dynamic parameters using the backend API with JD text
+      // Generate dynamic competencies using the backend API with JD text
       const response = await fetch('API_CONFIG.ENDPOINTS.GENERATE_DYNAMIC_PARAMETERS', {
         method: 'POST',
         headers: {
@@ -1213,11 +1194,11 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
 
       if (response.ok) {
         const data = await response.json();
-        const generatedParameters = data.parameters || {};
+        const generatedCompetenciesAuto = data.parameters || {};
         
-        console.log('🔄 Received parameters from backend:', generatedParameters);
-        console.log('🔄 Parameter keys:', Object.keys(generatedParameters));
-        Object.entries(generatedParameters).forEach(([key, param]) => {
+        console.log('🔄 Received competencies from backend:', generatedCompetenciesAuto);
+        console.log('🔄 Competency keys:', Object.keys(generatedCompetenciesAuto));
+        Object.entries(generatedCompetenciesAuto).forEach(([key, param]) => {
           const paramObj = param as any;
           console.log(`  ${key}:`, {
             name: paramObj.name,
@@ -1228,35 +1209,35 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           });
         });
         
-        // Save parameters directly to custom_role_parameters table
+        // Save competency config to custom_role_parameters (DB column name unchanged)
         const { error: saveError } = await supabase
           .from('custom_role_parameters')
           .insert({
             role_name: roleName,
-            custom_parameters: generatedParameters,
+            custom_parameters: generatedCompetenciesAuto,
             user_id: user?.id
           });
 
         if (saveError) {
-          console.error('Error saving parameters:', saveError);
-          toast.error('Failed to save parameters', { id: 'params-save-error-2' });
+          console.error('Error saving competencies:', saveError);
+          toast.error('Failed to save competencies', { id: 'params-save-error-2' });
         } else {
-          setCustomParameters(generatedParameters);
-          setParametersSaved(true);
-          calculateDuration(generatedParameters);
+          setCustomCompetencies(generatedCompetenciesAuto);
+          setCompetenciesSaved(true);
+          calculateDuration(generatedCompetenciesAuto);
           
           const method = data.cached ? 'cached' : 'AI-generated';
-          toast.success(`Auto-generated and saved ${method} parameters for ${roleName} (Interview #${interviewCount})`, { id: 'params-auto-saved' });
+          toast.success(`Auto-generated and saved ${method} competencies for ${roleName} (Interview #${interviewCount})`, { id: 'params-auto-saved' });
         }
       } else {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate parameters');
+        throw new Error(errorData.error || 'Failed to generate competencies');
       }
     } catch (error) {
-      console.error('Error auto-generating parameters:', error);
-      toast.error('Failed to auto-generate parameters', { id: 'params-auto-error' });
+      console.error('Error auto-generating competencies:', error);
+      toast.error('Failed to auto-generate competencies', { id: 'params-auto-error' });
     } finally {
-      setIsLoadingParameters(false);
+      setIsLoadingCompetencies(false);
     }
   };
 
@@ -1275,24 +1256,24 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
   }, [user?.profile?.company_id, injectedJobDescriptions]);
 
   useEffect(() => {
-    // Immediately clear parameters when position changes to prevent showing old parameters
+    // Immediately clear competencies when position changes to prevent showing old competencies
     console.log('🔄 Position changed to:', formData.position);
-    setCustomParameters({});
-    setParametersSaved(false);
+    setCustomCompetencies({});
+    setCompetenciesSaved(false);
     
     if (formData.position) {
-      // Call loadParameters directly to avoid dependency issues
-      loadParametersForPosition(formData.position);
+      // Call loadCompetenciesForPosition directly to avoid dependency issues
+      loadCompetenciesForPosition(formData.position);
     }
   }, [formData.position]);
 
-  // Debug: Monitor customParameters state changes
+  // Debug: Monitor customCompetencies state changes
   useEffect(() => {
-    console.log('🔄 customParameters state changed:', Object.keys(customParameters).length, 'parameters');
-    if (Object.keys(customParameters).length > 0) {
-      console.log('🔄 Parameters keys:', Object.keys(customParameters));
+    console.log('🔄 customCompetencies state changed:', Object.keys(customCompetencies).length, 'competencies');
+    if (Object.keys(customCompetencies).length > 0) {
+      console.log('🔄 Competency keys:', Object.keys(customCompetencies));
     }
-  }, [customParameters]);
+  }, [customCompetencies]);
 
   // Clear data when switching interview modes
   useEffect(() => {
@@ -1304,15 +1285,15 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       // Clear structured questions when switching to AI mode
       setStructuredQuestions([]);
     } else if (formData.interviewMode === 'structured') {
-      // Clear custom parameters when switching to structured mode
-      setCustomParameters({});
+      // Clear custom competencies when switching to structured mode
+      setCustomCompetencies({});
     }
     
     // Clear loaded positions to allow fresh toasts for new mode
     setLoadedPositions(new Set());
   }, [formData.interviewMode]);
 
-  // Load parameters when position changes (only for AI mode)
+  // Load competencies when position changes (only for AI mode)
   useEffect(() => {
     console.log('🔍 Position useEffect triggered:', { 
       position: formData.position, 
@@ -1320,30 +1301,30 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     });
     
     if (formData.position && formData.interviewMode === 'ai') {
-      console.log('🔄 Position useEffect: Loading parameters for position:', formData.position);
-      loadParametersForPosition(formData.position);
+      console.log('🔄 Position useEffect: Loading competencies for position:', formData.position);
+      loadCompetenciesForPosition(formData.position);
     }
   }, [formData.position, formData.interviewMode]);
 
-  const saveParameters = async () => {
+  const saveCompetencies = async () => {
     const roleName = formData.newRole || formData.position;
     
-    if (!roleName || Object.keys(customParameters).length === 0) {
-      toast.error('Please configure parameters before saving', { id: 'params-configure-required' });
+    if (!roleName || Object.keys(customCompetencies).length === 0) {
+      toast.error('Please configure competencies before saving', { id: 'params-configure-required' });
       return;
     }
 
-    const totalWeight = Object.values(customParameters).reduce((acc, p) => acc + (Number(p?.weight) || 0), 0);
+    const totalWeight = Object.values(customCompetencies).reduce((acc, p) => acc + (Number(p?.weight) || 0), 0);
     if (Math.abs(totalWeight - 100) > 0.01) {
-      toast.error(`Total weight must equal 100%. Current total: ${totalWeight}%. Adjust parameter weights so they sum to exactly 100.`, { id: 'params-weight-invalid' });
+      toast.error(`Total weight must equal 100%. Current total: ${totalWeight}%. Adjust competency weights so they sum to exactly 100.`, { id: 'params-weight-invalid' });
       return;
     }
     
-    setIsSavingParameters(true);
+    setIsSavingCompetencies(true);
     try {
-      console.log('🔄 Saving parameters for role:', roleName, customParameters);
+      console.log('🔄 Saving competencies for role:', roleName, customCompetencies);
       
-      // First check if parameters already exist for this role
+      // First check if competencies already exist for this role
       const { data: existingData, error: checkError } = await supabase
         .from('custom_role_parameters')
         .select('id')
@@ -1357,11 +1338,11 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       // If existingData exists (no error), update; otherwise insert new
       if (existingData && !checkError) {
         // Update existing record
-        console.log('🔄 Updating existing parameters for role:', roleName);
+        console.log('🔄 Updating existing competencies for role:', roleName);
         const result = await supabase
           .from('custom_role_parameters')
           .update({
-            custom_parameters: customParameters,
+            custom_parameters: customCompetencies,
             interview_type: formData.interviewType,
             structured_questions: {}, // Clear structured questions for AI interviews
             personalized_questions: formData.personalizedQuestionsEnabled ? formData.personalizedQuestions : null,
@@ -1374,12 +1355,12 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         error = result.error;
       } else {
         // Insert new record
-        console.log('🔄 Creating new parameters for role:', roleName);
+        console.log('🔄 Creating new competencies for role:', roleName);
         const result = await supabase
           .from('custom_role_parameters')
           .insert({
             role_name: roleName,
-            custom_parameters: customParameters,
+            custom_parameters: customCompetencies,
             interview_type: formData.interviewType,
             structured_questions: {}, // No structured questions for AI interviews
             personalized_questions: formData.personalizedQuestionsEnabled ? formData.personalizedQuestions : null,
@@ -1394,24 +1375,24 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
 
       if (error) throw error;
 
-      setParametersSaved(true);
+      setCompetenciesSaved(true);
       
       // Don't recalculate duration after saving - keep the current duration
       // The duration should remain the same as what was calculated before saving
       
-      toast.success('Parameters saved successfully!', { id: 'params-saved' });
-      console.log('✅ Parameters saved/updated for role:', roleName);
+      toast.success('Competencies saved successfully!', { id: 'params-saved' });
+      console.log('✅ Competencies saved/updated for role:', roleName);
     } catch (error) {
-      console.error('Error saving parameters:', error);
-      toast.error('Failed to save parameters', { id: 'params-save-error' });
+      console.error('Error saving competencies:', error);
+      toast.error('Failed to save competencies', { id: 'params-save-error' });
     } finally {
-      setIsSavingParameters(false);
+      setIsSavingCompetencies(false);
     }
   };
 
-  const addParameter = () => {
-    const newKey = `param_${Object.keys(customParameters).length + 1}`;
-    setCustomParameters(prev => {
+  const addCompetency = () => {
+    const newKey = `param_${Object.keys(customCompetencies).length + 1}`;
+    setCustomCompetencies(prev => {
       const updated = {
         ...prev,
         [newKey]: {
@@ -1432,20 +1413,20 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         }
       };
       
-      // Recalculate duration when adding new parameter
+      // Recalculate duration when adding new competency
       setTimeout(() => calculateDuration(updated), INTERVIEW_CONSTANTS.TIMEOUTS.RECORDING_VERIFICATION);
       return updated;
     });
   };
 
-  const updateParameter = (key: string, field: keyof CustomParameter, value: string | number | string[] | boolean) => {
+  const updateCompetency = (key: string, field: keyof CustomCompetency, value: string | number | string[] | boolean) => {
     let processedValue: string | number | string[] | boolean = value;
     if (field === 'weight' || field === 'min_questions' || field === 'max_questions') {
       const numValue = parseInt(value.toString());
       processedValue = isNaN(numValue) ? 0 : numValue;
     }
     
-    setCustomParameters(prev => {
+    setCustomCompetencies(prev => {
       const updated = {
         ...prev,
         [key]: {
@@ -1454,24 +1435,24 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         }
       };
       
-      // Recalculate duration and questions for any parameter change
+      // Recalculate duration and questions for any competency change
       setTimeout(() => calculateDuration(updated), INTERVIEW_CONSTANTS.TIMEOUTS.RECORDING_VERIFICATION);
       
       return updated;
     });
-    setParametersSaved(false);
+    setCompetenciesSaved(false);
   };
 
-  const deleteParameter = (key: string) => {
-    setCustomParameters(prev => {
+  const deleteCompetency = (key: string) => {
+    setCustomCompetencies(prev => {
       const newParams = { ...prev };
       delete newParams[key];
       
-      // Recalculate duration when deleting parameter
+      // Recalculate duration when deleting competency
       setTimeout(() => calculateDuration(newParams), INTERVIEW_CONSTANTS.TIMEOUTS.RECORDING_VERIFICATION);
       return newParams;
     });
-    setParametersSaved(false);
+    setCompetenciesSaved(false);
   };
 
   const resetForm = () => {
@@ -1488,18 +1469,18 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     });
   };
 
-  const recalculateDurationWithPersonalizedQuestions = (personalizedQuestions: Array<{question: string, timeLimit: number}>, parameters?: CustomParameters) => {
+  const recalculateDurationWithPersonalizedQuestions = (personalizedQuestions: Array<{question: string, timeLimit: number}>, competencyMap?: CustomCompetencies) => {
     // Calculate personalized questions duration
     const personalizedDuration = personalizedQuestions.reduce((total, q) => total + q.timeLimit, 0);
     
-    // Use provided parameters or fall back to current customParameters state
-    const paramsToUse = parameters || customParameters;
+    // Use provided map or fall back to current customCompetencies state
+    const competenciesToUse = competencyMap || customCompetencies;
     
-    // Get base duration from parameters (without personalized questions)
+    // Get base duration from competencies (without personalized questions)
     let baseDuration = 30; // Default fallback
-    if (Object.keys(paramsToUse).length > 0) {
+    if (Object.keys(competenciesToUse).length > 0) {
       let calculatedDuration = 0;
-      Object.values(paramsToUse).forEach(param => {
+      Object.values(competenciesToUse).forEach(param => {
         const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
         const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
         const avgQuestions = (minQuestions + maxQuestions) / 2;
@@ -1517,7 +1498,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     
     // Calculate total questions (technical + personalized) - use same logic as calculateDuration
     let functionalQuestions = 0;
-    Object.values(paramsToUse).forEach(param => {
+    Object.values(competenciesToUse).forEach(param => {
       const minQuestions = typeof param.min_questions === 'string' ? parseFloat(param.min_questions) : param.min_questions;
       const maxQuestions = typeof param.max_questions === 'string' ? parseFloat(param.max_questions) : param.max_questions;
       const questionsPerParam = (minQuestions + maxQuestions) / 2;
@@ -1539,7 +1520,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       totalDuration,
       functionalQuestions,
       totalQuestions,
-      usingProvidedParams: !!parameters
+      usingProvidedCompetencyMap: !!competencyMap
     });
     
     setFormData(prev => ({
@@ -1583,7 +1564,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           job_description: formData.jobDescription,
           interview_type: formData.interviewType,
           interview_mode: formData.interviewMode,
-          custom_parameters: customParameters
+          custom_parameters: customCompetencies
         }),
       });
 
@@ -1610,7 +1591,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
 
   // Helper function to calculate total weightage
   const calculateTotalWeightage = () => {
-    return Object.values(customParameters).reduce((total, param) => {
+    return Object.values(customCompetencies).reduce((total, param) => {
       return total + (param.weight || 0);
     }, 0);
   };
@@ -1634,9 +1615,9 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     return colors[index % colors.length];
   };
 
-  // Function to toggle parameter expansion
-  const toggleParameter = (key: string) => {
-    setExpandedParameters(prev => {
+  // Function to toggle competency expansion
+  const toggleCompetency = (key: string) => {
+    setExpandedCompetencies(prev => {
       const newSet = new Set(prev);
       if (newSet.has(key)) {
         newSet.delete(key);
@@ -1671,7 +1652,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
       <div className="mb-4 sm:mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className={`text-xl sm:text-2xl font-bold mb-2 ${titleClass}`}>Interview Parameters Setup</h2>
+          <h2 className={`text-xl sm:text-2xl font-bold mb-2 ${titleClass}`}>Interview Competencies Setup</h2>
           <p className="text-sm sm:text-base text-muted-foreground">Select the role and configure the interview settings</p>
         </div>
         <Popover>
@@ -1682,7 +1663,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           </PopoverTrigger>
           <PopoverContent className="w-full max-w-md sm:max-w-lg max-h-[85vh] overflow-y-auto" align="end" side="bottom">
             <div className="space-y-4 text-sm">
-              <h3 className="font-semibold text-base border-b pb-2">Interview Parameters – Quick Help</h3>
+              <h3 className="font-semibold text-base border-b pb-2">Interview Competencies – Quick Help</h3>
 
               {/* 1. Always start by saving a JD */}
               <div>
@@ -1709,7 +1690,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                 <ol className="list-decimal list-inside space-y-1 text-gray-600">
                   <li>Select your role in <strong>Select Role</strong>.</li>
                   <li>Choose <strong>AI Interview</strong> and an <strong>Interview Type</strong>.</li>
-                  <li>Click <strong>Generate AI Parameters</strong>, adjust questions / weights (total 100%), then <strong>Save Parameters</strong>.</li>
+                  <li>Click <strong>Generate AI Competencies</strong>, adjust questions / weights (total 100%), then <strong>Save Competencies</strong>.</li>
                 </ol>
                 <p className="mt-1 text-gray-600">
                   Optionally turn on <strong>Personalized Questions</strong> to add a few must‑ask questions on top of the AI‑generated ones.
@@ -1721,7 +1702,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                 <ol className="list-decimal list-inside space-y-1 text-gray-600">
                   <li>Select your role in <strong>Select Role</strong>.</li>
                   <li>Choose <strong>Structured Interview</strong>.</li>
-                  <li>Add or edit questions, sections, and timing as needed, then <strong>Save Parameters</strong>.</li>
+                  <li>Add or edit questions, sections, and timing as needed, then <strong>Save Competencies</strong>.</li>
                 </ol>
                 <p className="mt-1 text-gray-600">
                   You can also enable <strong>Personalized Questions</strong> here to define extra time‑boxed questions for this role.
@@ -1961,7 +1942,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                         <span>📝</span>
                         <div>
                           <div className="font-medium text-sm sm:text-base">Structured Interview (Pre-defined)</div>
-                          <div className="text-xs sm:text-sm text-gray-500">HR writes custom questions and parameters</div>
+                          <div className="text-xs sm:text-sm text-gray-500">HR writes custom questions and competencies</div>
                         </div>
                       </div>
                     </SelectItem>
@@ -1976,9 +1957,9 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                     value={formData.interviewType} 
                     onValueChange={async (value: 'functional' | 'behavioral' | 'mixed') => {
                       setFormData(prev => ({ ...prev, interviewType: value }));
-                      // Trigger parameter loading when interview type changes
+                      // Trigger competency loading when interview type changes
                       if (formData.position) {
-                        await loadParametersForPosition(formData.position);
+                        await loadCompetenciesForPosition(formData.position);
                       }
                     }}
                   >
@@ -2115,7 +2096,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       </Card>
 
       {/* Interview Summary Section */}
-            {formData.position && Object.keys(customParameters).length > 0 && (
+            {formData.position && Object.keys(customCompetencies).length > 0 && (
         <Card className="animate-fade-in">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -2128,7 +2109,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
                 <div className="text-blue-600 font-medium text-xs sm:text-sm">Total Questions</div>
                 <div className="text-xl sm:text-2xl font-bold text-blue-800">{formData.totalQuestions || 'Calculating...'}</div>
-                <div className="text-xs text-blue-600">Based on parameters</div>
+                <div className="text-xs text-blue-600">Based on competencies</div>
               </div>
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
                 <div className="text-blue-600 font-medium text-xs sm:text-sm">Duration</div>
@@ -2136,14 +2117,14 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                 <div className="text-xs text-blue-600">Auto-calculated</div>
               </div>
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                <div className="text-blue-600 font-medium text-xs sm:text-sm">Parameters</div>
-                <div className="text-xl sm:text-2xl font-bold text-blue-800">{Object.keys(customParameters).length}</div>
+                <div className="text-blue-600 font-medium text-xs sm:text-sm">Competencies</div>
+                <div className="text-xl sm:text-2xl font-bold text-blue-800">{Object.keys(customCompetencies).length}</div>
                 <div className="text-xs text-blue-600">Assessment areas</div>
               </div>
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
                 <div className="text-blue-600 font-medium text-xs sm:text-sm">Weightage</div>
                 <div className="text-xl sm:text-2xl font-bold text-blue-800">
-                  {Object.values(customParameters).reduce((total, param) => total + (param.weight || 0), 0)}%
+                  {Object.values(customCompetencies).reduce((total, param) => total + (param.weight || 0), 0)}%
                 </div>
                 <div className="text-xs text-blue-600">Total weightage</div>
               </div>
@@ -2157,7 +2138,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       {formData.interviewMode === 'ai' ? (
         <div>
 
-        {/* AI Interview - Parameters Section */}
+        {/* AI Interview - Competencies Section */}
         <Card className="animate-fade-in">
           <CardHeader>
             <CardTitle>
@@ -2167,15 +2148,15 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           {/* Always show Save Configuration button, show other buttons conditionally */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between mb-4 sm:mb-6 gap-3">
             <div className="flex flex-wrap gap-2 sm:gap-3">
-              {/* Show Generate button only when creating new parameters */}
-              {(!parametersSaved || Object.keys(customParameters).length === 0) && (
+              {/* Show Generate button only when creating new competencies */}
+              {(!competenciesSaved || Object.keys(customCompetencies).length === 0) && (
                 <Button
-                  onClick={() => generateDynamicParameters(true)} // Always force fresh generation
-                  disabled={isLoadingParameters || !formData.position}
+                  onClick={() => generateDynamicCompetencies(true)} // Always force fresh generation
+                  disabled={isLoadingCompetencies || !formData.position}
                   className={isCandidate ? 'flex items-center gap-2 w-full sm:w-auto bg-sky-600 hover:bg-sky-700 text-white' : 'flex items-center gap-2 w-full sm:w-auto'}
-                  title="Generate completely new parameters, ignoring any cached versions"
+                  title="Generate completely new competencies, ignoring any cached versions"
                 >
-                  {isLoadingParameters ? (
+                  {isLoadingCompetencies ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
                       <span className="text-sm sm:text-base">Generating...</span>
@@ -2183,20 +2164,20 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                   ) : (
                     <>
                       <Brain className="h-4 w-4" />
-                      <span className="text-sm sm:text-base">Generate AI Parameters</span>
+                      <span className="text-sm sm:text-base">Generate AI Competencies</span>
                     </>
                   )}
                 </Button>
               )}
               
-              {/* Show Save Parameters button only when parameters exist but not yet saved */}
-              {Object.keys(customParameters).length > 0 && !parametersSaved && (
+              {/* Show Save Competencies button only when competencies exist but not yet saved */}
+              {Object.keys(customCompetencies).length > 0 && !competenciesSaved && (
                 <Button
-                  onClick={saveParameters}
-                  disabled={isSavingParameters || Math.abs(calculateTotalWeightage() - 100) > 0.01}
+                  onClick={saveCompetencies}
+                  disabled={isSavingCompetencies || Math.abs(calculateTotalWeightage() - 100) > 0.01}
                   className={isCandidate ? 'flex items-center gap-2 bg-sky-600 hover:bg-sky-700 text-white w-full sm:w-auto' : 'flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto'}
                 >
-                  {isSavingParameters ? (
+                  {isSavingCompetencies ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
                       <span className="text-sm sm:text-base">Saving...</span>
@@ -2204,43 +2185,43 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                   ) : (
                     <>
                       <Save className="h-4 w-4" />
-                      <span className="text-sm sm:text-base">Save Parameters</span>
+                      <span className="text-sm sm:text-base">Save Competencies</span>
                     </>
                   )}
                 </Button>
               )}
               
-              {/* Show "Parameters Saved" indicator and Edit button when parameters are saved */}
-              {Object.keys(customParameters).length > 0 && parametersSaved && (
+              {/* Show "Competencies Saved" indicator and Edit button when competencies are saved */}
+              {Object.keys(customCompetencies).length > 0 && competenciesSaved && (
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2 px-4 py-2 bg-green-100 text-green-800 rounded-lg border border-green-200">
                     <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-sm font-medium">Parameters Saved</span>
+                    <span className="text-sm font-medium">Competencies Saved</span>
                   </div>
                   <Button
-                    onClick={() => setParametersSaved(false)}
+                    onClick={() => setCompetenciesSaved(false)}
                     variant="outline"
                     size="sm"
                     className="text-blue-600 hover:text-blue-700 border-blue-300 hover:border-blue-400"
                   >
-                    Edit Parameters
+                    Edit Competencies
                   </Button>
                 </div>
               )}
             </div>
 
             <div className="flex gap-2">
-              {/* Show Clear button only when parameters exist */}
-              {Object.keys(customParameters).length > 0 && (
+              {/* Show Clear button only when competencies exist */}
+              {Object.keys(customCompetencies).length > 0 && (
                 <Button
                   onClick={() => {
-                    setCustomParameters({});
-                    setParametersSaved(false);
-                    toast.success('Parameters cleared successfully!', { id: 'params-cleared' });
+                    setCustomCompetencies({});
+                    setCompetenciesSaved(false);
+                    toast.success('Competencies cleared successfully!', { id: 'params-cleared' });
                   }}
                   variant="destructive"
                   className="flex items-center gap-2"
-                  title="Clear all current parameters"
+                  title="Clear all current competencies"
                 >
                   <Trash2 className="h-4 w-4" />
                   Clear
@@ -2249,18 +2230,18 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
             </div>
           </div>
 
-          {Object.keys(customParameters).length > 0 ? (
+          {Object.keys(customCompetencies).length > 0 ? (
             <div className="space-y-4">
-              {Object.entries(customParameters).map(([key, param], index) => {
-                const isExpanded = expandedParameters.has(key);
+              {Object.entries(customCompetencies).map(([key, param], index) => {
+                const isExpanded = expandedCompetencies.has(key);
                 const color = getWeightageColor(index, param.weight);
                 
                 return (
                   <Card key={key} className="bg-gray-50">
                     <CardContent className="pt-6">
-                      {parametersSaved ? (
+                      {competenciesSaved ? (
                         <div className="space-y-3">
-                          {/* Parameter Header with Circle Bullet and Percentage */}
+                          {/* Competency header with circle bullet and percentage */}
                           <div className="flex items-start justify-between">
                             <div className="flex items-start gap-3 flex-1">
                               {/* Circle bullet point */}
@@ -2296,14 +2277,14 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                           <div className="flex items-center justify-between">
                             <div 
                               className="text-blue-600 text-xs font-medium cursor-pointer hover:text-blue-700 transition-colors"
-                              onClick={() => toggleParameter(key)}
+                              onClick={() => toggleCompetency(key)}
                             >
                               {isExpanded ? 'Hide Details ▲' : 'View Details ▼'}
                             </div>
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => deleteParameter(key)}
+                              onClick={() => deleteCompetency(key)}
                               className="text-red-500 hover:text-red-700 h-6 w-6 p-0"
                             >
                               <X className="h-3 w-3" />
@@ -2314,12 +2295,12 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex-1">
                             <div className="w-full">
-                              <Label>Parameter Name</Label>
+                              <Label>Competency Name</Label>
                               <Input
                                 type="text"
                                 value={param.name}
-                                onChange={(e) => updateParameter(key, 'name', e.target.value)}
-                                placeholder="Enter parameter name..."
+                                onChange={(e) => updateCompetency(key, 'name', e.target.value)}
+                                placeholder="Enter competency name..."
                                 className="w-full"
                               />
                             </div>
@@ -2327,7 +2308,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => deleteParameter(key)}
+                            onClick={() => deleteCompetency(key)}
                             className="text-red-500 hover:text-red-700 ml-2"
                           >
                             <X className="h-4 w-4" />
@@ -2335,15 +2316,15 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                         </div>
                       )}
                     
-                      {/* Expandable Content - Only show when parameters are saved and expanded */}
-                      {parametersSaved && isExpanded && (
+                      {/* Expandable content - only when competencies are saved and expanded */}
+                      {competenciesSaved && isExpanded && (
                         <div className="space-y-4">
                           {/* Description */}
                           <div className="w-full p-3 bg-white rounded border text-gray-700 whitespace-pre-line">
                             {param.description}
                           </div>
                           
-                          {/* Parameter Details Grid */}
+                          {/* Competency details grid */}
                           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
                             <div className="space-y-2">
                               <Label className="text-xs sm:text-sm">Weight (%)</Label>
@@ -2397,15 +2378,15 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                         </div>
                       )}
 
-                      {/* Editable Content - Only show when parameters are not saved */}
-                      {!parametersSaved && (
+                      {/* Editable content - only when competencies are not saved */}
+                      {!competenciesSaved && (
                         <div className="space-y-4">
                           <div className="w-full mb-4">
                             <Label>Description</Label>
                             <Textarea
                               value={param.description}
-                              onChange={(e) => updateParameter(key, 'description', e.target.value)}
-                              placeholder="Enter parameter description in bullet points..."
+                              onChange={(e) => updateCompetency(key, 'description', e.target.value)}
+                              placeholder="Enter competency description in bullet points..."
                               rows={4}
                               className="resize-none"
                             />
@@ -2419,7 +2400,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                                 min="0"
                                 max="100"
                                 value={param.weight}
-                                onChange={(e) => updateParameter(key, 'weight', e.target.value)}
+                                onChange={(e) => updateCompetency(key, 'weight', e.target.value)}
                                 className="text-sm sm:text-base"
                               />
                             </div>
@@ -2430,7 +2411,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                                 min="1"
                                 max="10"
                                 value={param.min_questions}
-                                onChange={(e) => updateParameter(key, 'min_questions', e.target.value)}
+                                onChange={(e) => updateCompetency(key, 'min_questions', e.target.value)}
                               />
                             </div>
                             <div className="space-y-2">
@@ -2440,7 +2421,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                                 min="1"
                                 max="10"
                                 value={param.max_questions}
-                                onChange={(e) => updateParameter(key, 'max_questions', e.target.value)}
+                                onChange={(e) => updateCompetency(key, 'max_questions', e.target.value)}
                               />
                             </div>
                             <div className="space-y-2">
@@ -2454,7 +2435,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                                 const maxAllowed = param.requires_written_answer ? 5 : 3;
                                 const raw = e.target.value === '' ? maxAllowed : parseInt(e.target.value, 10);
                                 const clamped = isNaN(raw) ? 3 : Math.min(maxAllowed, Math.max(1, raw));
-                                updateParameter(key, 'max_time', clamped);
+                                updateCompetency(key, 'max_time', clamped);
                               }}
                               />
                             </div>
@@ -2462,7 +2443,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                               <Label>Level</Label>
                               <Select
                                 value={param.level || 'Regular'}
-                                onValueChange={(value: 'Easy' | 'Regular' | 'Expert') => updateParameter(key, 'level', value)}
+                                onValueChange={(value: 'Easy' | 'Regular' | 'Expert') => updateCompetency(key, 'level', value)}
                               >
                                 <SelectTrigger>
                                   <SelectValue />
@@ -2479,7 +2460,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                                 id={`${key}-requires-written`}
                                 checked={param.requires_written_answer === true}
                                 onCheckedChange={(checked) => {
-                                  updateParameter(key, 'requires_written_answer', checked === true);
+                                  updateCompetency(key, 'requires_written_answer', checked === true);
                                   const currentMax = typeof param.max_time === 'number' ? param.max_time : (parseInt(String(param.max_time), 10) || 3);
                                   if (checked === true) {
                                     // Remember current max_time so we can restore it when unchecking
@@ -2487,12 +2468,12 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                                     // When enabling written answer, allow up to 5 min (speaking + writing takes more time)
                                     const suggested = 5;
                                     if (currentMax < suggested) {
-                                      updateParameter(key, 'max_time', suggested);
+                                      updateCompetency(key, 'max_time', suggested);
                                     }
                                   } else {
                                     // When unchecking, revert to the value before we checked (capped at 3 for speaking only)
                                     const restoreMax = Math.min(3, writtenAnswerPrevMaxTime[key] ?? 3);
-                                    updateParameter(key, 'max_time', restoreMax);
+                                    updateCompetency(key, 'max_time', restoreMax);
                                     setWrittenAnswerPrevMaxTime(prev => {
                                       const next = { ...prev };
                                       delete next[key];
@@ -2518,7 +2499,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                                 <Button
                                   onClick={() => {
                                     const newCriteria = [...param.scoring_criteria, ''];
-                                    updateParameter(key, 'scoring_criteria', newCriteria);
+                                    updateCompetency(key, 'scoring_criteria', newCriteria);
                                   }}
                                   variant="ghost"
                                   size="sm"
@@ -2537,7 +2518,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                                       onChange={(e) => {
                                         const newCriteria = [...param.scoring_criteria];
                                         newCriteria[index] = e.target.value;
-                                        updateParameter(key, 'scoring_criteria', newCriteria);
+                                        updateCompetency(key, 'scoring_criteria', newCriteria);
                                       }}
                                       placeholder={`Criteria ${index + 1}`}
                                       className="flex-1 text-sm"
@@ -2546,7 +2527,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                                       <Button
                                         onClick={() => {
                                           const newCriteria = param.scoring_criteria.filter((_, i) => i !== index);
-                                          updateParameter(key, 'scoring_criteria', newCriteria);
+                                          updateCompetency(key, 'scoring_criteria', newCriteria);
                                         }}
                                         variant="ghost"
                                         size="sm"
@@ -2567,15 +2548,15 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                 );
               })}
               
-              {/* Add Parameter button - only show when parameters are not saved (i.e., when creating new parameters) */}
-              {!parametersSaved && (
+              {/* Add Competency button - only when competencies are not saved */}
+              {!competenciesSaved && (
                 <Button
                   variant="outline"
-                  onClick={addParameter}
+                  onClick={addCompetency}
                   className="w-full border-dashed"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Parameter
+                  Add Competency
                 </Button>
               )}
             </div>
@@ -2583,17 +2564,17 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
             <div className="space-y-4">
             <div className="text-center py-8">
               <Target className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 text-lg">No assessment parameters configured yet.</p>
-              <p className="text-gray-400">Select a position and generate AI parameters to get started.</p>
+              <p className="text-gray-500 text-lg">No assessment competencies configured yet.</p>
+              <p className="text-gray-400">Select a position and generate AI competencies to get started.</p>
             </div>
                     
           <Button
             variant="outline"
-            onClick={addParameter}
+            onClick={addCompetency}
             className="w-full border-dashed"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Add Parameter
+            Add Competency
           </Button>
             </div>
           )}
@@ -2617,7 +2598,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                       id="personalizedQuestionsEnabled"
                       checked={formData.personalizedQuestionsEnabled}
                       onChange={(e) => {
-                        if (parametersSaved) return; // Prevent changes when saved
+                        if (competenciesSaved) return; // Prevent changes when saved
                         const enabled = e.target.checked;
                         setFormData(prev => {
                           const newQuestions = enabled ? prev.personalizedQuestions : [];
@@ -2635,13 +2616,13 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                           recalculateDurationWithPersonalizedQuestions([]);
                         }
                       }}
-                      disabled={parametersSaved}
+                      disabled={competenciesSaved}
                       className={`h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ${
-                        parametersSaved ? 'opacity-50 cursor-not-allowed' : ''
+                        competenciesSaved ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                     />
                     <Label htmlFor="personalizedQuestionsEnabled" className={`text-sm font-medium text-blue-800 ${
-                      parametersSaved ? 'opacity-50' : ''
+                      competenciesSaved ? 'opacity-50' : ''
                     }`}>
                       Enable Personalized Questions
                     </Label>
@@ -2659,7 +2640,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                             <Label className="text-sm font-medium text-gray-700">
                               Question {index + 1}
                             </Label>
-                            {!parametersSaved && formData.personalizedQuestions.length > 1 && (
+                            {!competenciesSaved && formData.personalizedQuestions.length > 1 && (
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -2676,7 +2657,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                               </Button>
                             )}
                           </div>
-                          {parametersSaved ? (
+                          {competenciesSaved ? (
                             <div className="text-sm text-gray-700 bg-gray-50 p-2 rounded border">
                               {question.question}
                             </div>
@@ -2697,7 +2678,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                           )}
                           <div className="flex items-center gap-2">
                             <Label className="text-xs text-gray-600">Time Limit (minutes):</Label>
-                            {parametersSaved ? (
+                            {competenciesSaved ? (
                               <div className="text-sm font-semibold text-gray-900">
                                 {question.timeLimit}
                               </div>
@@ -2723,7 +2704,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                         </div>
                       ))}
                       
-                      {!parametersSaved && formData.personalizedQuestions.length < 2 && (
+                      {!competenciesSaved && formData.personalizedQuestions.length < 2 && (
                         <Button
                           type="button"
                           variant="outline"

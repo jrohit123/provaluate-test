@@ -116,6 +116,9 @@ const CandidateLogin = () => {
               </Link>
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
+              <Link to="/candidate-pricing" className="min-h-[44px] flex items-center px-2 text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors touch-manipulation">
+                Pricing
+              </Link>
               <Link to="/login" className="min-h-[44px] flex items-center px-2 text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors touch-manipulation">
                 Recruiter login
               </Link>

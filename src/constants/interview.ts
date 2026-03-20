@@ -79,6 +79,6 @@ export const INTERVIEW_CONSTANTS = {
     ANSWER_SUBMITTED: 'Answer submitted successfully!',
     QUESTION_GENERATED: 'Next question generated!',
     INTERVIEW_COMPLETED: 'Interview completed successfully!',
-    PARAMETERS_SAVED: 'Parameters saved successfully!',
+    COMPETENCIES_SAVED: 'Competencies saved successfully!',
   },
 };

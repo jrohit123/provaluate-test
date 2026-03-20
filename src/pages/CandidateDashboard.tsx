@@ -17,6 +17,7 @@ import { CandidateAppSidebar } from '@/components/ai-interview/CandidateAppSideb
 import { CandidateMainDashboard } from '@/components/ai-interview/CandidateMainDashboard';
 import CandidateJdInterviewConfig from '@/components/ai-interview/CandidateJdInterviewConfig';
 import CandidateJdInterviewCreate from '@/components/ai-interview/CandidateJdInterviewCreate';
+import { ReferralsSection } from '@/components/ai-interview/ReferralsSection';
 import { API_CONFIG, buildApiUrl } from '@/constants/api';
 import { ChartContainer } from '@/components/ui/chart';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceArea } from 'recharts';
@@ -36,6 +37,7 @@ const CandidateDashboard = () => {
   const isJdsConfigure = path.startsWith('/candidate-dashboard/jds/configure');
   const isJdsCreate = path.startsWith('/candidate-dashboard/jds/create');
   const isInterviews = path.startsWith('/candidate-dashboard/interviews');
+  const isReferrals = path.startsWith('/candidate-dashboard/referrals');
 
   const handleSignOut = useCallback(async () => {
     await supabase.auth.signOut();
@@ -117,6 +119,7 @@ const CandidateDashboard = () => {
                   <MyInterviewsSection candidateId={candidate?.candidate_id} candidateEmail={candidate?.email ?? undefined} />
                 </>
               )}
+              {isReferrals && <ReferralsSection />}
             </div>
             <footer className="flex-shrink-0 bg-white border-t border-sky-100 px-4 sm:px-6 py-3 sm:py-4 text-center text-xs sm:text-sm text-muted-foreground">
               <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-0 sm:space-x-2">
@@ -154,7 +157,8 @@ type ProgressItem = {
   position: string;
   completed_at: string | null;
   overall_score: number | null;
-  parameter_scores: Record<string, number>;
+  /** Normalized from API `parameter_scores` when present */
+  competency_scores: Record<string, number>;
   speech_metrics?: SpeechMetrics | null;
 };
 const CHART_OVERALL = 'overall';
@@ -227,7 +231,20 @@ function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: str
       : `candidate_email=${encodeURIComponent(candidateEmail!)}`;
     fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.GET_CANDIDATE_INTERVIEW_PROGRESS}?${q}`))
       .then((r) => (r.ok ? r.json() : []))
-      .then((data: ProgressItem[]) => setProgress(Array.isArray(data) ? data : []))
+      .then((raw: unknown) => {
+        const arr = Array.isArray(raw) ? raw : [];
+        const normalized: ProgressItem[] = arr.map((item: Record<string, unknown>) => {
+          const { parameter_scores: ps, competency_scores: cs, ...rest } = item as Record<string, unknown> & {
+            parameter_scores?: Record<string, number>;
+            competency_scores?: Record<string, number>;
+          };
+          return {
+            ...rest,
+            competency_scores: (typeof cs === 'object' && cs != null ? cs : ps) as Record<string, number>,
+          } as ProgressItem;
+        });
+        setProgress(normalized);
+      })
       .catch(() => setProgress([]));
   }, [candidateId, candidateEmail]);
 
@@ -482,7 +499,7 @@ function MyJdsSection({ candidateId }: { candidateId: string | undefined }) {
           </div>
           <div className="min-w-0">
             <h2 className="font-semibold text-gray-900 text-sm sm:text-base">Interview configuration</h2>
-            <p className="text-xs sm:text-sm text-gray-600">Set up assessment parameters and interview type for your roles</p>
+            <p className="text-xs sm:text-sm text-gray-600">Set up assessment competencies and interview type for your roles</p>
           </div>
         </Link>
         <Link

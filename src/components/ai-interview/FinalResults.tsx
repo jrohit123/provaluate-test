@@ -303,7 +303,7 @@ const FinalResults = () => {
   const reportVariant = searchParams.get('variant') || 'candidate'; // 'recruiter' = report ends at speech scores
   const [loading, setLoading] = useState(true);
   const [reportData, setReportData] = useState(null);
-  const [selectedParameter, setSelectedParameter] = useState(null);
+  const [selectedCompetencyKey, setSelectedCompetencyKey] = useState(null);
   const [expandedQuestions, setExpandedQuestions] = useState(new Set());
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
@@ -365,21 +365,21 @@ const FinalResults = () => {
         console.log('📊 Final results data loaded:', data);
         console.log('📊 Interview data:', data.interview);
         console.log('📊 Interview type from API:', data.interview?.interview_type);
-        console.log('📊 Parameters:', data.parameters?.length);
+        console.log('📊 Competencies:', data.parameters?.length);
         console.log('📊 Raw answers from API:', data.answers?.length);
         
-        // Try to get parameter scores data directly to extract real feedback
+        // Try to get competency scores data directly to extract real feedback
         let realFeedbackData = null;
         try {
-          console.log('🔍 Attempting to fetch parameter scores data...');
+          console.log('🔍 Attempting to fetch competency scores data...');
           console.log('🔍 Data structure keys:', Object.keys(data));
-          console.log('🔍 Custom parameters:', data.custom_parameters);
-          console.log('🔍 Standard parameters:', data.standard_parameters);
-          console.log('🔍 Parameters array:', data.parameters);
+          console.log('🔍 Custom competencies:', data.custom_parameters);
+          console.log('🔍 Standard competencies:', data.standard_parameters);
+          console.log('🔍 Competencies array:', data.parameters);
           
-          // Check if parameters array contains the detailed data
+          // Check if competencies array contains the detailed data
           if (data.parameters && data.parameters.length > 0) {
-            console.log('🔍 First parameter structure:', data.parameters[0]);
+            console.log('🔍 First competency structure:', data.parameters[0]);
             if (data.parameters[0].questions && data.parameters[0].questions.length > 0) {
               console.log('🔍 First question structure:', data.parameters[0].questions[0]);
             }
@@ -402,10 +402,10 @@ const FinalResults = () => {
         }
           
         } catch (paramError) {
-          console.log('⚠️ Could not load parameter scores data:', paramError);
+          console.log('⚠️ Could not load competency scores data:', paramError);
         }
         
-        // Extract questions and answers from parameters with proper ordering
+        // Extract questions and answers from competencies with proper ordering
         const extractedQuestions = [];
         const extractedAnswers = [];
         let globalQuestionIndex = 0;
@@ -553,10 +553,10 @@ const FinalResults = () => {
             });
           }
         } else {
-          console.log('⚠️ No questions or answers arrays from API, extracting from parameters data...');
+          console.log('⚠️ No questions or answers arrays from API, extracting from competencies data...');
           
           if (data.parameters && data.parameters.length > 0) {
-            console.log('🔍 Extracting from parameters data...');
+            console.log('🔍 Extracting from competencies data...');
             
             data.parameters.forEach((param, paramIndex) => {
               if (param.questions && Array.isArray(param.questions)) {
@@ -569,7 +569,7 @@ const FinalResults = () => {
                     parameter_name: param.name
                   });
                   
-                  // Try to get real feedback from parameter scores data
+                  // Try to get real feedback from competency scores data
                   let realFeedback = `Assessment for ${param.name}: ${param.reason}`;
                   if (realFeedbackData && realFeedbackData[param.key]) {
                     const individualScores = realFeedbackData[param.key].individual_question_scores;
@@ -601,10 +601,10 @@ const FinalResults = () => {
         extractedQuestions.sort((a, b) => a.question_order - b.question_order);
         extractedAnswers.sort((a, b) => a.question_order - b.question_order);
         
-        // Convert parameters array to object structure for UI compatibility
-        const parametersObject: Record<string, any> = {};
+        // Convert competencies array to object structure for UI compatibility
+        const competenciesObject: Record<string, any> = {};
 
-        // When we have questions+answers, build parameters from them so behavioral is guaranteed
+        // When we have questions+answers, build competencies from them so behavioral is guaranteed
         if (extractedQuestions.length > 0 && extractedAnswers.length > 0) {
           const byParam = new Map<string, { questions: any[]; answers: any[] }>();
           extractedQuestions.forEach((q, idx) => {
@@ -617,7 +617,7 @@ const FinalResults = () => {
           (data.parameters || []).forEach((p: any) => { if (p.key) paramMeta.set(p.key, p); });
           byParam.forEach((val, paramKey) => {
             const meta = paramMeta.get(paramKey);
-            parametersObject[paramKey] = {
+            competenciesObject[paramKey] = {
               name: meta?.name || paramKey,
               score: meta?.score ?? 6,
               weight: meta?.weight ?? 100,
@@ -642,7 +642,7 @@ const FinalResults = () => {
         }
 
         // Fallback: build from data.parameters when questions/answers path didn't populate
-         if (Object.keys(parametersObject).length === 0 && data.parameters && Array.isArray(data.parameters)) {
+         if (Object.keys(competenciesObject).length === 0 && data.parameters && Array.isArray(data.parameters)) {
            data.parameters.forEach(param => {
              // Map questions to the format expected by the UI
              const mappedQuestions = (param.questions || []).map((questionData, index) => {
@@ -721,7 +721,7 @@ const FinalResults = () => {
                };
              });
              
-             parametersObject[param.key] = {
+             competenciesObject[param.key] = {
                name: param.name,
                score: param.score,
                weight: param.weight,
@@ -738,14 +738,14 @@ const FinalResults = () => {
            ...data,
            questions: extractedQuestions,
            answers: extractedAnswers,
-           parameters: parametersObject
+           parameters: competenciesObject
          };
          
          console.log('📊 Extracted questions:', extractedQuestions.length);
          console.log('📊 Extracted answers:', extractedAnswers.length);
          console.log('📊 Sample answer feedback:', extractedAnswers[0]?.feedback?.substring(0, 100) + '...');
-         console.log('📊 Parameters object:', parametersObject);
-         console.log('📊 Parameters keys:', Object.keys(parametersObject));
+         console.log('📊 Competencies object:', competenciesObject);
+         console.log('📊 Competencies keys:', Object.keys(competenciesObject));
          
          // Debug duration data
          console.log('🔍 Interview data:', data.interview);
@@ -772,18 +772,18 @@ const FinalResults = () => {
     }
   }, [loadFinalResults, interviewId]);
 
-  // Auto-select first parameter when questions are loaded
+  // Auto-select first competency when questions are loaded
   useEffect(() => {
-    if (reportData && reportData.questions && reportData.questions.length > 0 && !selectedParameter) {
+    if (reportData && reportData.questions && reportData.questions.length > 0 && !selectedCompetencyKey) {
       const firstParamKey = reportData.questions[0].parameter_key || reportData.questions[0].parameter_name;
-      setSelectedParameter(firstParamKey);
+      setSelectedCompetencyKey(firstParamKey);
     }
-  }, [reportData, selectedParameter]);
+  }, [reportData, selectedCompetencyKey]);
 
-  // Reset expanded questions when parameter changes
+  // Reset expanded questions when competency changes
   useEffect(() => {
     setExpandedQuestions(new Set());
-  }, [selectedParameter]);
+  }, [selectedCompetencyKey]);
 
 
 
@@ -804,12 +804,12 @@ const FinalResults = () => {
       reportContent += `ASSESSMENT DATE: ${formatOrdinalDate(reportData.interview?.created_at)}\n`;
       reportContent += `REPORT GENERATED: ${formatOrdinalDate(new Date())}\n\n`;
       
-      // Parameter scores summary
+      // Competency scores summary
       if (reportData.parameters && reportData.parameters.length > 0) {
-        reportContent += `PARAMETER SCORES SUMMARY:\n`;
+        reportContent += `COMPETENCY SCORES SUMMARY:\n`;
         reportContent += `========================\n`;
         reportData.parameters.forEach((param, index) => {
-          reportContent += `${index + 1}. ${param.name || param.parameter_name || 'Unknown Parameter'}\n`;
+          reportContent += `${index + 1}. ${param.name || param.parameter_name || 'Unknown Competency'}\n`;
           reportContent += `   Score: ${param.score || param.averageScore || 'N/A'}/10\n`;
           if (param.weight) reportContent += `   Weight: ${param.weight}%\n`;
           reportContent += `\n`;
@@ -828,13 +828,13 @@ const FinalResults = () => {
             reportContent += `QUESTION ${index + 1}:\n`;
             reportContent += `==================\n`;
             reportContent += `Question Text: ${question.question_text}\n`;
-            reportContent += `Parameter: ${question.parameter_name || question.parameter_key || 'N/A'}\n`;
+            reportContent += `Competency: ${question.parameter_name || question.parameter_key || 'N/A'}\n`;
             reportContent += `Question Order: ${question.question_order + 1}\n\n`;
             
             reportContent += `CANDIDATE'S ANSWER:\n`;
             reportContent += `Transcript: ${answer.transcript || 'No transcript available'}\n`;
             reportContent += `Score: ${answer.score}/10\n`;
-            reportContent += `Parameter Score: ${answer.parameter_score || 'N/A'}/10\n\n`;
+            reportContent += `Competency score: ${answer.parameter_score || 'N/A'}/10\n\n`;
             
             reportContent += `AI FEEDBACK:\n`;
             reportContent += `${answer.feedback || 'No feedback available'}\n\n`;
@@ -865,10 +865,10 @@ const FinalResults = () => {
       reportContent += `This report contains the complete assessment details including:\n`;
       reportContent += `- All questions asked during the interview\n`;
       reportContent += `- Candidate's verbal responses (transcripts)\n`;
-      reportContent += `- Individual question scores and parameter scores\n`;
+      reportContent += `- Individual question scores and competency scores\n`;
       reportContent += `- AI-generated feedback for each answer\n`;
       reportContent += `- Direct links to audio and video recordings\n`;
-      reportContent += `- Parameter-wise performance breakdown\n\n`;
+      reportContent += `- Competency-wise performance breakdown\n\n`;
       reportContent += `Generated by AI Interview System\n`;
       reportContent += `Report ID: ${interviewId}\n`;
       
@@ -1195,7 +1195,7 @@ const FinalResults = () => {
         // Define columns with proper widths
         qaSheet.columns = [
           { header: 'Q NO', key: 'q', width: 8 },
-          { header: 'PARAMETER', key: 'parameter', width: 25 },
+          { header: 'COMPETENCY', key: 'competency', width: 25 },
           { header: 'QUESTION', key: 'question', width: 50 },
           { header: 'ANSWER', key: 'answer', width: 60 },
           { header: 'WRITTEN ANSWER', key: 'written_answer', width: 50 },
@@ -1211,20 +1211,20 @@ const FinalResults = () => {
           const answer = reportData.answers.find(a => (a.question_order || 0) === questionOrder);
           
           const questionText = question.question_text || question.question || 'N/A';
-          const parameter = question.parameter_name || question.parameter_key || 'N/A';
+          const competencyLabel = question.parameter_name || question.parameter_key || 'N/A';
           
           // Only add if we have a valid question (not N/A)
-          if (questionText !== 'N/A' && parameter !== 'N/A') {
+          if (questionText !== 'N/A' && competencyLabel !== 'N/A') {
             if (answer) {
               const transcript = answer.transcript || answer.answer || 'No transcript available';
               const writtenAnswer = answer.written_answer || 'No written answer';
               const score = answer.score || 'N/A';
               const feedback = answer.feedback || 'No feedback available';
               
-              qaSheet.addRow([questionOrder + 1, parameter, questionText, transcript, writtenAnswer, score, feedback]);
+              qaSheet.addRow([questionOrder + 1, competencyLabel, questionText, transcript, writtenAnswer, score, feedback]);
             } else {
               // Handle case where answer is missing but question exists
-              qaSheet.addRow([questionOrder + 1, parameter, questionText, 'No answer recorded', 'No written answer', 'N/A', 'No feedback available']);
+              qaSheet.addRow([questionOrder + 1, competencyLabel, questionText, 'No answer recorded', 'No written answer', 'N/A', 'No feedback available']);
             }
           }
         });
@@ -1385,7 +1385,7 @@ const FinalResults = () => {
       speechSheet.getCell(speechRow, 1).value = 'Per-Question Speech Metrics';
       speechSheet.getCell(speechRow, 1).font = { bold: true, size: 12 };
       speechRow += 2;
-      const perQHeaders = ['Q NO', 'PARAMETER', 'Overall speech quality', 'Speaking pace (WPM)', 'Speech ratio %', 'Word count', 'Filler words', 'Filler density %', 'Filler rate/min', 'Articulation score', 'Pause & pacing', 'Voice confidence', 'Voice modulation', 'Stress level', 'Calmness'];
+      const perQHeaders = ['Q NO', 'COMPETENCY', 'Overall speech quality', 'Speaking pace (WPM)', 'Speech ratio %', 'Word count', 'Filler words', 'Filler density %', 'Filler rate/min', 'Articulation score', 'Pause & pacing', 'Voice confidence', 'Voice modulation', 'Stress level', 'Calmness'];
       speechSheet.addRow(perQHeaders);
       speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
         cell.fill = blueFill;
@@ -1398,12 +1398,12 @@ const FinalResults = () => {
         sortedQuestions.forEach((question) => {
           const questionOrder = question.question_order || 0;
           const answer = reportData.answers.find((a: any) => (a.question_order || 0) === questionOrder);
-          const parameter = question.parameter_name || question.parameter_key || 'N/A';
+          const competencyLabel = question.parameter_name || question.parameter_key || 'N/A';
           const b = answer?.behavioral ?? answer?.behavioral_metrics;
           const fmt = (v: number | null | undefined, suffix = '') => (v != null ? `${v}${suffix}` : '-');
           speechSheet.addRow([
             questionOrder + 1,
-            parameter,
+            competencyLabel,
             b ? fmt(b.overall_speech_quality, '/100') : '-',
             b ? fmt(b.speaking_pace_wpm, ' WPM') : '-',
             b && b.speech_ratio != null ? fmt(b.speech_ratio) : '-',
@@ -1638,13 +1638,13 @@ const FinalResults = () => {
     );
   }
 
-  const { interview, parameters } = reportData;
+  const { interview, parameters: competenciesReport } = reportData;
   
-  // Normalize parameter count for both array and object structures
-  const parameterCount = Array.isArray(parameters)
-    ? parameters.length
-    : parameters
-      ? Object.keys(parameters).length
+  // Normalize competency count for both array and object structures (API still returns `parameters`)
+  const competencyCount = Array.isArray(competenciesReport)
+    ? competenciesReport.length
+    : competenciesReport
+      ? Object.keys(competenciesReport).length
       : 0;
 
   // PDF Generation Function
@@ -1701,7 +1701,7 @@ const FinalResults = () => {
       doc.setFont('helvetica', 'bolditalic');
       doc.setFontSize(10);
       doc.setTextColor(0, 0, 0);
-      doc.text('Parameter-Based Interview Analytics', pageWidth / 2, 48, { align: 'center' });
+      doc.text('Competency-Based Interview Analytics', pageWidth / 2, 48, { align: 'center' });
       doc.text('Combining AI Evaluation with Advanced Insights', pageWidth / 2, 52, { align: 'center' });
       doc.setFont('helvetica', 'normal');
 
@@ -1802,7 +1802,7 @@ const FinalResults = () => {
       doc.setTextColor(0, 0, 0);
       const execCandidateName = interview.candidate_name || 'the candidate';
       const execRole = interview.position || 'the applied role';
-      const summaryParagraph = `This report is an overview of ${execCandidateName}, who has completed the interview for the role of ${execRole}. The following pages provide insight into the candidate's answers for various questions across parameters. This is followed by a Detailed Speech Analysis section, which presents a detailed plan and personalised feedback on the candidate's speech and delivery.`;
+      const summaryParagraph = `This report is an overview of ${execCandidateName}, who has completed the interview for the role of ${execRole}. The following pages provide insight into the candidate's answers for various questions across competencies. This is followed by a Detailed Speech Analysis section, which presents a detailed plan and personalised feedback on the candidate's speech and delivery.`;
       const maxLineWidth = pageWidth - leftMargin * 2;
       const summarySegments = doc.splitTextToSize(summaryParagraph, maxLineWidth);
       summarySegments.forEach((seg: string) => {
@@ -1811,12 +1811,12 @@ const FinalResults = () => {
       });
 
       // Prepare question data first (needed for total page count)
-      const questionRows: { question: any; answer: any; parameter: string; feedback: string }[] = [];
+      const questionRows: { question: any; answer: any; competencyLabel: string; feedback: string }[] = [];
       console.log('🔍 PDF Generation Debug - Enhanced Version:');
-      console.log('🔍 Parameters object:', parameters);
-      console.log('🔍 Parameters keys:', Object.keys(parameters || {}));
+      console.log('🔍 Competencies object:', competenciesReport);
+      console.log('🔍 Competencies keys:', Object.keys(competenciesReport || {}));
       console.log('🔍 Interview data:', interview);
-      console.log('🔍 Parameter scores:', interview.parameter_scores);
+      console.log('🔍 Competency scores:', interview.parameter_scores);
       console.log('🔍 Report data answers:', reportData.answers?.length);
       console.log('🔍 Report data questions:', reportData.questions?.length);
       
@@ -1832,7 +1832,7 @@ const FinalResults = () => {
         const parameterScores = typeof interview.parameter_scores === 'string' 
           ? JSON.parse(interview.parameter_scores) 
           : interview.parameter_scores;
-        console.log('🔍 Parameter scores structure:');
+        console.log('🔍 Competency scores structure:');
         Object.entries(parameterScores).forEach(([paramKey, paramData]: [string, any]) => {
           console.log(`  ${paramKey}: ${paramData.individual_question_scores?.length || 0} individual scores`);
           if (paramData.individual_question_scores) {
@@ -1855,7 +1855,7 @@ const FinalResults = () => {
           const answer = reportData.answers.find((ans: any) => (ans.question_order || 0) === questionOrder);
           
           const questionText = question.question_text || question.question || 'N/A';
-          const parameter = question.parameter_name || question.parameter_key || 'N/A';
+          const competencyLabel = question.parameter_name || question.parameter_key || 'N/A';
           
           // Include all questions (including terminated/partial interviews with 1+ answers)
           if (questionText && questionText !== 'N/A') {
@@ -1870,7 +1870,7 @@ const FinalResults = () => {
                   feedback = answer.feedback;
                 }
                 
-                // Method 2: Feedback from parameter scores data
+                // Method 2: Feedback from competency scores data
                 if (!feedback && interview.parameter_scores) {
                   const parameterScores = typeof interview.parameter_scores === 'string' 
                     ? JSON.parse(interview.parameter_scores) 
@@ -1925,14 +1925,14 @@ const FinalResults = () => {
               questionRows.push({
                 question: { ...question, questionText },
                 answer,
-                parameter,
+                competencyLabel,
                 feedback: formattedFeedback
               });
             } else {
               questionRows.push({
                 question: { ...question, questionText },
                 answer: null,
-                parameter,
+                competencyLabel,
                 feedback: 'No feedback available'
               });
             }
@@ -1940,14 +1940,14 @@ const FinalResults = () => {
         });
       } else if (reportData.parameters && reportData.parameters.length > 0) {
         // Fallback for terminated interviews: build question rows from parameters.questions
-        console.log('🔍 Using parameters.questions for PDF (terminated/partial interview fallback)');
+        console.log('🔍 Using competencies.questions for PDF (terminated/partial interview fallback)');
         let globalIdx = 0;
         const answersList = reportData.answers || [];
         reportData.parameters.forEach((param: any) => {
           const paramQuestions = param.questions || [];
           paramQuestions.forEach((qData: any, qIdx: number) => {
             const questionText = qData.text || qData.question_text || `Question ${globalIdx + 1}`;
-            const parameter = param.name || param.parameter_name || param.key || 'General';
+            const competencyLabel = param.name || param.parameter_name || param.key || 'General';
             const matchedAnswer = answersList.find((a: any) =>
               (a.parameter_key === param.key || a.parameter_name === param.name) &&
               ((a.question_order || 0) === globalIdx || (a.question_order || 0) === qIdx)
@@ -1961,9 +1961,9 @@ const FinalResults = () => {
               question_order: globalIdx
             };
             questionRows.push({
-              question: { question_order: globalIdx, question_text: questionText, questionText, parameter_key: param.key, parameter_name: parameter },
+              question: { question_order: globalIdx, question_text: questionText, questionText, parameter_key: param.key, parameter_name: competencyLabel },
               answer,
-              parameter,
+              competencyLabel,
               feedback: answer.feedback || 'No feedback available'
             });
             globalIdx++;
@@ -1984,7 +1984,7 @@ const FinalResults = () => {
         voice_confidence: [], stress: []
       });
       questionRows.forEach((row: any) => {
-        const p = row.parameter;
+        const p = row.competencyLabel;
         if (!paramBehavioralMap[p]) paramBehavioralMap[p] = initParam();
         const b = row.answer?.behavioral || row.answer?.behavioral_metrics;
         if (b) {
@@ -2005,12 +2005,12 @@ const FinalResults = () => {
 
       // Page 1: no footer drawn here (final pass draws all footers once)
 
-      // Pages 2+: One question per page (Score Summary by Parameter removed)
+      // Pages 2+: One question per page (Score Summary by Competency removed)
       const totalQuestions = questionRows.length;
       const qFooterY = doc.internal.pageSize.height - 8;
       let currentPageNum = 2;
 
-      // Palette of colors to use for parameter header bars in question pages
+      // Palette of colors to use for competency header bars in question pages
       const PARAM_COLOR_PALETTE: { bg: [number, number, number]; text: [number, number, number] }[] = [
         { bg: [232, 244, 255], text: [26, 86, 219] },   // soft blue
         { bg: [240, 253, 244], text: [4, 120, 87] },    // soft green
@@ -2030,7 +2030,7 @@ const FinalResults = () => {
         const pageHeight = doc.internal.pageSize.height;
         const leftMargin = 15;
         const rightMargin = 15;
-        // Push the question/answer block further down to give clear visual separation under the parameter line
+        // Push the question/answer block further down to give clear visual separation under the competency line
         const contentStartY = 46;
         const bottomMargin = 28;
         const labelX = leftMargin;
@@ -2038,8 +2038,8 @@ const FinalResults = () => {
         const maxWidth = pageWidth - valueX - rightMargin;
         const lineHeight = 4.5;
 
-        // Colored parameter header bar
-        const paramName = row.parameter || 'Parameter';
+        // Colored competency header bar
+        const paramName = row.competencyLabel || 'Competency';
         if (!paramColorMap[paramName]) {
           paramColorMap[paramName] = PARAM_COLOR_PALETTE[nextParamColorIndex % PARAM_COLOR_PALETTE.length];
           nextParamColorIndex += 1;
@@ -2053,7 +2053,7 @@ const FinalResults = () => {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(11);
         doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-        doc.text(`Parameter: ${paramName}`, leftMargin + 3, headerY + 7);
+        doc.text(`Competency: ${paramName}`, leftMargin + 3, headerY + 7);
         // reset text color for body content
         doc.setTextColor(0, 0, 0);
 
@@ -2554,7 +2554,7 @@ const FinalResults = () => {
           {/* Left: Title and subtitle */}
           <div className="flex flex-col min-w-0">
             <h1 className="text-base sm:text-lg lg:text-xl font-bold text-white truncate">
-              Parameter-Based Assessment Analysis
+              Competency-Based Assessment Analysis
             </h1>
             <p className="text-xs sm:text-sm text-white/90 mt-0.5">
               AI Evaluation and Communication Insights
@@ -2663,8 +2663,8 @@ const FinalResults = () => {
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm sm:text-base text-gray-600">Parameters Evaluated:</span>
-                <span className="text-sm sm:text-base font-semibold text-gray-900">{parameterCount}</span>
+                <span className="text-sm sm:text-base text-gray-600">Competencies Evaluated:</span>
+                <span className="text-sm sm:text-base font-semibold text-gray-900">{competencyCount}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm sm:text-base text-gray-600">Total Questions:</span>
@@ -2766,10 +2766,10 @@ const FinalResults = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Parameter selection and questions */}
+        {/* Competency selection and questions */}
         {reportData?.questions && reportData.questions.length > 0 && (
           <div className="rounded-lg p-3 sm:p-6 bg-white border border-gray-200 shadow-sm mt-2 sm:mt-4">
-            {/* Parameter cards */}
+            {/* Competency cards */}
             {(() => {
               // Safety check - ensure data exists
               if (!reportData.questions || !reportData.answers) {
@@ -2783,12 +2783,12 @@ const FinalResults = () => {
                 );
               }
 
-              // Get unique parameters and their questions
-              const parameters = {};
+              // Group questions by competency (API fields: parameter_key / parameter_name)
+              const competencyGroups = {};
               reportData.questions.forEach(question => {
                 const paramKey = question.parameter_key || question.parameter_name;
-                if (!parameters[paramKey]) {
-                  parameters[paramKey] = {
+                if (!competencyGroups[paramKey]) {
+                  competencyGroups[paramKey] = {
                     name: question.parameter_name,
                     key: paramKey,
                     questions: [],
@@ -2798,15 +2798,15 @@ const FinalResults = () => {
                 }
                 const answer = reportData.answers?.find(a => a.question_order === question.question_order);
                 if (answer) {
-                  parameters[paramKey].questions.push({ question, answer });
-                  parameters[paramKey].totalScore += answer.score || 0;
-                  parameters[paramKey].questionCount += 1;
+                  competencyGroups[paramKey].questions.push({ question, answer });
+                  competencyGroups[paramKey].totalScore += answer.score || 0;
+                  competencyGroups[paramKey].questionCount += 1;
                 }
               });
 
-              // Add Personal Questions as a parameter if they exist
+              // Add Personal Questions as a group if they exist
               if (reportData.personalized_answers && reportData.personalized_answers.length > 0) {
-                parameters['personal-questions'] = {
+                competencyGroups['personal-questions'] = {
                   name: 'Personal Questions',
                   key: 'personal-questions',
                   questions: reportData.personalized_answers.map((answer, index) => ({
@@ -2820,15 +2820,15 @@ const FinalResults = () => {
                 };
               }
 
-              // Calculate average scores for each parameter (except personal questions)
-              Object.values(parameters).forEach((param: any) => {
+              // Calculate average scores for each competency (except personal questions)
+              Object.values(competencyGroups).forEach((param: any) => {
                 if (!param.isPersonal) {
                   param.averageScore = param.questionCount > 0 ? Math.round((param.totalScore / param.questionCount) * 10) / 10 : 0;
                 }
               });
 
-              // Check if we have any parameters with questions
-              if (Object.keys(parameters).length === 0) {
+              // Check if we have any competency groups with questions
+              if (Object.keys(competencyGroups).length === 0) {
                 return (
                   <div className={`text-center py-12 ${
                     'text-gray-500'
@@ -2842,14 +2842,14 @@ const FinalResults = () => {
 
               return (
                 <div className="space-y-6">
-                  {/* Enhanced Parameter Tabs with Performance Metrics */}
+                  {/* Competency tabs with performance metrics */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 mb-4 sm:mb-8">
-                    {Object.entries(parameters).map(([paramKey, param]: [string, any]) => (
+                    {Object.entries(competencyGroups).map(([paramKey, param]: [string, any]) => (
                       <button
                         key={paramKey}
-                        onClick={() => { setSelectedParameter(paramKey); setExpandedQuestions(new Set()); }}
+                        onClick={() => { setSelectedCompetencyKey(paramKey); setExpandedQuestions(new Set()); }}
                         className={`p-3 sm:p-6 rounded-xl transition-all duration-200 text-left min-w-0 ${
-                          selectedParameter === paramKey
+                          selectedCompetencyKey === paramKey
                             ? `${paramSelected} shadow-lg transform scale-105`
                             : 'bg-white text-gray-800 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 hover:scale-102 shadow-sm hover:shadow-md'
                         }`}
@@ -2859,7 +2859,7 @@ const FinalResults = () => {
                               <h4 className="font-bold text-sm sm:text-lg leading-tight break-words">{param.name}</h4>
                             {param.isPersonal ? (
                               <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                                selectedParameter === paramKey
+                                selectedCompetencyKey === paramKey
                                   ? paramBadgeSelected
                                   : paramBadge
                               }`}>
@@ -2867,7 +2867,7 @@ const FinalResults = () => {
                               </div>
                             ) : (
                               <div className={`text-2xl sm:text-3xl font-bold ${
-                                selectedParameter === paramKey 
+                                selectedCompetencyKey === paramKey 
                                   ? accentText
                                   : getScoreColor(param.averageScore)
                               }`}>
@@ -2883,7 +2883,7 @@ const FinalResults = () => {
                               ) : (
                                 <span>Weight: {(() => {
                                   // Calculate weight based on question count relative to total (excluding personal questions)
-                                  const functionalQuestions = Object.values(parameters).reduce((sum: number, p: any) => 
+                                  const functionalQuestions = Object.values(competencyGroups).reduce((sum: number, p: any) => 
                                     p.isPersonal ? sum : sum + (p.questionCount as number), 0) as number;
                                   const weight = functionalQuestions > 0 ? Math.round(((param.questionCount as number) / functionalQuestions) * 100) : 0;
                                   return weight;
@@ -2892,14 +2892,14 @@ const FinalResults = () => {
                               <span>{param.questionCount} questions</span>
                             </div>
                             
-                            {/* Performance Bar - Only for scored parameters */}
+                            {/* Performance bar — scored competencies only */}
                             {!param.isPersonal ? (
                               <div className={`w-full rounded-full h-3 ${
                                 'bg-gray-300'
                               }`}>
                                 <div 
                                   className={`h-3 rounded-full transition-all duration-300 ${
-selectedParameter === paramKey 
+selectedCompetencyKey === paramKey 
                                   ? barSelected
                                   : getScoreClass(param.averageScore)
                                   }`}
@@ -2916,13 +2916,13 @@ selectedParameter === paramKey
               ))}
             </div>
 
-                  {/* Questions for Selected Parameter */}
-                  {selectedParameter && parameters[selectedParameter] && (
+                  {/* Questions for selected competency */}
+                  {selectedCompetencyKey && competencyGroups[selectedCompetencyKey] && (
             <div className="space-y-6 mt-6">
                       {/* Question cards - vertical list with Expand */}
                       <div className="space-y-4 sm:space-y-5">
-                        {parameters[selectedParameter].questions.map(({ question, answer }: { question: any; answer: any }, idx: number) => {
-                          const expandKey = `${selectedParameter}-${idx}`;
+                        {competencyGroups[selectedCompetencyKey].questions.map(({ question, answer }: { question: any; answer: any }, idx: number) => {
+                          const expandKey = `${selectedCompetencyKey}-${idx}`;
                           const isExpanded = expandedQuestions.has(expandKey);
                           return (
                             <div
@@ -2937,7 +2937,7 @@ selectedParameter === paramKey
                                 <div className="min-w-0 flex-1 text-left">
                                   <div className="flex items-center gap-3 mb-3">
                                     <span className="font-bold text-base sm:text-lg text-gray-900">Question {idx + 1}</span>
-                                    {!parameters[selectedParameter].isPersonal && answer?.score != null && (
+                                    {!competencyGroups[selectedCompetencyKey].isPersonal && answer?.score != null && (
                                       <span className={`text-xl sm:text-2xl font-bold ${getScoreColor(answer.score)}`}>{answer.score}/10</span>
                                     )}
                                   </div>
@@ -2971,7 +2971,7 @@ selectedParameter === paramKey
                                       </button>
                                     )}
                                   </div>
-                                  {!parameters[selectedParameter].isPersonal && (
+                                  {!competencyGroups[selectedCompetencyKey].isPersonal && (
                                     <div>
                                       <h5 className="font-bold mb-2 text-base sm:text-lg text-gray-900">AI Feedback:</h5>
                                       <p className="text-base sm:text-lg text-gray-700 break-words">{answer.feedback || 'Feedback analysis pending - will be available soon'}</p>
@@ -3005,11 +3005,11 @@ selectedParameter === paramKey
                     </div>
                   )}
 
-                  {/* No Parameter Selected Message */}
-                  {!selectedParameter && (
+                  {/* No competency selected */}
+                  {!selectedCompetencyKey && (
                     <div className="text-center py-8 sm:py-16 text-gray-500 px-2">
-                      <p className="text-base sm:text-xl font-medium break-words">Select a parameter to view its questions</p>
-                      <p className="text-sm sm:text-lg mt-2 sm:mt-3 leading-relaxed break-words">Click a parameter card above, then expand a question to see full details</p>
+                      <p className="text-base sm:text-xl font-medium break-words">Select a competency to view its questions</p>
+                      <p className="text-sm sm:text-lg mt-2 sm:mt-3 leading-relaxed break-words">Click a competency card above, then expand a question to see full details</p>
                     </div>
                   )}
                   </div>

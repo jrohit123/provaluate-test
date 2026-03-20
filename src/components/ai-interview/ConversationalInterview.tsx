@@ -996,7 +996,7 @@ const ConversationalInterview = () => {
 
             if (transcribedText && transcribedText.length > 0) {
               // ✅ Deduplicate before appending (less aggressive since prompt helps with context)
-              // The prompt parameter reduces the need for aggressive deduplication
+              // Stronger transcription prompts reduce the need for aggressive deduplication
               accumulatedTranscriptRef.current = cleanTranscript(
                 transcribedText,
                 accumulatedTranscriptRef.current
@@ -2955,7 +2955,7 @@ const ConversationalInterview = () => {
         if (currentQuestionMaxTime === 0) {
           // For structured interviews, don't initialize timer here - it should come from API response
           if (interviewData?.interview_mode === 'structured') {
-            console.log('⏰ Structured interview - timer should come from API response, not parameter initialization');
+            console.log('⏰ Structured interview - timer should come from API response, not competency initialization');
           } else {
             initializeTimerForExistingQuestion(interviewData.position, currentQuestionIndex);
           }
@@ -2972,7 +2972,7 @@ const ConversationalInterview = () => {
       // Reset countdown when recording starts
       setRecordingCountdown(0);
       
-      // Answer timer removed - will be handled dynamically based on parameter max_time
+      // Answer timer removed - will be handled dynamically based on competency max_time
       
       // DON'T clear transcript when starting recording - keep live transcription working
       // setTranscript('');
@@ -3096,13 +3096,13 @@ const ConversationalInterview = () => {
     }
   }, [interviewData, setCurrentQuestion, setAiMessage, aiSpeaking, isRecording, isVideoOn]);
 
-  // Function to initialize timer for existing questions by fetching parameter data
+  // Initialize timer for existing questions using competency config from Supabase (column: custom_parameters)
   const initializeTimerForExistingQuestion = useCallback(async (position, questionIndex) => {
     try {
-      console.log('🔍 Fetching parameter data for position:', position, 'question index:', questionIndex);
+      console.log('🔍 Fetching competency config for position:', position, 'question index:', questionIndex);
       
-      // Fetch parameter configuration from Supabase
-      console.log('🔍 Fetching parameters for role:', position);
+      // Fetch role competency configuration from Supabase
+      console.log('🔍 Fetching competency map for role:', position);
       const { data: paramData, error } = await supabase
         .from('custom_role_parameters')
         .select('custom_parameters')
@@ -3114,7 +3114,7 @@ const ConversationalInterview = () => {
       console.log('🔍 Supabase query result:', { paramData, error });
       
       if (error) {
-        console.error('❌ Error fetching parameter data:', error);
+        console.error('❌ Error fetching competency config:', error);
         // Fallback to default 3 minutes (answer time only)
         const questionTimeInSeconds = 3 * 60;
         setCurrentQuestionMaxTime(questionTimeInSeconds);
@@ -3125,14 +3125,14 @@ const ConversationalInterview = () => {
       
       if (paramData && paramData.length > 0 && paramData[0].custom_parameters) {
         const customParams = paramData[0].custom_parameters;
-        console.log('🔍 Found parameter configuration:', Object.keys(customParams));
-        console.log('🔍 Full custom parameters:', customParams);
+        console.log('🔍 Found competency configuration keys:', Object.keys(customParams));
+        console.log('🔍 Full custom_parameters payload:', customParams);
         
         // Get the current question data from interview data
         const currentQuestion = interviewData?.questions?.[questionIndex];
         if (currentQuestion && currentQuestion.parameter_key && customParams[currentQuestion.parameter_key]) {
-          const paramKey = currentQuestion.parameter_key;
-          const paramConfig = customParams[paramKey];
+          const competencyKey = currentQuestion.parameter_key;
+          const paramConfig = customParams[competencyKey];
           
           // Use max_time from question data (which comes from database)
           const questionMaxTime = currentQuestion.max_time || paramConfig.max_time || 3;
@@ -3144,14 +3144,14 @@ const ConversationalInterview = () => {
           setIsQuestionTimerActive(true);
           
           console.log('⏰ Timer initialized for existing question:', questionTimeInSeconds, 'seconds for', questionMaxTime, 'min answer time');
-          console.log('🔍 Using parameter from question data:', paramKey, 'with max_time:', questionMaxTime);
+          console.log('🔍 Using competency from question data:', competencyKey, 'with max_time:', questionMaxTime);
           console.log('🔍 Question data:', currentQuestion);
         } else if (Object.keys(customParams).length > 0) {
-          // Fallback: use round-robin if no parameter_key in question data
-          const paramKeys = Object.keys(customParams);
-          const paramIndex = questionIndex % paramKeys.length;
-          const paramKey = paramKeys[paramIndex];
-          const paramConfig = customParams[paramKey];
+          // Fallback: use round-robin if no parameter_key on question (API field name unchanged)
+          const competencyKeys = Object.keys(customParams);
+          const paramIndex = questionIndex % competencyKeys.length;
+          const competencyKey = competencyKeys[paramIndex];
+          const paramConfig = customParams[competencyKey];
           
           // Parse max_time (handle both string and number values)
           const questionMaxTime = typeof paramConfig.max_time === 'string' 
@@ -3165,23 +3165,23 @@ const ConversationalInterview = () => {
           setIsQuestionTimerActive(true);
           
           console.log('⏰ Timer initialized for existing question (fallback):', questionTimeInSeconds, 'seconds for', questionMaxTime, 'min answer time');
-          console.log('🔍 Using parameter (fallback):', paramKey, 'with max_time:', questionMaxTime);
-          console.log('🔍 Parameter config:', paramConfig);
+          console.log('🔍 Using competency (fallback):', competencyKey, 'with max_time:', questionMaxTime);
+          console.log('🔍 Competency config:', paramConfig);
         } else {
-          // No parameters found, use default (answer time only)
+          // No competency entries found, use default (answer time only)
           const questionTimeInSeconds = 3 * 60;
           setCurrentQuestionMaxTime(questionTimeInSeconds);
           setQuestionTimerSeconds(questionTimeInSeconds);
           setIsQuestionTimerActive(true);
-          console.log('⏰ No parameters found, using default 3 minutes');
+          console.log('⏰ No competencies found, using default 3 minutes');
         }
       } else {
-        // No parameter data found, use default (answer time only)
+        // No competency data found, use default (answer time only)
         const questionTimeInSeconds = 3 * 60;
         setCurrentQuestionMaxTime(questionTimeInSeconds);
         setQuestionTimerSeconds(questionTimeInSeconds);
         setIsQuestionTimerActive(true);
-        console.log('⏰ No parameter data found, using default 3.5 minutes');
+        console.log('⏰ No competency data found, using default 3.5 minutes');
       }
     } catch (error) {
       console.error('❌ Error initializing timer for existing question:', error);

@@ -17,7 +17,7 @@ export const API_CONFIG = {
     UPLOAD_QUESTION_VIDEO: '/api/upload-question-video',
     UPLOAD_QUESTION_MEDIA: '/api/upload-question-media',
     
-    // Parameter Management
+    // Competency config (API paths unchanged for backend compatibility)
     CUSTOM_PARAMETERS: '/api/custom-parameters',
     GENERATE_DYNAMIC_PARAMETERS: '/api/generate-dynamic-parameters',
     GET_INTERVIEW_COUNT: '/api/get-interview-count',
@@ -48,6 +48,19 @@ export const API_CONFIG = {
     // TTS and Conversational Phrases
     TTS: '/api/tts',
     GENERATE_INTERVIEW_PHRASE: '/api/generate-interview-phrase',
+
+    // Candidate: OTP, onboarding, plans, payment, referrals
+    CANDIDATE_SEND_OTP: '/api/candidate/send-otp',
+    CANDIDATE_VERIFY_OTP: '/api/candidate/verify-otp',
+    CANDIDATE_PLANS: '/api/candidate/plans',
+    CANDIDATE_CREATE_ORDER: '/api/candidate/create-order',
+    CANDIDATE_VERIFY_PAYMENT: '/api/candidate/verify-payment',
+    CANDIDATE_ONBOARDING_COMPLETE: '/api/candidate/onboarding/complete',
+    CANDIDATE_REFERRAL_LINK_GENERATE: '/api/candidate/referral-link/generate',
+    CANDIDATE_REFERRAL_LINK: '/api/candidate/referral-link',
+    CANDIDATE_REFERRAL_ADD_MOBILE: '/api/candidate/referral-link/allowed-mobiles',
+    CANDIDATE_REFERRAL_DASHBOARD: '/api/candidate/referrals/dashboard',
+    CANDIDATE_APPLY_REFERRAL: '/api/candidate/apply-referral',
   },
   TIMEOUTS: {
     DEFAULT: 300000, // 30 seconds
