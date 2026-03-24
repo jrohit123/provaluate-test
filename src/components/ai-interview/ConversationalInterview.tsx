@@ -343,6 +343,8 @@ const ConversationalInterview = () => {
   const ttsFallbackToastShownRef = useRef(false);
   /** Total questions (from submit-answer response) to detect last question and use full submit flow */
   const totalQuestionsRef = useRef<number | null>(null);
+  /** Keyphrases from last submit-answer — passed to generate-question so the next question avoids a DB race */
+  const priorAnswerKeyphrasesRef = useRef<string[]>([]);
   /** Promise for previous question's media upload; awaited in generateNextQuestion before TTS */
   const pendingMediaUploadPromiseRef = useRef<Promise<void> | null>(null);
   /** When set (timer expiry), use these blobs for submit so audio/video are never skipped */
@@ -2011,17 +2013,20 @@ const ConversationalInterview = () => {
       console.log('🔍 Interview ID:', interviewData.interviewId);
       console.log('🔍 Current question index:', currentQuestionIndex);
       
+      const kp = priorAnswerKeyphrasesRef.current;
       const response = await apiCall(API_CONFIG.ENDPOINTS.GENERATE_QUESTION, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           interview_id: interviewData.interviewId,
           current_question_index: currentQuestionIndex + 1,
-          ...(simplifyQuestion && { simplify_question: true })
+          ...(simplifyQuestion && { simplify_question: true }),
+          ...(Array.isArray(kp) && kp.length > 0 ? { prior_answer_keyphrases: kp } : {})
         })
       }, API_CONFIG.TIMEOUTS.GENERATE_QUESTION);
 
       if (response.ok) {
+        priorAnswerKeyphrasesRef.current = [];
         const data = await response.json();
         console.log('📊 Full response data:', data);
         console.log('🔍 Max time from response:', data.max_time);
@@ -2471,6 +2476,7 @@ const ConversationalInterview = () => {
              if (response.ok) {
                const result = await response.json();
                if (result.total_questions != null) totalQuestionsRef.current = result.total_questions;
+               priorAnswerKeyphrasesRef.current = Array.isArray(result.keyphrases) ? result.keyphrases : [];
                
                // Check if interview is completed
                if (result.interview_completed) {

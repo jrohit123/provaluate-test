@@ -53,32 +53,24 @@ type SpeechMetricRating = 'Good' | 'Average' | 'Needs Work';
 function getSpeechMetricRating(metricKey: string, value: number): SpeechMetricRating {
   switch (metricKey) {
     case 'overall_speech_quality':
-      if (value >= 85 && value <= 100) return 'Good';
-      if (value >= 70 && value < 85) return 'Average';
+      if (value >= 85) return 'Good';
+      if (value >= 70) return 'Average';
       return 'Needs Work';
     case 'speaking_pace_wpm':
       if (value >= 120 && value <= 160) return 'Good';
-      if ((value >= 100 && value < 120) || (value > 160 && value <= 180)) return 'Average';
+      if ((value >= 100 && value < 120) || (value > 160 && value <= 185)) return 'Average';
       return 'Needs Work';
-    case 'filler_words':
-      if (value <= 5) return 'Good';
-      if (value <= 10) return 'Average';
-      return 'Needs Work';
-    case 'filler_density':
-      if (value <= 5) return 'Good';
-      if (value <= 15) return 'Average';
+    case 'filler_score':
+      if (value >= 85) return 'Good';
+      if (value >= 70) return 'Average';
       return 'Needs Work';
     case 'pause_quality_score':
-      if (value >= 80 && value <= 100) return 'Good';
-      if (value >= 65 && value < 80) return 'Average';
+      if (value >= 85) return 'Good';
+      if (value >= 65) return 'Average';
       return 'Needs Work';
     case 'voice_confidence':
-      if (value >= 80 && value <= 100) return 'Good';
-      if (value >= 55 && value < 80) return 'Average';
-      return 'Needs Work';
-    case 'stress_score':
-      if (value >= 0 && value <= 30) return 'Good';
-      if (value <= 60) return 'Average';
+      if (value >= 80) return 'Good';
+      if (value >= 55) return 'Average';
       return 'Needs Work';
     default:
       return 'Average';
@@ -118,10 +110,8 @@ function parseSpeechReportSections(reportText: string): { section: string; conte
     /^overall$/i,
     /^what the data tells you$/i,
     /^speaking pace$/i,
-    /^filler words?\s*(\/)?\s*(filler density)?$/i,
-    /^filler density$/i,
+    /^filler score$/i,
     /^voice confidence$/i,
-    /^stress$/i,
     /^pause(\s*(and|&)\s*pacing)?(\s*score)?$/i,
     /^comparison with previous interviews?$/i,
     /^progress over your interviews?$/i,
@@ -1336,13 +1326,11 @@ const FinalResults = () => {
         return vals.reduce((s: number, v: number) => s + v, 0) / vals.length;
       };
       const idealRanges: { key: string; name: string; getCandidate: () => string | null; getNum: () => number | null; ideal: string }[] = [
-        { key: 'overall_speech_quality', name: 'Overall Speech Quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}`), getNum: () => avgNum('overall_speech_quality'), ideal: '85-100' },
-        { key: 'speaking_pace_wpm', name: 'Speaking Pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), getNum: () => avgNum('speaking_pace_wpm'), ideal: '120-160 WPM' },
-        { key: 'filler_words', name: 'Filler Words', getCandidate: () => avg('filler_words', (v) => `${Math.round(v)}`), getNum: () => avgNum('filler_words'), ideal: '< 3-5 total' },
-        { key: 'filler_density', name: 'Filler Density', getCandidate: () => avg('filler_density', (v) => `${Math.round(v)}%`), getNum: () => avgNum('filler_density'), ideal: '< 2-5%' },
-        { key: 'pause_quality_score', name: 'Pause & Pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}`), getNum: () => avgNum('pause_quality_score'), ideal: '80-100' },
-        { key: 'voice_confidence', name: 'Voice Confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}`), getNum: () => avgNum('voice_confidence'), ideal: '80-100' },
-        { key: 'stress_score', name: 'Stress Level', getCandidate: () => avg('stress_score', (v) => `${Math.round(v)}`), getNum: () => avgNum('stress_score'), ideal: '0-30' },
+        { key: 'overall_speech_quality', name: 'Overall Speech Quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}`), getNum: () => avgNum('overall_speech_quality'), ideal: '85–100' },
+        { key: 'speaking_pace_wpm', name: 'Speaking Pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), getNum: () => avgNum('speaking_pace_wpm'), ideal: '120–160 WPM' },
+        { key: 'filler_score', name: 'Filler Score', getCandidate: () => avg('filler_score', (v) => `${Math.round(v)}`), getNum: () => avgNum('filler_score'), ideal: '85–100' },
+        { key: 'pause_quality_score', name: 'Pause & Pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}`), getNum: () => avgNum('pause_quality_score'), ideal: '85–100' },
+        { key: 'voice_confidence', name: 'Voice Confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}`), getNum: () => avgNum('voice_confidence'), ideal: '80–100' },
       ];
       const overallMetricsRows = idealRanges
         .map((r) => {
@@ -1385,7 +1373,7 @@ const FinalResults = () => {
       speechSheet.getCell(speechRow, 1).value = 'Per-Question Speech Metrics';
       speechSheet.getCell(speechRow, 1).font = { bold: true, size: 12 };
       speechRow += 2;
-      const perQHeaders = ['Q NO', 'COMPETENCY', 'Overall speech quality', 'Speaking pace (WPM)', 'Speech ratio %', 'Word count', 'Filler words', 'Filler density %', 'Filler rate/min', 'Articulation score', 'Pause & pacing', 'Voice confidence', 'Voice modulation', 'Stress level', 'Calmness'];
+      const perQHeaders = ['Q NO', 'COMPETENCY', 'Overall speech quality', 'Speaking pace (WPM)', 'Filler score', 'Filler rate/min', 'Pause & pacing', 'Voice confidence', 'Speech ratio %', 'Word count'];
       speechSheet.addRow(perQHeaders);
       speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
         cell.fill = blueFill;
@@ -1406,17 +1394,12 @@ const FinalResults = () => {
             competencyLabel,
             b ? fmt(b.overall_speech_quality, '/100') : '-',
             b ? fmt(b.speaking_pace_wpm, ' WPM') : '-',
-            b && b.speech_ratio != null ? fmt(b.speech_ratio) : '-',
-            b ? fmt(b.word_count) : '-',
-            b ? fmt(b.filler_words) : '-',
-            b && b.filler_density != null ? fmt(b.filler_density) : '-',
-            b && b.filler_rate_per_minute != null ? fmt(b.filler_rate_per_minute) : '-',
-            b && b.articulation_score != null ? fmt(b.articulation_score, '/100') : '-',
+            b && b.filler_score != null ? fmt(b.filler_score, '/100') : '-',
+            b && b.filler_rate_per_min != null ? fmt(b.filler_rate_per_min) : (b && b.filler_rate_per_minute != null ? fmt(b.filler_rate_per_minute) : '-'),
             b && b.pause_quality_score != null ? fmt(b.pause_quality_score, '/100') : '-',
             b && b.voice_confidence != null ? fmt(b.voice_confidence, '/100') : '-',
-            b && b.voice_modulation != null ? fmt(b.voice_modulation, '/100') : '-',
-            b && b.stress_score != null ? fmt(b.stress_score, '/100') : '-',
-            b && b.calmness_score != null ? fmt(b.calmness_score, '/100') : '-',
+            b && b.speech_ratio != null ? fmt(b.speech_ratio) : '-',
+            b ? fmt(b.word_count) : '-',
           ]);
           const rn = speechSheet.rowCount;
           speechSheet.getRow(rn).eachCell((cell, colNumber) => {
@@ -1667,10 +1650,11 @@ const FinalResults = () => {
         await new Promise<void>((resolve, reject) => {
           logoImg.onload = () => {
             try {
-              const heightMm = 12.7;
+              const heightMm = 16;
               const aspect = logoImg.naturalWidth / logoImg.naturalHeight;
               const widthMm = heightMm * aspect;
-              doc.addImage(logoImg, 'PNG', 5, 5, widthMm, heightMm);
+              // x=12 gives breathing room; y=8 clears the top band
+              doc.addImage(logoImg, 'PNG', 12, 8, widthMm, heightMm);
               logoAdded = true;
             } catch (error) {
               console.log('Error adding logo to PDF:', error);
@@ -1688,21 +1672,22 @@ const FinalResults = () => {
       }
 
       const pageWidth = doc.internal.pageSize.getWidth();
-      const blueRgb: [number, number, number] = [30, 93, 168]; // #1e5da8
+      const blueRgb: [number, number, number]      = [30, 93, 168];    // #1e5da8
+      const lightBlueRgb: [number, number, number] = [232, 240, 251];  // #e8f0fb – chip/badge bg
       const tableBorder = { lineColor: [0, 0, 0] as [number, number, number], lineWidth: 0.15 };
 
-      // Main header title – more space below logo, centered, blue
+      // ── MAIN TITLE ───────────────────────────────────────────────────────────────
       doc.setTextColor(...blueRgb);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(22);
-      doc.text('INTERVIEW ANALYSIS REPORT', pageWidth / 2, 40, { align: 'center' });
+      doc.setFontSize(20);
+      doc.text('INTERVIEW ANALYSIS REPORT', pageWidth / 2, 44, { align: 'center' });
 
-      // Two lines below header – bold and italic, no space between
+      // ── SUBTITLE LINES ───────────────────────────────────────────────────────────
       doc.setFont('helvetica', 'bolditalic');
-      doc.setFontSize(10);
-      doc.setTextColor(0, 0, 0);
-      doc.text('Competency-Based Interview Analytics', pageWidth / 2, 48, { align: 'center' });
-      doc.text('Combining AI Evaluation with Advanced Insights', pageWidth / 2, 52, { align: 'center' });
+      doc.setFontSize(9);
+      doc.setTextColor(80, 80, 80);
+      doc.text('Competency-Based Interview Analytics', pageWidth / 2, 52, { align: 'center' });
+      doc.text('Combining AI Evaluation with Advanced Insights', pageWidth / 2, 57, { align: 'center' });
       doc.setFont('helvetica', 'normal');
 
       // Resolve candidate photo URL (server → localStorage → sessionStorage)
@@ -1732,10 +1717,13 @@ const FinalResults = () => {
       const isValidPhoto = (s: string | null) => !!s && s.startsWith('data:image/') && s.length >= 100;
       const photoSrc = (candidatePhotoDataUrl && isValidPhoto(candidatePhotoDataUrl)) ? candidatePhotoDataUrl : '/assets/NAME.jpg';
 
-      // Draw candidate photo centered below subtitle (larger size)
-      const photoY = 58;
+      // ── CANDIDATE PHOTO ──────────────────────────────────────────────────────────
       const photoSize = 52;
+      const photoY = 65;
       const photoX = (pageWidth - photoSize) / 2;
+      const photoCx   = pageWidth / 2;
+      const photoCy   = photoY + photoSize / 2;
+
       await new Promise<void>((resolve) => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
@@ -1748,11 +1736,26 @@ const FinalResults = () => {
           } catch (_) {}
           resolve();
         };
-        img.onerror = () => resolve();
+        img.onerror = () => {
+          // ── FALLBACK: light-blue circle with candidate initials ──────────────────
+          doc.setFillColor(...lightBlueRgb);
+          doc.circle(photoCx, photoCy, photoSize / 2, 'F');
+          const initials = (interview.candidate_name || 'C')
+            .split(' ')
+            .map((w: string) => w[0])
+            .slice(0, 2)
+            .join('')
+            .toUpperCase();
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(14);
+          doc.setTextColor(...blueRgb);
+          doc.text(initials, photoCx, photoCy + 1.5, { align: 'center' });
+          resolve();
+        };
         img.src = photoSrc;
       });
 
-      // Candidate details table (below photo) – centered, more spacing
+      // ── CANDIDATE DETAILS TABLE ───────────────────────────────────────────────────
       const candidateTableStartY = photoY + photoSize + 18;
       const candidateRows: [string, string][] = [
         ['Candidate', interview.candidate_name || 'N/A'],
@@ -1769,22 +1772,29 @@ const FinalResults = () => {
       const tableTotalWidth = fieldColWidth + valueColWidth;
       const tableMargin = (pageWidth - tableTotalWidth) / 2;
       autoTable(doc, {
-        // Simple two-column table centered on the page, no top header row,
-        // no inner cell borders; rows are lightly shaded to match the UI.
         body: candidateRows,
         startY: candidateTableStartY,
         tableWidth: tableTotalWidth,
         styles: {
           fontSize: 9,
-          cellPadding: 3,
-          // All rows white with bold, black text
-          fillColor: [255, 255, 255],
-          textColor: [0, 0, 0],
-          fontStyle: 'bold',
-          lineWidth: 0, // no inner cell borders
+          cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+          lineColor: [208, 223, 245] as [number, number, number],
+          lineWidth: 0.3,
+          textColor: [60, 60, 80] as [number, number, number],
         },
-        columnStyles: { 0: { cellWidth: fieldColWidth }, 1: { cellWidth: valueColWidth } },
-        // Keep the table centered horizontally
+        columnStyles: {
+          0: {
+            cellWidth: fieldColWidth,
+            fontStyle: 'bold',
+            textColor: [26, 26, 46] as [number, number, number],
+            fillColor: [247, 249, 253] as [number, number, number],
+          },
+          1: {
+            cellWidth: valueColWidth,
+            fillColor: [255, 255, 255] as [number, number, number],
+            fontStyle: 'normal',
+          },
+        },
         margin: { left: tableMargin, right: tableMargin },
       });
       const leftMargin = 15;
@@ -1976,12 +1986,12 @@ const FinalResults = () => {
 
       type ParamMetrics = {
         overall_quality: number[]; wpm: number[]; filler: number[]; pause_quality: number[];
-        voice_confidence: number[]; stress: number[];
+        voice_confidence: number[];
       };
       const paramBehavioralMap: Record<string, ParamMetrics> = {};
       const initParam = (): ParamMetrics => ({
         overall_quality: [], wpm: [], filler: [], pause_quality: [],
-        voice_confidence: [], stress: []
+        voice_confidence: [],
       });
       questionRows.forEach((row: any) => {
         const p = row.competencyLabel;
@@ -1990,17 +2000,16 @@ const FinalResults = () => {
         if (b) {
           if (typeof b.overall_speech_quality === 'number') paramBehavioralMap[p].overall_quality.push(b.overall_speech_quality);
           if (typeof b.speaking_pace_wpm === 'number') paramBehavioralMap[p].wpm.push(b.speaking_pace_wpm);
-          if (typeof b.filler_words === 'number') paramBehavioralMap[p].filler.push(b.filler_words);
+          if (typeof b.filler_score === 'number') paramBehavioralMap[p].filler.push(b.filler_score);
           if (typeof b.pause_quality_score === 'number') paramBehavioralMap[p].pause_quality.push(b.pause_quality_score);
           if (typeof b.voice_confidence === 'number') paramBehavioralMap[p].voice_confidence.push(b.voice_confidence);
-          if (typeof b.stress_score === 'number') paramBehavioralMap[p].stress.push(b.stress_score);
         }
       });
 
       const hasBehavioralData = Object.keys(paramBehavioralMap).some(p => {
         const d = paramBehavioralMap[p];
         return d.overall_quality.length > 0 || d.wpm.length > 0 || d.filler.length > 0 ||
-          d.pause_quality.length > 0 || d.voice_confidence.length > 0 || d.stress.length > 0;
+          d.pause_quality.length > 0 || d.voice_confidence.length > 0;
       });
 
       // Page 1: no footer drawn here (final pass draws all footers once)
@@ -2024,19 +2033,91 @@ const FinalResults = () => {
       const paramColorMap: Record<string, { bg: [number, number, number]; text: [number, number, number] }> = {};
       let nextParamColorIndex = 0;
 
+      const competencyStats: Record<string, { avgScore: number | null; answeredCount: number; totalCount: number }> = {};
+      questionRows.forEach((row: any) => {
+        const key = row.competencyLabel || 'Competency';
+        if (!competencyStats[key]) {
+          competencyStats[key] = { avgScore: null, answeredCount: 0, totalCount: 0 };
+        }
+        competencyStats[key].totalCount += 1;
+        const val = row.answer?.parameter_score ?? row.answer?.score;
+        const num = typeof val === 'number' ? val : Number(val);
+        if (Number.isFinite(num)) {
+          competencyStats[key].answeredCount += 1;
+          const prev = competencyStats[key].avgScore;
+          if (prev == null) {
+            competencyStats[key].avgScore = num;
+          } else {
+            const n = competencyStats[key].answeredCount;
+            competencyStats[key].avgScore = ((prev * (n - 1)) + num) / n;
+          }
+        }
+      });
+
+      // DB-backed lookup maps for level/band text in PDF summary block.
+      const paramLevelByKey: Record<string, string> = {};
+      const paramLevelByName: Record<string, string> = {};
+      const parameterList: any[] = Array.isArray(reportData?.parameters)
+        ? reportData.parameters
+        : (reportData?.parameters && typeof reportData.parameters === 'object'
+            ? Object.values(reportData.parameters)
+            : []);
+      parameterList.forEach((p: any) => {
+        const lvl = String(p?.level || '').trim();
+        if (!lvl) return;
+        if (p?.key) paramLevelByKey[String(p.key)] = lvl;
+        if (p?.name) paramLevelByName[String(p.name)] = lvl;
+        if (p?.parameter_name) paramLevelByName[String(p.parameter_name)] = lvl;
+      });
+
+      const bandByQOrder: Record<number, { band?: string; reason?: string }> = {};
+      try {
+        const psRaw = interview?.parameter_scores;
+        const ps = typeof psRaw === 'string' ? JSON.parse(psRaw) : psRaw;
+        if (ps && typeof ps === 'object') {
+          Object.values(ps as Record<string, any>).forEach((paramData: any) => {
+            const iqs = Array.isArray(paramData?.individual_question_scores) ? paramData.individual_question_scores : [];
+            iqs.forEach((it: any) => {
+              const qOrd = Number(it?.question_order);
+              if (Number.isFinite(qOrd)) {
+                bandByQOrder[qOrd] = {
+                  band: it?.band_applied,
+                  reason: it?.band_reason
+                };
+              }
+            });
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to parse parameter_scores for band lookup:', e);
+      }
+
+      const getLevelLabelFromDb = (levelRaw: any, row: any): string => {
+        const fallbackLevel =
+          row?.question?.level ||
+          paramLevelByKey[String(row?.question?.parameter_key || '')] ||
+          paramLevelByName[String(row?.question?.parameter_name || '')] ||
+          paramLevelByName[String(row?.competencyLabel || '')] ||
+          '';
+        const level = String(levelRaw || fallbackLevel || '').trim();
+        if (!level) return 'N/A';
+        return `${level} level`;
+      };
+
       questionRows.forEach((row, idx) => {
         doc.addPage();
         const qNum = idx + 1;
         const pageHeight = doc.internal.pageSize.height;
-        const leftMargin = 15;
-        const rightMargin = 15;
-        // Push the question/answer block further down to give clear visual separation under the competency line
-        const contentStartY = 46;
+        const leftMargin = 21;
+        const rightMargin = 21;
+        // Push the question/answer block further down to make room for score summary block
+        const contentStartY = 80;
+        const continuedPageStartY = 22;
         const bottomMargin = 28;
-        const labelX = leftMargin;
-        const valueX = leftMargin + 40;
-        const maxWidth = pageWidth - valueX - rightMargin;
-        const lineHeight = 4.5;
+        const labelX = leftMargin + 2;
+        const valueX = leftMargin + 2;
+        const maxWidth = pageWidth - valueX - rightMargin - 3;
+        const lineHeight = 5.2;
 
         // Colored competency header bar
         const paramName = row.competencyLabel || 'Competency';
@@ -2045,40 +2126,92 @@ const FinalResults = () => {
           nextParamColorIndex += 1;
         }
         const colors = paramColorMap[paramName];
-        const headerY = 16;
-        const headerHeight = 10;
+        const headerY = 14;
+        const headerHeight = 18;
         doc.setFillColor(colors.bg[0], colors.bg[1], colors.bg[2]);
         // simple rounded rectangle spanning page width with margins
         doc.roundedRect(leftMargin, headerY, pageWidth - leftMargin - rightMargin, headerHeight, 2, 2, 'F');
+        // First line: "COMPETNACY:"
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
+        doc.setFontSize(13);
         doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-        doc.text(`Competency: ${paramName}`, leftMargin + 3, headerY + 7);
+        doc.text('COMPETENCY:', leftMargin + 4, headerY + 7.5);
+        // Second line: parameter name
+        doc.setFontSize(13);
+        doc.text(`${paramName}`, leftMargin + 4, headerY + 14.5);
+        // Right-side question index text (e.g., Q 5 of 6)
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(245, 248, 252);
+        doc.text(`Q ${qNum} of ${totalQuestions}`, pageWidth - rightMargin - 12, headerY + 6.5, { align: 'right' });
         // reset text color for body content
         doc.setTextColor(0, 0, 0);
+
+        // Summary block under header: left circular score + right competency summary
+        const paramStats = competencyStats[paramName] || { avgScore: null, answeredCount: 0, totalCount: 0 };
+        const summaryY = headerY + headerHeight + 8;
+        const circleCenterX = leftMargin + 12;
+        const circleCenterY = (headerY + headerHeight + contentStartY) / 2;
+        const circleR = 14;
+        const scoreValue = row.answer?.parameter_score ?? row.answer?.score ?? paramStats.avgScore;
+        const scoreNum = typeof scoreValue === 'number' ? scoreValue : Number(scoreValue);
+        const scoreText = Number.isFinite(scoreNum) ? `${Math.round(scoreNum)}/10` : 'N/A';
+        const qOrder = Number(row?.question?.question_order);
+        const bandFallback = Number.isFinite(qOrder) ? bandByQOrder[qOrder] : undefined;
+        const bandText = String(row.answer?.band_applied || bandFallback?.band || 'N/A');
+
+        doc.setDrawColor(210, 210, 210);
+        doc.setLineWidth(0.5);
+        doc.circle(circleCenterX, circleCenterY, circleR, 'S');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(130, 130, 130);
+        doc.text('AI competency', circleCenterX, circleCenterY - 2.8, { align: 'center' });
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(14);
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        doc.text(scoreText, circleCenterX, circleCenterY + 3.8, { align: 'center' });
+
+        const summaryTextX = leftMargin + 28;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor(145, 145, 145);
+        doc.text('Performance band', summaryTextX, summaryY + 10);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10.5);
+        doc.setTextColor(55, 55, 55);
+        doc.text(`${bandText}`, summaryTextX, summaryY + 17.5);
+
+        // Divider below summary block
+        doc.setDrawColor(228, 228, 228);
+        doc.line(leftMargin, summaryY + 33, pageWidth - rightMargin, summaryY + 33);
 
         const ensureSpace = (neededLines: number) => {
           if (yPos + neededLines * lineHeight > pageHeight - bottomMargin) {
             doc.addPage();
             currentPageNum++;
-            yPos = contentStartY;
+            // For overflow pages, start near the top (not mid-page).
+            yPos = continuedPageStartY;
           }
         };
 
         const drawField = (
           label: string,
           value: string,
-          options?: { italic?: boolean }
+          options?: { italic?: boolean; separator?: boolean }
         ) => {
           const v = value && value.trim().length > 0 ? value : '—';
           const paragraphs = doc.splitTextToSize(v, maxWidth);
-          const needed = paragraphs.length + 2;
+          const needed = paragraphs.length + 4;
           ensureSpace(needed);
 
           // label
           doc.setFont('helvetica', 'bold');
-          doc.setFontSize(10);
+          doc.setFontSize(12);
+          doc.setTextColor(145, 145, 145);
           doc.text(label, labelX, yPos);
+          // Clear visual separation between label and value
+          yPos += lineHeight + 1.0;
 
           // value
           if (options?.italic) {
@@ -2086,16 +2219,21 @@ const FinalResults = () => {
           } else {
             doc.setFont('helvetica', 'normal');
           }
-          doc.setFontSize(10);
+          doc.setFontSize(12);
+          doc.setTextColor(30, 30, 30);
           paragraphs.forEach((line, i) => {
-            doc.text(line, valueX, yPos + (i === 0 ? 0 : i * lineHeight));
+            doc.text(line, valueX, yPos + (i * lineHeight));
           });
 
-          yPos += paragraphs.length * lineHeight + lineHeight; // gap after field
-          // subtle separator line
-          doc.setDrawColor(230, 230, 230);
-          doc.line(leftMargin, yPos - 2, pageWidth - rightMargin, yPos - 2);
-          yPos += lineHeight / 2;
+          // Moderate section gap so we use remaining page space better
+          yPos += paragraphs.length * lineHeight + (lineHeight * 0.9);
+          // subtle separator line (optional)
+          if (options?.separator !== false) {
+            doc.setDrawColor(230, 230, 230);
+            doc.line(leftMargin, yPos - 2, pageWidth - rightMargin, yPos - 2);
+          }
+          yPos += lineHeight * 0.45;
+          doc.setTextColor(0, 0, 0);
         };
 
         const transcript = row.answer
@@ -2107,15 +2245,14 @@ const FinalResults = () => {
 
         let yPos = contentStartY;
         // Label as simple "Question"
-        drawField('Question', row.question.questionText || 'N/A');
+        drawField('Question', row.question.questionText || 'N/A', { separator: false });
         // Candidate answer should match normal body font (no italics)
-        drawField('Candidate Answer', transcript);
+        drawField('Candidate Answer', transcript, { separator: false });
         // Only show a Written Answer row if there is actual written content
         if (hasWrittenAnswer) {
           drawField('Written Answer', 'See written answer below', { italic: true });
         }
         drawField('AI Feedback', row.feedback || 'No feedback available');
-        drawField('AI Score', String(score));
 
         // Written answer block: line-by-line, monospace, preserves code/SQL formatting
         if (hasWrittenAnswer && writtenAnswerRaw) {
@@ -2187,63 +2324,40 @@ const FinalResults = () => {
             name: 'Overall Speech Quality',
             getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}`),
             getNum: () => avgNum('overall_speech_quality'),
-            ideal: '85-100',
-            definition:
-              'Composite score (0–100) derived from clarity, fluency, and delivery quality across all answers.',
+            ideal: '85–100',
+            definition: 'Composite score (0–100) from pace, fillers, pauses and confidence.',
           },
           {
             key: 'speaking_pace_wpm',
             name: 'Speaking Pace (WPM)',
             getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`),
             getNum: () => avgNum('speaking_pace_wpm'),
-            ideal: '120-160 WPM',
-            definition:
-              'Words per minute calculated from transcript and audio duration; reflects whether the candidate speaks at a clear, steady rate.',
+            ideal: '120–160 WPM',
+            definition: 'Words per minute calculated from audio duration.',
           },
           {
-            key: 'filler_words',
-            name: 'Filler Words',
-            getCandidate: () => avg('filler_words', (v) => `${Math.round(v)}`),
-            getNum: () => avgNum('filler_words'),
-            ideal: '< 3-5 total',
-            definition:
-              'Count of filler or hesitation words (e.g. um, uh, like) detected in the spoken response.',
-          },
-          {
-            key: 'filler_density',
-            name: 'Filler Density',
-            getCandidate: () => avg('filler_density', (v) => `${Math.round(v)}%`),
-            getNum: () => avgNum('filler_density'),
-            ideal: '< 5%',
-            definition:
-              'Percentage of total words that are fillers; high values indicate diluted, hesitant delivery.',
+            key: 'filler_score',
+            name: 'Filler Score',
+            getCandidate: () => avg('filler_score', (v) => `${Math.round(v)}`),
+            getNum: () => avgNum('filler_score'),
+            ideal: '85–100',
+            definition: 'Audio-detected filler sounds per speaking minute, converted to 0–100 (higher = fewer fillers).',
           },
           {
             key: 'pause_quality_score',
             name: 'Pause & Pacing',
             getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}`),
             getNum: () => avgNum('pause_quality_score'),
-            ideal: '80-100',
-            definition:
-              'Score (0–100) for use of pauses and rhythm — appropriate pausing vs. rushed or disjointed speech.',
+            ideal: '85–100',
+            definition: 'Score based on appropriate pausing vs awkward or dead-air silences.',
           },
           {
             key: 'voice_confidence',
             name: 'Voice Confidence',
             getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}`),
             getNum: () => avgNum('voice_confidence'),
-            ideal: '70-100',
-            definition:
-              'Score (0–100) based on tone, steadiness, and projection — how assured the speaker sounds.',
-          },
-          {
-            key: 'stress_score',
-            name: 'Stress Level',
-            getCandidate: () => avg('stress_score', (v) => `${Math.round(v)}`),
-            getNum: () => avgNum('stress_score'),
-            ideal: '0-30',
-            definition:
-              'Score (0–100) indicating perceived stress or tension in the voice from acoustic signals.',
+            ideal: '80–100',
+            definition: 'Score based on pitch variation, range, and vocal projection.',
           },
         ];
         const overallMetricsRows = idealRanges
@@ -2271,13 +2385,9 @@ const FinalResults = () => {
           doc.text('The table below shows the candidate\'s overall average for each speech metric across the entire interview, compared against professionally accepted benchmark ranges.', speechMargin, 28, { maxWidth: speechContentWidth });
           doc.setTextColor(0, 0, 0);
           const overallTableBody = overallMetricsRows.map((r) => {
-            const style = SPEECH_RATING_STYLES[r.rating];
             return [
               r.name,
-              {
-                content: `${r.candidate} (${r.rating})`,
-                styles: { fillColor: style.rgb, textColor: style.textRgb },
-              },
+              `${r.candidate} (${r.rating})`,
               r.ideal,
               r.definition,
             ];
@@ -2290,34 +2400,92 @@ const FinalResults = () => {
             head: [['Metric', 'Candidate score & rating', 'Ideal range', 'Definition']],
             body: overallTableBody,
             startY: 38,
-            // Slightly larger padding for better vertical spacing across all columns
-            styles: { fontSize: 9, cellPadding: 5, ...tableBorder },
-            headStyles: { fillColor: [30, 93, 168], textColor: 255, fontStyle: 'bold', fontSize: 9, ...tableBorder },
+            // Borderless table with light alternating row backgrounds
+            styles: {
+              fontSize: 9,
+              cellPadding: 6,
+              minCellHeight: 14,
+              lineWidth: 0,
+              lineColor: [255, 255, 255],
+              textColor: [40, 40, 40],
+              fillColor: [242, 242, 242],
+              halign: 'center',
+              valign: 'middle',
+            },
+            headStyles: {
+              fillColor: [235, 235, 235],
+              textColor: [70, 70, 70],
+              fontStyle: 'bold',
+              fontSize: 9,
+              minCellHeight: 14,
+              lineWidth: 0,
+              lineColor: [255, 255, 255],
+              halign: 'center',
+              valign: 'middle',
+            },
+            alternateRowStyles: { fillColor: [255, 255, 255] },
             columnStyles: {
-              0: { cellWidth: summaryCol0 },
-              1: { cellWidth: summaryCol1 },
-              2: { cellWidth: summaryCol2 },
-              3: { cellWidth: summaryCol3 },
+              0: { cellWidth: summaryCol0, halign: 'center', valign: 'middle' },
+              1: { cellWidth: summaryCol1, halign: 'center', valign: 'middle' },
+              2: { cellWidth: summaryCol2, halign: 'center', valign: 'middle' },
+              3: { cellWidth: summaryCol3, halign: 'center', valign: 'middle' },
             },
             margin: { left: speechMargin, right: speechMargin },
             tableWidth: speechContentWidth,
+            didParseCell: (data) => {
+              if (data.section === 'body' && data.column.index === 1) {
+                data.cell.text = [''];
+              }
+            },
+            didDrawCell: (data) => {
+              if (data.section !== 'body' || data.column.index !== 1) return;
+              const row = overallMetricsRows[data.row.index];
+              if (!row) return;
+              const style = SPEECH_RATING_STYLES[row.rating];
+              const text = `${row.candidate} (${row.rating})`;
+              const textWidth = doc.getTextWidth(text);
+              const padX = 4;
+              const padY = 2;
+              const boxW = Math.min(textWidth + padX * 2, data.cell.width - 4);
+              const boxH = Math.min(10, data.cell.height - 4);
+              const boxX = data.cell.x + (data.cell.width - boxW) / 2;
+              const boxY = data.cell.y + (data.cell.height - boxH) / 2;
+
+              doc.setFillColor(style.rgb[0], style.rgb[1], style.rgb[2]);
+              doc.rect(boxX, boxY, boxW, boxH, 'F');
+
+              const prevFontSize = doc.getFontSize();
+              doc.setFont('helvetica', 'normal');
+              doc.setFontSize(9);
+              doc.setTextColor(style.textRgb[0], style.textRgb[1], style.textRgb[2]);
+              doc.text(text, data.cell.x + data.cell.width / 2, boxY + boxH / 2 + 1.5, { align: 'center' });
+              doc.setFontSize(prevFontSize);
+            },
           });
           const legendY = ((doc as any).lastAutoTable?.finalY ?? 100) + 10;
           // Legend for rating colours: Good (green), Average (amber), Needs Work (red)
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(9);
-          const legendItems: { label: SpeechMetricRating; x: number }[] = [
-            { label: 'Good', x: speechMargin },
-            { label: 'Average', x: speechMargin + 60 },
-            { label: 'Needs Work', x: speechMargin + 140 },
-          ];
-          legendItems.forEach((item) => {
-            const style = SPEECH_RATING_STYLES[item.label];
-            const boxSize = 5;
+          const legendItems: SpeechMetricRating[] = ['Good', 'Average', 'Needs Work'];
+          const boxSize = 5;
+          const itemGap = 18;
+          const legendBlockWidth = legendItems.reduce((acc, label, idx) => {
+            const labelWidth = doc.getTextWidth(label);
+            const itemWidth = boxSize + 3 + labelWidth;
+            return acc + itemWidth + (idx < legendItems.length - 1 ? itemGap : 0);
+          }, 0);
+          const legendStartX = speechMargin + Math.max(0, (speechContentWidth - legendBlockWidth) / 2);
+          let cursorX = legendStartX;
+
+          legendItems.forEach((label, idx) => {
+            const style = SPEECH_RATING_STYLES[label];
+            const labelWidth = doc.getTextWidth(label);
             doc.setFillColor(style.rgb[0], style.rgb[1], style.rgb[2]);
-            doc.rect(item.x, legendY, boxSize, boxSize, 'F');
+            doc.rect(cursorX, legendY, boxSize, boxSize, 'F');
             doc.setTextColor(0, 0, 0);
-            doc.text(item.label, item.x + boxSize + 3, legendY + boxSize - 0.5);
+            doc.text(label, cursorX + boxSize + 3, legendY + boxSize - 0.5);
+            cursorX += boxSize + 3 + labelWidth;
+            if (idx < legendItems.length - 1) cursorX += itemGap;
           });
         }
       }
@@ -2351,38 +2519,6 @@ const FinalResults = () => {
           return true;
         });
 
-        // Helper: draw a single line of text where numeric values/ranges are bolded
-        const drawLineWithBoldNumbers = (text: string, xStart: number, y: number) => {
-          const regex =
-            /(\d+(?:\.\d+)?(?:\s*[-–]\s*\d+(?:\.\d+)?|\s*%|\s*WPM)?)/g;
-          let cursorX = xStart;
-          let lastIndex = 0;
-          let match: RegExpExecArray | null;
-          while ((match = regex.exec(text)) !== null) {
-            const before = text.slice(lastIndex, match.index);
-            if (before) {
-              doc.setFont('helvetica', 'normal');
-              doc.text(before, cursorX, y);
-              cursorX += doc.getTextWidth(before);
-            }
-            const token = match[1];
-            if (token) {
-              doc.setFont('helvetica', 'bold');
-              // Manually insert a small space before the bold token so it doesn't stick to the previous word
-              const spaceWidth = doc.getTextWidth(' ');
-              cursorX += spaceWidth;
-              doc.text(token, cursorX, y);
-              cursorX += doc.getTextWidth(token);
-            }
-            lastIndex = regex.lastIndex;
-          }
-          const rest = text.slice(lastIndex);
-          if (rest) {
-            doc.setFont('helvetica', 'normal');
-            doc.text(rest, cursorX, y);
-          }
-        };
-
         // Render narrative sections with bold black headings
         let yPos = 30;
         const pageHeight = doc.internal.pageSize.height;
@@ -2399,39 +2535,56 @@ const FinalResults = () => {
           }
         };
 
-        narrativeSections.forEach((section) => {
+        const speechSectionColorMap: Record<string, { bg: [number, number, number]; text: [number, number, number] }> = {
+          'how you sounded to the listener': { bg: [232, 244, 255], text: [26, 86, 219] }, // blue
+          'clarity and fluency': { bg: [232, 244, 255], text: [26, 86, 219] }, // blue
+          'confidence signals': { bg: [232, 244, 255], text: [26, 86, 219] }, // blue
+          'what to protect': { bg: [240, 253, 244], text: [4, 120, 87] }, // green
+          'what an interviewer would have noticed': { bg: [255, 251, 235], text: [180, 83, 9] }, // amber
+        };
+
+        narrativeSections.forEach((section, sectionIdx) => {
           const title = (section.section || '').trim();
           const content = (section.content || '').trim();
           if (!title && !content) return;
+          const sectionColor = speechSectionColorMap[title.toLowerCase()] || PARAM_COLOR_PALETTE[sectionIdx % PARAM_COLOR_PALETTE.length];
 
           // Heading
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(11);
-          doc.setTextColor(0, 0, 0);
-          ensureSpace(3);
-          doc.text(title || '—', speechMargin, yPos);
-          yPos += lineHeight + 2;
+          ensureSpace(5);
+          const headingBoxY = yPos - 2.5;
+          const headingBoxH = 9;
+          const headingTextX = speechMargin + 2.5;
+          const headingTextY = headingBoxY + 6;
+          doc.setFillColor(sectionColor.bg[0], sectionColor.bg[1], sectionColor.bg[2]);
+          doc.roundedRect(speechMargin, headingBoxY, speechContentWidth, headingBoxH, 2, 2, 'F');
+          doc.setTextColor(sectionColor.text[0], sectionColor.text[1], sectionColor.text[2]);
+          doc.text(title || '—', headingTextX, headingTextY);
+          yPos = headingBoxY + headingBoxH + 6;
 
-          // Body
+          // Body — plain text, no bold numbers (avoids jsPDF mixed-font spacing bugs)
           if (content) {
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(10);
             doc.setTextColor(0, 0, 0);
+            const bodyTextX = headingTextX;
+            const bodyTextWidth = pageWidth - bodyTextX - speechMargin;
             const paragraphs = content.split(/\n{2,}/);
             paragraphs.forEach((para, idx) => {
               const text = para.trim();
               if (!text) return;
-              const wrapped = doc.splitTextToSize(text, speechContentWidth);
+              const wrapped = doc.splitTextToSize(text, bodyTextWidth);
               wrapped.forEach((line: string) => {
                 ensureSpace(1);
-                drawLineWithBoldNumbers(line, speechMargin, yPos);
+                doc.text(line, bodyTextX, yPos);
                 yPos += lineHeight + 0.5;
               });
               if (idx < paragraphs.length - 1) {
-                yPos += lineHeight + 1; // extra gap between paragraphs
+                yPos += lineHeight + 1;
               }
             });
-            yPos += lineHeight + 1; // gap between sections
+            yPos += lineHeight + 1;
           }
         });
 
@@ -2454,33 +2607,150 @@ const FinalResults = () => {
         const planRaw = String(actionPlan).trim();
         const planItems = parseActionPlanItems(planRaw);
         if (planItems.length > 0) {
-          const tableTotalWidth = speechContentWidth;
-          const colWidths = [
-            tableTotalWidth * 0.18,  // Action Name
-            tableTotalWidth * 0.24,  // Addresses
-            tableTotalWidth * 0.32,  // Description
-            tableTotalWidth * 0.26,  // Expected outcome
-          ];
-          const tableBody = planItems.map((item) => [
-            item.actionName || '—',
-            item.addresses || '—',
-            item.description || '—',
-            item.expectedOutcome || '—',
-          ]);
-          autoTable(doc, {
-            head: [['Action Name', 'Addresses', 'Description', 'Expected outcome']],
-            body: tableBody,
-            startY: 28,
-            styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak', ...tableBorder },
-            headStyles: { fillColor: [30, 93, 168], textColor: 255, fontStyle: 'bold', fontSize: 9, ...tableBorder },
-            columnStyles: {
-              0: { cellWidth: colWidths[0] },
-              1: { cellWidth: colWidths[1] },
-              2: { cellWidth: colWidths[2] },
-              3: { cellWidth: colWidths[3] },
-            },
-            margin: { left: speechMargin, right: speechMargin },
-            tableWidth: tableTotalWidth,
+          const leverageColors: Record<string, { bg: [number, number, number]; text: [number, number, number] }> = {
+            'Highest leverage': { bg: [246, 232, 235], text: [146, 27, 56] },
+            'High leverage': { bg: [244, 233, 211], text: [120, 72, 8] },
+            Maintenance: { bg: [229, 244, 231], text: [22, 101, 52] },
+          };
+          const normalizeLeverageLabel = (text: string): string => {
+            const t = String(text || '').trim().toLowerCase();
+            if (t === 'highest leverage') return 'Highest leverage';
+            if (t === 'high leverage') return 'High leverage';
+            if (t === 'maintenance') return 'Maintenance';
+            return '';
+          };
+          const extractLeverage = (actionName: string): { cleanName: string; leverage: string } => {
+            const nameRaw = String(actionName || '').replace(/\*\*/g, '').trim();
+            const m = nameRaw.match(/\b(Highest leverage|High leverage|Maintenance)\b/i);
+            const leverage = normalizeLeverageLabel(m?.[1] ?? '');
+            const cleanName = nameRaw.replace(/\b(Highest leverage|High leverage|Maintenance)\b/i, '').replace(/\s{2,}/g, ' ').trim();
+            return { cleanName: cleanName || '—', leverage };
+          };
+
+          let yPos = 28;
+          const pageHeight = doc.internal.pageSize.height;
+          const bottomMargin = 24;
+          const lineHeight = 5.2;
+          const numberBoxW = 9;
+          const numberBoxH = 9;
+          const numberBoxX = speechMargin;
+          const titleX = numberBoxX + numberBoxW + 3;
+          const badgeRightPadding = 3;
+          const badgeH = 8;
+          const contentX = speechMargin + 2;
+          const contentWidth = speechContentWidth - 4;
+
+          const estimateLines = (text: string, maxWidth: number, fontSize: number): number => {
+            const prevFontSize = doc.getFontSize();
+            doc.setFontSize(fontSize);
+            const wrapped = doc.splitTextToSize(text || '—', maxWidth);
+            doc.setFontSize(prevFontSize);
+            return Math.max(1, wrapped.length);
+          };
+          const ensureSpace = (heightNeeded: number) => {
+            if (yPos + heightNeeded > pageHeight - bottomMargin) {
+              doc.addPage();
+              doc.setFont('helvetica', 'normal');
+              doc.setFontSize(9);
+              doc.setTextColor(0, 0, 0);
+              yPos = 20;
+            }
+          };
+
+          planItems.forEach((item, idx) => {
+            const { cleanName, leverage } = extractLeverage(item.actionName || '');
+            const leverageLabel = leverage || (idx === planItems.length - 1 ? 'Maintenance' : idx === 0 ? 'Highest leverage' : 'High leverage');
+            const leverageStyle = leverageColors[leverageLabel] || leverageColors['High leverage'];
+            const addressesText = item.addresses || '—';
+            const descriptionText = item.description || '—';
+            const outcomeText = item.expectedOutcome || '—';
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            const badgeTextWidth = doc.getTextWidth(leverageLabel);
+            const badgePadX = 3;
+            const badgeW = badgeTextWidth + badgePadX * 2;
+            const badgeX = speechMargin + speechContentWidth - badgeW - badgeRightPadding;
+            const titleMaxWidth = Math.max(30, badgeX - titleX - 4);
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(10);
+            const addressesPrefix = 'Addresses: ';
+            const addressesPrefixWidth = doc.getTextWidth(addressesPrefix);
+            const addressesLines = estimateLines(addressesText, Math.max(20, contentWidth - addressesPrefixWidth), 10);
+            const descriptionLines = estimateLines(descriptionText, contentWidth, 10);
+            const outcomeLabelLines = estimateLines('-> Expected outcome', contentWidth - 4, 9);
+            const outcomeBodyLines = estimateLines(outcomeText, contentWidth - 4, 10);
+            const outcomeBoxH = 6 + (outcomeLabelLines * (lineHeight - 0.4)) + 3 + (outcomeBodyLines * lineHeight) + 4;
+            const itemHeight =
+              12 + // number/title row
+              2 +
+              Math.max(1, addressesLines) * lineHeight +
+              2 +
+              Math.max(1, descriptionLines) * lineHeight +
+              4 +
+              outcomeBoxH +
+              7;
+
+            ensureSpace(itemHeight);
+
+            // Number box
+            doc.setFillColor(234, 234, 248);
+            doc.rect(numberBoxX, yPos, numberBoxW, numberBoxH, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            doc.setTextColor(76, 80, 191);
+            doc.text(String(item.srNo || idx + 1), numberBoxX + numberBoxW / 2, yPos + 6.3, { align: 'center' });
+
+            // Action title
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            doc.setTextColor(26, 26, 26);
+            const titleLines = doc.splitTextToSize(cleanName, titleMaxWidth);
+            doc.text(titleLines, titleX, yPos + 6);
+
+            // Leverage badge
+            doc.setFillColor(leverageStyle.bg[0], leverageStyle.bg[1], leverageStyle.bg[2]);
+            doc.rect(badgeX, yPos + 0.7, badgeW, badgeH, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8.5);
+            doc.setTextColor(leverageStyle.text[0], leverageStyle.text[1], leverageStyle.text[2]);
+            doc.text(leverageLabel, badgeX + badgeW / 2, yPos + 6, { align: 'center' });
+
+            yPos += 14;
+
+            // Addresses line
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(10);
+            doc.setTextColor(90, 90, 90);
+            doc.text(addressesPrefix, contentX, yPos);
+            const addressValueX = contentX + addressesPrefixWidth;
+            const addressWrapped = doc.splitTextToSize(addressesText, Math.max(20, contentWidth - addressesPrefixWidth));
+            doc.text(addressWrapped, addressValueX, yPos);
+            yPos += Math.max(1, addressWrapped.length) * lineHeight + 1.5;
+
+            // Description
+            doc.setTextColor(60, 60, 60);
+            const descWrapped = doc.splitTextToSize(descriptionText, contentWidth);
+            doc.text(descWrapped, contentX, yPos);
+            yPos += Math.max(1, descWrapped.length) * lineHeight + 3.5;
+
+            // Expected outcome box
+            const outcomeBoxY = yPos;
+            doc.setFillColor(234, 243, 227);
+            doc.setDrawColor(146, 183, 117);
+            doc.setLineWidth(0.3);
+            doc.rect(contentX - 1, outcomeBoxY, contentWidth + 2, outcomeBoxH, 'FD');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setTextColor(67, 119, 24);
+            doc.text('Expected outcome', contentX + 2, outcomeBoxY + 5.2);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(10);
+            doc.setTextColor(63, 90, 38);
+            const outcomeWrapped = doc.splitTextToSize(outcomeText, contentWidth - 4);
+            doc.text(outcomeWrapped, contentX + 2, outcomeBoxY + 11);
+            yPos += outcomeBoxH + 5;
           });
         } else {
           const planBody = normalizeActionPlanText(planRaw);
@@ -2515,7 +2785,7 @@ const FinalResults = () => {
         disclaimerY += lineHeight;
       });
       // Single final pass: redraw footer on every page with consistent font (helvetica 8pt) and correct "Page X of Y"
-      const totalPages = doc.internal.getNumberOfPages();
+      const totalPages = (doc.internal as any).getNumberOfPages();
       const footerYUniform = doc.internal.pageSize.height - 8;
       for (let p = 1; p <= totalPages; p++) {
         doc.setPage(p);
@@ -2720,12 +2990,11 @@ const FinalResults = () => {
                 return vals.reduce((s, v) => s + v, 0) / vals.length;
               };
               const metricConfig = [
-                { key: 'overall_speech_quality', name: 'Overall speech quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}/100`), ideal: '85-100' },
-                { key: 'speaking_pace_wpm', name: 'Speaking pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), ideal: '120-160' },
-                { key: 'filler_words', name: 'Filler words', getCandidate: () => avg('filler_words', (v) => `${Math.round(v)}`), ideal: '< 3-5 total' },
-                { key: 'filler_density', name: 'Filler density', getCandidate: () => avg('filler_density', (v) => `${Math.round(v)}%`), ideal: '< 2-5%' },
-                { key: 'pause_quality_score', name: 'Pause & pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}/100`), ideal: '80-100' },
-                { key: 'voice_confidence', name: 'Voice confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}/100`), ideal: '80-100' },
+                { key: 'overall_speech_quality', name: 'Overall speech quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}/100`), ideal: '85–100' },
+                { key: 'speaking_pace_wpm', name: 'Speaking pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), ideal: '120–160' },
+                { key: 'filler_score', name: 'Filler score', getCandidate: () => avg('filler_score', (v) => `${Math.round(v)}/100`), ideal: '85–100' },
+                { key: 'pause_quality_score', name: 'Pause & pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}/100`), ideal: '85–100' },
+                { key: 'voice_confidence', name: 'Voice confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}/100`), ideal: '80–100' },
               ];
               const metrics = metricConfig
                 .map((m) => {
@@ -2856,7 +3125,10 @@ const FinalResults = () => {
                       >
                           <div className="space-y-3 sm:space-y-4">
                             <div className="flex items-center justify-between gap-2 min-w-0">
-                              <h4 className="font-bold text-sm sm:text-lg leading-tight break-words">{param.name}</h4>
+                              <div className="min-w-0">
+                                <p className="text-xs sm:text-sm font-semibold uppercase tracking-wide opacity-80">Competency:</p>
+                                <h4 className="font-bold text-sm sm:text-lg leading-tight break-words">{param.name}</h4>
+                              </div>
                             {param.isPersonal ? (
                               <div className={`px-3 py-1 rounded-full text-sm font-medium ${
                                 selectedCompetencyKey === paramKey
@@ -2987,7 +3259,7 @@ selectedCompetencyKey === paramKey
                                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm sm:text-base">
                                               <div><span className="text-gray-600">Overall speech quality</span><span className="font-semibold block">{b.overall_speech_quality != null ? `${b.overall_speech_quality}/100` : '-'}</span></div>
                                               <div><span className="text-gray-600">Speaking pace</span><span className="font-semibold block">{b.speaking_pace_wpm ?? '-'} WPM</span></div>
-                                              <div><span className="text-gray-600">Filler words</span><span className="font-semibold block">{b.filler_words ?? '-'}{b.filler_density != null ? ` (${b.filler_density}%)` : ''}{b.filler_examples?.length ? ` (${b.filler_examples.join(', ')})` : ''}</span></div>
+                                              <div><span className="text-gray-600">Filler score</span><span className="font-semibold block">{b.filler_score != null ? `${b.filler_score}/100` : '-'}{b.filler_rate_per_min != null ? ` (${Number(b.filler_rate_per_min).toFixed(1)}/min)` : ''}</span></div>
                                               <div><span className="text-gray-600">Pause & pacing</span><span className="font-semibold block">{b.pause_quality_score != null ? `${b.pause_quality_score}/100` : '-'}</span></div>
                                               <div><span className="text-gray-600">Voice confidence</span><span className="font-semibold block">{b.voice_confidence != null ? `${b.voice_confidence}/100` : '-'}</span></div>
                                             </div>

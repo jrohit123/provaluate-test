@@ -39,6 +39,10 @@ export function ReferralsSection() {
   const [planSubmitting, setPlanSubmitting] = useState(false);
   const [planError, setPlanError] = useState('');
   const [candidateMobile, setCandidateMobile] = useState('');
+  const isCurrentPlanFree = Boolean(
+    currentPlan &&
+    ((Number(currentPlan.cost) || 0) <= 0 || /free/i.test(String(currentPlan.plan_name || '')))
+  );
   const { toast } = useToast();
 
   const getAuthHeaders = async (): Promise<Record<string, string>> => {
@@ -375,7 +379,9 @@ export function ReferralsSection() {
           <DialogHeader>
             <DialogTitle>Plan settings</DialogTitle>
             <DialogDescription>
-              Choose your current plan or switch to a different plan. Up to 50% of your referral balance can be applied.
+              {isCurrentPlanFree
+                ? 'Switch to a different paid plan. Up to 50% of your referral balance can be applied.'
+                : 'Choose your current plan or switch to a different plan. Up to 50% of your referral balance can be applied.'}
             </DialogDescription>
           </DialogHeader>
           {planError && (
@@ -385,7 +391,7 @@ export function ReferralsSection() {
           )}
           {planStep === 'choose' && (
             <div className="space-y-3">
-              {currentPlan && (
+              {currentPlan && !isCurrentPlanFree && (
                 <Button
                   type="button"
                   variant="outline"

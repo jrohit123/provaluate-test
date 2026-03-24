@@ -22,7 +22,7 @@ const stepItems = [
   { title: 'Customize Interview', icon: Settings, path: '/candidate-dashboard/jds/configure' },
   { title: 'Generate Interview', icon: UserPlus, path: '/candidate-dashboard/jds/create' },
   { title: 'Performance Report', icon: Briefcase, path: '/candidate-dashboard/interviews' },
-  { title: 'Referrals', icon: Share2, path: '/candidate-dashboard/referrals' },
+  { title: 'Revenue & Billing', icon: Share2, path: '/candidate-dashboard/referrals' },
 ];
 
 function getInitials(firstName?: string, lastName?: string): string {

@@ -146,11 +146,10 @@ type InterviewRow = { id: string; position: string | null; status: string | null
 type SpeechMetrics = {
   overall_speech_quality?: number;
   speaking_pace_wpm?: number;
-  filler_density?: number;
+  filler_score?: number;
+  filler_rate_per_min?: number;
   pause_quality_score?: number;
   voice_confidence?: number;
-  stress_score?: number;
-  filler_words?: number;
 };
 type ProgressItem = {
   interview_id: string;
@@ -279,13 +278,11 @@ function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: str
     yAxisLabel: string;
     tickFormatter?: (v: number) => string;
   }[] = [
-    { key: 'overall_speech_quality', label: 'Overall Speech Quality', description: 'A composite score (0–100) from the clarity, fluency, and delivery quality of your spoken answers.', unit: '/100', color: 'hsl(199, 89%, 48%)', domain: [0, 100], idealRange: [85, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
+    { key: 'overall_speech_quality', label: 'Overall Speech Quality', description: 'Composite score (0–100) from pace, filler score, pauses, and voice confidence.', unit: '/100', color: 'hsl(199, 89%, 48%)', domain: [0, 100], idealRange: [85, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
     { key: 'speaking_pace_wpm', label: 'Speaking Pace (WPM)', description: 'Words per minute. Reflects whether you speak at a clear, steady rate that is easy for the listener to follow.', unit: ' WPM', color: 'hsl(142, 71%, 45%)', domain: [0, 200], idealRange: [120, 160], yAxisLabel: 'WPM', tickFormatter: (v) => `${Math.round(v)}` },
-    { key: 'filler_words', label: 'Filler Words', description: 'Count of filler words or phrases (e.g. "um", "like", "you know") in your answer. Lower is better for clearer delivery.', unit: '', color: 'hsl(38, 92%, 50%)', domain: [0, 20], idealRange: [0, 5], yAxisLabel: 'Count', tickFormatter: (v) => `${Math.round(v)}` },
-    { key: 'filler_density', label: 'Filler Density', description: 'Percentage of your words that are fillers. Lower is better; it shows clearer, more confident speech.', unit: '%', color: 'hsl(38, 92%, 50%)', domain: [0, 20], idealRange: [0, 5], yAxisLabel: 'Filler density (%)', tickFormatter: (v) => v.toFixed(1) },
-    { key: 'pause_quality_score', label: 'Pause & Pacing', description: 'How well you use pauses and rhythm in your speech (0–100). Good pacing helps the listener follow and shows control.', unit: '/100', color: 'hsl(262, 83%, 58%)', domain: [0, 100], idealRange: [80, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
+    { key: 'filler_score', label: 'Filler Score', description: 'Audio-detected filler sounds, scored 0–100 (higher = fewer fillers).', unit: '/100', color: 'hsl(38, 92%, 50%)', domain: [0, 100], idealRange: [85, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
+    { key: 'pause_quality_score', label: 'Pause & Pacing', description: 'How well you use pauses and rhythm in your speech (0–100). Good pacing helps the listener follow and shows control.', unit: '/100', color: 'hsl(262, 83%, 58%)', domain: [0, 100], idealRange: [85, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
     { key: 'voice_confidence', label: 'Voice Confidence', description: 'How confident and assured your voice sounds (0–100). Higher scores suggest you came across as self-assured and clear.', unit: '/100', color: 'hsl(199, 89%, 48%)', domain: [0, 100], idealRange: [80, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
-    { key: 'stress_score', label: 'Stress Level', description: 'Indication of stress or tension in your voice (0–100). Lower is better; it suggests a calmer, more composed delivery.', unit: '/100', color: 'hsl(0, 84%, 60%)', domain: [0, 100], idealRange: [0, 30], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
   ];
   const speechChartDataByMetric = speechMetricConfigs.map((config) => {
     const data = progressSortedByDate

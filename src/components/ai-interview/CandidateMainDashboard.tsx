@@ -152,10 +152,10 @@ export function CandidateMainDashboard({ candidateId, candidateEmail, onNavigate
   }, [fetchPlanDetails]);
 
   const steps = [
-    { title: 'Interview config', icon: Settings, path: '/candidate-dashboard/jds/configure' },
-    { title: 'Interview creation', icon: UserPlus, path: '/candidate-dashboard/jds/create' },
-    { title: 'Interview dashboard', icon: Briefcase, path: '/candidate-dashboard/interviews' },
-    { title: 'Referrals', icon: Share2, path: '/candidate-dashboard/referrals' },
+    { title: 'Customize Interview', icon: Settings, path: '/candidate-dashboard/jds/configure' },
+    { title: 'Generate Interview', icon: UserPlus, path: '/candidate-dashboard/jds/create' },
+    { title: 'Performance Report', icon: Briefcase, path: '/candidate-dashboard/interviews' },
+    { title: 'Revenue & Billing', icon: Share2, path: '/candidate-dashboard/referrals' },
   ];
 
   const quickActionCardClass =
@@ -177,6 +177,12 @@ export function CandidateMainDashboard({ candidateId, candidateEmail, onNavigate
         </CardHeader>
         <CardContent className="flex flex-col items-center justify-center min-h-[140px] py-8 px-3 sm:px-6">
           <div className="flex flex-row flex-wrap sm:flex-nowrap gap-6 sm:gap-8 lg:gap-12 w-full max-w-5xl justify-center items-center">
+            <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center">
+              <div className="text-lg sm:text-2xl font-bold text-gray-900 w-full text-center">
+                {loadingPlan ? '...' : (currentPlanDetails?.plan_name || '—')}
+              </div>
+              <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words w-full text-center">CURRENT PLAN</div>
+            </div>
             <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center">
               <div className="text-lg sm:text-2xl font-bold text-gray-900 w-full text-center">
                 {loadingPlan ? '...' : (currentPlanDetails?.interview_count != null ? `${stats.interviewsCompleted} / ${currentPlanDetails.interview_count}` : '—')}
