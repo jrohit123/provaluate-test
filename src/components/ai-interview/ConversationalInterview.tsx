@@ -2443,7 +2443,11 @@ const ConversationalInterview = () => {
             if (questionVideoBlobToUse) {
               try {
                 audioBlobToSend = await extractWavFromWebMBlob(questionVideoBlobToUse);
-                if (audioBlobToSend) console.log('✅ Client-side WAV extracted from WebM for speech analysis');
+                if (audioBlobToSend && audioBlobToSend.size > 1000) {
+                  console.log('✅ WAV extracted — wav size:', audioBlobToSend.size, '| webm size:', questionVideoBlobToUse.size);
+                } else {
+                  console.warn('⚠️ WAV extraction returned null or too small.', 'webm type:', questionVideoBlobToUse.type, 'webm size:', questionVideoBlobToUse.size);
+                }
               } catch (e) {
                 console.warn('WAV extraction from WebM failed, submitting video only:', e);
               }

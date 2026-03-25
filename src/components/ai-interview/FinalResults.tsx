@@ -57,8 +57,8 @@ function getSpeechMetricRating(metricKey: string, value: number): SpeechMetricRa
       if (value >= 70) return 'Average';
       return 'Needs Work';
     case 'speaking_pace_wpm':
-      if (value >= 120 && value <= 160) return 'Good';
-      if ((value >= 100 && value < 120) || (value > 160 && value <= 185)) return 'Average';
+      if (value >= 110 && value <= 170) return 'Good';
+      if ((value >= 100 && value < 110) || (value > 170 && value <= 185)) return 'Average';
       return 'Needs Work';
     case 'filler_score':
       if (value >= 85) return 'Good';
@@ -1327,7 +1327,7 @@ const FinalResults = () => {
       };
       const idealRanges: { key: string; name: string; getCandidate: () => string | null; getNum: () => number | null; ideal: string }[] = [
         { key: 'overall_speech_quality', name: 'Overall Speech Quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}`), getNum: () => avgNum('overall_speech_quality'), ideal: '85–100' },
-        { key: 'speaking_pace_wpm', name: 'Speaking Pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), getNum: () => avgNum('speaking_pace_wpm'), ideal: '120–160 WPM' },
+        { key: 'speaking_pace_wpm', name: 'Speaking Pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), getNum: () => avgNum('speaking_pace_wpm'), ideal: '110–170 WPM' },
         { key: 'filler_score', name: 'Filler Score', getCandidate: () => avg('filler_score', (v) => `${Math.round(v)}`), getNum: () => avgNum('filler_score'), ideal: '85–100' },
         { key: 'pause_quality_score', name: 'Pause & Pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}`), getNum: () => avgNum('pause_quality_score'), ideal: '85–100' },
         { key: 'voice_confidence', name: 'Voice Confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}`), getNum: () => avgNum('voice_confidence'), ideal: '80–100' },
@@ -2332,7 +2332,7 @@ const FinalResults = () => {
             name: 'Speaking Pace (WPM)',
             getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`),
             getNum: () => avgNum('speaking_pace_wpm'),
-            ideal: '120–160 WPM',
+            ideal: '110–170 WPM',
             definition: 'Words per minute calculated from audio duration.',
           },
           {
@@ -2991,7 +2991,7 @@ const FinalResults = () => {
               };
               const metricConfig = [
                 { key: 'overall_speech_quality', name: 'Overall speech quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}/100`), ideal: '85–100' },
-                { key: 'speaking_pace_wpm', name: 'Speaking pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), ideal: '120–160' },
+                { key: 'speaking_pace_wpm', name: 'Speaking pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), ideal: '110–170' },
                 { key: 'filler_score', name: 'Filler score', getCandidate: () => avg('filler_score', (v) => `${Math.round(v)}/100`), ideal: '85–100' },
                 { key: 'pause_quality_score', name: 'Pause & pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}/100`), ideal: '85–100' },
                 { key: 'voice_confidence', name: 'Voice confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}/100`), ideal: '80–100' },
@@ -3260,8 +3260,27 @@ selectedCompetencyKey === paramKey
                                               <div><span className="text-gray-600">Overall speech quality</span><span className="font-semibold block">{b.overall_speech_quality != null ? `${b.overall_speech_quality}/100` : '-'}</span></div>
                                               <div><span className="text-gray-600">Speaking pace</span><span className="font-semibold block">{b.speaking_pace_wpm ?? '-'} WPM</span></div>
                                               <div><span className="text-gray-600">Filler score</span><span className="font-semibold block">{b.filler_score != null ? `${b.filler_score}/100` : '-'}{b.filler_rate_per_min != null ? ` (${Number(b.filler_rate_per_min).toFixed(1)}/min)` : ''}</span></div>
-                                              <div><span className="text-gray-600">Pause & pacing</span><span className="font-semibold block">{b.pause_quality_score != null ? `${b.pause_quality_score}/100` : '-'}</span></div>
-                                              <div><span className="text-gray-600">Voice confidence</span><span className="font-semibold block">{b.voice_confidence != null ? `${b.voice_confidence}/100` : '-'}</span></div>
+                                              <div>
+                                                <span className="text-gray-600">Pause & pacing</span>
+                                                <span className="font-semibold flex items-center gap-2 flex-wrap">
+                                                  {b.pause_quality_score != null ? `${b.pause_quality_score}/100` : '-'}
+                                                  {b.cold_start_detected && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-medium">⚠ Hesitation at start</span>
+                                                  )}
+                                                  {b.trailing_off_detected && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-medium">⚠ Trailed off at close</span>
+                                                  )}
+                                                </span>
+                                              </div>
+                                              <div>
+                                                <span className="text-gray-600">Voice confidence</span>
+                                                <span className="font-semibold flex items-center gap-2 flex-wrap">
+                                                  {b.voice_confidence != null ? `${b.voice_confidence}/100` : '-'}
+                                                  {b.uptalk_ratio != null && Number(b.uptalk_ratio) > 0.35 && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-medium">⚠ Uptalk detected</span>
+                                                  )}
+                                                </span>
+                                              </div>
                                             </div>
                                           </>
                                         );
