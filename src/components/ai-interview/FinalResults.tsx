@@ -98,7 +98,7 @@ function parseSpeechReportSections(reportText: string): { section: string; conte
   while ((m = regexA.exec(text)) !== null) {
     const section = m[1].trim();
     const content = m[2].trim();
-    if (section && (content || /overall|where|what|comparison|progress/i.test(section))) {
+    if (section && (content || /overall|where|what|comparison|progress|delivery|habits|protect/i.test(section))) {
       sections.push({ section, content: content || '—' });
     }
   }
@@ -116,6 +116,11 @@ function parseSpeechReportSections(reportText: string): { section: string; conte
     /^comparison with previous interviews?$/i,
     /^progress over your interviews?$/i,
     /^where you did well$/i,
+    /^how your delivery held up across the session$/i,
+    /^your consistent habits$/i,
+    /^where pressure changed your delivery$/i,
+    /^what to protect$/i,
+    /^what an interviewer would have noticed$/i,
   ];
   const isKnownHeader = (line: string) => {
     const t = line.trim().replace(/:$/, '').trim();
@@ -166,6 +171,7 @@ interface ActionPlanItem {
   addresses: string;
   description: string;
   expectedOutcome: string;
+  evolutionLabel?: string;
 }
 
 /**
@@ -180,6 +186,11 @@ function parseActionPlanItems(raw: string): ActionPlanItem[] {
   const text = raw.replace(/''/g, "'").trim();
   const items: ActionPlanItem[] = [];
 
+  const extractEvolutionLabel = (s: string): string => {
+    const evoMatch = s.match(/\[(IMPROVED|UNCHANGED|NEW)\]/i);
+    return evoMatch?.[1]?.toUpperCase() ?? '';
+  };
+
   // Format A: "1. Action name: Pace Control Practice" then **Addresses:**, **Description:**, **Expected outcome:**
   const blocksA = text.split(/(?:^|\n)\s*(\d+)\.\s*Action name:\s*/i);
   if (blocksA.length > 1) {
@@ -187,12 +198,13 @@ function parseActionPlanItems(raw: string): ActionPlanItem[] {
       const srNo = parseInt(blocksA[idx], 10) || items.length + 1;
       const rest = (blocksA[idx + 1] ?? '').trim();
       const firstLine = rest.split(/\n/)[0] ?? '';
-      const actionName = firstLine.replace(/\*\*Addresses:\*\*/i, '').trim();
+      const actionName = firstLine.replace(/\*\*Addresses:\*\*/i, '').replace(/\[(IMPROVED|UNCHANGED|NEW)\]/i, '').trim();
+      const evolutionLabel = extractEvolutionLabel(firstLine);
       const block = rest.replace(/^[^\n]*\n?/, '').trim();
       const addresses = block.match(/\*\*Addresses:\*\*\s*([\s\S]*?)(?=\*\*Description:\*\*|\*\*Expected outcome:\*\*|\n\s*\d+\.\s*Action name:|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
       const description = block.match(/\*\*Description:\*\*\s*([\s\S]*?)(?=\*\*Expected outcome:\*\*|\n\s*\d+\.\s*Action name:|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
       const expectedOutcome = block.match(/\*\*Expected outcome:\*\*\s*([\s\S]*?)(?=\*\*Addresses:\*\*|\*\*Description:\*\*|\n\s*\d+\.\s*Action name:|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
-      items.push({ srNo, actionName, addresses, description, expectedOutcome });
+      items.push({ srNo, actionName, addresses, description, expectedOutcome, evolutionLabel });
     }
     if (items.length > 0) return items;
   }
@@ -204,29 +216,29 @@ function parseActionPlanItems(raw: string): ActionPlanItem[] {
     const srNo = parseInt(m[1], 10);
     const actionName = m[2].trim();
     const block = m[3];
+    const evolutionLabel = extractEvolutionLabel(block);
     const addresses = block.match(/\*\*Addresses:\*\*\s*([\s\S]*?)(?=\n\s*\*\*Description:\*\*|\*\*Expected outcome:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
     const description = block.match(/\*\*Description:\*\*\s*([\s\S]*?)(?=\*\*Expected outcome:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
     const expectedOutcome = block.match(/\*\*Expected outcome:\*\*\s*([\s\S]*?)(?=\*\*Addresses:\*\*|\*\*Description:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
-    items.push({ srNo, actionName, addresses, description, expectedOutcome });
+    items.push({ srNo, actionName, addresses, description, expectedOutcome, evolutionLabel });
   }
   if (items.length > 0) return items;
 
   // Format C (fallback): "1. Plain Title" (no bold, no "Action name:" prefix) then **Addresses:**, **Description:**, **Expected outcome:**
-  // Catches older/inconsistent LLM outputs so they also render as a table.
   const blocksC = text.split(/(?:^|\n)\s*(\d+)\.\s+(?!\*\*)(?!Action name:)/i);
   if (blocksC.length > 1) {
     for (let idx = 1; idx + 1 < blocksC.length; idx += 2) {
       const srNo = parseInt(blocksC[idx], 10) || items.length + 1;
       const rest = (blocksC[idx + 1] ?? '').trim();
       const firstLine = rest.split(/\n/)[0] ?? '';
-      // Only treat as an item if the block actually contains at least one of the expected labels
       if (!/\*\*(Addresses|Description|Expected outcome):/i.test(rest)) continue;
-      const actionName = firstLine.replace(/\*\*(Addresses|Description|Expected outcome):/i, '').trim();
+      const actionName = firstLine.replace(/\*\*(Addresses|Description|Expected outcome):/i, '').replace(/\[(IMPROVED|UNCHANGED|NEW)\]/i, '').trim();
+      const evolutionLabel = extractEvolutionLabel(firstLine + '\n' + rest);
       const block = rest.replace(/^[^\n]*\n?/, '').trim();
       const addresses = block.match(/\*\*Addresses:\*\*\s*([\s\S]*?)(?=\*\*Description:\*\*|\*\*Expected outcome:\*\*|\n\s*\d+\.\s|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
       const description = block.match(/\*\*Description:\*\*\s*([\s\S]*?)(?=\*\*Expected outcome:\*\*|\n\s*\d+\.\s|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
       const expectedOutcome = block.match(/\*\*Expected outcome:\*\*\s*([\s\S]*?)(?=\*\*Addresses:\*\*|\*\*Description:\*\*|\n\s*\d+\.\s|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
-      items.push({ srNo, actionName, addresses, description, expectedOutcome });
+      items.push({ srNo, actionName, addresses, description, expectedOutcome, evolutionLabel });
     }
   }
   return items;
@@ -1467,8 +1479,11 @@ const FinalResults = () => {
           cell.alignment = { vertical: 'middle', wrapText: true };
         });
         planItems.forEach((item) => {
+          const nameWithEvo = item.evolutionLabel
+            ? `${item.actionName || '—'} [${item.evolutionLabel}]`
+            : (item.actionName || '—');
           speechSheet.addRow([
-            item.actionName || '—',
+            nameWithEvo,
             item.addresses || '—',
             item.description || '—',
             item.expectedOutcome || '—',
@@ -2536,11 +2551,12 @@ const FinalResults = () => {
         };
 
         const speechSectionColorMap: Record<string, { bg: [number, number, number]; text: [number, number, number] }> = {
-          'how you sounded to the listener': { bg: [232, 244, 255], text: [26, 86, 219] }, // blue
-          'clarity and fluency': { bg: [232, 244, 255], text: [26, 86, 219] }, // blue
-          'confidence signals': { bg: [232, 244, 255], text: [26, 86, 219] }, // blue
-          'what to protect': { bg: [240, 253, 244], text: [4, 120, 87] }, // green
-          'what an interviewer would have noticed': { bg: [255, 251, 235], text: [180, 83, 9] }, // amber
+          'how your delivery held up across the session': { bg: [232, 244, 255], text: [26, 86, 219] },
+          'your consistent habits': { bg: [232, 244, 255], text: [26, 86, 219] },
+          'where pressure changed your delivery': { bg: [232, 244, 255], text: [26, 86, 219] },
+          'what to protect': { bg: [240, 253, 244], text: [4, 120, 87] },
+          'what an interviewer would have noticed': { bg: [255, 251, 235], text: [180, 83, 9] },
+          'progress over your interviews': { bg: [245, 240, 255], text: [107, 70, 193] },
         };
 
         narrativeSections.forEach((section, sectionIdx) => {
@@ -2665,12 +2681,30 @@ const FinalResults = () => {
             const descriptionText = item.description || '—';
             const outcomeText = item.expectedOutcome || '—';
 
+            const evoLabel = item.evolutionLabel || '';
+            const evoColors: Record<string, { bg: [number, number, number]; text: [number, number, number] }> = {
+              'IMPROVED': { bg: [220, 252, 231], text: [22, 101, 52] },
+              'UNCHANGED': { bg: [243, 244, 246], text: [75, 85, 99] },
+              'NEW': { bg: [219, 234, 254], text: [30, 64, 175] },
+            };
+            const evoStyle = evoColors[evoLabel];
+
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(11);
             const badgeTextWidth = doc.getTextWidth(leverageLabel);
             const badgePadX = 3;
             const badgeW = badgeTextWidth + badgePadX * 2;
-            const badgeX = speechMargin + speechContentWidth - badgeW - badgeRightPadding;
+
+            let evoBadgeW = 0;
+            const evoBadgeGap = 2;
+            if (evoStyle) {
+              doc.setFontSize(7.5);
+              const evoTextWidth = doc.getTextWidth(evoLabel);
+              evoBadgeW = evoTextWidth + badgePadX * 2;
+            }
+
+            const totalBadgeWidth = badgeW + (evoStyle ? evoBadgeGap + evoBadgeW : 0);
+            const badgeX = speechMargin + speechContentWidth - totalBadgeWidth - badgeRightPadding;
             const titleMaxWidth = Math.max(30, badgeX - titleX - 4);
 
             doc.setFont('helvetica', 'normal');
@@ -2716,6 +2750,17 @@ const FinalResults = () => {
             doc.setFontSize(8.5);
             doc.setTextColor(leverageStyle.text[0], leverageStyle.text[1], leverageStyle.text[2]);
             doc.text(leverageLabel, badgeX + badgeW / 2, yPos + 6, { align: 'center' });
+
+            // Evolution label badge (only for follow-up interviews)
+            if (evoStyle) {
+              const evoBadgeX = badgeX + badgeW + evoBadgeGap;
+              doc.setFillColor(evoStyle.bg[0], evoStyle.bg[1], evoStyle.bg[2]);
+              doc.rect(evoBadgeX, yPos + 0.7, evoBadgeW, badgeH, 'F');
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(7.5);
+              doc.setTextColor(evoStyle.text[0], evoStyle.text[1], evoStyle.text[2]);
+              doc.text(evoLabel, evoBadgeX + evoBadgeW / 2, yPos + 6, { align: 'center' });
+            }
 
             yPos += 14;
 
