@@ -231,7 +231,7 @@ const Impact = () => {
             <p className="mt-8 text-center text-lg sm:text-xl text-black font-medium">
               Want to know more about how we assess candidates and solve hiring problems?{" "}
               <a
-                href="https://spark.aitamate.com/Brochure/ProValuate.html"
+                href="https://aitamate.com/provaluate-blog.html"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-600 font-semibold underline hover:no-underline"
