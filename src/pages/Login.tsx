@@ -325,11 +325,9 @@ const Login = () => {
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 hidden sm:block"></h1>
             </div>
             <div className="flex items-center space-x-3 sm:space-x-6">
-              {/* 
-              <Link to="/candidate-login" className="hidden sm:inline-block text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
+              {/* <Link to="/candidate-login" className="hidden sm:inline-block text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
                 Candidate login
-              </Link>
-              */}
+              </Link> */}
               {/* Desktop: Pricing & Impact visible */}
               <a href="/pricing" className="hidden sm:inline-block text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
                 Pricing
@@ -350,15 +348,13 @@ const Login = () => {
                 </SheetTrigger>
                 <SheetContent side="right" className="w-56">
                   <nav className="flex flex-col gap-4 pt-8">
-                    {/* 
-                    <Link
+                    {/* <Link
                       to="/candidate-login"
                       className="text-base font-medium text-gray-700 hover:text-gray-900 transition-colors"
                       onClick={() => setMobileMenuOpen(false)}
                     >
                       Candidate login
-                    </Link>
-                    */}
+                    </Link> */}
                     <a
                       href="/pricing"
                       className="text-base font-medium text-gray-700 hover:text-gray-900 transition-colors"
