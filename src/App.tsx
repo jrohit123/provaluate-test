@@ -24,6 +24,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import CandidateSignUp from "./pages/CandidateSignUp";
 import CandidateLogin from "./pages/CandidateLogin";
+import CandidatePricing from "./pages/CandidatePricing";
 import CandidateOnboarding from "./pages/CandidateOnboarding";
 import CandidateDashboard from "./pages/CandidateDashboard";
 
@@ -220,6 +221,8 @@ const App = () => {
             <Route path="/login" element={<Login />} />
             <Route path="/candidate-signup" element={<CandidateSignUp />} />
             <Route path="/candidate-login" element={<CandidateLogin />} />
+            <Route path="/candidate-login/:referralSlug" element={<Navigate to="/candidate-login" replace />} />
+            <Route path="/candidate-pricing" element={<CandidatePricing />} />
             <Route path="/candidate-onboarding" element={<CandidateOnboarding />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/onboarding" element={<Onboarding />} />
@@ -269,6 +272,11 @@ const App = () => {
               </CandidateProtectedRoute>
             } />
             <Route path="/candidate-dashboard/interviews" element={
+              <CandidateProtectedRoute>
+                <CandidateDashboard />
+              </CandidateProtectedRoute>
+            } />
+            <Route path="/candidate-dashboard/referrals" element={
               <CandidateProtectedRoute>
                 <CandidateDashboard />
               </CandidateProtectedRoute>

@@ -175,7 +175,7 @@ const InterviewSetup = () => {
         </Button>
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Setup AI Interview</h1>
-          <p className="text-gray-600 mt-2">Configure your AI interview parameters</p>
+          <p className="text-gray-600 mt-2">Configure your AI interview competencies</p>
         </div>
       </div>
 

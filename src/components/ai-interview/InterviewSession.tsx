@@ -71,6 +71,7 @@ const InterviewSession = () => {
   const streamRef = useRef(null);
   const lastRecordingToastRef = useRef<string | null>(null);
   const lastConnectionToastRef = useRef<string | null>(null);
+  const priorAnswerKeyphrasesRef = useRef<string[]>([]);
 
 
 
@@ -696,6 +697,9 @@ const InterviewSession = () => {
       }
 
       const result = await response.json();
+      priorAnswerKeyphrasesRef.current = Array.isArray((result as { keyphrases?: string[] }).keyphrases)
+        ? (result as { keyphrases: string[] }).keyphrases
+        : [];
       
       // Add answer to local state
       const newAnswer: Answer = {
@@ -778,6 +782,7 @@ const InterviewSession = () => {
     setIsTransitioning(true);
     
     try {
+      const kp = priorAnswerKeyphrasesRef.current;
       const response = await apiCall(API_CONFIG.ENDPOINTS.GENERATE_QUESTION, {
         method: 'POST',
         headers: {
@@ -785,7 +790,8 @@ const InterviewSession = () => {
         },
         body: JSON.stringify({
           interview_id: interviewData.interviewId,
-          current_question_index: currentQuestionIndex + 1
+          current_question_index: currentQuestionIndex + 1,
+          ...(Array.isArray(kp) && kp.length > 0 ? { prior_answer_keyphrases: kp } : {}),
         }),
       });
 
@@ -793,6 +799,7 @@ const InterviewSession = () => {
         throw new Error('Failed to generate question');
       }
 
+      priorAnswerKeyphrasesRef.current = [];
       const data = await response.json();
       
       // First, increment the question index

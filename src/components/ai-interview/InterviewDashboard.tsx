@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-hot-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,7 +24,8 @@ import {
   ChevronDown,
   ChevronUp,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Link
 } from 'lucide-react';
 
 interface Interview {
@@ -73,6 +75,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
   const [savedComments, setSavedComments] = useState<{[key: string]: string}>({});
   const [expandedComments, setExpandedComments] = useState<{[key: string]: boolean}>({});
   const [expandDialogStates, setExpandDialogStates] = useState<{[key: string]: boolean}>({});
+  const [linkModalInterviewId, setLinkModalInterviewId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchInterviews();
@@ -515,9 +518,14 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                           <div className="text-xs text-gray-500 break-words mb-2">
                             {interview.candidate_email}
                           </div>
-                          <Badge variant="outline" className="text-xs">
+                          <button
+                            type="button"
+                            onClick={() => setLinkModalInterviewId(interview.id)}
+                            className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2.5 py-0.5 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                          >
+                            <Link className="h-3 w-3 flex-shrink-0" />
                             {interview.position}
-                          </Badge>
+                          </button>
                         </div>
                         <Badge className={`${getStatusColor(interview.status)} text-xs`}>
                           {getStatusIcon(interview.status)}
@@ -817,9 +825,14 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                           </div>
                         </td>
                         <td className="py-3 px-4 border-r border-gray-200">
-                          <Badge variant="outline" className="text-xs">
+                          <button
+                            type="button"
+                            onClick={() => setLinkModalInterviewId(interview.id)}
+                            className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2.5 py-0.5 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                          >
+                            <Link className="h-3 w-3 flex-shrink-0" />
                             {interview.position}
-                          </Badge>
+                          </button>
                         </td>
                         <td className="py-3 px-4 border-r border-gray-200">
                           <Badge className={`${getStatusColor(interview.status)} text-xs`}>
@@ -1023,6 +1036,53 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
           )}
         </CardContent>
       </Card>
+
+      {/* Interview link modal - click Position to copy/open link */}
+      <Dialog open={!!linkModalInterviewId} onOpenChange={(open) => !open && setLinkModalInterviewId(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Interview link</DialogTitle>
+            <DialogDescription>
+              {linkModalInterviewId && (() => {
+                const inv = interviews.find(i => i.id === linkModalInterviewId);
+                return inv ? `Share this link with the candidate for ${inv.position}` : 'Copy or open the interview link.';
+              })()}
+            </DialogDescription>
+          </DialogHeader>
+          {linkModalInterviewId && (() => {
+            const link = `${window.location.origin}/interview/${linkModalInterviewId}`;
+            const inv = interviews.find(i => i.id === linkModalInterviewId);
+            return (
+              <div className="space-y-4">
+                <Input
+                  readOnly
+                  value={link}
+                  className="font-mono text-sm"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(link);
+                      toast.success('Interview link copied to clipboard!');
+                    }}
+                  >
+                    Copy link
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => window.open(link, '_blank', 'noopener,noreferrer')}
+                  >
+                    Open in new tab
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
     </div>
   );

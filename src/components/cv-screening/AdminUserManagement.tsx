@@ -36,6 +36,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
   const [selectedRechargePlan, setSelectedRechargePlan] = useState<string>('');
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [cancellingDowngrade, setCancellingDowngrade] = useState(false);
 
   // Compute admin status after all hooks
   const isAdmin = user?.profile?.role === 'admin';
@@ -69,6 +70,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
             .from('plans')
             .select('*')
             .eq('plan_name', companyData.selected_plan)
+            .eq('plan_type', companyData.plan_type || 'combo')
             .single();
           console.log('Fetched plan:', planData);
           setPlan(planData);
@@ -234,12 +236,13 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
     setChangingPlan(true);
     try {
       const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
-      const selectedPlanData = availablePlans.find(p => p.plan_name === selectedNewPlan);
+      const selectedPlanData = availablePlans.find(p => p.plan_id === selectedNewPlan);
       
       if (!selectedPlanData) {
         throw new Error('Selected plan not found');
       }
 
+      const planName = selectedPlanData.plan_name;
       const currentPlanCost = plan.plan_cost || 0;
       const newPlanCost = selectedPlanData.plan_cost || 0;
       
@@ -251,24 +254,24 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
       if (isUpgrade) {
         endpoint = '/payments/upgrade-plan';
       } else if (isDowngrade) {
-        endpoint = '/payments/downgrade-plan';
+        endpoint = '/payments/schedule-downgrade';
       } else {
         // Same price - just update in database
       const { error } = await supabase
         .from('companies')
-        .update({ selected_plan: selectedNewPlan })
+        .update({ selected_plan: planName, plan_type: selectedPlanData.plan_type })
         .eq('company_id', company.company_id);
 
       if (error) throw error;
 
-      setCompany(prev => ({ ...prev, selected_plan: selectedNewPlan }));
+      setCompany(prev => ({ ...prev, selected_plan: planName, plan_type: selectedPlanData.plan_type }));
       setPlan(selectedPlanData);
       setPlanChangeOpen(false);
       setSelectedNewPlan('');
       
       toast({
         title: "Plan Updated",
-        description: `Successfully updated to ${selectedNewPlan} plan.`,
+        description: `Successfully updated to ${planName} plan.`,
       });
         setChangingPlan(false);
         return;
@@ -304,7 +307,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
               key: result.key_id,
               subscription_id: result.subscription_id,
               name: "aitamate",
-              description: `Activate ${selectedNewPlan} subscription`,
+              description: `Activate ${planName} subscription`,
               prefill: {
                 name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
                 email: user?.email || "",
@@ -312,7 +315,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
               },
               notes: {
                 company_id: company.company_id,
-                plan_name: selectedNewPlan
+                plan_name: planName
               },
               theme: {
                 color: "#1A56DB"
@@ -322,7 +325,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                 await loadCompanyData();
                 toast({
                   title: "Subscription Activated",
-                  description: `Your ${selectedNewPlan} subscription is now active. Credit covers full amount - no payment required.`,
+                  description: `Your ${planName} subscription is now active. Credit covers full amount - no payment required.`,
                 });
                 setPlanChangeOpen(false);
                 setSelectedNewPlan('');
@@ -353,7 +356,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
             await loadCompanyData();
             toast({
               title: "Plan Upgraded",
-              description: result.message || `Successfully upgraded to ${selectedNewPlan} plan. Credit covers full amount - no payment required. Please activate subscription manually.`,
+              description: result.message || `Successfully upgraded to ${planName} plan. Credit covers full amount - no payment required. Please activate subscription manually.`,
             });
             setPlanChangeOpen(false);
             setSelectedNewPlan('');
@@ -375,7 +378,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
             currency: 'INR',
             order_id: result.order_id,
             name: "aitamate",
-            description: `Upgrade to ${selectedNewPlan} plan${result.credit_applied > 0 ? ` (Credit ₹${result.credit_applied} applied)` : ''}`,
+            description: `Upgrade to ${planName} plan${result.credit_applied > 0 ? ` (Credit ₹${result.credit_applied} applied)` : ''}`,
             prefill: {
               name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
               email: user?.email || "",
@@ -383,7 +386,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
             },
             notes: {
               company_id: company.company_id,
-              plan_name: selectedNewPlan,
+              plan_name: planName,
               action: 'upgrade'
             },
             theme: {
@@ -415,7 +418,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                       key: subData.key_id,
                       subscription_id: subData.subscription_id,
                       name: "aitamate",
-                      description: `Activate ${selectedNewPlan} subscription`,
+                      description: `Activate ${planName} subscription`,
                       prefill: {
                         name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
                         email: user?.email || "",
@@ -423,7 +426,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                       },
                       notes: {
                         company_id: company.company_id,
-                        plan_name: selectedNewPlan
+                        plan_name: planName
                       },
                       theme: {
                         color: "#1A56DB"
@@ -433,7 +436,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                         await loadCompanyData();
                         toast({
                           title: "Subscription Activated",
-                          description: `Your ${selectedNewPlan} subscription is now active. Payments will be charged automatically.`,
+                          description: `Your ${planName} subscription is now active. Payments will be charged automatically.`,
                         });
                         setPlanChangeOpen(false);
                         setSelectedNewPlan('');
@@ -464,7 +467,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                     await loadCompanyData();
                     toast({
                       title: "Plan Upgraded",
-                      description: result.message || `Successfully upgraded to ${selectedNewPlan} plan. Please activate subscription manually.`,
+                      description: result.message || `Successfully upgraded to ${planName} plan. Please activate subscription manually.`,
                     });
                     setPlanChangeOpen(false);
                     setSelectedNewPlan('');
@@ -476,7 +479,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                   await loadCompanyData();
                   toast({
                     title: "Plan Upgraded",
-                    description: result.message || `Successfully upgraded to ${selectedNewPlan} plan.`,
+                    description: result.message || `Successfully upgraded to ${planName} plan.`,
                   });
                   setPlanChangeOpen(false);
                   setSelectedNewPlan('');
@@ -519,171 +522,18 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
           setSelectedNewPlan('');
           setChangingPlan(false);
         }
-      } else if (!isUpgrade) {
-        // Downgrade: User pays full plan cost, credit stored for next cycle
-        
-        // If order_id exists, proceed with payment
-        if (result.order_id && result.key_id) {
-          // Check if Razorpay is loaded
-          if (typeof window === 'undefined' || !(window as any).Razorpay) {
-            throw new Error('Razorpay SDK not loaded. Please refresh the page.');
-          }
-
-          const options = {
-            key: result.key_id,
-            amount: result.net_payment * 100,  // Convert to paise (full plan cost)
-            currency: 'INR',
-            order_id: result.order_id,
-            name: "aitamate",
-            description: `Downgrade to ${selectedNewPlan} plan${result.credit_stored > 0 ? ` (Credit ₹${result.credit_stored} will be applied to next cycle)` : ''}`,
-            prefill: {
-              name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
-              email: user?.email || "",
-              contact: ""
-            },
-            notes: {
-              company_id: company.company_id,
-              plan_name: selectedNewPlan,
-              action: 'downgrade'
-            },
-            theme: {
-              color: "#1A56DB"
-            },
-            handler: async function (response: any) {
-              try {
-                setChangingPlan(true);
-                const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
-                
-                // Wait for webhook to process (create subscription)
-                await new Promise(resolve => setTimeout(resolve, 3000));
-                
-                // Get subscription_id created by webhook
-                try {
-                  const subResponse = await fetch(`${API_BASE_URL}/payments/get-subscription-id`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      company_id: company.company_id
-                    })
-                  });
-                  
-                  const subData = await subResponse.json();
-                  
-                  if (subData.success && subData.subscription_id) {
-                    // Open Razorpay subscription checkout to activate subscription
-                    const subOptions = {
-                      key: subData.key_id,
-                      subscription_id: subData.subscription_id,
-                      name: "aitamate",
-                      description: `Activate ${selectedNewPlan} subscription`,
-                      prefill: {
-                        name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
-                        email: user?.email || "",
-                        contact: ""
-                      },
-                      notes: {
-                        company_id: company.company_id,
-                        plan_name: selectedNewPlan
-                      },
-                      theme: {
-                        color: "#1A56DB"
-                      },
-                      handler: async function (subResponse: any) {
-                        // Subscription activated!
-                        await loadCompanyData();
-                        toast({
-                          title: "Subscription Activated",
-                          description: `Your ${selectedNewPlan} subscription is now active. ${result.credit_stored > 0 ? `Credit ₹${result.credit_stored} will be applied to next billing cycle.` : 'Payments will be charged automatically.'}`,
-                        });
-                        setPlanChangeOpen(false);
-                        setSelectedNewPlan('');
-                        setChangingPlan(false);
-                      },
-                      modal: {
-                        ondismiss: function() {
-                          setChangingPlan(false);
-                        }
-                      }
-                    };
-                    
-                    const rzp2 = new (window as any).Razorpay(subOptions);
-                    
-                    rzp2.on('payment.failed', function (subResponse: any) {
-                      console.error('Subscription activation failed:', subResponse.error);
-                      toast({
-                        title: "Activation Failed",
-                        description: subResponse.error.description || "Subscription could not be activated. Please contact support.",
-                        variant: "destructive",
-                      });
-                      setChangingPlan(false);
-                    });
-                    
-                    rzp2.open();
-                  } else {
-                    // Fallback: Just refresh data if subscription not found
-                    await loadCompanyData();
-                    toast({
-                      title: "Plan Downgraded",
-                      description: result.message || `Successfully downgraded to ${selectedNewPlan} plan. ${result.credit_stored > 0 ? `Credit ₹${result.credit_stored} will be applied to next billing cycle.` : ''} Please activate subscription manually.`,
-                    });
-                    setPlanChangeOpen(false);
-                    setSelectedNewPlan('');
-                    setChangingPlan(false);
-                  }
-                } catch (subError: any) {
-                  // If subscription check fails, just refresh data
-                  console.error('Error getting subscription:', subError);
-                  await loadCompanyData();
-                  toast({
-                    title: "Plan Downgraded",
-                    description: result.message || `Successfully downgraded to ${selectedNewPlan} plan. ${result.credit_stored > 0 ? `Credit ₹${result.credit_stored} will be applied to next billing cycle.` : ''}`,
-                  });
-                  setPlanChangeOpen(false);
-                  setSelectedNewPlan('');
-                  setChangingPlan(false);
-                }
-              } catch (error: any) {
-                console.error('Error processing payment:', error);
-                toast({
-                  title: "Payment Error",
-                  description: error.message || "An error occurred. Please contact support.",
-                  variant: "destructive",
-                });
-                setChangingPlan(false);
-              }
-            },
-            modal: {
-              ondismiss: function() {
-                setChangingPlan(false);
-              }
-            }
-          };
-          
-          const rzp1 = new (window as any).Razorpay(options);
-          
-          rzp1.on('payment.failed', function (response: any) {
-            console.error('Payment failed:', response.error);
-            toast({
-              title: "Payment Failed",
-              description: response.error.description || "Payment could not be completed. Please try again.",
-              variant: "destructive",
-            });
-            setChangingPlan(false);
-          });
-          
-          rzp1.open();
-        } else {
-          // If no order_id returned (shouldn't happen, but handle gracefully)
+      } else if (isDowngrade) {
+        // Schedule downgrade at end of cycle – no payment today
+        if (result.success) {
           await loadCompanyData();
+          toast({
+            title: "Downgrade Scheduled",
+            description: result.message || `Downgrade to ${planName} scheduled. No charge today.`,
+          });
           setPlanChangeOpen(false);
           setSelectedNewPlan('');
-          
-          toast({
-            title: "Plan Downgraded",
-            description: result.message || `Successfully downgraded to ${selectedNewPlan} plan.`,
-          });
-          setChangingPlan(false);
         }
+        setChangingPlan(false);
       } else {
         // If no order_id/subscription_id returned (shouldn't happen, but handle gracefully)
         await loadCompanyData();
@@ -692,7 +542,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
         
         toast({
           title: isUpgrade ? "Plan Upgraded" : "Plan Downgraded",
-          description: result.message || `Successfully ${isUpgrade ? 'upgraded' : 'downgraded'} to ${selectedNewPlan} plan.`,
+          description: result.message || `Successfully ${isUpgrade ? 'upgraded' : 'downgraded'} to ${planName} plan.`,
         });
         setChangingPlan(false);
       }
@@ -707,48 +557,35 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
     }
   };
 
-  const handleCVRecharge = async () => {
+  const handleTopUp = async () => {
     if (!user?.profile?.company_id || !plan) {
-      toast({
-        title: "Error",
-        description: "Missing company or plan information.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Missing company or plan information.", variant: "destructive" });
       return;
     }
-
+    const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
     try {
       setRechargingCVs(true);
-      const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
-      
-      // Create CV recharge order
-      const response = await fetch(`${API_BASE_URL}/payments/recharge-cvs`, {
+      const response = await fetch(`${API_BASE_URL}/payments/topup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          company_id: user.profile.company_id
-        })
+        body: JSON.stringify({ company_id: user.profile.company_id })
       });
-
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create CV recharge order');
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to create recharge order');
       }
-
       const orderData = await response.json();
-      
-      // Check if Razorpay is loaded
       if (typeof window === 'undefined' || !(window as any).Razorpay) {
         throw new Error('Razorpay SDK not loaded. Please refresh the page.');
       }
-
-      // Open Razorpay checkout for one-time payment
+      const desc = `Top-up for ${plan.plan_name}`;
+      const successMsg = 'Top-up successful. Quotas have been reset for the current cycle.';
       const options = {
         key: orderData.key_id,
         amount: orderData.amount,
         currency: orderData.currency,
         name: "aitamate",
-        description: `CV Recharge - Add ${orderData.cvs_to_add} CVs`,
+        description: desc,
         order_id: orderData.order_id,
         prefill: {
           name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
@@ -758,76 +595,41 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
         notes: {
           company_id: user.profile.company_id,
           plan_name: plan.plan_name,
-          recharge_type: 'cv_topup'
+          recharge_type: 'topup'
         },
-        theme: {
-          color: "#1A56DB"
-        },
-        handler: async function (response: any) {
+        theme: { color: "#1A56DB" },
+        handler: async function (rzpResponse: any) {
           try {
-            // Verify payment
             const verifyResponse = await fetch(`${API_BASE_URL}/payments/verify`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 company_id: user.profile.company_id,
                 plan_id: plan.plan_id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature
+                razorpay_order_id: rzpResponse.razorpay_order_id,
+                razorpay_payment_id: rzpResponse.razorpay_payment_id,
+                razorpay_signature: rzpResponse.razorpay_signature
               })
             });
-
-            if (!verifyResponse.ok) {
-              throw new Error('Payment verification failed');
-            }
-
-            toast({
-              title: "CV Recharge Successful",
-              description: `${orderData.cvs_to_add} CVs added. Cycle date unchanged.`,
-            });
-            
-            // Refresh company data
+            if (!verifyResponse.ok) throw new Error('Payment verification failed');
+            toast({ title: "Recharge Successful", description: successMsg });
             await loadCompanyData();
           } catch (error: any) {
-            console.error('Error processing CV recharge:', error);
-            toast({
-              title: "CV Recharge Error",
-              description: error.message || "An error occurred. Please contact support.",
-              variant: "destructive",
-            });
+            toast({ title: "Recharge Error", description: error.message || "An error occurred.", variant: "destructive" });
           } finally {
             setRechargingCVs(false);
           }
         },
-        modal: {
-          ondismiss: function() {
-            setRechargingCVs(false);
-          }
-        }
+        modal: { ondismiss: () => setRechargingCVs(false) }
       };
-      
       const rzp1 = new (window as any).Razorpay(options);
-      
-      rzp1.on('payment.failed', function (response: any) {
-        console.error('Payment failed:', response.error);
-        toast({
-          title: "Payment Failed",
-          description: response.error.description || "Payment could not be completed. Please try again.",
-          variant: "destructive",
-        });
+      rzp1.on('payment.failed', () => {
+        toast({ title: "Payment Failed", description: "Payment could not be completed. Please try again.", variant: "destructive" });
         setRechargingCVs(false);
       });
-      
       rzp1.open();
-      
     } catch (error: any) {
-      console.error('Error initiating CV recharge:', error);
-      toast({
-        title: "CV Recharge Error",
-        description: error.message || "Failed to initiate CV recharge. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Recharge Error", description: error.message || "Failed to initiate recharge.", variant: "destructive" });
       setRechargingCVs(false);
     }
   };
@@ -1046,11 +848,12 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
     try {
       setLoading(true);
       
-      // Find selected plan data
-      const selectedPlanData = availablePlans.find(p => p.plan_name === selectedRechargePlan);
+      // Find selected plan data (selectedRechargePlan is plan_id)
+      const selectedPlanData = availablePlans.find(p => p.plan_id === selectedRechargePlan);
       if (!selectedPlanData) {
         throw new Error('Selected plan not found');
       }
+      const planName = selectedPlanData.plan_name;
 
       // Step 1: Create subscription on backend (backend will update selected_plan automatically)
       const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
@@ -1080,7 +883,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
         key: subscriptionData.key_id,
         subscription_id: subscriptionData.subscription_id,
         name: "aitamate",
-        description: `Activate ${selectedRechargePlan} subscription - ₹${selectedPlanData.plan_cost}/month`,
+        description: `Activate ${planName} subscription - ₹${selectedPlanData.plan_cost}/month`,
         prefill: {
           name: `${user?.profile?.first_name || ''} ${user?.profile?.last_name || ''}`.trim() || user?.email?.split('@')[0] || "Customer",
           email: user?.email || "",
@@ -1088,7 +891,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
         },
         notes: {
           company_id: user.profile.company_id,
-          plan_name: selectedRechargePlan
+          plan_name: planName
         },
         theme: {
           color: "#1A56DB"
@@ -1099,7 +902,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
             
             toast({
               title: "Subscription Activated",
-              description: `Your ${selectedRechargePlan} subscription has been activated. Payments of ₹${selectedPlanData.plan_cost} will be charged automatically monthly.`,
+              description: `Your ${planName} subscription has been activated. Payments of ₹${selectedPlanData.plan_cost} will be charged automatically monthly.`,
             });
               
             // Refresh company data
@@ -1151,6 +954,37 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
         variant: "destructive",
       });
       setLoading(false);
+    }
+  };
+
+  const handleCancelDowngrade = async () => {
+    if (!user?.profile?.company_id || !company?.company_id) {
+      toast({ title: "Error", description: "Missing company information.", variant: "destructive" });
+      return;
+    }
+    const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
+    try {
+      setCancellingDowngrade(true);
+      const response = await fetch(`${API_BASE_URL}/payments/cancel-downgrade`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: company.company_id })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to cancel downgrade');
+      toast({
+        title: "Downgrade Cancelled",
+        description: data.message || "Your current plan will renew as usual.",
+      });
+      await loadCompanyData();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Could not cancel downgrade. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setCancellingDowngrade(false);
     }
   };
 
@@ -1212,14 +1046,55 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
   // Only render UI if admin
   if (!isAdmin) return null;
 
+  const pendingPlanName = company?.pending_plan_id
+    ? (availablePlans.find(p => p.plan_id === company.pending_plan_id)?.plan_name ?? 'lower plan')
+    : null;
+  const pendingChangeDate = company?.pending_plan_change_at
+    ? new Date(company.pending_plan_change_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    : null;
+
   return (
     <Card className="mb-8" data-tour="settings-user-management">
+      {company?.pending_plan_id && (
+        <div className="mx-4 mt-4 rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm">
+          <span>
+            Scheduled downgrade to <strong>{pendingPlanName}</strong>
+            {pendingChangeDate && <> on {pendingChangeDate}</>}. No charge until then.
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-3 mt-2 sm:mt-0 sm:ml-2"
+            disabled={cancellingDowngrade}
+            onClick={handleCancelDowngrade}
+          >
+            {cancellingDowngrade ? 'Cancelling…' : 'Cancel downgrade'}
+          </Button>
+        </div>
+      )}
       <CardHeader>
         <CardTitle className="text-lg sm:text-xl">User Management</CardTitle>
         <div className="text-xs sm:text-sm text-muted-foreground mt-1">
           {plan ? (
             <>
-              Plan: <b>{plan.plan_name}</b> | Max Users: <b>{maxUsers}</b> | Slots Left: <b>{slotsLeft}</b>
+              Plan:{' '}
+              <b>
+                {plan.plan_name}
+                {plan.plan_type && (
+                  <>
+                    {' '}
+                    (
+                    {plan.plan_type === 'cv'
+                      ? 'CV Only'
+                      : plan.plan_type === 'interview'
+                      ? 'Interviews Only'
+                      : 'Combo'}
+                    )
+                  </>
+                )}
+              </b>{' '}
+              | Max Users: <b>{maxUsers}</b> | Slots Left: <b>{slotsLeft}</b>
             </>
           ) : (
             <span className="text-red-600">No plan information available for this company.</span>
@@ -1235,9 +1110,20 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
           <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             {!isTrialPlan && (
               <>
-                <Button variant="outline" onClick={handleRecharge} disabled={loading}>Recharge</Button>
-                {company?.subscription_status !== 'cancelled' && 
-                 company?.subscription_status !== 'expired' && 
+                <Button variant="outline" onClick={handleRecharge} disabled={loading}>
+                  Recharge Subscription
+                </Button>
+                {/* Top Up Usage - hidden for now
+                <Button
+                  variant="outline"
+                  onClick={handleTopUp}
+                  disabled={rechargingCVs || !plan}
+                >
+                  {rechargingCVs ? 'Processing...' : 'Top Up Usage'}
+                </Button>
+                */}
+                {company?.subscription_status !== 'cancelled' &&
+                 company?.subscription_status !== 'expired' &&
                  company?.razorpay_subscription_id && (
                   <Button 
                     variant="outline" 
@@ -1248,14 +1134,14 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                     {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
                   </Button>
                 )}
-                <Button variant="outline" onClick={handleCVRecharge} disabled={rechargingCVs || !plan}>
-                  {rechargingCVs ? 'Processing...' : 'Recharge CVs'}
-                </Button>
               </>
             )}
+            {/* Change Billing Date - hidden for now
             <Dialog open={cycleDateOpen} onOpenChange={setCycleDateOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline">Change Cycle Date</Button>
+                <Button variant="outline" disabled>
+                  Change Cycle Date
+                </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -1266,9 +1152,14 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                     <p className="text-sm text-muted-foreground mb-2">
                       Current billing date: <strong>{company?.subscription_end ? new Date(company.subscription_end).toLocaleDateString() : 'N/A'}</strong>
                     </p>
-                    {plan && company && (
+                    {plan && company && (plan.max_cvs ?? 0) > 0 && (
                       <p className="text-sm text-muted-foreground mb-2">
                         Unused CVs: <strong>{plan.max_cvs - (company.cv_processed_count || 0)}</strong> / {plan.max_cvs}
+                      </p>
+                    )}
+                    {plan && company && (plan.max_interviews ?? 0) > 0 && (
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Interviews used: <strong>{company.interview_count ?? 0}</strong> / {plan.max_interviews ?? 0}
                       </p>
                     )}
                     <p className="text-sm text-muted-foreground mb-4">
@@ -1302,7 +1193,6 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                           const targetDay = Math.min(newCycleDay, 28);
                           let calculatedDate = new Date(today.getFullYear(), today.getMonth(), targetDay);
                           
-                          // If date is before today, move to next month
                           const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
                           if (calculatedDate < todayStart) {
                             if (today.getMonth() === 11) {
@@ -1352,6 +1242,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                 </div>
               </DialogContent>
             </Dialog>
+            */}
             <Dialog open={planChangeOpen} onOpenChange={setPlanChangeOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline">Change Plan</Button>
@@ -1364,7 +1255,22 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                 <div className="space-y-4">
                   <div>
                     <p className="text-sm text-muted-foreground mb-2">
-                      Current Plan: <strong>{plan?.plan_name || 'None'}</strong>
+                      Current Plan:{' '}
+                      <strong>
+                        {plan?.plan_name || 'None'}
+                        {plan?.plan_type && (
+                          <>
+                            {' '}
+                            (
+                            {plan.plan_type === 'cv'
+                              ? 'CV Only'
+                              : plan.plan_type === 'interview'
+                              ? 'Interviews Only'
+                              : 'Combo'}
+                            )
+                          </>
+                        )}
+                      </strong>
                     </p>
                     <p className="text-sm text-muted-foreground mb-4">
                       Select a new plan from the available options below:
@@ -1378,11 +1284,16 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                       {availablePlans
                         .sort((a, b) => (a.plan_cost || 0) - (b.plan_cost || 0))
                         .map(availablePlan => (
-                        <SelectItem key={availablePlan.plan_name} value={availablePlan.plan_name}>
+                        <SelectItem key={availablePlan.plan_id} value={availablePlan.plan_id}>
                           <div className="flex flex-col">
-                            <span className="font-medium">{availablePlan.plan_name}</span>
+                            <span className="font-medium">
+                              {availablePlan.plan_name}
+                              {availablePlan.plan_type ? ` (${availablePlan.plan_type === 'cv' ? 'CV Only' : availablePlan.plan_type === 'interview' ? 'Interviews Only' : 'Combo'})` : ''}
+                            </span>
                             <span className="text-xs text-muted-foreground">
                               ₹{availablePlan.plan_cost}/month • Max {availablePlan.max_users} users
+                              {availablePlan.max_cvs != null ? ` • ${availablePlan.max_cvs} CVs` : ''}
+                              {availablePlan.max_interviews != null ? ` • ${availablePlan.max_interviews} interviews` : ''}
                             </span>
                           </div>
                         </SelectItem>
@@ -1432,11 +1343,16 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                       {availablePlans
                         .sort((a, b) => (a.plan_cost || 0) - (b.plan_cost || 0))
                         .map(availablePlan => (
-                        <SelectItem key={availablePlan.plan_name} value={availablePlan.plan_name}>
+                        <SelectItem key={availablePlan.plan_id} value={availablePlan.plan_id}>
                           <div className="flex flex-col">
-                            <span className="font-medium">{availablePlan.plan_name}</span>
+                            <span className="font-medium">
+                              {availablePlan.plan_name}
+                              {availablePlan.plan_type ? ` (${availablePlan.plan_type === 'cv' ? 'CV Only' : availablePlan.plan_type === 'interview' ? 'Interviews Only' : 'Combo'})` : ''}
+                            </span>
                             <span className="text-xs text-muted-foreground">
-                              ₹{availablePlan.plan_cost}/month • Max {availablePlan.max_users} users • {availablePlan.max_cvs} CVs
+                              ₹{availablePlan.plan_cost}/month • Max {availablePlan.max_users} users
+                              {availablePlan.max_cvs != null ? ` • ${availablePlan.max_cvs} CVs` : ''}
+                              {availablePlan.max_interviews != null ? ` • ${availablePlan.max_interviews} interviews` : ''}
                             </span>
                           </div>
                         </SelectItem>
@@ -1448,7 +1364,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-blue-900">Amount to be charged:</span>
                         <span className="text-lg font-bold text-blue-900">
-                          ₹{availablePlans.find(p => p.plan_name === selectedRechargePlan)?.plan_cost || 0}/month
+                          ₹{availablePlans.find(p => p.plan_id === selectedRechargePlan)?.plan_cost || 0}/month
                         </span>
                       </div>
                       <p className="text-xs text-blue-700 mt-2">

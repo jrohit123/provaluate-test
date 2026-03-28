@@ -17,6 +17,7 @@ import { CandidateAppSidebar } from '@/components/ai-interview/CandidateAppSideb
 import { CandidateMainDashboard } from '@/components/ai-interview/CandidateMainDashboard';
 import CandidateJdInterviewConfig from '@/components/ai-interview/CandidateJdInterviewConfig';
 import CandidateJdInterviewCreate from '@/components/ai-interview/CandidateJdInterviewCreate';
+import { ReferralsSection } from '@/components/ai-interview/ReferralsSection';
 import { API_CONFIG, buildApiUrl } from '@/constants/api';
 import { ChartContainer } from '@/components/ui/chart';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceArea } from 'recharts';
@@ -36,6 +37,7 @@ const CandidateDashboard = () => {
   const isJdsConfigure = path.startsWith('/candidate-dashboard/jds/configure');
   const isJdsCreate = path.startsWith('/candidate-dashboard/jds/create');
   const isInterviews = path.startsWith('/candidate-dashboard/interviews');
+  const isReferrals = path.startsWith('/candidate-dashboard/referrals');
 
   const handleSignOut = useCallback(async () => {
     await supabase.auth.signOut();
@@ -117,6 +119,7 @@ const CandidateDashboard = () => {
                   <MyInterviewsSection candidateId={candidate?.candidate_id} candidateEmail={candidate?.email ?? undefined} />
                 </>
               )}
+              {isReferrals && <ReferralsSection />}
             </div>
             <footer className="flex-shrink-0 bg-white border-t border-sky-100 px-4 sm:px-6 py-3 sm:py-4 text-center text-xs sm:text-sm text-muted-foreground">
               <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-0 sm:space-x-2">
@@ -143,18 +146,18 @@ type InterviewRow = { id: string; position: string | null; status: string | null
 type SpeechMetrics = {
   overall_speech_quality?: number;
   speaking_pace_wpm?: number;
-  filler_density?: number;
+  filler_score?: number;
+  filler_rate_per_min?: number;
   pause_quality_score?: number;
   voice_confidence?: number;
-  stress_score?: number;
-  filler_words?: number;
 };
 type ProgressItem = {
   interview_id: string;
   position: string;
   completed_at: string | null;
   overall_score: number | null;
-  parameter_scores: Record<string, number>;
+  /** Normalized from API `parameter_scores` when present */
+  competency_scores: Record<string, number>;
   speech_metrics?: SpeechMetrics | null;
 };
 const CHART_OVERALL = 'overall';
@@ -227,7 +230,20 @@ function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: str
       : `candidate_email=${encodeURIComponent(candidateEmail!)}`;
     fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.GET_CANDIDATE_INTERVIEW_PROGRESS}?${q}`))
       .then((r) => (r.ok ? r.json() : []))
-      .then((data: ProgressItem[]) => setProgress(Array.isArray(data) ? data : []))
+      .then((raw: unknown) => {
+        const arr = Array.isArray(raw) ? raw : [];
+        const normalized: ProgressItem[] = arr.map((item: Record<string, unknown>) => {
+          const { parameter_scores: ps, competency_scores: cs, ...rest } = item as Record<string, unknown> & {
+            parameter_scores?: Record<string, number>;
+            competency_scores?: Record<string, number>;
+          };
+          return {
+            ...rest,
+            competency_scores: (typeof cs === 'object' && cs != null ? cs : ps) as Record<string, number>,
+          } as ProgressItem;
+        });
+        setProgress(normalized);
+      })
       .catch(() => setProgress([]));
   }, [candidateId, candidateEmail]);
 
@@ -262,13 +278,11 @@ function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: str
     yAxisLabel: string;
     tickFormatter?: (v: number) => string;
   }[] = [
-    { key: 'overall_speech_quality', label: 'Overall Speech Quality', description: 'A composite score (0–100) from the clarity, fluency, and delivery quality of your spoken answers.', unit: '/100', color: 'hsl(199, 89%, 48%)', domain: [0, 100], idealRange: [85, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
+    { key: 'overall_speech_quality', label: 'Overall Speech Quality', description: 'Composite score (0–100) from pace, filler score, pauses, and voice confidence.', unit: '/100', color: 'hsl(199, 89%, 48%)', domain: [0, 100], idealRange: [85, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
     { key: 'speaking_pace_wpm', label: 'Speaking Pace (WPM)', description: 'Words per minute. Reflects whether you speak at a clear, steady rate that is easy for the listener to follow.', unit: ' WPM', color: 'hsl(142, 71%, 45%)', domain: [0, 200], idealRange: [120, 160], yAxisLabel: 'WPM', tickFormatter: (v) => `${Math.round(v)}` },
-    { key: 'filler_words', label: 'Filler Words', description: 'Count of filler words or phrases (e.g. "um", "like", "you know") in your answer. Lower is better for clearer delivery.', unit: '', color: 'hsl(38, 92%, 50%)', domain: [0, 20], idealRange: [0, 5], yAxisLabel: 'Count', tickFormatter: (v) => `${Math.round(v)}` },
-    { key: 'filler_density', label: 'Filler Density', description: 'Percentage of your words that are fillers. Lower is better; it shows clearer, more confident speech.', unit: '%', color: 'hsl(38, 92%, 50%)', domain: [0, 20], idealRange: [0, 5], yAxisLabel: 'Filler density (%)', tickFormatter: (v) => v.toFixed(1) },
-    { key: 'pause_quality_score', label: 'Pause & Pacing', description: 'How well you use pauses and rhythm in your speech (0–100). Good pacing helps the listener follow and shows control.', unit: '/100', color: 'hsl(262, 83%, 58%)', domain: [0, 100], idealRange: [80, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
+    { key: 'filler_score', label: 'Filler Score', description: 'Audio-detected filler sounds, scored 0–100 (higher = fewer fillers).', unit: '/100', color: 'hsl(38, 92%, 50%)', domain: [0, 100], idealRange: [85, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
+    { key: 'pause_quality_score', label: 'Pause & Pacing', description: 'How well you use pauses and rhythm in your speech (0–100). Good pacing helps the listener follow and shows control.', unit: '/100', color: 'hsl(262, 83%, 58%)', domain: [0, 100], idealRange: [85, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
     { key: 'voice_confidence', label: 'Voice Confidence', description: 'How confident and assured your voice sounds (0–100). Higher scores suggest you came across as self-assured and clear.', unit: '/100', color: 'hsl(199, 89%, 48%)', domain: [0, 100], idealRange: [80, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
-    { key: 'stress_score', label: 'Stress Level', description: 'Indication of stress or tension in your voice (0–100). Lower is better; it suggests a calmer, more composed delivery.', unit: '/100', color: 'hsl(0, 84%, 60%)', domain: [0, 100], idealRange: [0, 30], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
   ];
   const speechChartDataByMetric = speechMetricConfigs.map((config) => {
     const data = progressSortedByDate
@@ -482,7 +496,7 @@ function MyJdsSection({ candidateId }: { candidateId: string | undefined }) {
           </div>
           <div className="min-w-0">
             <h2 className="font-semibold text-gray-900 text-sm sm:text-base">Interview configuration</h2>
-            <p className="text-xs sm:text-sm text-gray-600">Set up assessment parameters and interview type for your roles</p>
+            <p className="text-xs sm:text-sm text-gray-600">Set up assessment competencies and interview type for your roles</p>
           </div>
         </Link>
         <Link

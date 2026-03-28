@@ -15,11 +15,14 @@ export interface Database {
           company_name: string
           email_domain: string | null
           selected_plan: string | null
+          plan_type: string | null
           subscription_status: string | null
           subscription_start: string | null
           subscription_end: string | null
           cv_processed_count: number | null
           cv_processing_reset_date: string | null
+          interview_count: number | null
+          interview_reset_date: string | null
           pending_credit: number | null
           razorpay_subscription_id: string | null
           created_at: string
@@ -34,11 +37,14 @@ export interface Database {
           company_name: string
           email_domain?: string | null
           selected_plan?: string | null
+          plan_type?: string | null
           subscription_status?: string | null
           subscription_start?: string | null
           subscription_end?: string | null
           cv_processed_count?: number | null
           cv_processing_reset_date?: string | null
+          interview_count?: number | null
+          interview_reset_date?: string | null
           pending_credit?: number | null
           razorpay_subscription_id?: string | null
           created_at?: string
@@ -53,11 +59,14 @@ export interface Database {
           company_name?: string
           email_domain?: string | null
           selected_plan?: string | null
+          plan_type?: string | null
           subscription_status?: string | null
           subscription_start?: string | null
           subscription_end?: string | null
           cv_processed_count?: number | null
           cv_processing_reset_date?: string | null
+          interview_count?: number | null
+          interview_reset_date?: string | null
           pending_credit?: number | null
           razorpay_subscription_id?: string | null
           created_at?: string

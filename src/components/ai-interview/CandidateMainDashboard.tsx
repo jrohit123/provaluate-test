@@ -1,8 +1,9 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { User, Settings, UserPlus, Briefcase } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Settings, UserPlus, Briefcase, Share2 } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { API_CONFIG, buildApiUrl } from '@/constants/api';
 
 /** Profile section keys in candidate_profile_details.profile_data (must match Profile Builder). */
 const PROFILE_SECTION_KEYS = [
@@ -32,6 +33,8 @@ interface CandidateMainDashboardProps {
   onNavigate: (path: string) => void;
 }
 
+type CurrentPlanDetails = { plan_name: string; interview_count?: number; jd_count?: number } | null;
+
 export function CandidateMainDashboard({ candidateId, candidateEmail, onNavigate }: CandidateMainDashboardProps) {
   const [stats, setStats] = useState({
     jobDescriptions: 0,
@@ -40,6 +43,9 @@ export function CandidateMainDashboard({ candidateId, candidateEmail, onNavigate
     profileSectionsTotal: PROFILE_SECTION_KEYS.length,
   });
   const [loading, setLoading] = useState(true);
+  const [currentPlanDetails, setCurrentPlanDetails] = useState<CurrentPlanDetails>(null);
+  const [referralCount, setReferralCount] = useState(0);
+  const [loadingPlan, setLoadingPlan] = useState(true);
 
   useEffect(() => {
     if (!candidateId && !candidateEmail) {
@@ -103,11 +109,53 @@ export function CandidateMainDashboard({ candidateId, candidateEmail, onNavigate
     })();
   }, [candidateId, candidateEmail]);
 
+  const fetchPlanDetails = useCallback(async () => {
+    try {
+      setLoadingPlan(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        setCurrentPlanDetails(null);
+        setReferralCount(0);
+        return;
+      }
+      const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_REFERRAL_DASHBOARD), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setReferralCount(Array.isArray(data.as_referrer) ? data.as_referrer.length : 0);
+        if (data.current_plan) {
+          const p = data.current_plan;
+          setCurrentPlanDetails({
+            plan_name: p.plan_name || 'Current plan',
+            interview_count: p.interview_count,
+            jd_count: p.jd_count,
+          });
+        } else {
+          setCurrentPlanDetails(null);
+        }
+      } else {
+        setCurrentPlanDetails(null);
+        setReferralCount(0);
+      }
+    } catch {
+      setCurrentPlanDetails(null);
+      setReferralCount(0);
+    } finally {
+      setLoadingPlan(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPlanDetails();
+  }, [fetchPlanDetails]);
+
   const steps = [
-    { title: 'Profile overview', icon: User, path: '/candidate-dashboard/profile' },
-    { title: 'Interview config', icon: Settings, path: '/candidate-dashboard/jds/configure' },
-    { title: 'Interview creation', icon: UserPlus, path: '/candidate-dashboard/jds/create' },
-    { title: 'Interview dashboard', icon: Briefcase, path: '/candidate-dashboard/interviews' },
+    { title: 'Customize Interview', icon: Settings, path: '/candidate-dashboard/jds/configure' },
+    { title: 'Generate Interview', icon: UserPlus, path: '/candidate-dashboard/jds/create' },
+    { title: 'Performance Report', icon: Briefcase, path: '/candidate-dashboard/interviews' },
+    { title: 'Revenue & Billing', icon: Share2, path: '/candidate-dashboard/referrals' },
   ];
 
   const quickActionCardClass =
@@ -122,30 +170,36 @@ export function CandidateMainDashboard({ candidateId, candidateEmail, onNavigate
         </div>
       </div>
 
-      {/* Quick Stats - full width, single row */}
-      <Card className="w-full border border-sky-100 shadow-sm overflow-hidden">
+      {/* Quick Stats - same layout as recruiter dashboard: single row, centred */}
+      <Card className="w-full border border-sky-100 shadow-sm overflow-hidden animate-fade-in">
         <CardHeader className="pb-2 px-3 sm:px-6">
           <CardTitle className="text-base sm:text-lg md:text-xl text-gray-900">Quick Stats</CardTitle>
         </CardHeader>
-        <CardContent className="px-3 sm:px-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6">
-            <div className="text-center p-4 sm:p-5 rounded-lg bg-sky-50 border border-sky-100">
-              <div className="text-2xl sm:text-3xl font-bold text-sky-800">
-                {loading ? '...' : stats.jobDescriptions}
+        <CardContent className="flex flex-col items-center justify-center min-h-[140px] py-8 px-3 sm:px-6">
+          <div className="flex flex-row flex-wrap sm:flex-nowrap gap-6 sm:gap-8 lg:gap-12 w-full max-w-5xl justify-center items-center">
+            <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center">
+              <div className="text-lg sm:text-2xl font-bold text-gray-900 w-full text-center">
+                {loadingPlan ? '...' : (currentPlanDetails?.plan_name || '—')}
               </div>
-              <div className="text-sm sm:text-base text-gray-600 mt-1">JOB DESCRIPTIONS</div>
+              <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words w-full text-center">CURRENT PLAN</div>
             </div>
-            <div className="text-center p-4 sm:p-5 rounded-lg bg-sky-50 border border-sky-100">
-              <div className="text-2xl sm:text-3xl font-bold text-sky-800">
-                {loading ? '...' : stats.interviewsCompleted}
+            <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center">
+              <div className="text-lg sm:text-2xl font-bold text-gray-900 w-full text-center">
+                {loadingPlan ? '...' : (currentPlanDetails?.interview_count != null ? `${stats.interviewsCompleted} / ${currentPlanDetails.interview_count}` : '—')}
               </div>
-              <div className="text-sm sm:text-base text-gray-600 mt-1">INTERVIEWS COMPLETED</div>
+              <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words w-full text-center">INTERVIEWS (USED / PLAN)</div>
             </div>
-            <div className="text-center p-4 sm:p-5 rounded-lg bg-sky-50 border border-sky-100">
-              <div className="text-2xl sm:text-3xl font-bold text-sky-800">
-                {loading ? '...' : `${stats.profileSectionsCompleted}/${stats.profileSectionsTotal}`}
+            <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center">
+              <div className="text-lg sm:text-2xl font-bold text-gray-900 w-full text-center">
+                {loadingPlan ? '...' : (currentPlanDetails?.jd_count != null ? `${stats.jobDescriptions} / ${currentPlanDetails.jd_count}` : '—')}
               </div>
-              <div className="text-sm sm:text-base text-gray-600 mt-1">PROFILE SECTIONS COMPLETED</div>
+              <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words w-full text-center">JDs (USED / PLAN)</div>
+            </div>
+            <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center">
+              <div className="text-lg sm:text-2xl font-bold text-gray-900 w-full text-center">
+                {loadingPlan ? '...' : referralCount}
+              </div>
+              <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words w-full text-center">REFERRALS (USED MY LINK)</div>
             </div>
           </div>
         </CardContent>

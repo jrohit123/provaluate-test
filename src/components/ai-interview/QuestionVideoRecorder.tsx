@@ -3,6 +3,7 @@ import { Camera, Video, VideoOff, Loader2, CheckCircle, AlertCircle, Play, Pause
 import RecordRTC from 'recordrtc';
 import toast from 'react-hot-toast';
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
+import { INTERVIEW_CONSTANTS } from '@/constants/interview';
 import { getAdaptiveVideoConstraints } from '@/utils/mediaConstraints';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -86,8 +87,8 @@ const QuestionVideoRecorder = ({
     try {
       console.log('🎥 Starting question video recording...');
       
-      // Create video recorder for individual question (lower bitrate on mobile)
-      const videoBitsPerSecond = isMobile ? 300000 : 400000;
+      // Create video recorder for individual question (same bitrate for desktop + mobile)
+      const videoBitsPerSecond = INTERVIEW_CONSTANTS.MEDIA.VIDEO_BITRATE;
       const recorder = new RecordRTC(videoStreamRef.current, {
         type: 'video',
         mimeType: 'video/webm',

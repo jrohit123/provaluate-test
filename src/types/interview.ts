@@ -4,7 +4,7 @@ export interface Question {
   id: string;
   question_text: string;
   question_order: number;
-  parameter_id?: string;
+  competency_id?: string;
   created_at: string;
   updated_at?: string;
 }
@@ -58,7 +58,7 @@ export interface InterviewData {
   updated_at?: string;
 }
 
-export interface CustomParameter {
+export interface CustomCompetency {
   name: string;
   description: string;
   weight: number;
@@ -72,8 +72,8 @@ export interface CustomParameter {
   requires_written_answer?: boolean;
 }
 
-export interface CustomParameters {
-  [key: string]: CustomParameter;
+export interface CustomCompetencies {
+  [key: string]: CustomCompetency;
 }
 
 export interface InterviewState {
@@ -108,7 +108,7 @@ export interface Interview {
   updated_at?: string;
   completed_at?: string;
   total_score?: number;
-  parameters?: CustomParameter[];
+  competencies?: CustomCompetency[];
 }
 
 export interface SaveState {

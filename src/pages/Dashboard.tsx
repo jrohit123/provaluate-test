@@ -18,15 +18,17 @@ import { useAuth } from '@/hooks/use-auth';
 import { useSession } from '@/contexts/SessionContext';
 import { UiAnalyticsService } from '@/services/uiAnalyticsService';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { supabase } from '@/integrations/supabase/client';
 import {
   getMainTourSteps,
   getSectionTourSteps,
   getSectionTourStorageKey,
+  getTourSectionsForPlan,
   isSidebarOnlyTarget,
   TOUR_OPEN_SIDEBAR_EVENT,
-  TOUR_SECTIONS,
   TOUR_STORAGE_KEY,
   waitForTarget,
+  type PlanType,
 } from '@/constants/tour';
 
 export type ActiveSection = 'main-dashboard' | 'job-upload' | 'evaluation-criteria' | 'resume-upload' | 'match-scorecard' | 'career-portal' | 'interview-creation' | 'ai-interview' | 'setup' | 'interview-dashboard' | 'settings';
@@ -51,10 +53,51 @@ const Dashboard = () => {
 
   const isAdmin = user?.profile?.role === 'admin' || user?.profile?.role === 'superadmin';
 
+  // Resolve effective plan type for plan-aware tour steps.
+  // Missing/empty plan_type => 'combo' (free tier behavior).
+  const [effectivePlanType, setEffectivePlanType] = useState<PlanType | null>(null);
+  useEffect(() => {
+    const cid = user?.profile?.company_id;
+    if (!cid) {
+      setEffectivePlanType(null);
+      return;
+    }
+    let alive = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('companies')
+          .select('plan_type')
+          .eq('company_id', cid)
+          .single();
+        if (!alive) return;
+        if (error) {
+          console.warn('Could not load plan_type for tour:', error);
+          setEffectivePlanType('combo');
+          return;
+        }
+        const raw = data?.plan_type;
+        const resolved =
+          raw != null && String(raw).trim() !== ''
+            ? (String(raw).toLowerCase() as PlanType)
+            : 'combo';
+        setEffectivePlanType(resolved);
+      } catch (e) {
+        if (!alive) return;
+        console.warn('Unexpected error loading plan_type for tour:', e);
+        setEffectivePlanType('combo');
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [user?.profile?.company_id]);
+
   const tourSteps = useMemo(() => {
     if (tourMode === 'section' && tourSection) return getSectionTourSteps(tourSection);
-    return getMainTourSteps(isMobile);
-  }, [tourMode, tourSection, isMobile]);
+    if (!effectivePlanType) return [];
+    return getMainTourSteps(isMobile, effectivePlanType);
+  }, [tourMode, tourSection, isMobile, effectivePlanType]);
 
   const joyrideSteps = useMemo(
     () =>
@@ -129,6 +172,12 @@ const Dashboard = () => {
   const startMainTour = useCallback(
     (ignoreCompleted = false) => {
       if (!ignoreCompleted && localStorage.getItem(TOUR_STORAGE_KEY) === 'true') return;
+      // Wait until plan type is resolved to avoid showing wrong (CV vs interview) steps.
+      if (!effectivePlanType) {
+        setPendingMainTour(true);
+        setSearchParams({ section: 'main-dashboard' }, { replace: true });
+        return;
+      }
       setTourStepIndex(0);
       setTourMode('main');
       setTourSection(null);
@@ -139,7 +188,7 @@ const Dashboard = () => {
         setPendingMainTour(true);
       }
     },
-    [activeSection, dashboardReady, setSearchParams]
+    [activeSection, dashboardReady, setSearchParams, effectivePlanType]
   );
 
   const startSectionTour = useCallback((section: ActiveSection) => {
@@ -244,12 +293,13 @@ const Dashboard = () => {
       activeSection !== 'main-dashboard' ||
       !dashboardReady ||
       !pendingMainTour ||
+      !effectivePlanType ||
       tourRun
     )
       return;
     setPendingMainTour(false);
     setTourRun(true);
-  }, [activeSection, dashboardReady, pendingMainTour, tourRun]);
+  }, [activeSection, dashboardReady, pendingMainTour, tourRun, effectivePlanType]);
 
   // Auto-start main tour only after dashboard (with stats) has fully loaded and user has seen it
   useEffect(() => {
@@ -262,13 +312,15 @@ const Dashboard = () => {
 
   // Auto-start section tour when first visiting a tour-enabled section, only after that section has loaded
   useEffect(() => {
-    if (!TOUR_SECTIONS.includes(activeSection) || tourRun) return;
+    if (!effectivePlanType) return;
+    const allowedSections = getTourSectionsForPlan(effectivePlanType);
+    if (!allowedSections.includes(activeSection) || tourRun) return;
     if (activeSection === 'settings' && !isAdmin) return;
     if (localStorage.getItem(getSectionTourStorageKey(activeSection)) === 'true') return;
     if (!sectionReadyMap[activeSection]) return;
     const t = setTimeout(() => startSectionTour(activeSection), 400);
     return () => clearTimeout(t);
-  }, [activeSection, tourRun, isAdmin, sectionReadyMap, startSectionTour]);
+  }, [activeSection, tourRun, isAdmin, sectionReadyMap, startSectionTour, effectivePlanType]);
 
   // Track which section the recruiter is viewing
   useEffect(() => {

@@ -7,7 +7,7 @@ const QuestionVideoPlayer = ({
   answerText, 
   score, 
   feedback, 
-  parameterName,
+  competencyName,
   onVideoClick 
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -170,7 +170,7 @@ const QuestionVideoPlayer = ({
               Question {videoData.question_order + 1}
             </h3>
             <p className="text-sm text-gray-600">
-              {parameterName || 'Technical Assessment'}
+              {competencyName || 'Technical Assessment'}
             </p>
           </div>
         </div>

@@ -175,7 +175,7 @@ export function TrialExpirationWarning() {
             {trialStatus.is_expired
               ? 'Trial Expired'
               : trialStatus.cvs_exhausted
-              ? 'CV Quota Exhausted'
+              ? 'Usage Limit Reached'
               : 'Trial Expiring Soon'}
           </span>
           {!isCritical && (
@@ -235,15 +235,15 @@ export function TrialExpirationWarning() {
         <AlertDescription className="space-y-2">
           <p>
             {lowCVWarning.isCritical
-              ? `You've used ${Math.round(lowCVWarning.usagePercentage)}% of your CV quota. Only ${lowCVWarning.remainingCVs} CV${lowCVWarning.remainingCVs !== 1 ? 's' : ''} remaining. Please recharge or upgrade soon.`
-              : `You've used ${Math.round(lowCVWarning.usagePercentage)}% of your CV quota. ${lowCVWarning.remainingCVs} CV${lowCVWarning.remainingCVs !== 1 ? 's' : ''} remaining. Consider recharging or upgrading.`}
+              ? `Aapne apna ${Math.round(lowCVWarning.usagePercentage)}% usage complete kar liya hai. Sirf ${lowCVWarning.remainingCVs} unit${lowCVWarning.remainingCVs !== 1 ? 's' : ''} bache hain. Jaldi recharge ya upgrade kijiye.`
+              : `Aapka ${Math.round(lowCVWarning.usagePercentage)}% usage ho chuka hai. ${lowCVWarning.remainingCVs} unit${lowCVWarning.remainingCVs !== 1 ? 's' : ''} bache hain. Recharge ya upgrade karne ka sochiye.`}
           </p>
           <div className="flex gap-2">
             <Button onClick={handleUpgrade} size="sm" variant={lowCVWarning.isCritical ? 'default' : 'outline'}>
-              {lowCVWarning.isCritical ? 'Recharge Now' : 'Recharge or Upgrade'}
+              {lowCVWarning.isCritical ? 'Recharge Now' : 'Recharge / Upgrade'}
             </Button>
             <div className="flex items-center gap-1 text-sm text-muted-foreground">
-              <span>{lowCVWarning.remainingCVs} / {lowCVWarning.maxCVs} CVs remaining</span>
+              <span>{lowCVWarning.remainingCVs} / {lowCVWarning.maxCVs} uses remaining</span>
             </div>
           </div>
         </AlertDescription>

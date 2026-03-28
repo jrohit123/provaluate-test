@@ -43,7 +43,7 @@ export const INTERVIEW_CONSTANTS = {
     MIN_AUDIO_DURATION: 1000, // 1 second
     MAX_AUDIO_DURATION: 300000, // 5 minutes
     AUDIO_BITRATE: 128000, // 128 kbps
-    VIDEO_BITRATE: 400000, // 400 kbps – smaller files, faster uploads; good for talking-head interview
+    VIDEO_BITRATE: 300000, // 300 kbps – smaller files, faster uploads; good for talking-head interview (desktop + mobile)
     TIME_SLICE: 15000, // 15 seconds
   },
   
@@ -79,6 +79,6 @@ export const INTERVIEW_CONSTANTS = {
     ANSWER_SUBMITTED: 'Answer submitted successfully!',
     QUESTION_GENERATED: 'Next question generated!',
     INTERVIEW_COMPLETED: 'Interview completed successfully!',
-    PARAMETERS_SAVED: 'Parameters saved successfully!',
+    COMPETENCIES_SAVED: 'Competencies saved successfully!',
   },
 };
