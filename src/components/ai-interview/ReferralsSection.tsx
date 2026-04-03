@@ -19,6 +19,7 @@ type AsReferred = { referrer_name: string; plan_purchased: number | null; referr
 type ActivityItem = { type: string; amount: number; description: string; date: string };
 type CurrentPlan = { plan_id: string; plan_name: string; cost: number; id?: string };
 type Plan = { id: string; plan_name: string; jd_count: number; cost: number; interview_count: number; is_free: boolean };
+type ReferralSettings = { referral_credit_percentage: number; max_credit_usage_percentage: number };
 
 export function ReferralsSection() {
   const [loading, setLoading] = useState(true);
@@ -39,6 +40,10 @@ export function ReferralsSection() {
   const [planSubmitting, setPlanSubmitting] = useState(false);
   const [planError, setPlanError] = useState('');
   const [candidateMobile, setCandidateMobile] = useState('');
+  const [settings, setSettings] = useState<ReferralSettings>({
+    referral_credit_percentage: 20,
+    max_credit_usage_percentage: 50
+  });
   const isCurrentPlanFree = Boolean(
     currentPlan &&
     ((Number(currentPlan.cost) || 0) <= 0 || /free/i.test(String(currentPlan.plan_name || '')))
@@ -52,6 +57,19 @@ export function ReferralsSection() {
     if (token) h['Authorization'] = `Bearer ${token}`;
     return h;
   };
+
+  const loadSettings = useCallback(async () => {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_REFERRAL_SETTINGS), { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setSettings(data);
+      }
+    } catch (e) {
+      console.error('Failed to load referral settings:', e);
+    }
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -84,7 +102,8 @@ export function ReferralsSection() {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    loadSettings();
+  }, [loadData, loadSettings]);
 
   const handleGenerateLink = async () => {
     setGenerating(true);
@@ -141,7 +160,7 @@ export function ReferralsSection() {
     }
     const cost = 'cost' in planToUse ? planToUse.cost : 0;
     const planId = 'plan_id' in planToUse ? (planToUse as CurrentPlan).plan_id : (planToUse as Plan).id;
-    const maxCredits = Math.min(balance * 0.5, cost);
+    const maxCredits = Math.min(balance * (settings.max_credit_usage_percentage / 100), cost);
     const creditsToUse = Math.round(maxCredits * 100) / 100;
     const amountToPay = cost - creditsToUse;
     if (amountToPay <= 0) {
@@ -246,7 +265,7 @@ export function ReferralsSection() {
               Referral link
             </CardTitle>
             <p className="text-sm text-gray-600">
-              Share this link with anyone. When they sign up and paste it on the plan step, then purchase a plan, you earn 20% as credit.
+              Share this link with anyone. When they sign up and paste it on the plan step, then purchase a plan, you earn {settings.referral_credit_percentage}% as credit.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -286,7 +305,7 @@ export function ReferralsSection() {
             </div>
             <p className="text-2xl font-semibold text-sky-700">₹{Number(balance).toFixed(2)}</p>
             <p className="text-sm text-gray-600">
-              You can use up to 50% of your balance on your next plan purchase.
+              You can use up to {settings.max_credit_usage_percentage}% of your balance on your next plan purchase.
             </p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mt-2">
               <span className="text-gray-600">Original credits:</span>
@@ -380,8 +399,8 @@ export function ReferralsSection() {
             <DialogTitle>Plan settings</DialogTitle>
             <DialogDescription>
               {isCurrentPlanFree
-                ? 'Switch to a different paid plan. Up to 50% of your referral balance can be applied.'
-                : 'Choose your current plan or switch to a different plan. Up to 50% of your referral balance can be applied.'}
+                ? 'Switch to a different paid plan. Up to ' + settings.max_credit_usage_percentage + '% of your referral balance can be applied.'
+                : 'Choose your current plan or switch to a different plan. Up to ' + settings.max_credit_usage_percentage + '% of your referral balance can be applied.'}
             </DialogDescription>
           </DialogHeader>
           {planError && (
@@ -420,8 +439,8 @@ export function ReferralsSection() {
                 <p className="text-sm text-gray-600">Cost: ₹{currentPlan.cost.toFixed(2)}</p>
               </div>
               <div className="text-sm">
-                <p>Credits to use: ₹{Math.min(balance * 0.5, currentPlan.cost).toFixed(2)}</p>
-                <p>Amount to pay: ₹{(currentPlan.cost - Math.min(balance * 0.5, currentPlan.cost)).toFixed(2)}</p>
+                <p>Credits to use: ₹{Math.min(balance * (settings.max_credit_usage_percentage / 100), currentPlan.cost).toFixed(2)}</p>
+                <p>Amount to pay: ₹{(currentPlan.cost - Math.min(balance * (settings.max_credit_usage_percentage / 100), currentPlan.cost)).toFixed(2)}</p>
               </div>
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={() => setPlanStep('choose')}>
@@ -458,7 +477,7 @@ export function ReferralsSection() {
               {selectedPlanId && (() => {
                 const plan = plans.find((p) => p.id === selectedPlanId);
                 if (!plan) return null;
-                const creditsToUse = Math.min(balance * 0.5, plan.cost);
+                const creditsToUse = Math.min(balance * (settings.max_credit_usage_percentage / 100), plan.cost);
                 const amountToPay = plan.cost - creditsToUse;
                 return (
                   <div className="text-sm p-3 bg-gray-50 rounded-md">

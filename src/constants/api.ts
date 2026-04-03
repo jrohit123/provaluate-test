@@ -60,6 +60,7 @@ export const API_CONFIG = {
     CANDIDATE_REFERRAL_LINK: '/api/candidate/referral-link',
     CANDIDATE_REFERRAL_ADD_MOBILE: '/api/candidate/referral-link/allowed-mobiles',
     CANDIDATE_REFERRAL_DASHBOARD: '/api/candidate/referrals/dashboard',
+    CANDIDATE_REFERRAL_SETTINGS: '/api/candidate/referral-settings',
     CANDIDATE_APPLY_REFERRAL: '/api/candidate/apply-referral',
   },
   TIMEOUTS: {

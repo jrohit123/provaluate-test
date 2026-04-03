@@ -120,6 +120,12 @@ function parseSpeechReportSections(reportText: string): { section: string; conte
     /^your consistent habits$/i,
     /^where pressure changed your delivery$/i,
     /^what to protect$/i,
+    /^how you opened each answer$/i,
+    /^your flow and filler pattern$/i,
+    /^how you closed each answer$/i,
+    /^your vocal presence$/i,
+    /^what to keep doing$/i,
+    /^what changed since last time$/i,
     /^what an interviewer would have noticed$/i,
   ];
   const isKnownHeader = (line: string) => {
@@ -160,6 +166,11 @@ function normalizeActionPlanText(raw: string): string {
   s = s.replace(/\s+\*\*Addresses:\*\*/g, '\n\n**Addresses:**');
   s = s.replace(/\s+\*\*Description:\*\*/g, '\n\n**Description:**');
   s = s.replace(/\s+\*\*Expected outcome:\*\*/g, '\n\n**Expected outcome:**');
+  s = s.replace(/\s+\*\*What you did:\*\*/g, '\n\n**What you did:**');
+  s = s.replace(/\s+\*\*Why it matters:\*\*/g, '\n\n**Why it matters:**');
+  s = s.replace(/\s+\*\*The cue:\*\*/g, '\n\n**The cue:**');
+  s = s.replace(/\s+\*\*Between interviews:\*\*/g, '\n\n**Between interviews:**');
+  s = s.replace(/\s+---\s*\n\*\*YOUR PERSONALISED ACTION PLAN CHECKLIST\*\*/gi, '\n\n---\n\n**YOUR PERSONALISED ACTION PLAN CHECKLIST**');
   s = s.replace(/\n(\d\.\s+\*\*)/g, '\n\n$1');
   return s.trim();
 }
@@ -168,28 +179,308 @@ function normalizeActionPlanText(raw: string): string {
 interface ActionPlanItem {
   srNo: number;
   actionName: string;
+  /** v1 legacy */
   addresses: string;
   description: string;
   expectedOutcome: string;
+  /** v2: three fields (current) or four (legacy with The cue) */
+  format?: 'v1' | 'v2';
+  whatYouDid?: string;
+  whyItMatters?: string;
+  /** @deprecated optional — legacy four-field plans only */
+  theCue?: string;
+  betweenInterviews?: string;
   evolutionLabel?: string;
 }
 
+/** Matches Python/DB `set_of_actions.checklist` and PDF checklist section. */
+interface ActionPlanChecklistBlock {
+  action_title: string;
+  leverage?: string;
+  items: string[];
+}
+
+/** Split stored `personalised_action_plan` into coaching actions vs appended checklist markdown (Python appends after `---`). */
+function splitPersonalisedActionPlan(raw: string): { planBody: string; checklistMarkdown: string | null } {
+  const trimmed = (raw || '').trim();
+  const m = trimmed.match(/\n---\s*\n\*\*YOUR PERSONALISED ACTION PLAN CHECKLIST\*\*/i);
+  if (m && m.index != null) {
+    return {
+      planBody: trimmed.slice(0, m.index).trim(),
+      checklistMarkdown: trimmed.slice(m.index + 1).trim(),
+    };
+  }
+  return { planBody: trimmed, checklistMarkdown: null };
+}
+
+function parseChecklistFromMarkdown(md: string): ActionPlanChecklistBlock[] {
+  const out: ActionPlanChecklistBlock[] = [];
+  if (!md?.trim()) return out;
+  let body = md
+    .replace(/\*\*YOUR PERSONALISED ACTION PLAN CHECKLIST\*\*/gi, '')
+    .replace(/^---\s*/gm, '')
+    .trim();
+  const chunks = body
+    .split(/\n(?=\*\*Action\s+\d+\s+)/i)
+    .map((c) => c.trim())
+    .filter(Boolean);
+  for (const chunk of chunks) {
+    const lines = chunk.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) continue;
+    const headPlain = lines[0].replace(/\*\*/g, '').trim();
+    const mTitle = headPlain.match(/Action\s+\d+\s*[—\-]\s*(.+?)(?:\s*\(([^)]+)\)\s*)?$/i);
+    const title = (mTitle?.[1] || headPlain).replace(/\s*\([^)]*\)\s*$/, '').trim();
+    const levParen = headPlain.match(/\(([^)]+)\)\s*$/);
+    const items: string[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].replace(/^\*\*|\*\*$/g, '').trim();
+      const item = line.replace(/^[☐□❏]\s*/, '').trim();
+      if (item) items.push(item);
+    }
+    out.push({
+      action_title: title || headPlain,
+      leverage: levParen?.[1]?.trim(),
+      items,
+    });
+  }
+  return out;
+}
+
+/** Prefer JSON column `interview.set_of_actions`; fallback to embedded checklist markdown in plan text. */
+function resolveActionPlanChecklistBlocks(interview: { set_of_actions?: unknown } | null | undefined, planRaw: string): ActionPlanChecklistBlock[] {
+  const raw = interview?.set_of_actions;
+  if (raw != null && raw !== '') {
+    let obj: unknown = raw;
+    if (typeof raw === 'string') {
+      try {
+        obj = JSON.parse(raw);
+      } catch {
+        obj = null;
+      }
+    }
+    if (obj && typeof obj === 'object' && !Array.isArray(obj) && Array.isArray((obj as { checklist?: unknown }).checklist)) {
+      const rows = (obj as { checklist: unknown[] }).checklist
+        .map((x) => {
+          if (!x || typeof x !== 'object') return null;
+          const rec = x as Record<string, unknown>;
+          const action_title = String(rec.action_title ?? rec.actionTitle ?? '').trim();
+          const lev = rec.leverage != null ? String(rec.leverage).trim() : undefined;
+          const items = Array.isArray(rec.items) ? rec.items.map((t) => String(t).trim()).filter(Boolean) : [];
+          if (!action_title || !items.length) return null;
+          return { action_title, leverage: lev, items } as ActionPlanChecklistBlock;
+        })
+        .filter(Boolean) as ActionPlanChecklistBlock[];
+      if (rows.length > 0) return rows;
+    }
+  }
+  const { checklistMarkdown } = splitPersonalisedActionPlan(planRaw || '');
+  if (checklistMarkdown) return parseChecklistFromMarkdown(checklistMarkdown);
+  return [];
+}
+
+/** Strip leading checkbox/dash/bullet chars so list markers are not duplicated in the UI. */
+function formatChecklistItemLine(raw: string): string {
+  return String(raw || '')
+    .replace(/^\s*[☐□❏]\s*/u, '')
+    .replace(/^\s*[-–—•]\s*/, '')
+    .trim();
+}
+
 /**
- * Parse action plan text into structured items (Sr No, Action Name, Addresses, Description, Expected outcome).
- * Supports three formats:
+ * PDF checklist — plain "ACTION PLAN CHECK LIST" title (same blue style as plan page); action names in light green bars only.
+ * One block per row, full content width. If `resumeY` is set (pt below last action-plan content), continues on that page when space allows to avoid a half-empty page.
+ */
+function drawActionPlanChecklistPdf(
+  doc: any,
+  blocks: ActionPlanChecklistBlock[],
+  speechMargin: number,
+  speechContentWidth: number,
+  opts?: { resumeY?: number | null }
+): void {
+  if (!blocks.length) return;
+  const pageH = doc.internal.pageSize.height;
+  const bm = 18;
+  const titlePadX = 3;
+  /** Line step for checklist bullets — matches structured plan `lineHeight` (5.2) at 10pt */
+  const lineH = 5.2;
+  /** Same bar height and type scale as speech narrative section headings (see speech PDF loop). */
+  const speechHeadingBarH = 9;
+  const speechHeadingFontSize = 11;
+  const speechHeadingTextBaselineFromTop = 6;
+  /** Same as v2 action-plan body (“What you did” / “Why it matters”) */
+  const bulletFontSize = 10;
+  /** Min vertical space (mm) to prefer starting checklist on a fresh page. */
+  const minSpaceToContinue = 78;
+
+  let yTitleLine: number;
+  let yCols: number;
+
+  const resume = opts?.resumeY;
+  if (resume != null && resume > 0 && resume + minSpaceToContinue <= pageH - bm) {
+    yTitleLine = resume + 5;
+    yCols = yTitleLine + 9;
+  } else {
+    doc.addPage();
+    yTitleLine = 20;
+    yCols = 30;
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(30, 93, 168);
+  doc.text('ACTION PLAN CHECK LIST', speechMargin, yTitleLine);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(bulletFontSize);
+  doc.setTextColor(0, 0, 0);
+
+  const drawOneBlock = (block: ActionPlanChecklistBlock, x0: number, colW: number, yTop: number): number => {
+    let y = yTop;
+    const headPlain = String(block.action_title || '—').trim();
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(speechHeadingFontSize);
+    const titleLines = doc.splitTextToSize(headPlain, colW - titlePadX * 2);
+    const titleBoxH = speechHeadingBarH * Math.max(1, titleLines.length);
+    if (y + titleBoxH > pageH - bm - 4) {
+      doc.addPage();
+      y = 14;
+    }
+    doc.setFillColor(234, 243, 227);
+    doc.setDrawColor(146, 183, 117);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(x0, y, colW, titleBoxH, 2, 2, 'FD');
+    doc.setTextColor(22, 101, 52);
+    titleLines.forEach((tl: string, lineIdx: number) => {
+      const ty = y + lineIdx * speechHeadingBarH + speechHeadingTextBaselineFromTop;
+      doc.text(tl, x0 + titlePadX, ty);
+    });
+    y += titleBoxH + 5.8;
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(bulletFontSize);
+    (block.items || []).forEach((line) => {
+      const clean = formatChecklistItemLine(String(line));
+      const bullet = `- ${clean}`;
+      const wrapped = doc.splitTextToSize(bullet, colW - titlePadX - 2);
+      wrapped.forEach((wl: string) => {
+        if (y + lineH > pageH - bm) {
+          doc.addPage();
+          y = 14;
+        }
+        doc.text(wl, x0 + titlePadX, y);
+        y += lineH;
+      });
+      y += 0.55;
+    });
+    return y + 2;
+  };
+
+  const blockGap = 4;
+  let y = yCols;
+  for (let i = 0; i < blocks.length; i += 1) {
+    y = drawOneBlock(blocks[i], speechMargin, speechContentWidth, y);
+    if (i < blocks.length - 1) {
+      y += blockGap;
+    }
+  }
+}
+
+function parseActionPlanItemsV2(text: string): ActionPlanItem[] {
+  const items: ActionPlanItem[] = [];
+  const extractEvolutionLabel = (s: string): string => {
+    const evoMatch = s.match(/\[(IMPROVED|UNCHANGED|NEW)\]/i);
+    return evoMatch?.[1]?.toUpperCase() ?? '';
+  };
+  const blocks = text
+    .split(/\n(?=\s*\d+\.\s+)/)
+    .map((b) => b.trim())
+    .filter((b) => /^\d+\./.test(b));
+  for (const block of blocks) {
+    const firstNl = block.indexOf('\n');
+    const head = firstNl === -1 ? block : block.slice(0, firstNl);
+    const body = firstNl === -1 ? '' : block.slice(firstNl + 1);
+    const hm = head.match(/^(\d+)\.\s+(.+)$/);
+    if (!hm) continue;
+    const srNo = parseInt(hm[1], 10);
+    const titleLine = (hm[2] || '').trim();
+    const evolutionLabel = extractEvolutionLabel(titleLine);
+    const actionName = titleLine
+      .replace(/\[(IMPROVED|UNCHANGED|NEW)\]/gi, '')
+      .replace(/\*\*/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const what =
+      body
+        .match(/\*\*What you did:\*\*\s*([\s\S]*?)(?=\*\*Why it matters:\*\*)/i)?.[1]
+        ?.trim()
+        .replace(/\s+/g, ' ') ?? '';
+    const hasLegacyCue = /\*\*The cue:\*\*/i.test(body);
+    const why = hasLegacyCue
+      ? body
+          .match(/\*\*Why it matters:\*\*\s*([\s\S]*?)(?=\*\*The cue:\*\*)/i)?.[1]
+          ?.trim()
+          .replace(/\s+/g, ' ') ?? ''
+      : body
+          .match(/\*\*Why it matters:\*\*\s*([\s\S]*?)(?=\*\*Between interviews:\*\*)/i)?.[1]
+          ?.trim()
+          .replace(/\s+/g, ' ') ?? '';
+    const cue = hasLegacyCue
+      ? body
+          .match(/\*\*The cue:\*\*\s*([\s\S]*?)(?=\*\*Between interviews:\*\*)/i)?.[1]
+          ?.trim()
+          .replace(/\s+/g, ' ') ?? ''
+      : '';
+    const between =
+      body
+        .match(/\*\*Between interviews:\*\*\s*([\s\S]*?)(?=\n\s*\d+\.\s+|$)/i)?.[1]
+        ?.trim()
+        .replace(/\s+/g, ' ') ?? '';
+    if (!what && !why && !between) continue;
+    items.push({
+      srNo,
+      actionName,
+      format: 'v2',
+      addresses: '',
+      description: '',
+      expectedOutcome: '',
+      whatYouDid: what,
+      whyItMatters: why,
+      theCue: cue,
+      betweenInterviews: between,
+      evolutionLabel,
+    });
+  }
+  return items;
+}
+
+/**
+ * Parse action plan text into structured items.
+ * v2 (current): **What you did:** **Why it matters:** **Between interviews:**
+ * v2 (legacy): includes **The cue:**
+ * v1: **Addresses:** **Description:** **Expected outcome:**
+ * Supports three v1 formats:
  * - Format A: "1. Action name: Title" then **Addresses:**, **Description:**, **Expected outcome:**
  * - Format B: "1. **Title**" then same labels (current prompt output)
  * - Format C: "1. Title" (plain, no bold) then same labels (fallback for older/inconsistent LLM output)
  * Returns empty array only if no items could be extracted at all.
  */
 function parseActionPlanItems(raw: string): ActionPlanItem[] {
-  const text = raw.replace(/''/g, "'").trim();
+  const { planBody } = splitPersonalisedActionPlan(raw.replace(/''/g, "'").trim());
+  const text = planBody;
   const items: ActionPlanItem[] = [];
 
   const extractEvolutionLabel = (s: string): string => {
     const evoMatch = s.match(/\[(IMPROVED|UNCHANGED|NEW)\]/i);
     return evoMatch?.[1]?.toUpperCase() ?? '';
   };
+
+  const isV2 =
+    /\*\*What you did:\*\*/i.test(text) &&
+    /\*\*Why it matters:\*\*/i.test(text) &&
+    /\*\*Between interviews:\*\*/i.test(text);
+  if (isV2) {
+    const v2 = parseActionPlanItemsV2(text);
+    if (v2.length > 0) return v2;
+  }
 
   // Format A: "1. Action name: Pace Control Practice" then **Addresses:**, **Description:**, **Expected outcome:**
   const blocksA = text.split(/(?:^|\n)\s*(\d+)\.\s*Action name:\s*/i);
@@ -204,7 +495,7 @@ function parseActionPlanItems(raw: string): ActionPlanItem[] {
       const addresses = block.match(/\*\*Addresses:\*\*\s*([\s\S]*?)(?=\*\*Description:\*\*|\*\*Expected outcome:\*\*|\n\s*\d+\.\s*Action name:|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
       const description = block.match(/\*\*Description:\*\*\s*([\s\S]*?)(?=\*\*Expected outcome:\*\*|\n\s*\d+\.\s*Action name:|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
       const expectedOutcome = block.match(/\*\*Expected outcome:\*\*\s*([\s\S]*?)(?=\*\*Addresses:\*\*|\*\*Description:\*\*|\n\s*\d+\.\s*Action name:|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
-      items.push({ srNo, actionName, addresses, description, expectedOutcome, evolutionLabel });
+      items.push({ srNo, actionName, addresses, description, expectedOutcome, evolutionLabel, format: 'v1' });
     }
     if (items.length > 0) return items;
   }
@@ -216,11 +507,13 @@ function parseActionPlanItems(raw: string): ActionPlanItem[] {
     const srNo = parseInt(m[1], 10);
     const actionName = m[2].trim();
     const block = m[3];
-    const evolutionLabel = extractEvolutionLabel(block);
+    // Read evolution label only from the action title line, not from body text.
+    const titleLine = `${m[1]}. **${m[2]}** ${block.split('\n')[0] ?? ''}`;
+    const evolutionLabel = extractEvolutionLabel(titleLine);
     const addresses = block.match(/\*\*Addresses:\*\*\s*([\s\S]*?)(?=\n\s*\*\*Description:\*\*|\*\*Expected outcome:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
     const description = block.match(/\*\*Description:\*\*\s*([\s\S]*?)(?=\*\*Expected outcome:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
     const expectedOutcome = block.match(/\*\*Expected outcome:\*\*\s*([\s\S]*?)(?=\*\*Addresses:\*\*|\*\*Description:\*\*|\n\s*\d+\.|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
-    items.push({ srNo, actionName, addresses, description, expectedOutcome, evolutionLabel });
+    items.push({ srNo, actionName, addresses, description, expectedOutcome, evolutionLabel, format: 'v1' });
   }
   if (items.length > 0) return items;
 
@@ -233,12 +526,13 @@ function parseActionPlanItems(raw: string): ActionPlanItem[] {
       const firstLine = rest.split(/\n/)[0] ?? '';
       if (!/\*\*(Addresses|Description|Expected outcome):/i.test(rest)) continue;
       const actionName = firstLine.replace(/\*\*(Addresses|Description|Expected outcome):/i, '').replace(/\[(IMPROVED|UNCHANGED|NEW)\]/i, '').trim();
-      const evolutionLabel = extractEvolutionLabel(firstLine + '\n' + rest);
+      // Read evolution label only from the action title line, not from body text.
+      const evolutionLabel = extractEvolutionLabel(firstLine);
       const block = rest.replace(/^[^\n]*\n?/, '').trim();
       const addresses = block.match(/\*\*Addresses:\*\*\s*([\s\S]*?)(?=\*\*Description:\*\*|\*\*Expected outcome:\*\*|\n\s*\d+\.\s|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
       const description = block.match(/\*\*Description:\*\*\s*([\s\S]*?)(?=\*\*Expected outcome:\*\*|\n\s*\d+\.\s|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
       const expectedOutcome = block.match(/\*\*Expected outcome:\*\*\s*([\s\S]*?)(?=\*\*Addresses:\*\*|\*\*Description:\*\*|\n\s*\d+\.\s|$)/i)?.[1]?.trim().replace(/\s+/g, ' ').trim() ?? '';
-      items.push({ srNo, actionName, addresses, description, expectedOutcome, evolutionLabel });
+      items.push({ srNo, actionName, addresses, description, expectedOutcome, evolutionLabel, format: 'v1' });
     }
   }
   return items;
@@ -260,13 +554,13 @@ function formatOrdinalDate(date: Date | string | null | undefined): string {
 
 /**
  * Draw report/plan text with proper formatting: unescape '' to ', render **...** as bold.
- * Handles page breaks. doc is jsPDF instance.
+ * Handles page breaks. doc is jsPDF instance. Returns final baseline Y (for continuing layout).
  */
 function drawFormattedReportText(
   doc: any,
   rawText: string,
   opts: { startX: number; startY: number; maxWidth: number; lineHeight: number; pageHeight: number; bottomMargin: number; fontSize: number }
-): void {
+): number {
   const unescaped = rawText.replace(/''/g, "'");
   const parts: { text: string; bold: boolean }[] = [];
   let remaining = unescaped;
@@ -296,6 +590,7 @@ function drawFormattedReportText(
       y += opts.lineHeight;
     }
   }
+  return y;
 }
 
 const FinalResults = () => {
@@ -1313,6 +1608,7 @@ const FinalResults = () => {
       // ============================================
       const speechSheet = workbook.addWorksheet('Speech Analysis');
       const blueFill = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF1E5DA8' } };
+      const checklistActionNameFill = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFEAF3E3' } };
       const thinBorder = {
         top: { style: 'thin' as const, color: { argb: 'FF000000' } },
         left: { style: 'thin' as const, color: { argb: 'FF000000' } },
@@ -1466,12 +1762,32 @@ const FinalResults = () => {
       speechRow += 2;
 
       const actionPlan = reportData?.interview?.personalised_action_plan;
-      speechSheet.getCell(speechRow, 1).value = 'Your Personalised Action Plan';
+      const planStr = actionPlan && String(actionPlan).trim() ? String(actionPlan).trim() : '';
+      const planItems = planStr ? parseActionPlanItems(planStr) : [];
+      const checklistForExcel = resolveActionPlanChecklistBlocks(reportData?.interview, planStr);
+      let checklistExcelWritten = false;
+      const planIsV2 = planItems.some((i) => i.format === 'v2');
+      const v2HasCueCol = planItems.some((i) => i.format === 'v2' && (i.theCue || '').trim());
+      const excelPlanCols = planIsV2 ? (v2HasCueCol ? 5 : 4) : 4;
+      const actionPlanSheetTitle =
+        planItems.length > 0 || planStr
+          ? 'Your Personalised Action Plan'
+          : checklistForExcel.length > 0
+            ? 'ACTION PLAN CHECK LIST'
+            : 'Your Personalised Action Plan';
+      speechSheet.getCell(speechRow, 1).value = actionPlanSheetTitle;
       speechSheet.getCell(speechRow, 1).font = { bold: true, size: 12 };
       speechRow += 2;
-      const planItems = actionPlan && String(actionPlan).trim() ? parseActionPlanItems(String(actionPlan).trim()) : [];
       if (planItems.length > 0) {
-        speechSheet.addRow(['Action Name', 'Addresses', 'Description', 'Expected outcome']);
+        if (planIsV2) {
+          if (v2HasCueCol) {
+            speechSheet.addRow(['Action Name', 'What you did', 'Why it matters', 'The cue', 'Between interviews']);
+          } else {
+            speechSheet.addRow(['Action Name', 'What you did', 'Why it matters', 'Between interviews']);
+          }
+        } else {
+          speechSheet.addRow(['Action Name', 'Addresses', 'Description', 'Expected outcome']);
+        }
         speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
           cell.fill = blueFill;
           cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
@@ -1479,27 +1795,95 @@ const FinalResults = () => {
           cell.alignment = { vertical: 'middle', wrapText: true };
         });
         planItems.forEach((item) => {
-          const nameWithEvo = item.evolutionLabel
+          const nameWithTitle = item.evolutionLabel
             ? `${item.actionName || '—'} [${item.evolutionLabel}]`
             : (item.actionName || '—');
-          speechSheet.addRow([
-            nameWithEvo,
-            item.addresses || '—',
-            item.description || '—',
-            item.expectedOutcome || '—',
-          ]);
+          if (item.format === 'v2') {
+            if (v2HasCueCol) {
+              speechSheet.addRow([
+                nameWithTitle,
+                item.whatYouDid || '—',
+                item.whyItMatters || '—',
+                item.theCue || '—',
+                item.betweenInterviews || '—',
+              ]);
+            } else {
+              speechSheet.addRow([
+                nameWithTitle,
+                item.whatYouDid || '—',
+                item.whyItMatters || '—',
+                item.betweenInterviews || '—',
+              ]);
+            }
+          } else {
+            speechSheet.addRow([
+              nameWithTitle,
+              item.addresses || '—',
+              item.description || '—',
+              item.expectedOutcome || '—',
+            ]);
+          }
           speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
             cell.border = thinBorder;
             cell.font = { size: 10 };
             cell.alignment = { vertical: 'middle', wrapText: true };
           });
         });
+        if (checklistForExcel.length > 0) {
+          speechRow = speechSheet.rowCount + 2;
+          speechSheet.getCell(speechRow, 1).value = 'ACTION PLAN CHECK LIST';
+          speechSheet.getCell(speechRow, 1).font = { bold: true, size: 12 };
+          speechRow += 1;
+          speechSheet.addRow(['Action', 'Items']);
+          speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
+            cell.fill = blueFill;
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+            cell.border = thinBorder;
+            cell.alignment = { vertical: 'middle', wrapText: true };
+          });
+          checklistForExcel.forEach((block) => {
+            const lines = block.items.map((t) => `• ${formatChecklistItemLine(String(t))}`).join('\n');
+            speechSheet.addRow([block.action_title || '—', lines]);
+            speechSheet.getRow(speechSheet.rowCount).eachCell((cell, colNumber) => {
+              cell.border = thinBorder;
+              cell.font = { size: 10 };
+              cell.alignment = { vertical: 'top', wrapText: true };
+              if (colNumber === 1) cell.fill = checklistActionNameFill;
+            });
+          });
+          checklistExcelWritten = true;
+        }
       } else if (actionPlan && String(actionPlan).trim()) {
         speechSheet.getCell(speechRow, 1).value = String(actionPlan).trim().replace(/''/g, "'");
         speechSheet.getCell(speechRow, 1).alignment = { vertical: 'top', wrapText: true };
-        speechSheet.mergeCells(speechRow, 1, speechRow, 4);
-      } else {
+        speechSheet.mergeCells(speechRow, 1, speechRow, Math.max(4, excelPlanCols));
+      } else if (!checklistForExcel.length) {
         speechSheet.getCell(speechRow, 1).value = 'No personalised action plan available.';
+      }
+      if (checklistForExcel.length > 0 && !checklistExcelWritten) {
+        if (planItems.length > 0 || planStr) {
+          speechRow = speechSheet.rowCount + 2;
+          speechSheet.getCell(speechRow, 1).value = 'ACTION PLAN CHECK LIST';
+          speechSheet.getCell(speechRow, 1).font = { bold: true, size: 12 };
+          speechRow += 1;
+        }
+        speechSheet.addRow(['Action', 'Items']);
+        speechSheet.getRow(speechSheet.rowCount).eachCell((cell) => {
+          cell.fill = blueFill;
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+          cell.border = thinBorder;
+          cell.alignment = { vertical: 'middle', wrapText: true };
+        });
+        checklistForExcel.forEach((block) => {
+          const lines = block.items.map((t) => `• ${formatChecklistItemLine(String(t))}`).join('\n');
+          speechSheet.addRow([block.action_title || '—', lines]);
+          speechSheet.getRow(speechSheet.rowCount).eachCell((cell, colNumber) => {
+            cell.border = thinBorder;
+            cell.font = { size: 10 };
+            cell.alignment = { vertical: 'top', wrapText: true };
+            if (colNumber === 1) cell.fill = checklistActionNameFill;
+          });
+        });
       }
       }
 
@@ -2544,7 +2928,8 @@ const FinalResults = () => {
           if (yPos + extraLines * lineHeight > pageHeight - bottomMargin) {
             doc.addPage();
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
+            // Keep speech body typography consistent across page breaks.
+            doc.setFontSize(10);
             doc.setTextColor(0, 0, 0);
             yPos = 20;
           }
@@ -2554,7 +2939,13 @@ const FinalResults = () => {
           'how your delivery held up across the session': { bg: [232, 244, 255], text: [26, 86, 219] },
           'your consistent habits': { bg: [232, 244, 255], text: [26, 86, 219] },
           'where pressure changed your delivery': { bg: [232, 244, 255], text: [26, 86, 219] },
+          'how you opened each answer': { bg: [232, 244, 255], text: [26, 86, 219] },
+          'your flow and filler pattern': { bg: [236, 253, 245], text: [5, 122, 85] },
+          'how you closed each answer': { bg: [254, 243, 199], text: [146, 64, 14] },
+          'your vocal presence': { bg: [239, 246, 255], text: [30, 64, 175] },
           'what to protect': { bg: [240, 253, 244], text: [4, 120, 87] },
+          'what to keep doing': { bg: [240, 253, 244], text: [4, 120, 87] },
+          'what changed since last time': { bg: [245, 240, 255], text: [107, 70, 193] },
           'what an interviewer would have noticed': { bg: [255, 251, 235], text: [180, 83, 9] },
           'progress over your interviews': { bg: [245, 240, 255], text: [107, 70, 193] },
         };
@@ -2566,9 +2957,10 @@ const FinalResults = () => {
           const sectionColor = speechSectionColorMap[title.toLowerCase()] || PARAM_COLOR_PALETTE[sectionIdx % PARAM_COLOR_PALETTE.length];
 
           // Heading
+          ensureSpace(5);
+          // ensureSpace() may add a page and reset typography; re-apply heading style afterwards.
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(11);
-          ensureSpace(5);
           const headingBoxY = yPos - 2.5;
           const headingBoxH = 9;
           const headingTextX = speechMargin + 2.5;
@@ -2607,21 +2999,25 @@ const FinalResults = () => {
         
       }
 
-      // Page: Your Personalised Action Plan — one column per attribute (no Sr No)
+      // Page: Your Personalised Action Plan — checklist prefers `interview.set_of_actions` (same data as markdown tail).
       const actionPlan = reportData?.interview?.personalised_action_plan;
-      if (actionPlan && String(actionPlan).trim()) {
+      const planRaw = String(actionPlan ?? '').trim();
+      const planItems = planRaw ? parseActionPlanItems(planRaw) : [];
+      const checklistPdfBlocks = resolveActionPlanChecklistBlocks(reportData?.interview, planRaw);
+      const hasPlanBody = planRaw.length > 0;
+      if (hasPlanBody || checklistPdfBlocks.length > 0) {
         const speechMargin = 8;
         const speechContentWidth = pageWidth - speechMargin * 2;
-        doc.addPage();
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(12);
-        doc.setTextColor(30, 93, 168);
-        doc.text('YOUR PERSONALISED ACTION PLAN', speechMargin, 20);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(0, 0, 0);
-        const planRaw = String(actionPlan).trim();
-        const planItems = parseActionPlanItems(planRaw);
+        if (hasPlanBody) {
+          doc.addPage();
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(12);
+          doc.setTextColor(30, 93, 168);
+          doc.text('YOUR PERSONALISED ACTION PLAN', speechMargin, 20);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.setTextColor(0, 0, 0);
+        }
         if (planItems.length > 0) {
           const leverageColors: Record<string, { bg: [number, number, number]; text: [number, number, number] }> = {
             'Highest leverage': { bg: [246, 232, 235], text: [146, 27, 56] },
@@ -2673,6 +3069,54 @@ const FinalResults = () => {
             }
           };
 
+          /** Bordered callout for “The cue” / “Between interviews” (lavender vs teal). */
+          const drawV2HighlightBox = (
+            label: string,
+            body: string,
+            box: {
+              fill: [number, number, number];
+              stroke: [number, number, number];
+              header: [number, number, number];
+              bodyRgb: [number, number, number];
+            }
+          ) => {
+            const innerPadX = 2;
+            const innerW = contentWidth - 4;
+            const wrapped = doc.splitTextToSize(body || '—', innerW);
+            const n = Math.max(1, wrapped.length);
+            const boxH = 12 + n * lineHeight;
+            ensureSpace(boxH + 4);
+            const boxY = yPos;
+            doc.setFillColor(box.fill[0], box.fill[1], box.fill[2]);
+            doc.setDrawColor(box.stroke[0], box.stroke[1], box.stroke[2]);
+            doc.setLineWidth(0.3);
+            doc.rect(contentX - 1, boxY, contentWidth + 2, boxH, 'FD');
+            const labelBaseline = boxY + 6;
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setTextColor(box.header[0], box.header[1], box.header[2]);
+            doc.text(`${label}:`, contentX + innerPadX, labelBaseline);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(10);
+            doc.setTextColor(box.bodyRgb[0], box.bodyRgb[1], box.bodyRgb[2]);
+            const bodyFirstBaseline = labelBaseline + lineHeight + 2;
+            doc.text(wrapped, contentX + innerPadX, bodyFirstBaseline);
+            yPos = boxY + boxH + 3;
+          };
+
+          const cueCalloutStyle = {
+            fill: [234, 234, 248] as [number, number, number],
+            stroke: [129, 140, 248] as [number, number, number],
+            header: [76, 80, 191] as [number, number, number],
+            bodyRgb: [26, 26, 26] as [number, number, number],
+          };
+          const betweenCalloutStyle = {
+            fill: [204, 251, 241] as [number, number, number],
+            stroke: [45, 212, 191] as [number, number, number],
+            header: [15, 118, 110] as [number, number, number],
+            bodyRgb: [26, 26, 26] as [number, number, number],
+          };
+
           planItems.forEach((item, idx) => {
             const { cleanName, leverage } = extractLeverage(item.actionName || '');
             const leverageLabel = leverage || (idx === planItems.length - 1 ? 'Maintenance' : idx === 0 ? 'Highest leverage' : 'High leverage');
@@ -2709,24 +3153,8 @@ const FinalResults = () => {
 
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(10);
-            const addressesPrefix = 'Addresses: ';
-            const addressesPrefixWidth = doc.getTextWidth(addressesPrefix);
-            const addressesLines = estimateLines(addressesText, Math.max(20, contentWidth - addressesPrefixWidth), 10);
-            const descriptionLines = estimateLines(descriptionText, contentWidth, 10);
-            const outcomeLabelLines = estimateLines('-> Expected outcome', contentWidth - 4, 9);
-            const outcomeBodyLines = estimateLines(outcomeText, contentWidth - 4, 10);
-            const outcomeBoxH = 6 + (outcomeLabelLines * (lineHeight - 0.4)) + 3 + (outcomeBodyLines * lineHeight) + 4;
-            const itemHeight =
-              12 + // number/title row
-              2 +
-              Math.max(1, addressesLines) * lineHeight +
-              2 +
-              Math.max(1, descriptionLines) * lineHeight +
-              4 +
-              outcomeBoxH +
-              7;
-
-            ensureSpace(itemHeight);
+            // Reserve only the action header first; let long body/outcome continue naturally.
+            ensureSpace(16);
 
             // Number box
             doc.setFillColor(234, 234, 248);
@@ -2764,42 +3192,83 @@ const FinalResults = () => {
 
             yPos += 14;
 
-            // Addresses line
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(10);
-            doc.setTextColor(90, 90, 90);
-            doc.text(addressesPrefix, contentX, yPos);
-            const addressValueX = contentX + addressesPrefixWidth;
-            const addressWrapped = doc.splitTextToSize(addressesText, Math.max(20, contentWidth - addressesPrefixWidth));
-            doc.text(addressWrapped, addressValueX, yPos);
-            yPos += Math.max(1, addressWrapped.length) * lineHeight + 1.5;
+            if (item.format === 'v2') {
+              const v2PlainRows: { label: string; text: string }[] = [
+                { label: 'What you did', text: item.whatYouDid || '—' },
+                { label: 'Why it matters', text: item.whyItMatters || '—' },
+              ];
+              for (const row of v2PlainRows) {
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9);
+                doc.setTextColor(0, 0, 0);
+                doc.text(`${row.label}:`, contentX, yPos);
+                yPos += lineHeight;
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(10);
+                doc.setTextColor(0, 0, 0);
+                const wrapped = doc.splitTextToSize(row.text, contentWidth);
+                ensureSpace(Math.max(1, wrapped.length) * lineHeight + 3);
+                doc.text(wrapped, contentX, yPos);
+                yPos += Math.max(1, wrapped.length) * lineHeight + 2;
+              }
+              if ((item.theCue || '').trim()) {
+                drawV2HighlightBox('The cue', item.theCue || '—', cueCalloutStyle);
+              }
+              drawV2HighlightBox('Between interviews', item.betweenInterviews || '—', betweenCalloutStyle);
+            } else {
+              const addressesPrefix = 'Addresses: ';
+              const addressesPrefixWidth = doc.getTextWidth(addressesPrefix);
+              const outcomeLabelLines = estimateLines('-> Expected outcome', contentWidth - 4, 9);
+              const outcomeBodyLines = estimateLines(outcomeText, contentWidth - 4, 10);
+              const outcomeBoxH = 6 + (outcomeLabelLines * (lineHeight - 0.4)) + 3 + (outcomeBodyLines * lineHeight) + 4;
+              // Addresses line
+              doc.setFont('helvetica', 'normal');
+              doc.setFontSize(10);
+              doc.setTextColor(90, 90, 90);
+              doc.text(addressesPrefix, contentX, yPos);
+              const addressValueX = contentX + addressesPrefixWidth;
+              const addressWrapped = doc.splitTextToSize(addressesText, Math.max(20, contentWidth - addressesPrefixWidth));
+              ensureSpace(Math.max(1, addressWrapped.length) * lineHeight + 2);
+              doc.text(addressWrapped, addressValueX, yPos);
+              yPos += Math.max(1, addressWrapped.length) * lineHeight + 1.5;
 
-            // Description
-            doc.setTextColor(60, 60, 60);
-            const descWrapped = doc.splitTextToSize(descriptionText, contentWidth);
-            doc.text(descWrapped, contentX, yPos);
-            yPos += Math.max(1, descWrapped.length) * lineHeight + 3.5;
+              // Description
+              doc.setTextColor(60, 60, 60);
+              const descWrapped = doc.splitTextToSize(descriptionText, contentWidth);
+              ensureSpace(Math.max(1, descWrapped.length) * lineHeight + 4);
+              doc.text(descWrapped, contentX, yPos);
+              yPos += Math.max(1, descWrapped.length) * lineHeight + 3.5;
 
-            // Expected outcome box
-            const outcomeBoxY = yPos;
-            doc.setFillColor(234, 243, 227);
-            doc.setDrawColor(146, 183, 117);
-            doc.setLineWidth(0.3);
-            doc.rect(contentX - 1, outcomeBoxY, contentWidth + 2, outcomeBoxH, 'FD');
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(9);
-            doc.setTextColor(67, 119, 24);
-            doc.text('Expected outcome', contentX + 2, outcomeBoxY + 5.2);
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(10);
-            doc.setTextColor(63, 90, 38);
-            const outcomeWrapped = doc.splitTextToSize(outcomeText, contentWidth - 4);
-            doc.text(outcomeWrapped, contentX + 2, outcomeBoxY + 11);
-            yPos += outcomeBoxH + 5;
+              // Expected outcome box
+              ensureSpace(outcomeBoxH + 5);
+              const outcomeBoxY = yPos;
+              doc.setFillColor(234, 243, 227);
+              doc.setDrawColor(146, 183, 117);
+              doc.setLineWidth(0.3);
+              doc.rect(contentX - 1, outcomeBoxY, contentWidth + 2, outcomeBoxH, 'FD');
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(9);
+              doc.setTextColor(67, 119, 24);
+              doc.text('Expected outcome', contentX + 2, outcomeBoxY + 5.2);
+              doc.setFont('helvetica', 'normal');
+              doc.setFontSize(10);
+              doc.setTextColor(63, 90, 38);
+              const outcomeWrapped = doc.splitTextToSize(outcomeText, contentWidth - 4);
+              doc.text(outcomeWrapped, contentX + 2, outcomeBoxY + 11);
+              yPos += outcomeBoxH + 5;
+            }
+
+            if (idx < planItems.length - 1) {
+              yPos += 5;
+            }
           });
-        } else {
-          const planBody = normalizeActionPlanText(planRaw);
-          drawFormattedReportText(doc, planBody, {
+
+          drawActionPlanChecklistPdf(doc, checklistPdfBlocks, speechMargin, speechContentWidth, {
+            resumeY: yPos + (checklistPdfBlocks.length > 0 ? 7.5 : 0),
+          });
+        } else if (hasPlanBody) {
+          const planBody = normalizeActionPlanText(splitPersonalisedActionPlan(planRaw).planBody);
+          const formattedEndY = drawFormattedReportText(doc, planBody, {
             startX: speechMargin,
             startY: 28,
             maxWidth: speechContentWidth,
@@ -2808,6 +3277,11 @@ const FinalResults = () => {
             bottomMargin: 28,
             fontSize: 9,
           });
+          drawActionPlanChecklistPdf(doc, checklistPdfBlocks, speechMargin, speechContentWidth, {
+            resumeY: formattedEndY + (checklistPdfBlocks.length > 0 ? 7.5 : 0),
+          });
+        } else {
+          drawActionPlanChecklistPdf(doc, checklistPdfBlocks, speechMargin, speechContentWidth);
         }
       }
       }
@@ -3354,7 +3828,115 @@ selectedCompetencyKey === paramKey
           </div>
         )}
 
-                 
+        {/* Action plan + checklist; checklist reads `set_of_actions` first (same payload as markdown tail). */}
+        {reportVariant !== 'recruiter' &&
+          reportData?.interview &&
+          (() => {
+            const planRawWeb = String(reportData.interview.personalised_action_plan ?? '').trim();
+            const items = planRawWeb ? parseActionPlanItems(planRawWeb) : [];
+            const checklistBlocks = resolveActionPlanChecklistBlocks(reportData.interview, planRawWeb);
+            if (items.length === 0 && checklistBlocks.length === 0) return null;
+            return (
+              <div className="rounded-lg p-4 sm:p-6 mb-4 sm:mb-6 bg-white border border-gray-200 shadow-sm">
+                <h3 className={`text-lg sm:text-xl font-semibold mb-3 sm:mb-4 ${isCandidateReport ? 'text-sky-800' : 'text-[#1e5da8]'}`}>
+                  {items.length > 0 ? 'Your personalised action plan' : 'ACTION PLAN CHECK LIST'}
+                </h3>
+                {items.length > 0 ? (
+                <div className="space-y-11 sm:space-y-12 pb-1 sm:pb-2">
+                  {items.map((item, idx) => (
+                    <div key={idx} className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 sm:p-5 space-y-4">
+                      <div className="font-bold text-base sm:text-lg text-gray-900">
+                        {(item.actionName || '—').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim()}
+                      </div>
+                      {item.format === 'v2' ? (
+                        <>
+                          <div>
+                            <div className="font-bold text-sm text-gray-900">What you did:</div>
+                            <p className="text-sm sm:text-base text-gray-900 mt-1 whitespace-pre-wrap">{item.whatYouDid || '—'}</p>
+                          </div>
+                          <div>
+                            <div className="font-bold text-sm text-gray-900">Why it matters:</div>
+                            <p className="text-sm sm:text-base text-gray-900 mt-1 whitespace-pre-wrap">{item.whyItMatters || '—'}</p>
+                          </div>
+                          {(item.theCue || '').trim() ? (
+                            <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 sm:p-4">
+                              <div className="font-bold text-sm text-indigo-700 mb-1.5">The cue:</div>
+                              <p className="text-sm sm:text-base text-[#1a1a1a] whitespace-pre-wrap">{item.theCue}</p>
+                            </div>
+                          ) : null}
+                          <div className="rounded-lg border border-teal-300 bg-teal-50 p-3 sm:p-4">
+                            <div className="font-bold text-sm text-teal-800 mb-1.5">Between interviews:</div>
+                            <p className="text-sm sm:text-base text-[#1a1a1a] whitespace-pre-wrap">{item.betweenInterviews || '—'}</p>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-sm sm:text-base text-gray-900 space-y-3 whitespace-pre-wrap">
+                          <p>
+                            <span className="font-semibold">Addresses: </span>
+                            {item.addresses || '—'}
+                          </p>
+                          <p>{item.description || '—'}</p>
+                          <div className="rounded-lg border border-emerald-200 bg-emerald-50/90 p-3">
+                            <div className="font-bold text-sm text-emerald-900 mb-1">Expected outcome</div>
+                            <p className="text-[#1a1a1a]">{item.expectedOutcome || '—'}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                ) : null}
+                {checklistBlocks.length > 0 ? (
+                  <div
+                    className={
+                      items.length > 0
+                        ? 'mt-[5.5rem] sm:mt-24 pt-[4.5rem] sm:pt-20 border-t border-gray-200'
+                        : 'mt-3 sm:mt-4'
+                    }
+                  >
+                    {items.length > 0 ? (
+                      <h4
+                        className={`text-lg sm:text-xl font-semibold mb-3 sm:mb-4 ${
+                          isCandidateReport ? 'text-sky-800' : 'text-[#1e5da8]'
+                        }`}
+                      >
+                        ACTION PLAN CHECK LIST
+                      </h4>
+                    ) : null}
+                    <div className="flex flex-col gap-5 sm:gap-6">
+                      {checklistBlocks.map((block, cidx) => (
+                        <div
+                          key={cidx}
+                          className="rounded-lg border border-gray-200/90 bg-white shadow-sm p-3.5 sm:p-4"
+                        >
+                          {/* ~9mm / speech-section bar height: compact row, 11pt-equivalent type */}
+                          <div className="w-full min-h-[2.125rem] rounded-lg border border-emerald-200/70 bg-[#eaf3e3] px-3.5 sm:px-4 py-1 sm:py-1.5 flex items-start">
+                            <p className="font-bold text-[13px] sm:text-[14px] leading-snug text-emerald-950 m-0">
+                              {block.action_title}
+                            </p>
+                          </div>
+                          <ul className="m-0 mt-5 sm:mt-6 list-none space-y-3 sm:space-y-3.5 p-0">
+                            {block.items.map((line, iidx) => (
+                              <li
+                                key={iidx}
+                                className="flex gap-3.5 items-start text-sm sm:text-base text-gray-900 leading-relaxed"
+                              >
+                                <span
+                                  className="mt-[0.5rem] sm:mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600"
+                                  aria-hidden
+                                />
+                                <span className="min-w-0 pt-px whitespace-pre-wrap">{formatChecklistItemLine(line)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })()}
 
         {/* Complete Session Video */}
         {reportData.interview?.session_video_url && (

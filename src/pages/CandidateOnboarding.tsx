@@ -88,52 +88,8 @@ export default function CandidateOnboarding() {
       setError('First name and last name are required.');
       return;
     }
-    if (!mobile.trim()) {
-      setError('Mobile number is required.');
-      return;
-    }
     setSubmitting(true);
     try {
-      const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_SEND_OTP), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile: mobile.trim() }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data?.error || 'Failed to send OTP.');
-        setSubmitting(false);
-        return;
-      }
-      setStep(STEPS.OTP);
-      setOtp('');
-      setError('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.');
-    }
-    setSubmitting(false);
-  };
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    if (!otp.trim()) {
-      setError('Enter the OTP you received.');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_VERIFY_OTP), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile: mobile.trim(), code: otp.trim() }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data?.error || 'Invalid or expired OTP.');
-        setSubmitting(false);
-        return;
-      }
       const authUser = user ?? (await supabase.auth.getUser()).data.user;
       if (!authUser?.id || !authUser?.email) {
         setError('Session expired. Please sign in again.');
@@ -147,7 +103,7 @@ export default function CandidateOnboarding() {
         body: JSON.stringify({
           first_name: firstName.trim(),
           last_name: lastName.trim(),
-          mobile: mobile.trim(),
+          mobile: null,
           referral_slug: null,
         }),
       });
@@ -171,7 +127,93 @@ export default function CandidateOnboarding() {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
     }
     setSubmitting(false);
+
+    // --- Twilio send-OTP + OTP step — restore when mobile field is shown again ---
+    // if (!mobile.trim()) {
+    //   setError('Mobile number is required.');
+    //   return;
+    // }
+    // setSubmitting(true);
+    // try {
+    //   const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_SEND_OTP), {
+    //     method: 'POST',
+    //     headers: { 'Content-Type': 'application/json' },
+    //     body: JSON.stringify({ mobile: mobile.trim() }),
+    //   });
+    //   const data = await res.json().catch(() => ({}));
+    //   if (!res.ok) {
+    //     setError(data?.error || 'Failed to send OTP.');
+    //     setSubmitting(false);
+    //     return;
+    //   }
+    //   setStep(STEPS.OTP);
+    //   setOtp('');
+    //   setError('');
+    // } catch (err) {
+    //   setError(err instanceof Error ? err.message : 'Something went wrong.');
+    // }
+    // setSubmitting(false);
   };
+
+  // --- OTP verify (Twilio) — uncomment when OTP step is shown again ---
+  // const handleVerifyOtp = async (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   setError('');
+  //   if (!otp.trim()) {
+  //     setError('Enter the OTP you received.');
+  //     return;
+  //   }
+  //   setSubmitting(true);
+  //   try {
+  //     const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_VERIFY_OTP), {
+  //       method: 'POST',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       body: JSON.stringify({ mobile: mobile.trim(), code: otp.trim() }),
+  //     });
+  //     const data = await res.json().catch(() => ({}));
+  //     if (!res.ok) {
+  //       setError(data?.error || 'Invalid or expired OTP.');
+  //       setSubmitting(false);
+  //       return;
+  //     }
+  //     const authUser = user ?? (await supabase.auth.getUser()).data.user;
+  //     if (!authUser?.id || !authUser?.email) {
+  //       setError('Session expired. Please sign in again.');
+  //       setSubmitting(false);
+  //       return;
+  //     }
+  //     const headers = await getAuthHeaders();
+  //     const completeRes = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_ONBOARDING_COMPLETE), {
+  //       method: 'POST',
+  //       headers,
+  //       body: JSON.stringify({
+  //         first_name: firstName.trim(),
+  //         last_name: lastName.trim(),
+  //         mobile: mobile.trim(),
+  //         referral_slug: null,
+  //       }),
+  //     });
+  //     const completeData = await completeRes.json().catch(() => ({}));
+  //     if (!completeRes.ok) {
+  //       setError(completeData?.error || 'Failed to complete profile.');
+  //       setSubmitting(false);
+  //       return;
+  //     }
+  //     await refreshUser();
+  //     setStep(STEPS.PLAN);
+  //     setError('');
+  //     const plansRes = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_PLANS));
+  //     const plansData = await plansRes.json().catch(() => ({}));
+  //     if (plansRes.ok && Array.isArray(plansData?.plans)) {
+  //       setPlans(plansData.plans);
+  //       const free = plansData.plans.find((p: Plan) => p.is_free);
+  //       if (free) setSelectedPlanId(free.id);
+  //     }
+  //   } catch (err) {
+  //     setError(err instanceof Error ? err.message : 'Something went wrong.');
+  //   }
+  //   setSubmitting(false);
+  // };
 
   const handlePlanSelectAndPay = async () => {
     if (!selectedPlanId) {
@@ -181,15 +223,15 @@ export default function CandidateOnboarding() {
     const plan = plans.find((p) => p.id === selectedPlanId);
     if (!plan) return;
     if (plan.is_free) {
-      const headers = await getAuthHeaders();
-      const slug = extractReferralSlug(referralPaste);
-      if (slug) {
-        await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_APPLY_REFERRAL), {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ referral_slug: slug }),
-        });
-      }
+      // const headers = await getAuthHeaders();
+      // const slug = extractReferralSlug(referralPaste);
+      // if (slug) {
+      //   await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_APPLY_REFERRAL), {
+      //     method: 'POST',
+      //     headers,
+      //     body: JSON.stringify({ referral_slug: slug }),
+      //   });
+      // }
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (authUser?.id) {
         const sessionData = await SessionManager.createSession(authUser.id);
@@ -206,14 +248,14 @@ export default function CandidateOnboarding() {
     setError('');
     try {
       const headers = await getAuthHeaders();
-      const slug = extractReferralSlug(referralPaste);
-      if (slug) {
-        await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_APPLY_REFERRAL), {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ referral_slug: slug }),
-        });
-      }
+      // const slug = extractReferralSlug(referralPaste);
+      // if (slug) {
+      //   await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_APPLY_REFERRAL), {
+      //     method: 'POST',
+      //     headers,
+      //     body: JSON.stringify({ referral_slug: slug }),
+      //   });
+      // }
       const orderRes = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_CREATE_ORDER), {
         method: 'POST',
         headers,
@@ -228,7 +270,8 @@ export default function CandidateOnboarding() {
       const { order_id, amount, currency, key_id } = orderData;
       setRazorpayKeyId(key_id);
       const digitsOnly = mobile.trim().replace(/\D/g, '');
-      const contactForRazorpay = digitsOnly.length === 10 ? '91' + digitsOnly : digitsOnly;
+      const contactForRazorpay =
+        digitsOnly.length === 10 ? '91' + digitsOnly : digitsOnly.length > 0 ? digitsOnly : '';
       const { data: { user: authUser } } = await supabase.auth.getUser();
       const options = {
         key: key_id,
@@ -236,7 +279,7 @@ export default function CandidateOnboarding() {
         currency,
         order_id,
         prefill: {
-          contact: contactForRazorpay,
+          ...(contactForRazorpay ? { contact: contactForRazorpay } : {}),
           ...(authUser?.email && { email: authUser.email }),
         },
         handler: async (response: { razorpay_payment_id: string; razorpay_signature: string }) => {
@@ -304,7 +347,7 @@ export default function CandidateOnboarding() {
             {step === STEPS.PLAN && 'Choose a plan'}
           </CardTitle>
           <p className="text-sm sm:text-base text-gray-600">
-            {step === STEPS.NAME_MOBILE && 'Enter your name and mobile number. We’ll send you an OTP to verify.'}
+            {step === STEPS.NAME_MOBILE && 'Enter your name, then choose a plan on the next step.'}
             {step === STEPS.OTP && 'Enter the 6-digit OTP sent to your mobile.'}
             {step === STEPS.PLAN && 'Select a plan to get started. You can pay securely via Razorpay.'}
           </p>
@@ -334,6 +377,7 @@ export default function CandidateOnboarding() {
                   disabled={submitting}
                 />
               </div>
+              {/* --- Mobile + Twilio OTP — restore with OTP step ---
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-700">Mobile number</Label>
                 <Input
@@ -345,13 +389,15 @@ export default function CandidateOnboarding() {
                   disabled={submitting}
                 />
               </div>
+              */}
               <Button type="submit" className="w-full min-h-[44px] h-11 text-base bg-sky-600 hover:bg-sky-700 touch-manipulation" disabled={submitting}>
-                {submitting ? 'Sending OTP...' : "Let's move forward"}
+                {submitting ? 'Saving...' : 'Continue'}
               </Button>
               {error && <div className="text-red-600 text-sm text-center">{error}</div>}
             </form>
           )}
 
+          {/* --- OTP step (Twilio) — uncomment + restore handleVerifyOtp ---
           {step === STEPS.OTP && (
             <form className="space-y-4" onSubmit={handleVerifyOtp}>
               <div className="space-y-2">
@@ -379,6 +425,7 @@ export default function CandidateOnboarding() {
               {error && <div className="text-red-600 text-sm text-center">{error}</div>}
             </form>
           )}
+          */}
 
           {step === STEPS.PLAN && (
             <div className="space-y-4">
@@ -397,6 +444,7 @@ export default function CandidateOnboarding() {
                   ))}
                 </select>
               </div>
+              {/* --- Referral paste — restore with CANDIDATE_APPLY_REFERRAL calls ---
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-700">Referral link (optional)</Label>
                 <Input
@@ -407,6 +455,7 @@ export default function CandidateOnboarding() {
                   disabled={submitting}
                 />
               </div>
+              */}
               <Button
                 type="button"
                 className="w-full min-h-[44px] h-11 text-base bg-sky-600 hover:bg-sky-700 touch-manipulation"
