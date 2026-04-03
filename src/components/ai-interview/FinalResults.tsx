@@ -1277,7 +1277,8 @@ const FinalResults = () => {
             // Question header with icon
             doc.setFontSize(14);
             doc.setFont('helvetica', 'bold');
-            doc.text(`Question ${index + 1}`, 15, yPosition);
+            const qOrd = question?.question_order ?? index;
+            doc.text(`Question [Q${qOrd}]`, 15, yPosition);
             yPosition += 10;
             
             // Question text
@@ -2643,8 +2644,10 @@ const FinalResults = () => {
         const score = row.answer != null ? (row.answer.score ?? 'N/A') : 'N/A';
 
         let yPos = contentStartY;
-        // Label as simple "Question"
-        drawField('Question', row.question.questionText || 'N/A', { separator: false });
+        const qOrderForLabel = Number.isFinite(Number(row?.question?.question_order))
+          ? Number(row.question.question_order)
+          : idx;
+        drawField(`Question [Q${qOrderForLabel}]`, row.question.questionText || 'N/A', { separator: false });
         // Candidate answer should match normal body font (no italics)
         drawField('Candidate Answer', transcript, { separator: false });
         // Only show a Written Answer row if there is actual written content
@@ -3727,7 +3730,9 @@ selectedCompetencyKey === paramKey
                               <div className="flex items-start justify-between gap-5 p-6 sm:p-8 min-h-[140px] sm:min-h-[160px]">
                                 <div className="min-w-0 flex-1 text-left">
                                   <div className="flex items-center gap-3 mb-3">
-                                    <span className="font-bold text-base sm:text-lg text-gray-900">Question {idx + 1}</span>
+                                    <span className="font-bold text-base sm:text-lg text-gray-900">
+                                      {`Question [Q${question?.question_order ?? idx}]`}
+                                    </span>
                                     {!competencyGroups[selectedCompetencyKey].isPersonal && answer?.score != null && (
                                       <span className={`text-xl sm:text-2xl font-bold ${getScoreColor(answer.score)}`}>{answer.score}/10</span>
                                     )}
