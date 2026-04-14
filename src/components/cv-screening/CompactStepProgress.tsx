@@ -99,7 +99,7 @@ export const CompactStepProgress: React.FC<CompactStepProgressProps> = ({
             })}
           </div>
           <div className="flex flex-col items-center sm:items-start min-w-0">
-            <span className="text-xs font-medium text-gray-900 whitespace-nowrap">
+            <span className="text-xs font-medium text-[#042C53] whitespace-nowrap">
               Step {current + 1} of {total}
             </span>
             <span className="text-[10px] sm:text-xs text-gray-500 truncate w-full text-center sm:text-left max-w-[140px] sm:max-w-[200px]" title={steps[current]?.label}>

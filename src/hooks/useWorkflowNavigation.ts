@@ -14,6 +14,12 @@ export const INTERVIEW_WORKFLOW_STEPS = [
   { label: 'Interview Dashboard', key: 'interview-dashboard' }
 ];
 
+/** TPO dashboard embedded bar: configure roles, then review attempts (publish stays in the sidebar). */
+export const TPO_DASHBOARD_WORKFLOW_STEPS = [
+  { label: 'Interview Setup', key: 'tpo-setup' },
+  { label: 'Student activity', key: 'tpo-activity' },
+];
+
 export const useCurrentStep = () => {
   const [searchParams] = useSearchParams();
   const section = searchParams.get('section') || 'job-upload';

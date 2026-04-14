@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Settings, UserPlus, Briefcase, Share2 } from 'lucide-react';
+import { Settings, UserPlus, Briefcase, Share2, ClipboardList } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { API_CONFIG, buildApiUrl } from '@/constants/api';
@@ -154,7 +154,8 @@ export function CandidateMainDashboard({ candidateId, candidateEmail, onNavigate
   const steps = [
     { title: 'Customize Interview', icon: Settings, path: '/candidate-dashboard/jds/configure' },
     { title: 'Generate Interview', icon: UserPlus, path: '/candidate-dashboard/jds/create' },
-    { title: 'Performance Report', icon: Briefcase, path: '/candidate-dashboard/interviews' },
+    { title: 'Interviews', icon: ClipboardList, path: '/candidate-dashboard/interviews' },
+    { title: 'Performance Report', icon: Briefcase, path: '/candidate-dashboard/performance-report' },
     { title: 'Revenue & Billing', icon: Share2, path: '/candidate-dashboard/referrals' },
   ];
 
@@ -214,7 +215,7 @@ export function CandidateMainDashboard({ candidateId, candidateEmail, onNavigate
           </CardDescription>
         </CardHeader>
         <CardContent className="px-3 sm:px-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
             {steps.map((step) => (
               <Button
                 key={step.path}

@@ -14,12 +14,49 @@ import { API_CONFIG, buildApiUrl } from '@/constants/api';
 import { useToast } from '@/hooks/use-toast';
 import { Copy, Check, Loader2, Share2, Settings2, ArrowRight } from 'lucide-react';
 
-type ReferralRow = { name: string; plan_purchased: number | null; referral_amount: number | null };
+type ReferralRow = {
+  name: string;
+  plan_purchased: number | null;
+  referral_amount: number | null;
+  referral_type?: string;
+};
 type AsReferred = { referrer_name: string; plan_purchased: number | null; referral_amount: number | null } | null;
-type ActivityItem = { type: string; amount: number; description: string; date: string };
+type ActivityItem = {
+  type: string;
+  amount: number;
+  description: string;
+  date: string;
+  referral_context?: string | null;
+};
+type CollegeEnrollmentBanner = {
+  college_name?: string;
+  college_code?: string;
+  discount_percentage?: number;
+  course_name?: string;
+  end_date?: string;
+} | null;
+type PlanPricing = {
+  list_price: number;
+  college_discount_amount: number;
+  college_discount_percentage: number;
+  amount_after_college: number;
+  pricing_mode?: 'standard' | 'college_discount_from_post_credit_base';
+  discount_base_after_max_credits?: number;
+  projected_college_discount_with_max_credits?: number;
+  projected_amount_payable_with_max_credits?: number;
+  balance: number;
+  max_credit_usable: number;
+  max_credit_usage_percentage: number;
+  college_discount_stacks_with_credits: boolean;
+  college?: { college_name?: string; college_code?: string; discount_percentage?: number } | null;
+};
 type CurrentPlan = { plan_id: string; plan_name: string; cost: number; id?: string };
 type Plan = { id: string; plan_name: string; jd_count: number; cost: number; interview_count: number; is_free: boolean };
-type ReferralSettings = { referral_credit_percentage: number; max_credit_usage_percentage: number };
+type ReferralSettings = {
+  referral_credit_percentage: number;
+  max_credit_usage_percentage: number;
+  college_discount_stacks_with_credits: boolean;
+};
 
 export function ReferralsSection() {
   const [loading, setLoading] = useState(true);
@@ -42,8 +79,11 @@ export function ReferralsSection() {
   const [candidateMobile, setCandidateMobile] = useState('');
   const [settings, setSettings] = useState<ReferralSettings>({
     referral_credit_percentage: 20,
-    max_credit_usage_percentage: 50
+    max_credit_usage_percentage: 50,
+    college_discount_stacks_with_credits: true,
   });
+  const [collegeEnrollment, setCollegeEnrollment] = useState<CollegeEnrollmentBanner>(null);
+  const [pricingPreview, setPricingPreview] = useState<PlanPricing | null>(null);
   const isCurrentPlanFree = Boolean(
     currentPlan &&
     ((Number(currentPlan.cost) || 0) <= 0 || /free/i.test(String(currentPlan.plan_name || '')))
@@ -64,7 +104,11 @@ export function ReferralsSection() {
       const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_REFERRAL_SETTINGS), { headers });
       if (res.ok) {
         const data = await res.json();
-        setSettings(data);
+        setSettings({
+          referral_credit_percentage: Number(data.referral_credit_percentage ?? 20),
+          max_credit_usage_percentage: Number(data.max_credit_usage_percentage ?? 50),
+          college_discount_stacks_with_credits: Boolean(data.college_discount_stacks_with_credits ?? true),
+        });
       }
     } catch (e) {
       console.error('Failed to load referral settings:', e);
@@ -92,6 +136,7 @@ export function ReferralsSection() {
         setCandidateMobile(dashData.candidate_mobile ?? '');
         setAsReferrer(Array.isArray(dashData.as_referrer) ? dashData.as_referrer : []);
         setAsReferred(dashData.as_referred ?? null);
+        setCollegeEnrollment(dashData.college_enrollment ?? null);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load referrals');
@@ -143,6 +188,35 @@ export function ReferralsSection() {
     }
   }, []);
 
+  const loadPricingForPlanId = useCallback(async (planId: string) => {
+    if (!planId) {
+      setPricingPreview(null);
+      return;
+    }
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(
+        `${buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_PLAN_PRICING)}?plan_id=${encodeURIComponent(planId)}`,
+        { headers }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) setPricingPreview(data as PlanPricing);
+      else setPricingPreview(null);
+    } catch {
+      setPricingPreview(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (planStep === 'current' && currentPlan?.plan_id) {
+      loadPricingForPlanId(currentPlan.plan_id);
+    } else if (planStep === 'change' && selectedPlanId) {
+      loadPricingForPlanId(selectedPlanId);
+    } else {
+      setPricingPreview(null);
+    }
+  }, [planStep, currentPlan?.plan_id, selectedPlanId, loadPricingForPlanId]);
+
   const openPlanSettings = (step: 'current' | 'change') => {
     setPlanStep(step);
     setPlanError('');
@@ -158,11 +232,22 @@ export function ReferralsSection() {
       setPlanError(planStep === 'current' ? 'Current plan not found.' : 'Please select a plan.');
       return;
     }
-    const cost = 'cost' in planToUse ? planToUse.cost : 0;
     const planId = 'plan_id' in planToUse ? (planToUse as CurrentPlan).plan_id : (planToUse as Plan).id;
-    const maxCredits = Math.min(balance * (settings.max_credit_usage_percentage / 100), cost);
-    const creditsToUse = Math.round(maxCredits * 100) / 100;
-    const amountToPay = cost - creditsToUse;
+    const headers = await getAuthHeaders();
+    const prRes = await fetch(
+      `${buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_PLAN_PRICING)}?plan_id=${encodeURIComponent(planId)}`,
+      { headers }
+    );
+    const pricing = (await prRes.json().catch(() => ({}))) as PlanPricing;
+    if (!prRes.ok) {
+      setPlanError((pricing as { error?: string })?.error || 'Could not load pricing.');
+      return;
+    }
+    const maxCredits = Math.round((pricing.max_credit_usable ?? 0) * 100) / 100;
+    const creditsToUse = maxCredits;
+    const amountToPay = pricing.pricing_mode === 'college_discount_from_post_credit_base'
+      ? Number(pricing.projected_amount_payable_with_max_credits ?? pricing.amount_after_college)
+      : pricing.amount_after_college - creditsToUse;
     if (amountToPay <= 0) {
       setPlanError('No amount to charge. Use a plan with cost greater than the credit applied.');
       return;
@@ -170,7 +255,6 @@ export function ReferralsSection() {
     setPlanSubmitting(true);
     setPlanError('');
     try {
-      const headers = await getAuthHeaders();
       const orderRes = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_CREATE_ORDER), {
         method: 'POST',
         headers,
@@ -248,9 +332,32 @@ export function ReferralsSection() {
     );
   }
 
+  const formatReferralType = (t?: string) => {
+    if (t === 'same_college') return 'Same college';
+    if (t === 'cross_college') return 'Cross-college';
+    if (t === 'normal') return 'Standard';
+    return t || '–';
+  };
+
   return (
     <div className="w-full space-y-6">
       <h2 className="text-xl font-semibold text-gray-900">Referrals</h2>
+      {collegeEnrollment && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+          <span className="font-medium">{collegeEnrollment.college_name}</span>
+          {collegeEnrollment.course_name ? ` · ${collegeEnrollment.course_name}` : ''}
+          {collegeEnrollment.discount_percentage != null && (
+            <span className="ml-2 text-sky-800">
+              ({collegeEnrollment.discount_percentage}% student discount on purchases)
+            </span>
+          )}
+          {collegeEnrollment.end_date && (
+            <span className="block text-xs text-sky-800 mt-1">
+              Valid through {new Date(collegeEnrollment.end_date).toLocaleDateString()}
+            </span>
+          )}
+        </div>
+      )}
       {error && (
         <div className="rounded-md bg-red-50 border border-red-200 text-red-700 px-4 py-2 text-sm">
           {error}
@@ -264,9 +371,36 @@ export function ReferralsSection() {
               <Share2 className="h-4 w-4" />
               Referral link
             </CardTitle>
-            <p className="text-sm text-gray-600">
-              Share this link with anyone. When they sign up and paste it on the plan step, then purchase a plan, you earn {settings.referral_credit_percentage}% as credit.
-            </p>
+            {collegeEnrollment?.college_name ? (
+              <div className="text-sm text-gray-600 space-y-2">
+                <p>
+                  Because you signed up with your{' '}
+                  <span className="font-medium text-gray-800">college email</span>, you already get your school&apos;s student pricing on plans.
+                  Referral credits work best when you share your link <span className="font-medium text-gray-800">outside your college</span> — for
+                  example friends at <span className="font-medium text-gray-800">other institutions</span>, teammates, or anyone using a personal
+                  (non-school) email — so new people discover the product beyond your campus.
+                </p>
+                <p>
+                  When someone signs up with your link and completes their <span className="font-medium text-gray-800">first paid plan</span>, you
+                  both earn <span className="font-medium text-gray-800">{settings.referral_credit_percentage}%</span> of that purchase amount in
+                  credits. You can apply up to <span className="font-medium text-gray-800">{settings.max_credit_usage_percentage}%</span> of your
+                  credit balance per purchase when your account settings allow it.
+                </p>
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600 space-y-2">
+                <p>
+                  Share your personal link with <span className="font-medium text-gray-800">friends, classmates, or colleagues</span> who might
+                  benefit from interviews and reports here. They can sign up with any email they prefer.
+                </p>
+                <p>
+                  When they sign up with your link and complete their <span className="font-medium text-gray-800">first paid plan</span>, you both
+                  earn <span className="font-medium text-gray-800">{settings.referral_credit_percentage}%</span> of that purchase amount in credits.
+                  You can apply up to <span className="font-medium text-gray-800">{settings.max_credit_usage_percentage}%</span> of your balance
+                  per purchase when allowed.
+                </p>
+              </div>
+            )}
           </CardHeader>
           <CardContent className="space-y-4">
             {url ? (
@@ -305,7 +439,7 @@ export function ReferralsSection() {
             </div>
             <p className="text-2xl font-semibold text-sky-700">₹{Number(balance).toFixed(2)}</p>
             <p className="text-sm text-gray-600">
-              You can use up to {settings.max_credit_usage_percentage}% of your balance on your next plan purchase.
+              You can use up to {settings.max_credit_usage_percentage}% of your balance on the payable amount after any student discount (if stacking is enabled in settings).
             </p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mt-2">
               <span className="text-gray-600">Original credits:</span>
@@ -342,6 +476,7 @@ export function ReferralsSection() {
                   <thead>
                     <tr className="border-b text-left">
                       <th className="py-2 pr-4 font-medium">User</th>
+                      <th className="py-2 pr-4 font-medium">Type</th>
                       <th className="py-2 pr-4 font-medium">Credits gained</th>
                       <th className="py-2 font-medium">Plan selected</th>
                     </tr>
@@ -350,6 +485,7 @@ export function ReferralsSection() {
                     {asReferrer.map((r, i) => (
                       <tr key={i} className="border-b">
                         <td className="py-2 pr-4">{r.name}</td>
+                        <td className="py-2 pr-4 text-gray-600">{formatReferralType(r.referral_type)}</td>
                         <td className="py-2 pr-4">{r.referral_amount != null ? `₹${r.referral_amount}` : '–'}</td>
                         <td className="py-2">{r.plan_purchased != null ? `₹${r.plan_purchased}` : '–'}</td>
                       </tr>
@@ -374,7 +510,9 @@ export function ReferralsSection() {
                 {activity.map((a, i) => (
                   <div key={i} className="text-sm flex justify-between items-start gap-2 border-b border-gray-100 pb-1.5 last:border-0">
                     <span className={a.amount >= 0 ? 'text-green-700' : 'text-gray-700'}>
-                      {a.amount >= 0 ? `Earned ₹${Math.abs(a.amount).toFixed(2)}${a.description ? ` – ${a.description}` : ''}` : `Used ₹${Math.abs(a.amount).toFixed(2)} for ${a.description}`}
+                      {a.amount >= 0
+                        ? `Earned ₹${Math.abs(a.amount).toFixed(2)}${a.description ? ` – ${a.description}` : ''}${a.referral_context ? ` (${formatReferralType(a.referral_context)})` : ''}`
+                        : `Used ₹${Math.abs(a.amount).toFixed(2)} for ${a.description}`}
                     </span>
                     <span className="text-xs text-gray-500 shrink-0">
                       {a.date ? new Date(a.date).toLocaleDateString() : ''}
@@ -399,8 +537,8 @@ export function ReferralsSection() {
             <DialogTitle>Plan settings</DialogTitle>
             <DialogDescription>
               {isCurrentPlanFree
-                ? 'Switch to a different paid plan. Up to ' + settings.max_credit_usage_percentage + '% of your referral balance can be applied.'
-                : 'Choose your current plan or switch to a different plan. Up to ' + settings.max_credit_usage_percentage + '% of your referral balance can be applied.'}
+                ? 'Switch to a different paid plan. For college users, credits first reduce the discount base; then student discount is applied. For normal users, credits reduce payable directly.'
+                : 'Choose your current plan or switch to a different plan. For college users, credits first reduce the discount base; then student discount is applied. For normal users, credits reduce payable directly.'}
             </DialogDescription>
           </DialogHeader>
           {planError && (
@@ -436,11 +574,40 @@ export function ReferralsSection() {
             <div className="space-y-4">
               <div className="p-3 bg-sky-50 rounded-md">
                 <p className="font-medium text-gray-900">{currentPlan.plan_name}</p>
-                <p className="text-sm text-gray-600">Cost: ₹{currentPlan.cost.toFixed(2)}</p>
+                <p className="text-sm text-gray-600">List price: ₹{currentPlan.cost.toFixed(2)}</p>
               </div>
-              <div className="text-sm">
-                <p>Credits to use: ₹{Math.min(balance * (settings.max_credit_usage_percentage / 100), currentPlan.cost).toFixed(2)}</p>
-                <p>Amount to pay: ₹{(currentPlan.cost - Math.min(balance * (settings.max_credit_usage_percentage / 100), currentPlan.cost)).toFixed(2)}</p>
+              <div className="text-sm space-y-1">
+                {pricingPreview ? (
+                  <>
+                    {pricingPreview.pricing_mode === 'college_discount_from_post_credit_base' ? (
+                      <>
+                        <p>Credits to use (max): ₹{pricingPreview.max_credit_usable.toFixed(2)}</p>
+                        <p>Discount base after credits: ₹{Number(pricingPreview.discount_base_after_max_credits ?? 0).toFixed(2)}</p>
+                        <p className="text-sky-800">
+                          Student discount ({pricingPreview.college_discount_percentage}% on adjusted base): −₹
+                          {Number(pricingPreview.projected_college_discount_with_max_credits ?? 0).toFixed(2)}
+                        </p>
+                        <p className="font-medium">
+                          Amount to pay: ₹{Number(pricingPreview.projected_amount_payable_with_max_credits ?? pricingPreview.amount_after_college).toFixed(2)}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        {pricingPreview.college_discount_amount > 0 && (
+                          <p className="text-sky-800">
+                            Student discount ({pricingPreview.college_discount_percentage}%): −₹
+                            {pricingPreview.college_discount_amount.toFixed(2)}
+                          </p>
+                        )}
+                        <p>After discount: ₹{pricingPreview.amount_after_college.toFixed(2)}</p>
+                        <p>Credits to use (max): ₹{pricingPreview.max_credit_usable.toFixed(2)}</p>
+                        <p className="font-medium">Amount to pay: ₹{(pricingPreview.amount_after_college - pricingPreview.max_credit_usable).toFixed(2)}</p>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-gray-500">Loading pricing…</p>
+                )}
               </div>
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={() => setPlanStep('choose')}>
@@ -449,7 +616,7 @@ export function ReferralsSection() {
                 <Button
                   type="button"
                   className="bg-sky-600 hover:bg-sky-700"
-                  disabled={planSubmitting}
+                  disabled={planSubmitting || !pricingPreview}
                   onClick={handlePlanPay}
                 >
                   {planSubmitting ? 'Opening payment...' : 'Pay now'}
@@ -474,18 +641,38 @@ export function ReferralsSection() {
                   ))}
                 </select>
               </div>
-              {selectedPlanId && (() => {
-                const plan = plans.find((p) => p.id === selectedPlanId);
-                if (!plan) return null;
-                const creditsToUse = Math.min(balance * (settings.max_credit_usage_percentage / 100), plan.cost);
-                const amountToPay = plan.cost - creditsToUse;
-                return (
-                  <div className="text-sm p-3 bg-gray-50 rounded-md">
-                    <p>Credits to use: ₹{creditsToUse.toFixed(2)}</p>
-                    <p>Amount to pay: ₹{amountToPay.toFixed(2)}</p>
-                  </div>
-                );
-              })()}
+              {selectedPlanId && pricingPreview && (
+                <div className="text-sm p-3 bg-gray-50 rounded-md space-y-1">
+                  {pricingPreview.pricing_mode === 'college_discount_from_post_credit_base' ? (
+                    <>
+                      <p>Credits to use (max): ₹{pricingPreview.max_credit_usable.toFixed(2)}</p>
+                      <p>Discount base after credits: ₹{Number(pricingPreview.discount_base_after_max_credits ?? 0).toFixed(2)}</p>
+                      <p className="text-sky-800">
+                        Student discount ({pricingPreview.college_discount_percentage}% on adjusted base): −₹
+                        {Number(pricingPreview.projected_college_discount_with_max_credits ?? 0).toFixed(2)}
+                      </p>
+                      <p className="font-medium">
+                        Amount to pay: ₹{Number(pricingPreview.projected_amount_payable_with_max_credits ?? pricingPreview.amount_after_college).toFixed(2)}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      {pricingPreview.college_discount_amount > 0 && (
+                        <p className="text-sky-800">
+                          Student discount ({pricingPreview.college_discount_percentage}%): −₹
+                          {pricingPreview.college_discount_amount.toFixed(2)}
+                        </p>
+                      )}
+                      <p>After discount: ₹{pricingPreview.amount_after_college.toFixed(2)}</p>
+                      <p>Credits to use (max): ₹{pricingPreview.max_credit_usable.toFixed(2)}</p>
+                      <p className="font-medium">Amount to pay: ₹{(pricingPreview.amount_after_college - pricingPreview.max_credit_usable).toFixed(2)}</p>
+                    </>
+                  )}
+                </div>
+              )}
+              {selectedPlanId && !pricingPreview && (
+                <p className="text-sm text-gray-500">Loading pricing…</p>
+              )}
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={() => setPlanStep('choose')}>
                   Back
@@ -493,7 +680,7 @@ export function ReferralsSection() {
                 <Button
                   type="button"
                   className="bg-sky-600 hover:bg-sky-700"
-                  disabled={planSubmitting || !selectedPlanId}
+                  disabled={planSubmitting || !selectedPlanId || !pricingPreview}
                   onClick={handlePlanPay}
                 >
                   {planSubmitting ? 'Opening payment...' : 'Pay now'}

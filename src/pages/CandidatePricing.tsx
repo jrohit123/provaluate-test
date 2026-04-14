@@ -62,7 +62,7 @@ const CandidatePricing = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-sky-50 to-sky-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-600 mx-auto mb-4" />
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1a9fd6] mx-auto mb-4" />
           <p className="text-gray-600">Loading plans...</p>
         </div>
       </div>
@@ -115,7 +115,7 @@ const CandidatePricing = () => {
           {plans.map((plan) => (
             <Card
               key={plan.id}
-              className="border-2 border-gray-200 hover:border-sky-300 transition-all duration-300 flex flex-col min-w-0"
+              className="border-2 border-gray-200 hover:border-[#1a9fd6]/40 transition-all duration-300 flex flex-col min-w-0"
             >
               <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6">
                 <CardTitle className="text-xl sm:text-2xl mb-1 sm:mb-2">
@@ -159,7 +159,7 @@ const CandidatePricing = () => {
                 <Button
                   onClick={() => handleGetStarted(plan)}
                   variant="outline"
-                  className="w-full h-10 sm:h-11 text-sm sm:text-base border-sky-300 text-sky-700 hover:bg-sky-50 hover:text-sky-800"
+                  className="w-full h-10 sm:h-11 text-sm sm:text-base border-[#1a9fd6]/40 text-[#1a9fd6] hover:bg-[#1a9fd6]/10 hover:text-[#0a3a5a]"
                 >
                   Get started
                 </Button>
@@ -171,7 +171,7 @@ const CandidatePricing = () => {
         {plans.length === 0 && (
           <div className="text-center py-12 text-gray-600">
             <p>No plans available at the moment. Please try again later.</p>
-            <Link to="/candidate-login" className="text-sky-600 hover:underline mt-2 inline-block">Back to candidate login</Link>
+            <Link to="/candidate-login" className="text-[#1a9fd6] hover:text-[#0a3a5a] underline mt-2 inline-block">Back to candidate login</Link>
           </div>
         )}
 
@@ -186,7 +186,7 @@ const CandidatePricing = () => {
             </p>
             <a
               href="mailto:sales@aitamate.com?subject=ProValuate%20Candidate%20Plans"
-              className="inline-flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-medium transition-colors text-sm sm:text-base"
+              className="inline-flex items-center justify-center gap-2 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-medium transition-colors text-sm sm:text-base shadow-[0_4px_18px_rgba(37,99,235,0.28)] hover:shadow-[0_6px_22px_rgba(37,99,235,0.34)] [background:linear-gradient(135deg,#1a9fd6,#2563eb)] hover:[background:linear-gradient(135deg,#1490c0,#1d4ed8)]"
             >
               <Mail className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
               Contact support

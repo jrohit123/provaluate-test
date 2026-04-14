@@ -176,8 +176,8 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
       {/* Header */}
       <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
         <div data-tour="dashboard-welcome">
-        <p className="text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Welcome to your faster hiring workspace!</p>
-        <h1 className="text-xl sm:text-2xl font-bold text-primary-800">Dashboard</h1>
+        <p className="text-xs sm:text-sm text-[#042C53] mb-1 sm:mb-2">Welcome to your faster hiring workspace!</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-[#042C53]">Dashboard</h1>
         </div>
         {/* Extension above Guided Tour on mobile (flex-col); same row on desktop (sm:flex-row). Resume Plugins only for cv/combo. */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
@@ -192,7 +192,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                   });
                   setIsEmailPluginInfoOpen(true);
                 }}
-                className="flex items-center justify-center gap-2 w-full sm:w-auto"
+                className="flex items-center justify-center gap-2 w-full sm:w-auto text-white shadow-[0_4px_18px_rgba(13,110,163,0.28)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.34)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
               >
                 <Puzzle className="w-4 h-4" />
                 <span className="hidden sm:inline">Resume Plugins</span>
@@ -210,7 +210,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
               });
               onStartTour?.();
             }}
-            className="flex items-center justify-center gap-2 w-full sm:w-auto order-2"
+            className="flex items-center justify-center gap-2 w-full sm:w-auto order-2 text-white shadow-[0_4px_18px_rgba(13,110,163,0.28)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.34)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
           >
             <HelpCircle className="w-4 h-4" />
             <span className="hidden sm:inline">Guided Tour</span>
@@ -231,57 +231,57 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
         {/* Company Plan Card */}
         <Card className="animate-fade-in">
           <CardHeader>
-            <CardTitle>Company Plan</CardTitle>
+            <CardTitle className="text-[#042C53]">Company Plan</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {loading ? (
               <div className="space-y-2">
-                <div className="text-2xl font-bold text-gray-900">Loading...</div>
-                <div className="text-sm text-gray-600">Fetching plan details...</div>
+                <div className="text-2xl font-bold text-[#042C53]">Loading...</div>
+                <div className="text-sm text-[#042C53]">Fetching plan details...</div>
               </div>
             ) : planData ? (
               <div className="space-y-3">
                 <div className="space-y-2">
-                  <div className="text-2xl font-bold text-gray-900">
+                  <div className="text-2xl font-bold text-[#042C53]">
                     {planData.plan_name}
                     {planData.plan_type ? ` (${planData.plan_type === 'cv' ? 'CV Only' : planData.plan_type === 'interview' ? 'Interviews Only' : 'Combo'})` : ''}
                   </div>
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-[#042C53]">
                     {planData.plan_cost ? `₹${planData.plan_cost}/month` : 'Free Plan'}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
                   {planData.max_cvs != null && (
                     <div>
-                      <div className="font-medium text-gray-700">Max CVs</div>
-                      <div className="text-gray-600">
+                      <div className="font-medium text-[#042C53]">Max CVs</div>
+                      <div className="text-[#042C53]">
                         {loading ? '...' : `${consumedCVs} / ${planData.max_cvs === 0 ? 'Unlimited' : planData.max_cvs}`}
                       </div>
                     </div>
                   )}
                   {planData.max_interviews != null && (
                     <div>
-                      <div className="font-medium text-gray-700">Max Interviews</div>
-                      <div className="text-gray-600">
+                      <div className="font-medium text-[#042C53]">Max Interviews</div>
+                      <div className="text-[#042C53]">
                         {loading ? '...' : `${companyData?.interview_count ?? 0} / ${planData.max_interviews === 0 ? 'Unlimited' : planData.max_interviews}`}
                       </div>
                     </div>
                   )}
                   <div>
-                    <div className="font-medium text-gray-700">Max Users</div>
-                    <div className="text-gray-600">
+                    <div className="font-medium text-[#042C53]">Max Users</div>
+                    <div className="text-[#042C53]">
                       {loading ? '...' : `${consumedUsers} / ${planData.max_users || 'N/A'}`}
                     </div>
                   </div>
                   <div>
-                    <div className="font-medium text-gray-700">Active JDs</div>
-                    <div className="text-gray-600">
+                    <div className="font-medium text-[#042C53]">Active JDs</div>
+                    <div className="text-[#042C53]">
                       {stats.jobDescriptions} / {planData.active_jobs === 0 ? 'Unlimited' : planData.active_jobs}
                     </div>
                   </div>
                 </div>
                   {companyData?.subscription_end && (
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm text-[#042C53]">
                       Renews on: {(() => {
                         const date = new Date(companyData.subscription_end);
                         const day = date.getDate().toString().padStart(2, '0');
@@ -294,8 +294,8 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="text-2xl font-bold text-gray-900">No Plan Selected</div>
-                <div className="text-sm text-gray-600">Contact admin to select a plan</div>
+                <div className="text-2xl font-bold text-[#042C53]">No Plan Selected</div>
+                <div className="text-sm text-[#042C53]">Contact admin to select a plan</div>
               </div>
             )}
           </CardContent>
@@ -304,7 +304,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
         {/* Quick Stats Card - stats centred with equal spacing */}
         <Card className="animate-fade-in">
           <CardHeader>
-            <CardTitle>Quick Stats</CardTitle>
+            <CardTitle className="text-[#042C53]">Quick Stats</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col items-center justify-center pt-12 pb-1 px-6">
             <div className="flex flex-row flex-nowrap gap-6 sm:gap-8 w-full max-w-4xl justify-center items-stretch">
@@ -312,22 +312,22 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
               {(planType === 'cv' || planType === 'combo') && (
                 <>
                   <div className="flex-1 min-w-0 flex flex-col items-center text-center">
-                    <div className="text-lg sm:text-2xl font-bold text-gray-900">
+                    <div className="text-lg sm:text-2xl font-bold text-[#0d4060]">
                       {loading ? '...' : stats.jobDescriptions}
                     </div>
-                    <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words">CV JDs CREATED</div>
+                    <div className="text-xs sm:text-sm text-[#0d4060] min-h-[2.5rem] flex items-center justify-center break-words">CV JDs CREATED</div>
                   </div>
                   <div className="flex-1 min-w-0 flex flex-col items-center text-center">
-                    <div className="text-lg sm:text-2xl font-bold text-gray-900">
+                    <div className="text-lg sm:text-2xl font-bold text-[#0d4060]">
                       {loading ? '...' : stats.criteriaSets}
                     </div>
-                    <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words">EVALUATION CRITERIA</div>
+                    <div className="text-xs sm:text-sm text-[#0d4060] min-h-[2.5rem] flex items-center justify-center break-words">EVALUATION CRITERIA</div>
                   </div>
                   <div className="flex-1 min-w-0 flex flex-col items-center text-center">
-                    <div className="text-lg sm:text-2xl font-bold text-gray-900">
+                    <div className="text-lg sm:text-2xl font-bold text-[#0d4060]">
                       {loading ? '...' : stats.assessments}
                     </div>
-                    <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words">ASSESSMENTS</div>
+                    <div className="text-xs sm:text-sm text-[#0d4060] min-h-[2.5rem] flex items-center justify-center break-words">ASSESSMENTS</div>
                   </div>
                 </>
               )}
@@ -335,16 +335,16 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
               {(planType === 'interview' || planType === 'combo') && (
                 <>
                   <div className="flex-1 min-w-0 flex flex-col items-center text-center">
-                    <div className="text-lg sm:text-2xl font-bold text-gray-900">
+                    <div className="text-lg sm:text-2xl font-bold text-[#0d4060]">
                       {loading ? '...' : stats.interviewJobDescriptions}
                     </div>
-                    <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words">INTERVIEW JDs CREATED</div>
+                    <div className="text-xs sm:text-sm text-[#0d4060] min-h-[2.5rem] flex items-center justify-center break-words">INTERVIEW JDs CREATED</div>
                   </div>
                   <div className="flex-1 min-w-0 flex flex-col items-center text-center">
-                    <div className="text-lg sm:text-2xl font-bold text-gray-900">
+                    <div className="text-lg sm:text-2xl font-bold text-[#0d4060]">
                       {loading ? '...' : stats.interviewsCompleted}
                     </div>
-                    <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words">INTERVIEWS COMPLETED</div>
+                    <div className="text-xs sm:text-sm text-[#0d4060] min-h-[2.5rem] flex items-center justify-center break-words">INTERVIEWS COMPLETED</div>
                   </div>
                 </>
               )}
@@ -356,7 +356,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
       {/* Quick Actions Section */}
       <Card className="animate-fade-in" data-tour="quick-actions">
         <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
+          <CardTitle className="text-[#042C53]">Quick Actions</CardTitle>
           <CardDescription>
             Follow these steps to complete your candidate evaluation workflow
           </CardDescription>
@@ -369,15 +369,15 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
               onOpenChange={isMobile ? setIsCVScreeningOpen : undefined}
               disabled={!isMobile}
             >
-              <div className={`mb-3 sm:mb-4 ${isMobile ? 'bg-blue-50 border border-blue-200 rounded-lg p-3' : ''}`}>
+              <div className={`mb-3 sm:mb-4 ${isMobile ? 'bg-[#0d6ea3]/5 border border-[#0d6ea3]/20 rounded-lg p-3' : ''}`}>
                 <CollapsibleTrigger 
                   asChild 
                   className={isMobile ? "w-full" : "pointer-events-none"}
                 >
                   <div className={`flex items-center justify-between ${isMobile ? 'cursor-pointer' : ''}`}>
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900">CV Screening</h3>
+                    <h3 className="text-base sm:text-lg font-semibold text-[#042C53]">CV Screening</h3>
                     {isMobile && (
-                      <ChevronDown className={`h-5 w-5 text-blue-600 transition-transform duration-200 ${isCVScreeningOpen ? 'rotate-180' : ''}`} />
+                      <ChevronDown className={`h-5 w-5 text-[#0d6ea3] transition-transform duration-200 ${isCVScreeningOpen ? 'rotate-180' : ''}`} />
                     )}
                   </div>
                 </CollapsibleTrigger>
@@ -393,7 +393,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                 });
                 onSectionChange('job-upload');
               }}
-              className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
+              className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2 text-white shadow-[0_4px_18px_rgba(13,110,163,0.20)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.26)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
             >
               <FileText className="w-5 h-5" />
               <div className="font-semibold text-xs sm:text-sm text-center">1. New Job Upload</div>
@@ -408,7 +408,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                 });
                 onSectionChange('evaluation-criteria');
               }}
-              className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
+              className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2 text-white shadow-[0_4px_18px_rgba(13,110,163,0.20)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.26)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
             >
               <Wrench className="w-5 h-5" />
               <div className="font-semibold text-xs sm:text-sm text-center">2. Evaluation Criteria</div>
@@ -423,7 +423,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                 });
                 onSectionChange('resume-upload');
               }}
-              className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
+              className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2 text-white shadow-[0_4px_18px_rgba(13,110,163,0.20)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.26)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
             >
               <Upload className="w-5 h-5" />
               <div className="font-semibold text-xs sm:text-sm text-center">3. Resume Upload</div>
@@ -438,7 +438,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                 });
                 onSectionChange('match-scorecard');
               }}
-              className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
+              className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2 text-white shadow-[0_4px_18px_rgba(13,110,163,0.20)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.26)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
             >
               <BarChart3 className="w-5 h-5" />
               <div className="font-semibold text-xs sm:text-sm text-center">4. View All Results</div>
@@ -456,15 +456,15 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
               onOpenChange={isMobile ? setIsInterviewOpen : undefined}
               disabled={!isMobile}
             >
-              <div className={`mb-3 sm:mb-4 ${isMobile ? 'bg-blue-50 border border-blue-200 rounded-lg p-3' : ''}`}>
+              <div className={`mb-3 sm:mb-4 ${isMobile ? 'bg-[#0d6ea3]/5 border border-[#0d6ea3]/20 rounded-lg p-3' : ''}`}>
                 <CollapsibleTrigger 
                   asChild 
                   className={isMobile ? "w-full" : "pointer-events-none"}
                 >
                   <div className={`flex items-center justify-between ${isMobile ? 'cursor-pointer' : ''}`}>
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900">Interview Management</h3>
+                    <h3 className="text-base sm:text-lg font-semibold text-[#042C53]">Interview Management</h3>
                     {isMobile && (
-                      <ChevronDown className={`h-5 w-5 text-blue-600 transition-transform duration-200 ${isInterviewOpen ? 'rotate-180' : ''}`} />
+                      <ChevronDown className={`h-5 w-5 text-[#0d6ea3] transition-transform duration-200 ${isInterviewOpen ? 'rotate-180' : ''}`} />
                     )}
                   </div>
                 </CollapsibleTrigger>
@@ -480,7 +480,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                   });
                   onSectionChange('setup');
                 }}
-                className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
+                className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2 text-white shadow-[0_4px_18px_rgba(13,110,163,0.20)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.26)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
               >
                 <Cog className="w-5 h-5" />
                 <div className="font-semibold text-xs sm:text-sm text-center">Interview Creation</div>
@@ -495,7 +495,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                   });
                   onSectionChange('ai-interview');
                 }}
-                className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
+                className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2 text-white shadow-[0_4px_18px_rgba(13,110,163,0.20)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.26)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
               >
                 <Users className="w-5 h-5" />
                 <div className="font-semibold text-xs sm:text-sm text-center">Send Interview</div>
@@ -510,7 +510,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                   });
                   onSectionChange('interview-dashboard');
                 }}
-                className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2"
+                className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2 text-white shadow-[0_4px_18px_rgba(13,110,163,0.20)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.26)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
               >
                 <Monitor className="w-5 h-5" />
                 <div className="font-semibold text-xs sm:text-sm text-center">Interview Dashboard</div>

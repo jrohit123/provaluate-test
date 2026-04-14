@@ -756,7 +756,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
         <div className="space-y-4 text-left">
           {parsed.strengths.length > 0 && (
             <div className="rounded-lg border border-green-200 bg-green-50 p-3 sm:p-4">
-              <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Strengths</h5>
+              <h5 className="font-semibold text-sm sm:text-base text-[#042C53] mb-2">Strengths</h5>
               <ul className="list-disc list-inside space-y-1.5 text-sm text-gray-800">
                 {parsed.strengths.map((item, i) => (
                   <li key={i}>{item}</li>
@@ -766,7 +766,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
           )}
           {parsed.ambiguous.length > 0 && (
             <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 sm:p-4">
-              <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Ambiguous</h5>
+              <h5 className="font-semibold text-sm sm:text-base text-[#042C53] mb-2">Ambiguous</h5>
               <ul className="list-disc list-inside space-y-1.5 text-sm text-gray-800">
                 {parsed.ambiguous.map((item, i) => (
                   <li key={i}>{item}</li>
@@ -776,7 +776,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
           )}
           {parsed.weaknesses.length > 0 && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 sm:p-4">
-              <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Shortcomings</h5>
+              <h5 className="font-semibold text-sm sm:text-base text-[#042C53] mb-2">Shortcomings</h5>
               <ul className="list-disc list-inside space-y-1.5 text-sm text-gray-800">
                 {parsed.weaknesses.map((item, i) => (
                   <li key={i}>{item}</li>
@@ -786,7 +786,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
           )}
           {parsed.overallSummary && (
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 sm:p-4">
-              <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Overall Summary</h5>
+              <h5 className="font-semibold text-sm sm:text-base text-[#042C53] mb-2">Overall Summary</h5>
               <p className="text-sm text-gray-800 whitespace-pre-line">{parsed.overallSummary}</p>
             </div>
           )}
@@ -947,7 +947,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
           if (line.type === 'heading') {
             return (
               <div key={index} className="mt-3 first:mt-0">
-                <strong className="text-sm text-gray-900 font-bold" style={{ fontWeight: '700', fontSize: '14px' }}>
+                <strong className="text-sm text-[#042C53] font-bold" style={{ fontWeight: '700', fontSize: '14px' }}>
                   {line.text}
                 </strong>
               </div>
@@ -1447,7 +1447,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-2">
-                    <h3 className="text-lg sm:text-xl font-bold text-gray-900 truncate">{candidate.name}</h3>
+                    <h3 className="text-lg sm:text-xl font-bold text-[#042C53] truncate">{candidate.name}</h3>
                     <div className="flex items-center gap-2">
                       <Checkbox
                         id={`create-interview-${candidate.id}`}
@@ -1480,7 +1480,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                   <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium ${getRecommendationStyle(candidate.status)}`}>
                     {candidate.status}
                   </span>
-                  <span className="text-2xl sm:text-3xl font-bold text-gray-900">
+                  <span className="text-2xl sm:text-3xl font-bold text-[#042C53]">
                     {`${candidate.overallScore}%`}
                   </span>
                 </div>
@@ -1507,11 +1507,11 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                   return (
                     <div key={idx} className="space-y-2">
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 sm:gap-0">
-                        <span className="font-medium text-sm sm:text-base text-gray-900 break-words">
+                        <span className="font-medium text-sm sm:text-base text-[#042C53] break-words">
                           {score.parameter}
                         </span>
                         <div className="text-left sm:text-right">
-                          <span className="text-base sm:text-lg font-bold text-gray-900">
+                          <span className="text-base sm:text-lg font-bold text-[#042C53]">
                             {displayScore}
                           </span>
                           <span className="text-xs sm:text-sm text-gray-500 sm:ml-4 block sm:inline">
@@ -1539,7 +1539,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                     <div className="text-left">
                       {parsed.strengths.length > 0 && (
                         <div className="bg-green-50 px-3 sm:px-4 py-3">
-                          <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Strengths</h5>
+                          <h5 className="font-semibold text-sm sm:text-base text-[#042C53] mb-2">Strengths</h5>
                           <div className="space-y-1.5 text-sm text-gray-800">
                             {parsed.strengths.map((item, i) => (
                               <p key={i} className="pl-0">- {item}</p>
@@ -1549,7 +1549,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                       )}
                       {parsed.ambiguous.length > 0 && (
                         <div className="bg-yellow-50 px-3 sm:px-4 py-3">
-                          <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Clarifications</h5>
+                          <h5 className="font-semibold text-sm sm:text-base text-[#042C53] mb-2">Clarifications</h5>
                           <div className="space-y-1.5 text-sm text-gray-800">
                             {parsed.ambiguous.map((item, i) => (
                               <p key={i} className="pl-0">- {item}</p>
@@ -1559,7 +1559,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                       )}
                       {parsed.weaknesses.length > 0 && (
                         <div className="bg-red-50 px-3 sm:px-4 py-3">
-                          <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Shortcomings</h5>
+                          <h5 className="font-semibold text-sm sm:text-base text-[#042C53] mb-2">Shortcomings</h5>
                           <div className="space-y-1.5 text-sm text-gray-800">
                             {parsed.weaknesses.map((item, i) => (
                               <p key={i} className="pl-0">- {item}</p>
@@ -1569,7 +1569,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
                       )}
                       {parsed.overallSummary && (
                         <div className="bg-blue-50 px-3 sm:px-4 py-3">
-                          <h5 className="font-semibold text-sm sm:text-base text-gray-900 mb-2">Summary</h5>
+                          <h5 className="font-semibold text-sm sm:text-base text-[#042C53] mb-2">Summary</h5>
                           <p className="text-sm text-gray-800 whitespace-pre-line">{parsed.overallSummary}</p>
                         </div>
                       )}
@@ -1587,7 +1587,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
             {/* Recommendation (grey card) */}
             {candidate.recommendation && (
               <div className="mt-4 sm:mt-6 rounded-lg border border-gray-300 bg-gray-100/80 p-3 sm:p-4 shadow-sm">
-                <h4 className="font-semibold text-sm sm:text-base text-gray-900 mb-3">Recommendation</h4>
+                <h4 className="font-semibold text-sm sm:text-base text-[#042C53] mb-3">Recommendation</h4>
                 <div className="text-gray-800">
                   {renderSummaryText(candidate.recommendation)}
                 </div>

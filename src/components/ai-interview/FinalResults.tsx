@@ -608,6 +608,18 @@ const FinalResults = () => {
   const [playingAudio, setPlayingAudio] = useState(null);
   const [showingWrittenAnswer, setShowingWrittenAnswer] = useState(null);
   const [showSpeechDetailsCard, setShowSpeechDetailsCard] = useState(false);
+  const [activeTab, setActiveTab] = useState<'ov' | 'dd' | 'sp'>('ov');
+  const [checklistChecked, setChecklistChecked] = useState<Record<string, boolean>>({});
+  const [speechSectionExpanded, setSpeechSectionExpanded] = useState({
+    metrics: false,
+    narrative: false,
+    plan: false,
+    checklist: false,
+  });
+
+  const toggleSpeechSection = (key: keyof typeof speechSectionExpanded) => {
+    setSpeechSectionExpanded((s) => ({ ...s, [key]: !s[key] }));
+  };
 
   const playVideo = (videoUrl) => {
     if (videoUrl) {
@@ -1954,7 +1966,9 @@ const FinalResults = () => {
 
   const getScoreClass = (score) => isCandidateReport ? 'bg-sky-600' : 'bg-[#1e5da8]';
   const accentHex = isCandidateReport ? '#0284c7' : '#1e5da8'; // sky-600 vs blue
-  const headerBg = isCandidateReport ? 'bg-sky-700 border-sky-800' : 'bg-[#1e5da8] border-[#1e5da8]/80';
+  const headerBg = isCandidateReport
+    ? '[background:linear-gradient(135deg,#2563eb,#1a9fd6)] border-[#1a9fd6]/50'
+    : 'bg-[#1e5da8] border-[#1e5da8]/80';
   const btnPrimary = isCandidateReport ? 'bg-sky-600 hover:bg-sky-700' : 'bg-[#1e5da8] hover:bg-[#1e5da8]/90';
   const btnOutline = isCandidateReport ? 'bg-white text-sky-600 hover:bg-gray-50' : 'bg-white text-[#1e5da8] hover:bg-gray-50';
   const loadingBorder = isCandidateReport ? 'border-sky-600' : 'border-[#1e5da8]';
@@ -2010,7 +2024,7 @@ const FinalResults = () => {
             <h2 className="text-lg sm:text-2xl font-bold text-gray-800 mb-2 break-words">Results Not Found</h2>
             <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6 break-words">The interview results could not be loaded.</p>
             <button
-              onClick={() => navigate(reportVariant === 'recruiter' ? '/dashboard?section=interview-dashboard' : '/candidate-dashboard/interviews')}
+              onClick={() => navigate(reportVariant === 'recruiter' ? '/dashboard?section=interview-dashboard' : '/candidate-dashboard/performance-report')}
               className={`min-h-[44px] px-4 sm:px-6 py-3 rounded-lg ${btnPrimary} text-white text-sm sm:text-base font-medium transition-colors touch-manipulation w-full sm:w-auto`}
             >
               {reportVariant === 'recruiter' ? 'Go to Dashboard' : 'Go to My Interviews'}
@@ -3366,7 +3380,7 @@ const FinalResults = () => {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={() => navigate(reportVariant === 'recruiter' ? '/dashboard?section=interview-dashboard' : '/candidate-dashboard/interviews')}>
+                <DropdownMenuItem onClick={() => navigate(reportVariant === 'recruiter' ? '/dashboard?section=interview-dashboard' : '/candidate-dashboard/performance-report')}>
                   <LayoutDashboard className="mr-2 h-4 w-4 flex-shrink-0" />
                   {reportVariant === 'recruiter' ? 'Back to Dashboard' : 'Back to My Interviews'}
                 </DropdownMenuItem>
@@ -3394,60 +3408,120 @@ const FinalResults = () => {
 
       {/* Main Content - full width as old setup */}
       <div className="flex-1 w-full min-w-0 py-4 sm:py-8 px-4 sm:px-6 pb-8 sm:pb-12 overflow-x-hidden">
+        <div className="mx-auto w-full max-w-screen-2xl">
+        {/* Tabs */}
+        <nav className="mb-4 sm:mb-6 -mx-4 sm:-mx-6 px-4 sm:px-6 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden border-b border-gray-200 bg-white" role="tablist">
+          <div className="flex min-w-max gap-1">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'ov'}
+              onClick={() => setActiveTab('ov')}
+              className={`px-4 py-3 text-base font-medium border-b-2 transition-colors ${
+                activeTab === 'ov'
+                  ? 'text-[#0d6ea3] border-[#0d6ea3] font-semibold'
+                  : 'text-gray-600 border-transparent hover:text-[#0d6ea3]'
+              }`}
+            >
+              Overview
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'dd'}
+              onClick={() => setActiveTab('dd')}
+              className={`px-4 py-3 text-base font-medium border-b-2 transition-colors inline-flex items-center gap-2 ${
+                activeTab === 'dd'
+                  ? 'text-[#0d6ea3] border-[#0d6ea3] font-semibold'
+                  : 'text-gray-600 border-transparent hover:text-[#0d6ea3]'
+              }`}
+            >
+              Question Deep Dive
+              <span className="inline-flex items-center justify-center rounded-full bg-[#0d6ea3]/10 px-2 py-0.5 text-sm font-semibold text-[#0d6ea3]">
+                {reportData?.questions?.length ?? 0}
+              </span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'sp'}
+              onClick={() => setActiveTab('sp')}
+              className={`px-4 py-3 text-base font-medium border-b-2 transition-colors ${
+                activeTab === 'sp'
+                  ? 'text-[#0d6ea3] border-[#0d6ea3] font-semibold'
+                  : 'text-gray-600 border-transparent hover:text-[#0d6ea3]'
+              }`}
+            >
+              Speech &amp; Coaching
+            </button>
+          </div>
+        </nav>
+
+        {/* ═══ TAB 1 — OVERVIEW ═══ */}
+        {activeTab === 'ov' && (
+        <>
         {/* Interview Overview - Two Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-10">
+        <div className="grid grid-cols-1 sm:[grid-template-columns:minmax(260px,320px)_1fr] gap-4 sm:gap-6 mb-6 sm:mb-10 items-stretch">
           {/* Card 1: Overall Score - Circular Diagram */}
-          <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm flex flex-col items-center justify-center">
+          <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm flex flex-col items-center justify-center w-full">
             <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex-shrink-0">
               <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                {isCandidateReport && (
+                  <defs>
+                    <linearGradient id="scoreRingGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stopColor="#2563eb" />
+                      <stop offset="100%" stopColor="#1a9fd6" />
+                    </linearGradient>
+                  </defs>
+                )}
                 <circle cx="50" cy="50" r="42" fill="none" stroke="#e5e7eb" strokeWidth="10" />
                 <circle
                   cx="50"
                   cy="50"
                   r="42"
                   fill="none"
-                  stroke={accentHex}
+                  stroke={isCandidateReport ? 'url(#scoreRingGradient)' : accentHex}
                   strokeWidth="10"
                   strokeLinecap="round"
                   strokeDasharray={`${(Math.min(10, Math.max(0, Number(interview?.overall_score) || 0)) / 10) * 263} 263`}
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className={`text-2xl sm:text-3xl font-bold ${accentText}`}>
+                <span className={`text-3xl sm:text-4xl font-bold ${accentText}`}>
                   {interview?.overall_score != null ? `${formatOverallScore(interview.overall_score)}/10` : 'N/A'}
                 </span>
-                <span className="text-xs sm:text-sm text-gray-600 mt-1">Overall Score</span>
+                <span className="text-sm sm:text-base text-gray-600 mt-1">Overall Score</span>
               </div>
             </div>
-            <div className={`text-xs sm:text-sm mt-2 px-3 py-1 rounded-full text-white ${getScoreClass(interview?.overall_score || 0)}`}>
+            <div className={`text-sm sm:text-base mt-2 px-3 py-1 rounded-full text-white ${getScoreClass(interview?.overall_score || 0)}`}>
               {getScoreLabel(interview?.overall_score || 0)}
             </div>
           </div>
 
           {/* Card 2: Interview Summary */}
           <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm">
-            <h2 className="text-lg sm:text-xl font-bold mb-4 flex items-center text-gray-900">
+            <h2 className="text-xl sm:text-2xl font-bold mb-4 flex items-center text-gray-900">
               <BarChart3 className={`h-5 w-5 sm:h-6 sm:w-6 mr-2 ${accentText} flex-shrink-0`} />
               Interview Summary
             </h2>
             <div className="space-y-3 sm:space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-sm sm:text-base text-gray-600">Candidate:</span>
-                <span className="text-sm sm:text-base font-semibold text-gray-900">{interview?.candidate_name ?? 'N/A'}</span>
+                <span className="text-base sm:text-lg text-gray-600">Candidate:</span>
+                <span className="text-base sm:text-lg font-semibold text-gray-900">{interview?.candidate_name ?? 'N/A'}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm sm:text-base text-gray-600">Role:</span>
-                <span className="text-sm sm:text-base font-semibold text-gray-900">{interview?.position ?? 'N/A'}</span>
+                <span className="text-base sm:text-lg text-gray-600">Role:</span>
+                <span className="text-base sm:text-lg font-semibold text-gray-900">{interview?.position ?? 'N/A'}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm sm:text-base text-gray-600">Date:</span>
-                <span className="text-sm sm:text-base font-semibold text-gray-900">
+                <span className="text-base sm:text-lg text-gray-600">Date:</span>
+                <span className="text-base sm:text-lg font-semibold text-gray-900">
                   {formatOrdinalDate(interview?.completed_at || interview?.created_at)}
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm sm:text-base text-gray-600">Duration:</span>
-                <span className="text-sm sm:text-base font-semibold text-gray-900">
+                <span className="text-base sm:text-lg text-gray-600">Duration:</span>
+                <span className="text-base sm:text-lg font-semibold text-gray-900">
                   {interview?.completed_at && interview?.started_at
                     ? `${Math.round((new Date(interview.completed_at).getTime() - new Date(interview.started_at).getTime()) / 60000)} minutes`
                     : `${Math.round(Number(interview?.duration_minutes) || 30)} minutes`
@@ -3455,33 +3529,86 @@ const FinalResults = () => {
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm sm:text-base text-gray-600">Competencies Evaluated:</span>
-                <span className="text-sm sm:text-base font-semibold text-gray-900">{competencyCount}</span>
+                <span className="text-base sm:text-lg text-gray-600">Competencies Evaluated:</span>
+                <span className="text-base sm:text-lg font-semibold text-gray-900">{competencyCount}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm sm:text-base text-gray-600">Total Questions:</span>
-                <span className="text-sm sm:text-base font-semibold text-gray-900">{interview?.total_questions ?? 0}</span>
+                <span className="text-base sm:text-lg text-gray-600">Total Questions:</span>
+                <span className="text-base sm:text-lg font-semibold text-gray-900">{interview?.total_questions ?? 0}</span>
               </div>
-
-              {/* Speech details: single row with clickable text that opens the card */}
-              {reportData?.answers?.some((a) => {
-                const b = a.behavioral ?? a.behavioral_metrics;
-                return b && (typeof b.overall_speech_quality === 'number' || typeof b.speaking_pace_wpm === 'number' || typeof b.pause_quality_score === 'number');
-              }) && (
-                <div className="flex justify-between items-center">
-                  <span className="text-sm sm:text-base text-gray-600">Speech details:</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowSpeechDetailsCard(true)}
-                    className={`text-sm sm:text-base font-bold ${accentText} hover:underline focus:outline-none focus:ring-2 focus:ring-offset-1 rounded px-2 py-1 ${isCandidateReport ? 'focus:ring-sky-600' : 'focus:ring-[#1e5da8]'}`}
-                  >
-                    Click here for speech details
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         </div>
+
+        {/* Competency Performance */}
+        {reportData?.questions?.length && reportData?.answers?.length ? (
+          <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm mb-6 sm:mb-10">
+            <h2 className="text-xl sm:text-2xl font-bold mb-4 flex items-center text-gray-900">
+              <Award className={`h-5 w-5 sm:h-6 sm:w-6 mr-2 ${accentText} flex-shrink-0`} />
+              Competency Performance
+            </h2>
+
+            {(() => {
+              const competencyGroups: Record<string, { name: string; scoreSum: number; count: number }> = {};
+              (reportData.questions || []).forEach((q: any) => {
+                const key = q.parameter_key || q.parameter_name || 'General';
+                const name = q.parameter_name || q.parameter_key || 'General';
+                if (!competencyGroups[key]) competencyGroups[key] = { name, scoreSum: 0, count: 0 };
+                const ans = (reportData.answers || []).find((a: any) => a.question_order === q.question_order);
+                if (ans && typeof ans.score === 'number') {
+                  competencyGroups[key].scoreSum += ans.score;
+                  competencyGroups[key].count += 1;
+                }
+              });
+
+              const rows = Object.values(competencyGroups)
+                .filter((g) => g.count > 0)
+                .map((g) => ({ name: g.name, avg: g.scoreSum / g.count }))
+                .sort((a, b) => b.avg - a.avg)
+                .slice(0, 6);
+
+              if (rows.length === 0) {
+                return <p className="text-sm sm:text-base text-gray-600">No competency scores available yet.</p>;
+              }
+
+              const colorFor = (v: number) => (v >= 7 ? 'bg-emerald-500' : v >= 5 ? 'bg-amber-500' : 'bg-red-500');
+
+              return (
+                <div className="space-y-3">
+                  {rows.map((r) => (
+                    <div key={r.name} className="grid grid-cols-[180px_1fr_52px] gap-3 items-center">
+                      <div className="text-base sm:text-lg text-gray-700 truncate">{r.name}</div>
+                      <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                        <div
+                          className={`h-full ${colorFor(r.avg)}`}
+                          style={{ width: `${Math.max(0, Math.min(100, (r.avg / 10) * 100))}%` }}
+                        />
+                      </div>
+                      <div className="text-base sm:text-lg font-semibold text-gray-900 text-right tabular-nums">
+                        {Number.isFinite(r.avg) ? r.avg.toFixed(1) : 'N/A'}
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="pt-3 text-sm text-gray-600 flex flex-wrap gap-4">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-sm bg-emerald-500" />
+                      7–10 Good
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-sm bg-amber-500" />
+                      5–6.9 Average
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-sm bg-red-500" />
+                      &lt; 5 Needs Work
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        ) : null}
 
         {/* Speech details card (dialog) */}
         <Dialog open={showSpeechDetailsCard} onOpenChange={setShowSpeechDetailsCard}>
@@ -3556,9 +3683,11 @@ const FinalResults = () => {
             })()}
           </DialogContent>
         </Dialog>
+        </>
+        )}
 
-        {/* Competency selection and questions */}
-        {reportData?.questions && reportData.questions.length > 0 && (
+        {/* ═══ TAB 2 — QUESTION DEEP DIVE ═══ */}
+        {activeTab === 'dd' && reportData?.questions && reportData.questions.length > 0 && (
           <div className="rounded-lg p-3 sm:p-6 bg-white border border-gray-200 shadow-sm mt-2 sm:mt-4">
             {/* Competency cards */}
             {(() => {
@@ -3833,115 +3962,650 @@ selectedCompetencyKey === paramKey
           </div>
         )}
 
-        {/* Action plan + checklist; checklist reads `set_of_actions` first (same payload as markdown tail). */}
-        {reportVariant !== 'recruiter' &&
-          reportData?.interview &&
-          (() => {
-            const planRawWeb = String(reportData.interview.personalised_action_plan ?? '').trim();
-            const items = planRawWeb ? parseActionPlanItems(planRawWeb) : [];
-            const checklistBlocks = resolveActionPlanChecklistBlocks(reportData.interview, planRawWeb);
-            if (items.length === 0 && checklistBlocks.length === 0) return null;
-            return (
-              <div className="rounded-lg p-4 sm:p-6 mb-4 sm:mb-6 bg-white border border-gray-200 shadow-sm">
-                <h3 className={`text-lg sm:text-xl font-semibold mb-3 sm:mb-4 ${isCandidateReport ? 'text-sky-800' : 'text-[#1e5da8]'}`}>
-                  {items.length > 0 ? 'Your personalised action plan' : 'ACTION PLAN CHECK LIST'}
-                </h3>
-                {items.length > 0 ? (
-                <div className="space-y-11 sm:space-y-12 pb-1 sm:pb-2">
-                  {items.map((item, idx) => (
-                    <div key={idx} className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 sm:p-5 space-y-4">
-                      <div className="font-bold text-base sm:text-lg text-gray-900">
-                        {(item.actionName || '—').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim()}
-                      </div>
-                      {item.format === 'v2' ? (
-                        <>
-                          <div>
-                            <div className="font-bold text-sm text-gray-900">What you did:</div>
-                            <p className="text-sm sm:text-base text-gray-900 mt-1 whitespace-pre-wrap">{item.whatYouDid || '—'}</p>
-                          </div>
-                          <div>
-                            <div className="font-bold text-sm text-gray-900">Why it matters:</div>
-                            <p className="text-sm sm:text-base text-gray-900 mt-1 whitespace-pre-wrap">{item.whyItMatters || '—'}</p>
-                          </div>
-                          {(item.theCue || '').trim() ? (
-                            <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 sm:p-4">
-                              <div className="font-bold text-sm text-indigo-700 mb-1.5">The cue:</div>
-                              <p className="text-sm sm:text-base text-[#1a1a1a] whitespace-pre-wrap">{item.theCue}</p>
-                            </div>
-                          ) : null}
-                          <div className="rounded-lg border border-teal-300 bg-teal-50 p-3 sm:p-4">
-                            <div className="font-bold text-sm text-teal-800 mb-1.5">Between interviews:</div>
-                            <p className="text-sm sm:text-base text-[#1a1a1a] whitespace-pre-wrap">{item.betweenInterviews || '—'}</p>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="text-sm sm:text-base text-gray-900 space-y-3 whitespace-pre-wrap">
-                          <p>
-                            <span className="font-semibold">Addresses: </span>
-                            {item.addresses || '—'}
-                          </p>
-                          <p>{item.description || '—'}</p>
-                          <div className="rounded-lg border border-emerald-200 bg-emerald-50/90 p-3">
-                            <div className="font-bold text-sm text-emerald-900 mb-1">Expected outcome</div>
-                            <p className="text-[#1a1a1a]">{item.expectedOutcome || '—'}</p>
-                          </div>
-                        </div>
-                      )}
+        {/* ═══ TAB 3 — SPEECH & COACHING ═══ */}
+        {activeTab === 'sp' && (
+          <div className="space-y-4 sm:space-y-6">
+            {/* Speech Metrics — Overall Average */}
+            <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm">
+              <div
+                className="mb-4 flex items-center justify-between gap-3 cursor-pointer select-none"
+                role="button"
+                tabIndex={0}
+                aria-expanded={speechSectionExpanded.metrics}
+                onClick={() => toggleSpeechSection('metrics')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleSpeechSection('metrics');
+                  }
+                }}
+              >
+                <h2 className="text-lg sm:text-xl font-bold flex items-center text-gray-900 tracking-[0.06em]">
+                  SPEECH METRICS — VISUAL REPRESENTATION
+                </h2>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSpeechSection('metrics');
+                  }}
+                  className="inline-flex items-center gap-1 text-xs sm:text-sm font-semibold text-[#0d6ea3] hover:text-[#042C53]"
+                  aria-expanded={speechSectionExpanded.metrics}
+                >
+                  {speechSectionExpanded.metrics ? 'Collapse' : 'Expand'}
+                  {speechSectionExpanded.metrics ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
+              </div>
+
+              {!speechSectionExpanded.metrics && (
+                <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+                  <div className="text-sm font-semibold text-[#042C53]">Quick preview</div>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-600">
+                    <div className="rounded-md border border-gray-200 bg-white p-3">
+                      <div className="font-semibold text-slate-800">Radar</div>
+                      <div className="mt-1">Compare ideal band vs your score across 5 metrics.</div>
                     </div>
-                  ))}
-                </div>
-                ) : null}
-                {checklistBlocks.length > 0 ? (
-                  <div
-                    className={
-                      items.length > 0
-                        ? 'mt-[5.5rem] sm:mt-24 pt-[4.5rem] sm:pt-20 border-t border-gray-200'
-                        : 'mt-3 sm:mt-4'
-                    }
-                  >
-                    {items.length > 0 ? (
-                      <h4
-                        className={`text-lg sm:text-xl font-semibold mb-3 sm:mb-4 ${
-                          isCandidateReport ? 'text-sky-800' : 'text-[#1e5da8]'
-                        }`}
-                      >
-                        ACTION PLAN CHECK LIST
-                      </h4>
-                    ) : null}
-                    <div className="flex flex-col gap-5 sm:gap-6">
-                      {checklistBlocks.map((block, cidx) => (
-                        <div
-                          key={cidx}
-                          className="rounded-lg border border-gray-200/90 bg-white shadow-sm p-3.5 sm:p-4"
-                        >
-                          {/* ~9mm / speech-section bar height: compact row, 11pt-equivalent type */}
-                          <div className="w-full min-h-[2.125rem] rounded-lg border border-emerald-200/70 bg-[#eaf3e3] px-3.5 sm:px-4 py-1 sm:py-1.5 flex items-start">
-                            <p className="font-bold text-[13px] sm:text-[14px] leading-snug text-emerald-950 m-0">
-                              {block.action_title}
-                            </p>
-                          </div>
-                          <ul className="m-0 mt-5 sm:mt-6 list-none space-y-3 sm:space-y-3.5 p-0">
-                            {block.items.map((line, iidx) => (
-                              <li
-                                key={iidx}
-                                className="flex gap-3.5 items-start text-sm sm:text-base text-gray-900 leading-relaxed"
-                              >
-                                <span
-                                  className="mt-[0.5rem] sm:mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600"
-                                  aria-hidden
-                                />
-                                <span className="min-w-0 pt-px whitespace-pre-wrap">{formatChecklistItemLine(line)}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
+                    <div className="rounded-md border border-gray-200 bg-white p-3">
+                      <div className="font-semibold text-slate-800">Bars</div>
+                      <div className="mt-1">See your score and ideal range on the same scale.</div>
+                    </div>
+                    <div className="rounded-md border border-gray-200 bg-white p-3">
+                      <div className="font-semibold text-slate-800">Hover insights</div>
+                      <div className="mt-1">Hover points to view candidate, ideal min & ideal max.</div>
                     </div>
                   </div>
-                ) : null}
+                </div>
+              )}
+
+              {speechSectionExpanded.metrics && reportData?.answers && (() => {
+                const answers = reportData.answers;
+                const withBehavioral = answers.filter((a) => {
+                  const b = a.behavioral ?? a.behavioral_metrics;
+                  return b && (typeof b.overall_speech_quality === 'number' || typeof b.speaking_pace_wpm === 'number' || typeof b.pause_quality_score === 'number');
+                });
+                if (withBehavioral.length === 0) {
+                  return <p className="text-sm sm:text-base text-gray-600">No speech metrics available for this interview.</p>;
+                }
+
+                const avg = (key: string, formatter: (v: number) => string = (v) => String(v)) => {
+                  const vals = withBehavioral.map((a) => (a.behavioral ?? a.behavioral_metrics)?.[key]).filter((v): v is number => typeof v === 'number');
+                  if (vals.length === 0) return null;
+                  const sum = vals.reduce((s, v) => s + v, 0);
+                  return formatter(sum / vals.length);
+                };
+                const avgNum = (key: string): number | null => {
+                  const vals = withBehavioral.map((a) => (a.behavioral ?? a.behavioral_metrics)?.[key]).filter((v): v is number => typeof v === 'number');
+                  if (vals.length === 0) return null;
+                  return vals.reduce((s, v) => s + v, 0) / vals.length;
+                };
+
+                const metricConfig = [
+                  { key: 'overall_speech_quality', name: 'Overall speech quality', getCandidate: () => avg('overall_speech_quality', (v) => `${Math.round(v)}/100`), getNum: () => avgNum('overall_speech_quality'), ideal: { min: 85, max: 100 }, max: 100 },
+                  { key: 'speaking_pace_wpm', name: 'Speaking pace (WPM)', getCandidate: () => avg('speaking_pace_wpm', (v) => `${Math.round(v)} WPM`), getNum: () => avgNum('speaking_pace_wpm'), ideal: { min: 110, max: 170 }, max: 220 },
+                  { key: 'filler_score', name: 'Filler score', getCandidate: () => avg('filler_score', (v) => `${Math.round(v)}/100`), getNum: () => avgNum('filler_score'), ideal: { min: 85, max: 100 }, max: 100 },
+                  { key: 'pause_quality_score', name: 'Pause & pacing', getCandidate: () => avg('pause_quality_score', (v) => `${Math.round(v)}/100`), getNum: () => avgNum('pause_quality_score'), ideal: { min: 85, max: 100 }, max: 100 },
+                  { key: 'voice_confidence', name: 'Voice confidence', getCandidate: () => avg('voice_confidence', (v) => `${Math.round(v)}/100`), getNum: () => avgNum('voice_confidence'), ideal: { min: 80, max: 100 }, max: 100 },
+                ] as const;
+
+                const metrics = metricConfig
+                  .map((m) => {
+                    const candidate = m.getCandidate();
+                    const numVal = m.getNum();
+                    if (candidate == null) return null;
+                    const rating = numVal != null ? getSpeechMetricRating(m.key, numVal) : 'Average';
+                    return { ...m, candidate, numVal, rating };
+                  })
+                  .filter((m): m is NonNullable<typeof m> => m != null);
+
+                const polarPoint = (cx: number, cy: number, r: number, angleRad: number) => ({
+                  x: cx + r * Math.cos(angleRad),
+                  y: cy + r * Math.sin(angleRad),
+                });
+                const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+                const toNorm = (raw: number | null | undefined, max: number) => (raw == null ? 0 : clamp01(Number(raw) / max));
+                const toNormIdeal = (raw: number, max: number) => clamp01(raw / max);
+
+                const Radar = () => {
+                  const [hovered, setHovered] = useState<null | { label: string; value: string; x: number; y: number }>(null);
+                  const size = 760;
+                  const pad = 104;
+                  const cx = size / 2;
+                  const cy = size / 2;
+                  const rMax = (size / 2) - pad;
+                  const axes = metrics;
+                  const n = axes.length;
+                  const start = -Math.PI / 2;
+                  const step = (Math.PI * 2) / n;
+
+                  const axisLabel = (k: string) => {
+                    if (k === 'overall_speech_quality') return 'Overall quality';
+                    if (k === 'speaking_pace_wpm') return 'Speaking pace';
+                    if (k === 'filler_score') return 'Filler score';
+                    if (k === 'pause_quality_score') return 'Pause & pacing';
+                    if (k === 'voice_confidence') return 'Voice confidence';
+                    return k;
+                  };
+                  const formatIdeal = (k: string, v: number) => (k === 'speaking_pace_wpm' ? `${v} WPM` : `${v}/100`);
+
+                  const poly = (vals: number[]) =>
+                    vals
+                      .map((v, i) => {
+                        const a = start + i * step;
+                        const p = polarPoint(cx, cy, rMax * clamp01(v), a);
+                        return `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
+                      })
+                      .join(' ');
+
+                  const idealMin = axes.map((m) => toNormIdeal(m.ideal.min, m.max));
+                  const idealMax = axes.map((m) => toNormIdeal(m.ideal.max, m.max));
+                  const candidate = axes.map((m) => toNorm(m.numVal, m.max));
+
+                  const gridLevels = [0.25, 0.5, 0.75, 1];
+
+                  const idealBandPath = (() => {
+                    // Build a ring path: outer (idealMax) + inner (idealMin reversed)
+                    const outer = idealMax.map((v, i) => {
+                      const a = start + i * step;
+                      const p = polarPoint(cx, cy, rMax * clamp01(v), a);
+                      return { x: p.x, y: p.y };
+                    });
+                    const inner = idealMin.map((v, i) => {
+                      const a = start + i * step;
+                      const p = polarPoint(cx, cy, rMax * clamp01(v), a);
+                      return { x: p.x, y: p.y };
+                    });
+                    const move = (p: { x: number; y: number }) => `M ${p.x.toFixed(2)} ${p.y.toFixed(2)}`;
+                    const line = (p: { x: number; y: number }) => `L ${p.x.toFixed(2)} ${p.y.toFixed(2)}`;
+                    const close = 'Z';
+                    const outerPath = `${move(outer[0])} ${outer.slice(1).map(line).join(' ')} ${close}`;
+                    const innerRev = [...inner].reverse();
+                    const innerPath = `${move(innerRev[0])} ${innerRev.slice(1).map(line).join(' ')} ${close}`;
+                    return `${outerPath} ${innerPath}`;
+                  })();
+
+                  return (
+                    <div className="flex flex-col items-center relative">
+                      <div className="relative mt-3">
+                        <svg
+                          viewBox={`0 0 ${size} ${size}`}
+                          preserveAspectRatio="xMidYMid meet"
+                          className="h-[640px] w-[640px] max-w-full overflow-visible sm:h-[740px] sm:w-[740px]"
+                        >
+                          {/* grid */}
+                          {gridLevels.map((lvl) => (
+                            <polygon
+                              key={lvl}
+                              points={poly(new Array(n).fill(lvl))}
+                              fill="none"
+                              stroke="rgba(148,163,184,0.55)"
+                              strokeWidth="1.25"
+                            />
+                          ))}
+                          {/* axes */}
+                          {axes.map((m, i) => {
+                            const a = start + i * step;
+                            const p = polarPoint(cx, cy, rMax, a);
+                            return (
+                              <line
+                                key={m.key}
+                                x1={cx}
+                                y1={cy}
+                                x2={p.x}
+                                y2={p.y}
+                                stroke="rgba(148,163,184,0.55)"
+                                strokeWidth="1.25"
+                              />
+                            );
+                          })}
+
+                          {/* ideal band (ring) */}
+                          <path
+                            d={idealBandPath}
+                            fill="rgba(34,197,94,0.26)"
+                            fillRule="evenodd"
+                            stroke="rgba(34,197,94,0.70)"
+                            strokeWidth="2.25"
+                          />
+
+                          {/* candidate */}
+                          <polygon points={poly(candidate)} fill="rgba(13,110,163,0.22)" stroke="rgba(13,110,163,0.92)" strokeWidth="2.75" />
+
+                          {/* labels */}
+                          {axes.map((m, i) => {
+                            const a = start + i * step;
+                            const p = polarPoint(cx, cy, rMax + 28, a);
+                            const anchor =
+                              Math.abs(Math.cos(a)) < 0.25 ? 'middle' : Math.cos(a) > 0 ? 'start' : 'end';
+                            return (
+                              <text
+                                key={`${m.key}-lbl`}
+                                x={p.x}
+                                y={p.y}
+                                textAnchor={anchor as any}
+                                dominantBaseline="middle"
+                                fontSize="16"
+                                fill="#334155"
+                              >
+                                {axisLabel(m.key)}
+                              </text>
+                            );
+                          })}
+
+                          {/* ideal min/max dots + candidate dots */}
+                          {axes.map((m, i) => {
+                            const a = start + i * step;
+                            const pMin = polarPoint(cx, cy, rMax * clamp01(idealMin[i] ?? 0), a);
+                            const pMax = polarPoint(cx, cy, rMax * clamp01(idealMax[i] ?? 0), a);
+                            const pCand = polarPoint(cx, cy, rMax * clamp01(candidate[i] ?? 0), a);
+                            const label = axisLabel(m.key);
+                            const scoreLabel = m.candidate || '—';
+                            return (
+                              <g key={`${m.key}-dots`}>
+                                {/* ideal min */}
+                                <circle
+                                  cx={pMin.x}
+                                  cy={pMin.y}
+                                  r={5.5}
+                                  fill="white"
+                                  stroke="rgba(34,197,94,0.95)"
+                                  strokeWidth="2"
+                                  style={{ cursor: 'default' }}
+                                  onMouseEnter={() => setHovered({ label: `${label} (ideal min)`, value: formatIdeal(m.key, m.ideal.min), x: pMin.x, y: pMin.y })}
+                                  onMouseMove={() => setHovered({ label: `${label} (ideal min)`, value: formatIdeal(m.key, m.ideal.min), x: pMin.x, y: pMin.y })}
+                                  onMouseLeave={() => setHovered(null)}
+                                />
+                                {/* ideal max */}
+                                <circle
+                                  cx={pMax.x}
+                                  cy={pMax.y}
+                                  r={5.5}
+                                  fill="white"
+                                  stroke="rgba(34,197,94,0.95)"
+                                  strokeWidth="2"
+                                  style={{ cursor: 'default' }}
+                                  onMouseEnter={() => setHovered({ label: `${label} (ideal max)`, value: formatIdeal(m.key, m.ideal.max), x: pMax.x, y: pMax.y })}
+                                  onMouseMove={() => setHovered({ label: `${label} (ideal max)`, value: formatIdeal(m.key, m.ideal.max), x: pMax.x, y: pMax.y })}
+                                  onMouseLeave={() => setHovered(null)}
+                                />
+
+                                {/* candidate */}
+                                <circle
+                                  cx={pCand.x}
+                                  cy={pCand.y}
+                                  r={7}
+                                  fill="white"
+                                  stroke="rgba(13,110,163,0.95)"
+                                  strokeWidth="2"
+                                  style={{ cursor: 'default' }}
+                                  onMouseEnter={() => setHovered({ label: `${label} (candidate)`, value: scoreLabel, x: pCand.x, y: pCand.y })}
+                                  onMouseMove={() => setHovered({ label: `${label} (candidate)`, value: scoreLabel, x: pCand.x, y: pCand.y })}
+                                  onMouseLeave={() => setHovered(null)}
+                                />
+                                <circle cx={pCand.x} cy={pCand.y} r={4} fill="rgba(13,110,163,0.95)" pointerEvents="none" />
+                              </g>
+                            );
+                          })}
+                        </svg>
+
+                        {hovered && (
+                          <div
+                            className="pointer-events-none absolute rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-800 shadow-lg"
+                            style={{
+                              left: hovered.x,
+                              top: hovered.y,
+                              transform: 'translate(-50%, -110%)',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            <span className="font-semibold">{hovered.label}:</span> {hovered.value}
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+                  );
+                };
+
+                return (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+                      <div className="space-y-3">
+                        <div className="text-sm font-semibold text-gray-900">
+                          Metric Chart (
+                          <span className="inline-flex items-center gap-1">
+                            Ideal <span className="inline-block h-2.5 w-2.5 rounded-sm bg-green-400" />
+                          </span>
+                          {' '}vs{' '}
+                          <span className="inline-flex items-center gap-1">
+                            Actual Captured <span className="inline-block h-2.5 w-2.5 rounded-sm bg-[#0d6ea3]" />
+                          </span>
+                          )
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50/40 p-6 flex items-center justify-center overflow-visible">
+                          <Radar />
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="text-sm font-semibold text-gray-900">
+                          Speech Metrics Bar Representation
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="grid grid-rows-5 gap-4">
+                            {metrics.map((m) => {
+                              const style = SPEECH_RATING_STYLES[m.rating];
+                              const v = toNorm(m.numVal, m.max);
+                              const idealMin = toNormIdeal(m.ideal.min, m.max);
+                              const idealMax = toNormIdeal(m.ideal.max, m.max);
+                              const left = idealMin * 100;
+                              const width = Math.max(0, (idealMax - idealMin) * 100);
+                              const right = Math.min(100, left + width);
+                              const candidatePct = Math.max(0, Math.min(100, v * 100));
+                              const labelPos = (pct: number) => {
+                                const c = Math.max(0, Math.min(100, pct));
+                                const transform = c < 8 ? 'translateX(0%)' : c > 92 ? 'translateX(-100%)' : 'translateX(-50%)';
+                                return { left: `${c}%`, transform };
+                              };
+                              return (
+                                <div key={m.key} className="rounded-lg border border-gray-200 bg-white p-4 h-full flex flex-col justify-center overflow-hidden">
+                                  {/* Row 1: Metric name -> candidate score bar */}
+                                  <div className="mt-1 grid grid-cols-[140px_1fr] items-center gap-3">
+                                    <div className="text-sm font-semibold text-slate-800">
+                                      {m.name}:
+                                    </div>
+                                    <div className="relative pt-5">
+                                      {/* label above the bar */}
+                                      <div className="pointer-events-none absolute top-0 left-0 right-0 h-5 px-1">
+                                        <span
+                                          className="absolute top-0 whitespace-nowrap text-[11px] font-semibold text-slate-800"
+                                          style={labelPos(candidatePct)}
+                                        >
+                                          {m.candidate}
+                                        </span>
+                                      </div>
+
+                                      <div className="relative h-3 rounded-full bg-slate-200 overflow-hidden">
+                                        <div
+                                          className="absolute top-0 bottom-0 rounded-full"
+                                          style={{
+                                            width: `${v * 100}%`,
+                                            background: m.rating === 'Good' ? 'rgba(34,197,94,0.95)' : m.rating === 'Needs Work' ? 'rgba(239,68,68,0.92)' : 'rgba(202,138,4,0.95)',
+                                          }}
+                                          aria-hidden="true"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Row 2: Ideal Range -> ideal band bar */}
+                                  <div className="mt-5 grid grid-cols-[140px_1fr] items-center gap-3">
+                                    <div className="text-sm font-semibold text-slate-700">
+                                      Ideal Range:
+                                    </div>
+                                    <div className="relative pt-5">
+                                      {/* labels above the bar */}
+                                      <div className="pointer-events-none absolute top-0 left-0 right-0 h-5 px-1">
+                                        <span
+                                          className="absolute top-0 whitespace-nowrap text-[11px] font-semibold text-slate-700"
+                                          style={labelPos(left)}
+                                        >
+                                          {m.ideal.min}
+                                        </span>
+                                        <span
+                                          className="absolute top-0 whitespace-nowrap text-[11px] font-semibold text-slate-700"
+                                          style={labelPos(right)}
+                                        >
+                                          {m.ideal.max}
+                                        </span>
+                                      </div>
+
+                                      <div className="relative h-3 rounded-full bg-slate-200 overflow-hidden">
+                                        <div
+                                          className="absolute top-0 bottom-0 bg-green-300/70"
+                                          style={{ left: `${left}%`, width: `${width}%` }}
+                                          aria-hidden="true"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="mt-3 text-xs text-gray-600">
+                            Each bar shows your score (coloured) against the ideal zone (green). Bars outside the ideal zone need attention.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Table removed (redundant with radar + bars) */}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Speech Narrative */}
+            <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm">
+              <div
+                className="mb-4 flex items-center justify-between gap-3 cursor-pointer select-none"
+                role="button"
+                tabIndex={0}
+                aria-expanded={speechSectionExpanded.narrative}
+                onClick={() => toggleSpeechSection('narrative')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleSpeechSection('narrative');
+                  }
+                }}
+              >
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900 tracking-[0.06em]">
+                  SPEECH NARRATIVE
+                </h2>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSpeechSection('narrative');
+                  }}
+                  className="inline-flex items-center gap-1 text-xs sm:text-sm font-semibold text-[#0d6ea3] hover:text-[#042C53]"
+                  aria-expanded={speechSectionExpanded.narrative}
+                >
+                  {speechSectionExpanded.narrative ? 'Collapse' : 'Expand'}
+                  {speechSectionExpanded.narrative ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
               </div>
-            );
-          })()}
+              {!speechSectionExpanded.narrative && (
+                <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+                  <div className="text-sm font-semibold text-[#042C53]">Quick preview</div>
+                  <div className="mt-2 text-sm text-slate-700 leading-relaxed">
+                    A section-wise breakdown of your speech performance with strengths, issues, and coaching guidance.
+                  </div>
+                </div>
+              )}
+              {speechSectionExpanded.narrative && (() => {
+                const speechReport = reportData?.interview?.speech_detailed_report;
+                if (!speechReport || !String(speechReport).trim()) {
+                  return <p className="text-sm sm:text-base text-gray-600">No narrative available yet. Download the PDF for the full analysis when it’s ready.</p>;
+                }
+                const reportBody = stripSpeechReportTitleLine(String(speechReport).trim()).replace(/''/g, "'");
+                const sections = parseSpeechReportSections(reportBody);
+                if (!sections.length) {
+                  return <p className="text-sm sm:text-base text-gray-600 whitespace-pre-line">{reportBody}</p>;
+                }
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {sections.map((s) => (
+                      <div key={s.section} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                        <div className="text-xs font-semibold tracking-[0.08em] text-gray-600 uppercase">{s.section}</div>
+                        <p className="mt-2 text-sm sm:text-base text-gray-800 leading-relaxed whitespace-pre-line">{s.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Personalised Action Plan + Checklist */}
+            <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm">
+              <div
+                className="mb-2 flex items-center justify-between gap-3 cursor-pointer select-none"
+                role="button"
+                tabIndex={0}
+                aria-expanded={speechSectionExpanded.plan}
+                onClick={() => toggleSpeechSection('plan')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleSpeechSection('plan');
+                  }
+                }}
+              >
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900 tracking-[0.06em]">
+                  PERSONALISED ACTION PLAN
+                </h2>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSpeechSection('plan');
+                  }}
+                  className="inline-flex items-center gap-1 text-xs sm:text-sm font-semibold text-[#0d6ea3] hover:text-[#042C53]"
+                  aria-expanded={speechSectionExpanded.plan}
+                >
+                  {speechSectionExpanded.plan ? 'Collapse' : 'Expand'}
+                  {speechSectionExpanded.plan ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
+              </div>
+              {!speechSectionExpanded.plan && (
+                <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+                  <div className="text-sm font-semibold text-[#042C53]">Quick preview</div>
+                  <div className="mt-2 text-sm text-slate-700 leading-relaxed">
+                    A personalised set of improvement actions and (when available) a checklist you can tick off as you practice.
+                  </div>
+                </div>
+              )}
+              {speechSectionExpanded.plan && (() => {
+                const planRaw = String(reportData?.interview?.personalised_action_plan ?? '').trim();
+                const items = planRaw ? parseActionPlanItems(planRaw) : [];
+                const checklistBlocks = resolveActionPlanChecklistBlocks(reportData?.interview, planRaw);
+                const hasAny = items.length > 0 || checklistBlocks.length > 0;
+                if (!hasAny) return <p className="text-sm sm:text-base text-gray-600">No personalised action plan available yet.</p>;
+                return (
+                  <div className="space-y-6">
+                    {items.length > 0 && (
+                      <div className="space-y-4">
+                        {items.map((it) => (
+                      <div key={`${it.srNo}-${it.actionName}`} className="rounded-lg border border-gray-200 bg-white p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold tracking-[0.08em] text-gray-600 uppercase">Action {it.srNo}</div>
+                            <div className="mt-1 text-base sm:text-lg font-semibold text-gray-900">{it.actionName}</div>
+                          </div>
+                          {it.evolutionLabel ? (
+                            <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                              {it.evolutionLabel}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {it.format === 'v2' ? (
+                          <div className="mt-3 space-y-3 text-sm sm:text-base text-gray-800">
+                            {it.whatYouDid ? (
+                              <div>
+                                <div className="text-xs font-semibold tracking-[0.08em] text-gray-600 uppercase">What you did</div>
+                                <p className="mt-1 leading-relaxed">{it.whatYouDid}</p>
+                              </div>
+                            ) : null}
+                            {it.whyItMatters ? (
+                              <div>
+                                <div className="text-xs font-semibold tracking-[0.08em] text-gray-600 uppercase">Why it matters</div>
+                                <p className="mt-1 leading-relaxed">{it.whyItMatters}</p>
+                              </div>
+                            ) : null}
+                            {it.betweenInterviews ? (
+                              <div className="rounded-md border border-[#0d6ea3]/20 bg-[#0d6ea3]/5 p-3">
+                                <div className="text-xs font-semibold tracking-[0.08em] text-[#0d6ea3] uppercase">Between interviews</div>
+                                <p className="mt-1 leading-relaxed text-gray-800">{it.betweenInterviews}</p>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <div className="mt-3 space-y-3 text-sm sm:text-base text-gray-800">
+                            {it.addresses ? <p><span className="font-semibold">Addresses:</span> {it.addresses}</p> : null}
+                            {it.description ? <p><span className="font-semibold">Description:</span> {it.description}</p> : null}
+                            {it.expectedOutcome ? <p><span className="font-semibold">Expected outcome:</span> {it.expectedOutcome}</p> : null}
+                          </div>
+                        )}
+                      </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {checklistBlocks.length > 0 && (
+                      <div className="rounded-lg border border-gray-200 bg-gray-50/40 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-bold text-gray-900 tracking-[0.06em]">
+                            ACTION PLAN CHECKLIST
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => toggleSpeechSection('checklist')}
+                            className="inline-flex items-center gap-1 text-xs sm:text-sm font-semibold text-[#0d6ea3] hover:text-[#042C53]"
+                            aria-expanded={speechSectionExpanded.checklist}
+                          >
+                            {speechSectionExpanded.checklist ? 'Collapse' : 'Expand'}
+                            {speechSectionExpanded.checklist ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </button>
+                        </div>
+                        {speechSectionExpanded.checklist && (
+                          <div className="mt-3 space-y-4">
+                            {checklistBlocks.map((b) => (
+                              <div key={b.action_title} className="rounded-lg border border-gray-200 bg-white p-4">
+                                <div className="text-xs font-semibold tracking-[0.08em] text-gray-600 uppercase">
+                                  {b.action_title}
+                                </div>
+                                <div className="mt-3 space-y-2">
+                                  {b.items.map((txt) => {
+                                    const key = `${b.action_title}::${txt}`;
+                                    const on = !!checklistChecked[key];
+                                    return (
+                                      <button
+                                        key={key}
+                                        type="button"
+                                        onClick={() => setChecklistChecked((m) => ({ ...m, [key]: !on }))}
+                                        className="w-full flex items-start gap-3 text-left"
+                                      >
+                                        <span
+                                          className={`mt-0.5 h-5 w-5 rounded-md border flex items-center justify-center flex-shrink-0 ${
+                                            on ? 'bg-[#0d6ea3] border-[#0d6ea3]' : 'bg-white border-gray-300'
+                                          }`}
+                                          aria-hidden="true"
+                                        >
+                                          {on ? <span className="text-white text-xs font-bold">✓</span> : null}
+                                        </span>
+                                        <span className={`text-sm sm:text-base leading-relaxed ${on ? 'line-through text-gray-500' : 'text-gray-800'}`}>
+                                          {txt}
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Personalised action plan + checklist: included in downloaded PDF only; not rendered on web results. */}
 
         {/* Complete Session Video */}
         {reportData.interview?.session_video_url && (
@@ -3993,6 +4657,8 @@ selectedCompetencyKey === paramKey
             </div>
           </div>
         )}
+
+        </div>
       </div>
 
       {/* Video Modal */}

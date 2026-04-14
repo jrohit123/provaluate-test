@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { cloneElement, isValidElement, useEffect, useState } from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -27,6 +27,8 @@ import CandidateLogin from "./pages/CandidateLogin";
 import CandidatePricing from "./pages/CandidatePricing";
 import CandidateOnboarding from "./pages/CandidateOnboarding";
 import CandidateDashboard from "./pages/CandidateDashboard";
+import TpoLogin from "./pages/TpoLogin";
+import TpoDashboard from "./pages/TpoDashboard";
 
 // Import AI Interview components (now TypeScript)
 import InterviewDashboard from "./components/ai-interview/InterviewDashboard";
@@ -43,6 +45,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { InterviewProvider } from "@/contexts/InterviewContext";
 import { SessionProvider } from "@/contexts/SessionContext";
+import { API_CONFIG, buildApiUrl } from "@/constants/api";
 import './App.css';
 
 const queryClient = new QueryClient();
@@ -174,6 +177,73 @@ const CandidateProtectedRoute = ({ children }: { children: React.ReactNode }) =>
   return <>{children}</>;
 };
 
+const TpoProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const [loading, setLoading] = useState(true);
+  const [allowed, setAllowed] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [tpoUser, setTpoUser] = useState<{
+    id?: string;
+    full_name: string;
+    email: string;
+    role: 'tpo_admin' | 'tpo_staff';
+  } | null>(null);
+
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          setAllowed(false);
+          setNeedsOnboarding(false);
+          setTpoUser(null);
+          setLoading(false);
+          return;
+        }
+        const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.TPO_ME), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setAllowed(false);
+          setNeedsOnboarding(false);
+          setTpoUser(null);
+          setLoading(false);
+          return;
+        }
+        if (data?.requires_onboarding) {
+          setAllowed(false);
+          setNeedsOnboarding(true);
+          setTpoUser(null);
+          setLoading(false);
+          return;
+        }
+        setAllowed(true);
+        setNeedsOnboarding(false);
+        setTpoUser(data?.tpo_user ?? null);
+      } catch {
+        setAllowed(false);
+        setNeedsOnboarding(false);
+        setTpoUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    check();
+  }, []);
+
+  if (loading) return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
+  if (needsOnboarding) return <Navigate to="/tpo-login" replace />;
+  if (!allowed) return <Navigate to="/tpo-login" replace />;
+  if (isValidElement(children)) {
+    return cloneElement(
+      children as React.ReactElement<{ initialTpoUser?: typeof tpoUser }>,
+      { initialTpoUser: tpoUser }
+    );
+  }
+  return <>{children}</>;
+};
+
 // Toast component that adapts to mobile
 const AdaptiveToaster = () => {
   const isMobile = useIsMobile();
@@ -222,6 +292,7 @@ const App = () => {
             <Route path="/candidate-signup" element={<CandidateSignUp />} />
             <Route path="/candidate-login" element={<CandidateLogin />} />
             <Route path="/candidate-login/:referralSlug" element={<Navigate to="/candidate-login" replace />} />
+            <Route path="/tpo-login" element={<TpoLogin />} />
             <Route path="/candidate-pricing" element={<CandidatePricing />} />
             <Route path="/candidate-onboarding" element={<CandidateOnboarding />} />
             <Route path="/reset-password" element={<ResetPassword />} />
@@ -276,10 +347,30 @@ const App = () => {
                 <CandidateDashboard />
               </CandidateProtectedRoute>
             } />
+            <Route path="/candidate-dashboard/performance-report" element={
+              <CandidateProtectedRoute>
+                <CandidateDashboard />
+              </CandidateProtectedRoute>
+            } />
+            <Route path="/candidate-dashboard/personal-interviews" element={
+              <CandidateProtectedRoute>
+                <CandidateDashboard />
+              </CandidateProtectedRoute>
+            } />
+            <Route path="/candidate-dashboard/campus-interviews" element={
+              <CandidateProtectedRoute>
+                <CandidateDashboard />
+              </CandidateProtectedRoute>
+            } />
             <Route path="/candidate-dashboard/referrals" element={
               <CandidateProtectedRoute>
                 <CandidateDashboard />
               </CandidateProtectedRoute>
+            } />
+            <Route path="/tpo-dashboard" element={
+              <TpoProtectedRoute>
+                <TpoDashboard />
+              </TpoProtectedRoute>
             } />
             
             {/* AI Interview Routes - Original Interface */}

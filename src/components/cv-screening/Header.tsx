@@ -75,7 +75,7 @@ export const Header = () => {
     : greeting;
 
   return (
-    <header className="bg-[#1e5da8] border-b px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 sm:gap-4">
+    <header className="border-b px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 sm:gap-4 text-white [background:linear-gradient(135deg,#042C53,#0d6ea3)]">
       <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
         <SidebarTrigger className="text-white flex-shrink-0" data-tour="sidebar-trigger" />
         <div className="min-w-0">
@@ -93,9 +93,11 @@ export const Header = () => {
         <Button 
           variant="outline" 
           onClick={handleLogout} 
-          className="text-xs sm:text-sm px-3 sm:px-4 h-10 min-h-[44px] flex-shrink-0"
+          className="text-xs sm:text-sm px-3 sm:px-4 h-10 min-h-[44px] flex-shrink-0 border-white/70 bg-white hover:bg-white/95"
         >
-          <span>Logout</span>
+          <span className="text-transparent bg-clip-text [background-image:linear-gradient(135deg,#042C53,#0d6ea3)]">
+            Logout
+          </span>
         </Button>
       </div>
     </header>

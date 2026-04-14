@@ -2,7 +2,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthContext, isCandidate } from '@/contexts/AuthContext';
 import { FileText, User, Briefcase, ExternalLink, ClipboardList, Loader2, Globe, Award, Lightbulb, BookOpen, Heart, Trophy, FolderGit2, Users, Building2, PenLine, BookMarked, Hash, X, Check, Settings, UserPlus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { SessionManager } from '@/utils/sessionManager';
 import type { Tables } from '@/integrations/supabase/types';
@@ -19,11 +20,14 @@ import CandidateJdInterviewConfig from '@/components/ai-interview/CandidateJdInt
 import CandidateJdInterviewCreate from '@/components/ai-interview/CandidateJdInterviewCreate';
 import { ReferralsSection } from '@/components/ai-interview/ReferralsSection';
 import { API_CONFIG, buildApiUrl } from '@/constants/api';
-import { ChartContainer } from '@/components/ui/chart';
-import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceArea } from 'recharts';
+import {
+  StudentPerformanceReportView,
+  CANDIDATE_INTERVIEW_CARD_CLASS,
+  type PerformanceInterviewRow,
+  type ProgressItem,
+} from '@/components/ai-interview/StudentPerformanceReportView';
 import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
 import { INTERVIEW_WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
-import { useIsMobile } from '@/hooks/use-mobile';
 
 const CandidateDashboard = () => {
   const { user } = useAuthContext();
@@ -37,6 +41,10 @@ const CandidateDashboard = () => {
   const isJdsConfigure = path.startsWith('/candidate-dashboard/jds/configure');
   const isJdsCreate = path.startsWith('/candidate-dashboard/jds/create');
   const isInterviews = path.startsWith('/candidate-dashboard/interviews');
+  const isPerformanceReport = path.startsWith('/candidate-dashboard/performance-report');
+  // Legacy routes kept for backwards links; they redirect into Interviews with tab preset.
+  const isPersonalInterviewsLegacy = path.startsWith('/candidate-dashboard/personal-interviews');
+  const isCampusInterviewsLegacy = path.startsWith('/candidate-dashboard/campus-interviews');
   const isReferrals = path.startsWith('/candidate-dashboard/referrals');
 
   const handleSignOut = useCallback(async () => {
@@ -102,6 +110,14 @@ const CandidateDashboard = () => {
                 <MyJdsSection candidateId={candidate?.candidate_id} />
               )}
               {isInterviews && (
+                <InterviewsSection
+                  candidateId={candidate?.candidate_id}
+                  candidateEmail={candidate?.email ?? undefined}
+                  candidateFirstName={candidate?.first_name ?? undefined}
+                  candidateLastName={candidate?.last_name ?? undefined}
+                />
+              )}
+              {isPerformanceReport && (
                 <>
                   <div className="lg:hidden">
                     <CompactStepProgress
@@ -109,7 +125,7 @@ const CandidateDashboard = () => {
                       total={INTERVIEW_WORKFLOW_STEPS.length}
                       steps={INTERVIEW_WORKFLOW_STEPS}
                       onStepClick={(index) => {
-                        const routes = ['/candidate-dashboard/jds/configure', '/candidate-dashboard/jds/create', '/candidate-dashboard/interviews'];
+                        const routes = ['/candidate-dashboard/jds/configure', '/candidate-dashboard/jds/create', '/candidate-dashboard/performance-report'];
                         if (index >= 0 && index < routes.length) navigate(routes[index]);
                       }}
                       allowClickAnyStep
@@ -118,6 +134,24 @@ const CandidateDashboard = () => {
                   </div>
                   <MyInterviewsSection candidateId={candidate?.candidate_id} candidateEmail={candidate?.email ?? undefined} />
                 </>
+              )}
+              {isPersonalInterviewsLegacy && (
+                <InterviewsSection
+                  candidateId={candidate?.candidate_id}
+                  candidateEmail={candidate?.email ?? undefined}
+                  candidateFirstName={candidate?.first_name ?? undefined}
+                  candidateLastName={candidate?.last_name ?? undefined}
+                  initialTab="personal"
+                />
+              )}
+              {isCampusInterviewsLegacy && (
+                <InterviewsSection
+                  candidateId={candidate?.candidate_id}
+                  candidateEmail={candidate?.email ?? undefined}
+                  candidateFirstName={candidate?.first_name ?? undefined}
+                  candidateLastName={candidate?.last_name ?? undefined}
+                  initialTab="campus"
+                />
               )}
               {isReferrals && <ReferralsSection />}
             </div>
@@ -142,35 +176,11 @@ const CandidateDashboard = () => {
 };
 
 // --- My Interviews (by candidate_id and by candidate_email when candidate_id null) ---
-type InterviewRow = { id: string; position: string | null; status: string | null; created_at: string; candidate_name?: string | null };
-type SpeechMetrics = {
-  overall_speech_quality?: number;
-  speaking_pace_wpm?: number;
-  filler_score?: number;
-  filler_rate_per_min?: number;
-  pause_quality_score?: number;
-  voice_confidence?: number;
-};
-type ProgressItem = {
-  interview_id: string;
-  position: string;
-  completed_at: string | null;
-  overall_score: number | null;
-  /** Normalized from API `parameter_scores` when present */
-  competency_scores: Record<string, number>;
-  speech_metrics?: SpeechMetrics | null;
-};
-const CHART_OVERALL = 'overall';
-type ChartMetricOption = typeof CHART_OVERALL | keyof SpeechMetrics;
-
 function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: string | undefined; candidateEmail?: string }) {
-  const isMobile = useIsMobile();
-  const [list, setList] = useState<InterviewRow[]>([]);
+  const [list, setList] = useState<PerformanceInterviewRow[]>([]);
   const [progress, setProgress] = useState<ProgressItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedChart, setSelectedChart] = useState<ChartMetricOption>(CHART_OVERALL);
-  const tooltipFontSize = isMobile ? 12 : 14;
 
   useEffect(() => {
     if (!candidateId && !candidateEmail) {
@@ -180,8 +190,9 @@ function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: str
     (async () => {
       setError(null);
       const seen = new Set<string>();
-      const merged: InterviewRow[] = [];
-      const selectCols = 'id, position, status, created_at, candidate_name';
+      const merged: PerformanceInterviewRow[] = [];
+      const selectCols =
+        'id, position, status, created_at, completed_at, overall_score, candidate_name, interview_source, campus_template_id';
       if (candidateId) {
         const { data, error: e } = await supabase
           .from('interviews')
@@ -194,7 +205,7 @@ function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: str
           setLoading(false);
           return;
         }
-        for (const row of (data ?? []) as InterviewRow[]) {
+        for (const row of (data ?? []) as PerformanceInterviewRow[]) {
           if (!seen.has(row.id)) {
             seen.add(row.id);
             merged.push(row);
@@ -209,7 +220,7 @@ function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: str
           .eq('candidate_email', candidateEmail)
           .order('created_at', { ascending: false });
         if (!e && data) {
-          for (const row of (data ?? []) as InterviewRow[]) {
+          for (const row of (data ?? []) as PerformanceInterviewRow[]) {
             if (!seen.has(row.id)) {
               seen.add(row.id);
               merged.push(row);
@@ -247,227 +258,615 @@ function MyInterviewsSection({ candidateId, candidateEmail }: { candidateId: str
       .catch(() => setProgress([]));
   }, [candidateId, candidateEmail]);
 
-  const progressByInterviewId = progress.reduce<Record<string, ProgressItem>>((acc, p) => {
-    acc[p.interview_id] = p;
-    return acc;
-  }, {});
-
-  const chartData = progress
-    .filter((p) => p.overall_score != null)
-    .sort((a, b) => new Date(a.completed_at || 0).getTime() - new Date(b.completed_at || 0).getTime())
-    .map((p, idx) => ({
-      name: p.position ? (p.position.length > 20 ? `Interview ${idx + 1}` : p.position) : `Interview ${idx + 1}`,
-      score: p.overall_score ?? 0,
-      fullLabel: p.position || `Interview ${idx + 1}`,
-    }));
-  const showChart = chartData.length >= 2;
-
-  // Speech metrics progression: sorted by completed_at (chronological)
-  const progressSortedByDate = [...progress].sort(
-    (a, b) => new Date(a.completed_at || 0).getTime() - new Date(b.completed_at || 0).getTime()
+  const completedInterviewRows = useMemo(
+    () => list.filter((row) => row.status === 'completed'),
+    [list]
   );
-  // Ideal ranges aligned with PDF report (candidate scores shown against these bands)
-  const speechMetricConfigs: {
-    key: keyof SpeechMetrics;
-    label: string;
-    description: string;
-    unit: string;
-    color: string;
-    domain: [number, number];
-    idealRange: [number, number];
-    yAxisLabel: string;
-    tickFormatter?: (v: number) => string;
-  }[] = [
-    { key: 'overall_speech_quality', label: 'Overall Speech Quality', description: 'Composite score (0–100) from pace, filler score, pauses, and voice confidence.', unit: '/100', color: 'hsl(199, 89%, 48%)', domain: [0, 100], idealRange: [85, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
-    { key: 'speaking_pace_wpm', label: 'Speaking Pace (WPM)', description: 'Words per minute. Reflects whether you speak at a clear, steady rate that is easy for the listener to follow.', unit: ' WPM', color: 'hsl(142, 71%, 45%)', domain: [0, 200], idealRange: [120, 160], yAxisLabel: 'WPM', tickFormatter: (v) => `${Math.round(v)}` },
-    { key: 'filler_score', label: 'Filler Score', description: 'Audio-detected filler sounds, scored 0–100 (higher = fewer fillers).', unit: '/100', color: 'hsl(38, 92%, 50%)', domain: [0, 100], idealRange: [85, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
-    { key: 'pause_quality_score', label: 'Pause & Pacing', description: 'How well you use pauses and rhythm in your speech (0–100). Good pacing helps the listener follow and shows control.', unit: '/100', color: 'hsl(262, 83%, 58%)', domain: [0, 100], idealRange: [85, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
-    { key: 'voice_confidence', label: 'Voice Confidence', description: 'How confident and assured your voice sounds (0–100). Higher scores suggest you came across as self-assured and clear.', unit: '/100', color: 'hsl(199, 89%, 48%)', domain: [0, 100], idealRange: [80, 100], yAxisLabel: 'Score (0–100)', tickFormatter: (v) => `${Math.round(v)}` },
-  ];
-  const speechChartDataByMetric = speechMetricConfigs.map((config) => {
-    const data = progressSortedByDate
-      .map((p, idx) => ({
-        name: p.position && p.position.length <= 20 ? p.position : `Int. ${idx + 1}`,
-        value: p.speech_metrics?.[config.key] ?? null,
-        fullLabel: p.position || `Interview ${idx + 1}`,
-      }))
-      .filter((d) => d.value != null) as { name: string; value: number; fullLabel: string }[];
-    return { ...config, data };
-  });
-  const showSpeechCharts = speechChartDataByMetric.some((m) => m.data.length >= 2);
-  const showAnyChart = showChart || showSpeechCharts;
-  const chartDropdownOptions: { value: ChartMetricOption; label: string }[] = [
-    ...(showChart ? [{ value: CHART_OVERALL as ChartMetricOption, label: 'Performance over time' }] : []),
-    ...speechChartDataByMetric.filter((m) => m.data.length >= 2).map((m) => ({ value: m.key as ChartMetricOption, label: m.label })),
-  ];
-  const selectedMetricConfig = selectedChart === CHART_OVERALL ? null : speechChartDataByMetric.find((m) => m.key === selectedChart);
-  const selectedMetricHasData = selectedChart === CHART_OVERALL ? showChart : (selectedMetricConfig?.data.length ?? 0) >= 2;
-
-  useEffect(() => {
-    const valid = chartDropdownOptions.some((opt) => opt.value === selectedChart);
-    if (chartDropdownOptions.length > 0 && !valid) {
-      setSelectedChart(chartDropdownOptions[0].value);
-    }
-  }, [chartDropdownOptions, selectedChart]);
 
   if (!candidateId && !candidateEmail) {
     return (
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">My interviews</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">Performance report</h1>
         <p className="text-gray-600">Sign in to see your interviews.</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full min-w-0 pb-4 sm:pb-0">
-      <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mb-3 sm:mb-4">My interviews</h1>
+    <StudentPerformanceReportView
+      title="Performance report"
+      introText={
+        <>
+          Charts and cards below use <strong>completed</strong> interviews only. To <strong>start or continue</strong> a
+          personal interview you created, open <strong>Personal interviews</strong> in the sidebar (same idea as{' '}
+          <strong>Campus interviews</strong> for TPO-published roles).
+        </>
+      }
+      interviewRows={completedInterviewRows}
+      progress={progress}
+      loadingList={loading}
+      error={error}
+      showTakeInterview={false}
+      messageEmptyList="No completed interviews yet. Finish a personal or campus interview, then view scores and progress here."
+    />
+  );
+}
+
+/** Non-campus rows (personal practice, recruiter, etc.) — same pattern as campus: take / continue / taken here; reports live under Performance report. */
+function isNonCampusInterviewSource(source: string | null | undefined): boolean {
+  return (source || '').toLowerCase() !== 'campus';
+}
+
+function PersonalInterviewsSection({
+  candidateId,
+  candidateEmail,
+  embedded = false,
+}: {
+  candidateId: string | undefined;
+  candidateEmail?: string;
+  embedded?: boolean;
+}) {
+  const [list, setList] = useState<PerformanceInterviewRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!candidateId && !candidateEmail) {
+      setLoading(false);
+      return;
+    }
+    (async () => {
+      setError(null);
+      const seen = new Set<string>();
+      const merged: PerformanceInterviewRow[] = [];
+      const selectCols =
+        'id, position, status, created_at, completed_at, overall_score, candidate_name, interview_source, campus_template_id';
+      if (candidateId) {
+        const { data, error: e } = await supabase
+          .from('interviews')
+          .select(selectCols)
+          .eq('candidate_id', candidateId)
+          .order('created_at', { ascending: false });
+        if (e) {
+          setError(e.message);
+          setList([]);
+          setLoading(false);
+          return;
+        }
+        for (const row of (data ?? []) as PerformanceInterviewRow[]) {
+          if (!seen.has(row.id) && isNonCampusInterviewSource(row.interview_source)) {
+            seen.add(row.id);
+            merged.push(row);
+          }
+        }
+      }
+      if (candidateEmail) {
+        const { data, error: e } = await supabase
+          .from('interviews')
+          .select(selectCols)
+          .is('candidate_id', null)
+          .eq('candidate_email', candidateEmail)
+          .order('created_at', { ascending: false });
+        if (!e && data) {
+          for (const row of (data ?? []) as PerformanceInterviewRow[]) {
+            if (!seen.has(row.id) && isNonCampusInterviewSource(row.interview_source)) {
+              seen.add(row.id);
+              merged.push(row);
+            }
+          }
+        }
+      }
+      merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setList(merged);
+      setLoading(false);
+    })();
+  }, [candidateId, candidateEmail]);
+
+  if (!candidateId && !candidateEmail) {
+    return (
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">Personal interviews</h1>
+        <p className="text-gray-600">Sign in to see interviews you have created.</p>
+      </div>
+    );
+  }
+
+  const compactBtn =
+    'h-9 min-h-[44px] sm:min-h-9 px-3 sm:px-4 text-xs sm:text-sm touch-manipulation w-auto max-w-full self-start inline-flex items-center justify-center';
+
+  return (
+    <div className={embedded ? 'w-full min-w-0' : 'w-full min-w-0 pb-4 sm:pb-0'}>
+      {!embedded && (
+        <>
+          <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mb-2 sm:mb-3">Personal interviews</h1>
+          <p className="text-sm sm:text-base text-gray-600 mb-4">
+            Interviews you create from <strong>Generate Interview</strong> show up here so you can start or continue them.
+            Finished attempts and scores stay in <strong>Performance report</strong>.
+          </p>
+        </>
+      )}
       {loading && (
         <div className="flex items-center gap-2 text-gray-600 text-sm sm:text-base">
-          <Loader2 className="h-5 w-5 animate-spin shrink-0" /> Loading…
+          <Loader2 className="h-5 w-5 animate-spin shrink-0" /> Loading...
         </div>
       )}
       {error && <p className="text-red-600 text-sm sm:text-base mb-4">{error}</p>}
-      {!loading && showAnyChart && chartDropdownOptions.length > 0 && (
-        <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="flex flex-col gap-3 mb-3 min-w-0">
-            <h2 className="text-sm sm:text-lg font-semibold text-gray-900">
-              {selectedChart === CHART_OVERALL ? 'Performance over time' : selectedMetricConfig?.label ?? 'Performance over time'}
-            </h2>
-            <Select value={selectedChart} onValueChange={(v) => setSelectedChart(v as ChartMetricOption)}>
-              <SelectTrigger className="w-full min-h-[44px] touch-manipulation text-sm sm:text-base">
-                <SelectValue placeholder="Select metric" />
-              </SelectTrigger>
-              <SelectContent>
-                {chartDropdownOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-full min-w-0 -mx-1 sm:mx-0">
-          {selectedMetricHasData && selectedChart === CHART_OVERALL && (
-            <ChartContainer
-              config={{ score: { label: 'Overall score', color: 'hsl(199, 89%, 48%)' } }}
-              className="h-[200px] sm:h-[260px] md:h-[280px] w-full min-w-0 [&_.recharts-cartesian-axis-tick_text]:!fill-gray-900 [&_.recharts-cartesian-axis-tick_text]:!text-[12px] sm:[&_.recharts-cartesian-axis-tick_text]:!text-[14px] [&_.recharts-cartesian-axis-tick_text]:!font-medium [&_.recharts-cartesian-axis_text]:!fill-gray-900 [&_.recharts-label]:!fill-gray-900 [&_.recharts-label]:!text-[13px] sm:[&_.recharts-label]:!text-[15px]"
-            >
-              <LineChart data={chartData} margin={{ top: 10, right: 10, left: 14, bottom: 24 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(0 0% 90%)" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#111827' }} tickFormatter={() => ''} label={{ value: 'Interview', position: 'insideBottom', offset: -8, style: { fontSize: 13, fill: '#111827', fontWeight: 500 } }} />
-                <YAxis domain={[0, 10]} tick={{ fontSize: 12, fill: '#111827' }} width={40} tickMargin={10} tickFormatter={(v) => `${v}/10`} />
-                <Tooltip
-                  contentStyle={{ fontSize: tooltipFontSize }}
-                  labelStyle={{ fontSize: tooltipFontSize }}
-                  formatter={(value: number) => [`${Number(value).toFixed(1)}/10`, 'Score']}
-                  labelFormatter={(_, payload) => (payload?.[0]?.payload?.fullLabel ?? '')}
-                />
-                <Line type="monotone" dataKey="score" stroke="var(--color-score)" strokeWidth={2} dot={{ r: 4 }} name="Overall score" />
-              </LineChart>
-            </ChartContainer>
-          )}
-          {selectedMetricHasData && selectedChart !== CHART_OVERALL && selectedMetricConfig && (
-            <ChartContainer
-              config={{ value: { label: selectedMetricConfig.label, color: selectedMetricConfig.color } }}
-              className="h-[200px] sm:h-[260px] md:h-[280px] w-full min-w-0 [&_.recharts-cartesian-axis-tick_text]:!fill-gray-900 [&_.recharts-cartesian-axis-tick_text]:!text-[12px] sm:[&_.recharts-cartesian-axis-tick_text]:!text-[14px] [&_.recharts-cartesian-axis-tick_text]:!font-medium [&_.recharts-cartesian-axis_text]:!fill-gray-900 [&_.recharts-label]:!fill-gray-900 [&_.recharts-label]:!text-[13px] sm:[&_.recharts-label]:!text-[15px]"
-            >
-              <LineChart data={selectedMetricConfig.data} margin={{ top: 10, right: 10, left: 14, bottom: 24 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(0 0% 90%)" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#111827' }} tickFormatter={() => ''} label={{ value: 'Interview', position: 'insideBottom', offset: -8, style: { fontSize: 13, fill: '#111827', fontWeight: 500 } }} />
-                <YAxis
-                  domain={selectedMetricConfig.domain}
-                  tick={{ fontSize: 12, fill: '#111827' }}
-                  width={40}
-                  tickMargin={10}
-                  tickFormatter={selectedMetricConfig.tickFormatter ?? ((v) => String(v))}
-                />
-                <ReferenceArea
-                  y1={selectedMetricConfig.idealRange[0]}
-                  y2={selectedMetricConfig.idealRange[1]}
-                  fill="hsl(142 71% 45% / 0.12)"
-                  stroke="hsl(142 71% 45% / 0.4)"
-                  strokeWidth={1}
-                  strokeDasharray="2 2"
-                />
-                <Tooltip
-                  contentStyle={{ fontSize: tooltipFontSize }}
-                  labelStyle={{ fontSize: tooltipFontSize }}
-                  formatter={(value: number) => [String(Number(value).toFixed(1)) + (selectedMetricConfig.unit || ''), selectedMetricConfig.label]}
-                  labelFormatter={(_, payload) => (payload?.[0]?.payload?.fullLabel ?? '')}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke="var(--color-value)"
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                  name={selectedMetricConfig.label}
-                />
-              </LineChart>
-            </ChartContainer>
-          )}
-          {selectedMetricHasData && selectedChart === CHART_OVERALL && (
-            <div className="text-xs sm:text-sm text-gray-900 mt-2 px-1 space-y-0.5">
-              <p>Y-axis: Score (out of 10)</p>
-            </div>
-          )}
-          {selectedMetricHasData && selectedChart !== CHART_OVERALL && selectedMetricConfig && (
-            <div className="text-xs sm:text-sm text-gray-900 mt-2 px-1 space-y-1">
-              <p>Shaded band = ideal range for this metric. Compare your scores against the band.</p>
-              <p>Y-axis: {selectedMetricConfig.yAxisLabel}</p>
-              <p className="text-gray-700 mt-1.5">{selectedMetricConfig.description}</p>
-            </div>
-          )}
-          {!selectedMetricHasData && (
-            <p className="text-sm text-gray-500 py-6 sm:py-8 text-center">Complete more interviews to see progress for this metric.</p>
-          )}
-          </div>
-        </div>
-      )}
       {!loading && list.length === 0 && !error && (
-        <p className="text-gray-600">You have no interviews linked to your account yet. Open an interview link from your email to have it appear here.</p>
-      )}
-      {!loading && list.length > 0 && !showChart && chartData.length <= 1 && (
-        <p className="text-sm text-gray-500 mb-4">Complete more interviews to see your progress over time.</p>
+        <p className="text-gray-600">No personal interviews yet. Use Generate Interview to create one.</p>
       )}
       {!loading && list.length > 0 && (
-        <ul className="space-y-3 sm:space-y-4">
-          {list.map((i) => {
-            const prog = progressByInterviewId[i.id];
-            const score = prog?.overall_score != null ? prog.overall_score : null;
+        <ul className="space-y-3 sm:space-y-4 w-full">
+          {list.map((row) => {
+            const completed = row.status === 'completed';
+            const inProgress =
+              !!row.status && row.status !== 'completed' && row.status !== 'terminated';
+            const terminated = row.status === 'terminated';
+
             return (
-              <li key={i.id} className="flex flex-col gap-3 p-4 sm:p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
-                <div className="min-w-0">
-                  <p className="font-semibold text-gray-900 text-base sm:text-lg">{i.position ?? 'Interview'}</p>
-                  <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-                    {i.status ?? '—'} · {new Date(i.created_at).toLocaleDateString()}
-                    {i.status === 'completed' && score != null && (
-                      <span className="ml-2 font-semibold text-sky-600">{Number(score).toFixed(1)}/10</span>
+              <li key={row.id} className={CANDIDATE_INTERVIEW_CARD_CLASS}>
+                <div className="min-w-0 flex flex-col gap-3 sm:gap-4 items-start text-left">
+                  <div className="space-y-1">
+                    <p className="font-semibold text-gray-900 text-base sm:text-lg leading-snug">{row.position ?? 'Interview'}</p>
+                    <p className="text-xs sm:text-sm text-gray-500">
+                      {row.status ?? '—'}
+                      {row.status === 'completed' && row.overall_score != null && (
+                        <span className="ml-2 font-semibold text-sky-600">{Number(row.overall_score).toFixed(1)}/10</span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {completed && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled
+                        className={`${compactBtn} shrink-0 cursor-not-allowed border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-50 disabled:opacity-100 shadow-sm`}
+                        aria-disabled="true"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-emerald-700" aria-hidden />
+                          Taken
+                        </span>
+                      </Button>
                     )}
-                  </p>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2 w-full">
-                  {i.status !== 'completed' && i.status !== 'terminated' && (
-                    <Button asChild size="sm" variant="outline" className="min-h-[44px] touch-manipulation w-full text-sm sm:text-base">
-                      <Link to={`/interview/${i.id}`} className="flex items-center justify-center gap-2">
-                        <ClipboardList className="h-4 w-4 shrink-0" />
-                        Take interview
-                      </Link>
-                    </Button>
-                  )}
-                  <Button asChild size="sm" variant="outline" className="min-h-[44px] touch-manipulation w-full text-sm sm:text-base">
-                    <a href={`/final-results/${i.id}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2">
-                      <ExternalLink className="h-4 w-4 shrink-0" />
-                      View report
-                    </a>
-                  </Button>
+                    {terminated && (
+                      <Button asChild size="sm" variant="outline" className={compactBtn}>
+                        <a
+                          href={`/final-results/${row.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" aria-hidden />
+                          View results
+                        </a>
+                      </Button>
+                    )}
+                    {!completed && !terminated && (
+                      <Button asChild size="sm" variant="outline" className={compactBtn}>
+                        <a
+                          href={`/interview/${row.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5"
+                        >
+                          <ClipboardList className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" aria-hidden />
+                          {inProgress ? 'Continue interview' : 'Start interview'}
+                        </a>
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </li>
             );
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+function InterviewsSection({
+  candidateId,
+  candidateEmail,
+  candidateFirstName,
+  candidateLastName,
+  initialTab = 'personal',
+}: {
+  candidateId: string | undefined;
+  candidateEmail?: string;
+  candidateFirstName?: string;
+  candidateLastName?: string;
+  initialTab?: 'personal' | 'campus';
+}) {
+  const [tab, setTab] = useState<'personal' | 'campus'>(initialTab);
+
+  return (
+    <div className="w-full min-w-0 pb-4 sm:pb-0">
+      <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mb-3 sm:mb-4">Interviews</h1>
+
+      {/* Glider / segmented control */}
+      <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1 shadow-sm mb-4">
+        <button
+          type="button"
+          onClick={() => setTab('personal')}
+          className={
+            tab === 'personal'
+              ? 'px-4 py-2 text-sm font-semibold rounded-md bg-sky-700 text-white'
+              : 'px-4 py-2 text-sm font-semibold rounded-md text-gray-700 hover:bg-gray-50'
+          }
+        >
+          Personal
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('campus')}
+          className={
+            tab === 'campus'
+              ? 'px-4 py-2 text-sm font-semibold rounded-md bg-sky-700 text-white'
+              : 'px-4 py-2 text-sm font-semibold rounded-md text-gray-700 hover:bg-gray-50'
+          }
+        >
+          Campus
+        </button>
+      </div>
+
+      {tab === 'personal' ? (
+        <PersonalInterviewsSection candidateId={candidateId} candidateEmail={candidateEmail} embedded />
+      ) : (
+        <CampusInterviewsSection
+          candidateId={candidateId}
+          candidateEmail={candidateEmail}
+          candidateFirstName={candidateFirstName}
+          candidateLastName={candidateLastName}
+          embedded
+        />
+      )}
+    </div>
+  );
+}
+
+type CampusTemplate = {
+  id: string;
+  template_id?: string;
+  variant_id?: string;
+  title: string;
+  position?: string | null;
+  extracted_jd_text?: string | null;
+  status: 'draft' | 'published' | 'archived';
+  opens_at?: string | null;
+  closes_at?: string | null;
+  max_attempts_per_candidate?: number | null;
+  created_at: string;
+  attempt_count: number;
+  can_start: boolean;
+  /** From linked custom_role_parameters (matches TPO Configure). */
+  duration_minutes?: number;
+  interview_type?: string;
+  interview_mode?: 'ai' | 'structured';
+  last_attempt?: {
+    id: string;
+    status: string;
+    created_at: string;
+    completed_at?: string | null;
+    overall_score?: number | null;
+  } | null;
+};
+
+type CampusOpportunity = {
+  id: string;
+  invite_id: string;
+  template_id: string;
+  status: 'invited' | 'applied' | 'shortlisted' | 'rejected' | 'published' | 'withdrawn' | string;
+  invite_title?: string | null;
+  invite_message?: string | null;
+  template_title?: string | null;
+  template_position?: string | null;
+  applied_at?: string | null;
+};
+
+function CampusInterviewsSection({
+  candidateId,
+  candidateEmail,
+  candidateFirstName,
+  candidateLastName,
+  embedded = false,
+}: {
+  candidateId: string | undefined;
+  candidateEmail?: string;
+  candidateFirstName?: string;
+  candidateLastName?: string;
+  embedded?: boolean;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [startingTemplateId, setStartingTemplateId] = useState<string | null>(null);
+  const [jdModalTemplate, setJdModalTemplate] = useState<CampusTemplate | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<CampusTemplate[]>([]);
+  const [opportunities, setOpportunities] = useState<CampusOpportunity[]>([]);
+  const [loadingOpportunities, setLoadingOpportunities] = useState(false);
+  const [applyingInviteId, setApplyingInviteId] = useState<string | null>(null);
+  const isCampusLoading = loading || loadingOpportunities;
+
+  const getAuthHeaders = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
+  };
+
+  const loadTemplates = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_CAMPUS_INTERVIEWS), {
+        method: 'GET',
+        headers,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string })?.error || 'Failed to load campus interviews');
+      setTemplates(((data as { templates?: CampusTemplate[] }).templates || []) as CampusTemplate[]);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load campus interviews');
+      setTemplates([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadOpportunities = useCallback(async () => {
+    setLoadingOpportunities(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_CAMPUS_OPPORTUNITIES), {
+        method: 'GET',
+        headers,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string })?.error || 'Failed to load opportunities');
+      setOpportunities(((data as { opportunities?: CampusOpportunity[] }).opportunities || []) as CampusOpportunity[]);
+    } catch {
+      setOpportunities([]);
+    } finally {
+      setLoadingOpportunities(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTemplates();
+  }, [loadTemplates]);
+
+  useEffect(() => {
+    loadOpportunities();
+  }, [loadOpportunities]);
+
+  const applyForOpportunity = async (inviteId: string) => {
+    try {
+      setApplyingInviteId(inviteId);
+      const headers = await getAuthHeaders();
+      const res = await fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.CANDIDATE_CAMPUS_OPPORTUNITIES}/${inviteId}/apply`), {
+        method: 'POST',
+        headers,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string })?.error || 'Could not submit application');
+      await Promise.all([loadOpportunities(), loadTemplates()]);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not submit application');
+    } finally {
+      setApplyingInviteId(null);
+    }
+  };
+
+  const startCampusInterview = async (tpl: CampusTemplate) => {
+    if (!candidateId || !candidateEmail) {
+      setError('Candidate profile is incomplete.');
+      return;
+    }
+    setStartingTemplateId(tpl.id);
+    setError(null);
+    try {
+      const candidateName = `${candidateFirstName || ''} ${candidateLastName || ''}`.trim() || candidateEmail.split('@')[0];
+      const durationMinutes =
+        typeof tpl.duration_minutes === 'number' && tpl.duration_minutes >= 5 && tpl.duration_minutes <= 120
+          ? Math.round(tpl.duration_minutes)
+          : 30;
+      const interviewType =
+        tpl.interview_type === 'functional' ||
+        tpl.interview_type === 'behavioral' ||
+        tpl.interview_type === 'mixed'
+          ? tpl.interview_type
+          : 'mixed';
+      const interviewMode = tpl.interview_mode === 'structured' ? 'structured' : 'ai';
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      const createRes = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CREATE_INTERVIEW), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          candidate_name: candidateName,
+          candidate_email: candidateEmail,
+          candidate_id: candidateId,
+          position: tpl.position || tpl.title,
+          duration_minutes: durationMinutes,
+          interview_type: interviewType,
+          interview_mode: interviewMode,
+          custom_instructions: `Campus Interview: ${tpl.title}`,
+          campus_template_id: tpl.template_id || tpl.id,
+          interview_source: 'campus',
+        }),
+      });
+      const createData = await createRes.json().catch(() => ({}));
+      if (!createRes.ok) throw new Error((createData as { error?: string })?.error || 'Could not create interview');
+      const interviewId = (createData as { interview_id?: string }).interview_id;
+      if (!interviewId) throw new Error('Interview ID missing from response');
+
+      const interviewPath = `/interview/${interviewId}`;
+      window.open(interviewPath, '_blank', 'noopener,noreferrer');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to start campus interview');
+    } finally {
+      setStartingTemplateId(null);
+    }
+  };
+
+  if (!candidateId) {
+    return (
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">Campus interviews</h1>
+        <p className="text-gray-600">Sign in to view assigned campus interviews.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={embedded ? 'w-full min-w-0' : 'w-full min-w-0 pb-4 sm:pb-0'}>
+      {!embedded && (
+        <>
+          <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mb-3 sm:mb-4">Campus interviews</h1>
+          <p className="text-sm sm:text-base text-gray-600 mb-4">
+            Interviews published by your college TPO for your course will appear here.
+          </p>
+        </>
+      )}
+      {isCampusLoading && (
+        <div className="flex items-center gap-2 text-gray-600 text-sm sm:text-base">
+          <Loader2 className="h-5 w-5 animate-spin shrink-0" /> Loading campus interviews...
+        </div>
+      )}
+      {error && <p className="text-red-600 text-sm sm:text-base mb-4">{error}</p>}
+      {!isCampusLoading && opportunities.length > 0 ? (
+        <Card className="mb-4 border-sky-200">
+          <CardHeader>
+            <CardTitle className="text-base sm:text-lg">Role opportunities</CardTitle>
+            <CardDescription>Apply first. Once shortlisted and published by TPO, the interview appears below.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {opportunities.map((op) => (
+              <div key={op.id} className="border rounded-md p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-900 truncate">{op.template_title || op.template_position || 'Campus role'}</p>
+                  <p className="text-xs sm:text-sm text-gray-600 truncate">
+                    {(op.invite_title || 'Campus interview application')} • {op.status}
+                    {op.applied_at ? ` • applied ${new Date(op.applied_at).toLocaleString()}` : ''}
+                  </p>
+                  {op.invite_message ? <p className="text-xs text-gray-500 mt-1">{op.invite_message}</p> : null}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(op.status === 'invited' || op.status === 'withdrawn' || op.status === 'rejected') && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={applyingInviteId === op.invite_id}
+                      onClick={() => applyForOpportunity(op.invite_id)}
+                    >
+                      {applyingInviteId === op.invite_id ? 'Applying...' : 'Apply'}
+                    </Button>
+                  )}
+                  {op.status === 'applied' && <span className="text-xs text-amber-700 font-medium">Application submitted</span>}
+                  {op.status === 'shortlisted' && <span className="text-xs text-emerald-700 font-medium">Shortlisted by TPO</span>}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+      {!isCampusLoading && templates.length === 0 && !error && (
+        <p className="text-gray-600">No campus interviews are available right now.</p>
+      )}
+      {!isCampusLoading && templates.length > 0 && (
+        <ul className="space-y-3 sm:space-y-4 w-full">
+          {templates.map((tpl) => (
+            <li key={tpl.id} className={CANDIDATE_INTERVIEW_CARD_CLASS}>
+              <div className="min-w-0 flex flex-col gap-4 sm:gap-5 items-start text-left">
+                <p className="font-semibold text-gray-900 text-base sm:text-lg leading-snug">{tpl.title}</p>
+                {tpl.extracted_jd_text && (
+                  <button
+                    type="button"
+                    onClick={() => setJdModalTemplate(tpl)}
+                    className="text-xs sm:text-sm text-sky-700 hover:text-sky-900 underline w-fit text-left"
+                  >
+                    View Job Description
+                  </button>
+                )}
+                <div>
+                  {(() => {
+                    const la = tpl.last_attempt;
+                    const completed = la?.status === 'completed';
+                    const inProgress =
+                      !!la?.status && la.status !== 'completed' && la.status !== 'terminated';
+                    const compactBtn =
+                      'h-9 min-h-[44px] sm:min-h-9 px-3 sm:px-4 text-xs sm:text-sm touch-manipulation w-auto max-w-full self-start inline-flex items-center justify-center';
+                    if (completed) {
+                      return (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled
+                          className={`${compactBtn} shrink-0 cursor-not-allowed border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-50 disabled:opacity-100 shadow-sm`}
+                          aria-disabled="true"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-emerald-700" aria-hidden />
+                            Taken
+                          </span>
+                        </Button>
+                      );
+                    }
+                    const takeDisabled =
+                      (!inProgress && !tpl.can_start) || startingTemplateId === tpl.id;
+                    let label = 'Start interview';
+                    if (startingTemplateId === tpl.id) label = 'Starting...';
+                    else if (inProgress) label = 'Continue interview';
+                    else if (!tpl.can_start) label = 'Attempt limit reached';
+                    const openExisting = () => {
+                      if (tpl.last_attempt?.id) {
+                        window.open(`/interview/${tpl.last_attempt.id}`, '_blank', 'noopener,noreferrer');
+                      }
+                    };
+                    return (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className={`${compactBtn}`}
+                        disabled={takeDisabled}
+                        onClick={() => (inProgress ? openExisting() : startCampusInterview(tpl))}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <ClipboardList className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" aria-hidden />
+                          {label}
+                        </span>
+                      </Button>
+                    );
+                  })()}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Dialog open={!!jdModalTemplate} onOpenChange={(open) => !open && setJdModalTemplate(null)}>
+        <DialogContent className="max-w-3xl lg:max-w-4xl max-h-[85vh] gap-0 p-0 overflow-hidden sm:rounded-lg grid grid-rows-[auto_minmax(0,1fr)]">
+          <DialogHeader className="px-7 pt-7 pb-3 pr-14">
+            <DialogTitle className="text-left text-lg sm:text-xl">
+              {jdModalTemplate ? `Job description — ${jdModalTemplate.title}` : 'Job description'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="px-7 pb-7 overflow-y-auto min-h-0 border-t border-border/60 pt-5">
+            {jdModalTemplate?.extracted_jd_text ? (
+              <p className="text-base sm:text-[1.05rem] text-gray-700 whitespace-pre-wrap leading-relaxed">{jdModalTemplate.extracted_jd_text}</p>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

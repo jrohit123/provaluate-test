@@ -2100,7 +2100,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
               
               <div className="flex items-center gap-2 mb-2">
                 <Briefcase className="w-4 h-4 text-primary-600" />
-                <h3 className="font-medium text-gray-900">Job Description</h3>
+                <h3 className="font-medium text-[#042C53]">Job Description</h3>
               </div>
               <Select value={selectedJobDescriptionId} onValueChange={handleJobDescriptionSelect}>
                 <SelectTrigger className="w-full">
@@ -2142,7 +2142,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
             <div className="space-y-3">
               <div className="flex items-center gap-2 mb-2">
                 <Grid className="w-4 h-4 text-primary-600" />
-                <h3 className="font-medium text-gray-900">Evaluation Criteria</h3>
+                <h3 className="font-medium text-[#042C53]">Evaluation Criteria</h3>
               </div>
               <Select value={selectedCriteriaGridId} onValueChange={handleCriteriaGridSelect}>
                 <SelectTrigger className="w-full">
@@ -2547,7 +2547,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                         <span>Processing...</span>
                       </div>
                     ) : (
-                      <div className="text-base sm:text-lg font-bold text-gray-900">
+                      <div className="text-base sm:text-lg font-bold text-[#042C53]">
                         {`${Math.round((normalizedOverallScore ?? 0) * 10)}%`}
                       </div>
                     )}

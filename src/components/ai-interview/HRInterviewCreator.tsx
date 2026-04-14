@@ -27,7 +27,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
-import { useInterviewCurrentStep, useInterviewNavigateToStep, INTERVIEW_WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
+import {
+  useInterviewCurrentStep,
+  useInterviewNavigateToStep,
+  INTERVIEW_WORKFLOW_STEPS,
+  TPO_DASHBOARD_WORKFLOW_STEPS,
+} from '@/hooks/useWorkflowNavigation';
 import { UsageTrackingService, type InterviewLimitInfo } from '@/services/usageTrackingService';
 import type { CustomCompetencies } from '@/types/interview';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -35,6 +40,14 @@ import { AlertTriangle } from 'lucide-react';
 
 /** When provided, JDs are loaded from this list (e.g. candidate's jd_candidates) instead of company tables. Recruiter flow unchanged when omitted. */
 export type InjectedJD = { jd_id: string; title: string | null; extracted_text?: string | null; jd_file?: string | null; created_at?: string };
+
+/** TPO dashboard: same candidate-style create UI; links interviews to campus_template_id and auth user. */
+export type TpoInterviewCreatorChrome = {
+  workflowStepIndex: number;
+  onWorkflowStepClick: (stepIndex: number) => void;
+  displayName: string;
+  displayEmail: string;
+};
 
 interface HRInterviewCreatorProps {
   onSectionReady?: () => void;
@@ -44,6 +57,10 @@ interface HRInterviewCreatorProps {
   injectedLoadJobDescriptions?: () => Promise<void>;
   /** Optional: when set, creates interview in candidate flow (sends candidate_id, null user_id/company_id). */
   candidateId?: string;
+  /** Optional: hide candidate profile warning text when profile fetch fails. */
+  hideCandidateProfileWarning?: boolean;
+  /** TPO: candidate-style steps + self panel; interview rows use user_id + campus_template_id (not candidates table). */
+  tpoInterviewChrome?: TpoInterviewCreatorChrome;
 }
 
 interface Candidate {
@@ -69,7 +86,14 @@ interface CreatedInterview {
   candidate_email: string;
 }
 
-const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedLoadJobDescriptions, candidateId }: HRInterviewCreatorProps) => {
+const HRInterviewCreator = ({
+  onSectionReady,
+  injectedJobDescriptions,
+  injectedLoadJobDescriptions,
+  candidateId,
+  hideCandidateProfileWarning = false,
+  tpoInterviewChrome,
+}: HRInterviewCreatorProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
@@ -77,10 +101,29 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
   const interviewCurrentStep = useInterviewCurrentStep();
   const interviewNavigateToStep = useInterviewNavigateToStep();
   const pathname = location.pathname;
-  const isCandidateFlow = !!candidateId;
-  const candidateWorkflowPaths = ['/candidate-dashboard/jds/configure', '/candidate-dashboard/jds/create', '/candidate-dashboard/interviews'] as const;
-  const candidateCurrentStep = pathname.includes('/jds/create') ? 1 : pathname.includes('/interviews') ? 2 : 0;
+  const tpoEmbeddedWorkflow = !!tpoInterviewChrome;
+  const embeddedInterviewWorkflowSteps = tpoEmbeddedWorkflow
+    ? TPO_DASHBOARD_WORKFLOW_STEPS
+    : INTERVIEW_WORKFLOW_STEPS;
+  const isCandidateFlow = !!candidateId || tpoEmbeddedWorkflow;
+  const companyId = user?.profile?.company_id as string | undefined;
+  const crpScopePayload = companyId && !isCandidateFlow
+    ? { parameter_pack_origin: 'company' as const, company_id: companyId }
+    : { parameter_pack_origin: 'personal' as const, user_id: user?.id };
+  const useCandidateSelfPanel = !!candidateId || tpoEmbeddedWorkflow;
+  const candidateWorkflowPaths = ['/candidate-dashboard/jds/configure', '/candidate-dashboard/jds/create', '/candidate-dashboard/performance-report'] as const;
+  const candidateCurrentStep = tpoEmbeddedWorkflow
+    ? tpoInterviewChrome!.workflowStepIndex
+    : pathname.includes('/jds/create')
+      ? 1
+      : pathname.includes('/interviews')
+        ? 2
+        : 0;
   const candidateNavigateToStep = (stepIndex: number) => {
+    if (tpoEmbeddedWorkflow) {
+      tpoInterviewChrome!.onWorkflowStepClick(stepIndex);
+      return;
+    }
     if (stepIndex >= 0 && stepIndex < candidateWorkflowPaths.length) {
       navigate(candidateWorkflowPaths[stepIndex]);
     }
@@ -116,12 +159,21 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
   /** Interview limit from plan (recruiter flow only). Used to show limit-reached message and disable create button. */
   const [interviewLimitInfo, setInterviewLimitInfo] = useState<InterviewLimitInfo | null>(null);
   const [interviewLimitLoading, setInterviewLimitLoading] = useState(false);
+  const [selectedCampusTemplateId, setSelectedCampusTemplateId] = useState<string | null>(null);
 
   // Effective JD list: use injected (candidate jd_candidates) or internal (recruiter company JDs)
   const effectiveJobDescriptions = injectedJobDescriptions ?? jobDescriptions;
 
   // Fetch logged-in candidate profile when in candidate flow (for name/email in create)
   useEffect(() => {
+    if (tpoInterviewChrome) {
+      setLoggedInCandidate({
+        name: tpoInterviewChrome.displayName,
+        email: tpoInterviewChrome.displayEmail,
+      });
+      setLoggedInCandidateLoading(false);
+      return;
+    }
     if (!candidateId) {
       setLoggedInCandidate(null);
       return;
@@ -150,11 +202,11 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       }
     })();
     return () => { cancelled = true; };
-  }, [candidateId]);
+  }, [candidateId, tpoInterviewChrome]);
 
   // Check for selected candidates from View All Results (recruiter flow only)
   useEffect(() => {
-    if (candidateId) return;
+    if (candidateId || tpoInterviewChrome) return;
     const selectedCandidates = sessionStorage.getItem('selectedCandidatesForInterview');
     if (selectedCandidates) {
       try {
@@ -245,6 +297,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       // Set the role name from the selected JD title
       setFormData(prev => ({ ...prev, position: selectedJD.title }));
     }
+    setSelectedCampusTemplateId(tpoInterviewChrome ? jdId : null);
   };
 
 
@@ -421,13 +474,21 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       console.log('🔄 Loading competencies for position:', formData.position, 'mode:', formData.interviewMode);
       
       // Try to load from custom_role_parameters table - FETCH interview_type!
-      const { data, error } = await supabase
+      let query = supabase
         .from('custom_role_parameters')
-        .select('custom_parameters, structured_questions, personalized_questions, interview_type')
+        .select('custom_parameters, structured_questions, personalized_questions, interview_type, interview_mode')
         .eq('role_name', formData.position)
         .eq('is_active', true)
+        .eq('interview_mode', formData.interviewMode)
+        .eq('interview_type', formData.interviewType)
         .order('created_at', { ascending: false })
         .limit(1);
+      if (crpScopePayload.parameter_pack_origin === 'company') {
+        query = query.eq('parameter_pack_origin', 'company').eq('company_id', crpScopePayload.company_id as string);
+      } else {
+        query = query.eq('parameter_pack_origin', 'personal').eq('user_id', (crpScopePayload.user_id as string) || '');
+      }
+      const { data, error } = await query;
       
       if (error) throw error;
       
@@ -560,7 +621,14 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     } finally {
       setIsLoadingCompetencies(false);
     }
-  }, [formData.position, formData.interviewMode]);
+  }, [
+    formData.position,
+    formData.interviewMode,
+    formData.interviewType,
+    crpScopePayload.parameter_pack_origin,
+    crpScopePayload.company_id,
+    crpScopePayload.user_id,
+  ]);
 
   const calculateDuration = (competencies: CustomCompetencies) => {
     if (!competencies || Object.keys(competencies).length === 0) {
@@ -754,7 +822,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
 
   // Recruiter flow: check interview limit from plan (interview/combo only)
   useEffect(() => {
-    if (candidateId || !user?.profile?.company_id) {
+    if (candidateId || tpoInterviewChrome || !user?.profile?.company_id) {
       setInterviewLimitInfo(null);
       return;
     }
@@ -771,13 +839,13 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         if (!cancelled) setInterviewLimitLoading(false);
       });
     return () => { cancelled = true; };
-  }, [candidateId, user?.profile?.company_id]);
+  }, [candidateId, tpoInterviewChrome, user?.profile?.company_id]);
 
   useEffect(() => {
     if (formData.position) {
       loadCompetencies();
     }
-  }, [formData.position, formData.interviewMode, loadCompetencies]);
+  }, [formData.position, formData.interviewMode, formData.interviewType, loadCompetencies]);
 
   // Clear competencies when switching modes
   useEffect(() => {
@@ -826,7 +894,10 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         },
         body: JSON.stringify({
           role_name: formData.position,
-          custom_parameters: customCompetencies
+          custom_parameters: customCompetencies,
+          interview_mode: formData.interviewMode,
+          interview_type: formData.interviewType,
+          ...crpScopePayload,
         })
       });
 
@@ -1122,7 +1193,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
 
   const createInterview = async () => {
     // Recruiter flow: block if interview limit reached
-    if (!candidateId && interviewLimitInfo && !interviewLimitInfo.canStartInterview) {
+    if (!candidateId && !tpoInterviewChrome && interviewLimitInfo && !interviewLimitInfo.canStartInterview) {
       toast({
         title: "Interview Limit Reached",
         description: `You've used all ${interviewLimitInfo.maxInterviews} interviews in your plan. Please upgrade to create more.`,
@@ -1130,8 +1201,8 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       });
       return;
     }
-    // Candidate flow: require loaded profile; recruiter flow: require form candidates
-    if (candidateId) {
+    // Candidate / TPO self flow: require loaded profile; recruiter flow: require form candidates
+    if (candidateId || tpoInterviewChrome) {
       if (!loggedInCandidate?.name?.trim() || !loggedInCandidate?.email?.trim()) {
         toast({
           title: "Profile required",
@@ -1161,6 +1232,15 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       return;
     }
 
+    if (tpoInterviewChrome && !selectedCampusTemplateId) {
+      toast({
+        title: "Select a role",
+        description: "Choose a campus interview role from the list before creating a link.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // For AI interviews, check if competencies are configured
     // For structured interviews, check if competencies are saved (indicating structured questions exist)
     if (formData.interviewMode === 'ai' && Object.keys(customCompetencies).length === 0) {
@@ -1181,12 +1261,14 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
 
     setIsCreating(true);
 
-    const candidatesToCreate = candidateId && loggedInCandidate
+    const candidatesToCreate = (candidateId || tpoInterviewChrome) && loggedInCandidate
       ? [{ name: loggedInCandidate.name, email: loggedInCandidate.email }]
       : formData.candidates;
     
     try {
       const createdInterviewsList: CreatedInterview[] = [];
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
       
       for (const candidate of candidatesToCreate) {
         console.log(`📤 Current formData before API call:`, {
@@ -1200,6 +1282,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(candidateId && token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
             candidate_name: candidate.name,
@@ -1214,7 +1297,14 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
             personalized_questions: formData.personalizedQuestions,
             ...(candidateId
               ? { candidate_id: candidateId, company_id: null, user_id: null }
-              : { company_id: user?.profile?.company_id, user_id: user?.id }
+              : tpoInterviewChrome
+                ? {
+                    company_id: null,
+                    user_id: user?.id ?? null,
+                    candidate_id: null,
+                    ...(selectedCampusTemplateId ? { campus_template_id: selectedCampusTemplateId } : {}),
+                  }
+                : { company_id: user?.profile?.company_id, user_id: user?.id }
             ),
           }),
         });
@@ -1331,7 +1421,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     return () => clearTimeout(t);
   }, [onSectionReady]);
 
-  const isCandidate = !!candidateId;
+  const isCandidate = !!candidateId || !!tpoInterviewChrome;
   const titleClass = isCandidate ? 'text-sky-800' : 'text-primary-800';
   const statBgClass = isCandidate ? 'bg-sky-50 border-sky-200' : 'bg-blue-50 border-blue-200';
   const statNumClass = isCandidate ? 'text-sky-800' : 'text-blue-800';
@@ -1343,8 +1433,8 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       <div className="lg:hidden">
         <CompactStepProgress
           current={currentStep}
-          total={INTERVIEW_WORKFLOW_STEPS.length}
-          steps={INTERVIEW_WORKFLOW_STEPS}
+          total={embeddedInterviewWorkflowSteps.length}
+          steps={embeddedInterviewWorkflowSteps}
           onStepClick={navigateToStep}
           allowClickAnyStep={isCandidateFlow}
           theme={isCandidateFlow ? 'candidate' : 'default'}
@@ -1353,7 +1443,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
       <div className="mb-4 sm:mb-6">
         <h2 className={`text-xl sm:text-2xl font-bold mb-2 ${titleClass}`}>Final Overview</h2>
-        {!candidateId && (
+        {!useCandidateSelfPanel && (
           <p className="text-sm sm:text-base text-muted-foreground">Set up an interview and generate a link for your candidate</p>
         )}
       </div>
@@ -1364,7 +1454,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           <div className="space-y-6 min-w-0">
             {/* Candidates Section: recruiter = import/add + name/email inputs; candidate = read-only self */}
             <div className="space-y-4">
-              {candidateId ? (
+              {useCandidateSelfPanel ? (
                 <>
                   <Label className="text-sm sm:text-base font-semibold">Candidate</Label>
                   {loggedInCandidateLoading ? (
@@ -1379,9 +1469,9 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                         <> ({loggedInCandidate.email})</>
                       )}
                     </p>
-                  ) : (
+                  ) : !hideCandidateProfileWarning ? (
                     <p className="text-sm text-amber-700 py-2">Unable to load your profile. Please try again or contact support.</p>
-                  )}
+                  ) : null}
                 </>
               ) : (
                 <>
@@ -1480,7 +1570,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
             </div>
 
             {/* Custom Instructions Section (recruiter only) */}
-            {!candidateId && (
+            {!useCandidateSelfPanel && (
               <div className="space-y-2">
                 <Label htmlFor="customInstructions" className="text-sm sm:text-base">Custom Instructions (Optional)</Label>
                 <Textarea
@@ -1516,6 +1606,27 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                 Structured Interview: Pre-defined questions set by HR
               </p>
             </div>
+
+            {formData.interviewMode === 'ai' && (
+              <div className="space-y-2">
+                <Label htmlFor="interviewType" className="text-sm sm:text-base">Interview Type *</Label>
+                <Select
+                  value={formData.interviewType}
+                  onValueChange={(value: 'functional' | 'behavioral' | 'mixed') =>
+                    setFormData(prev => ({ ...prev, interviewType: value }))
+                  }
+                >
+                  <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
+                    <SelectValue placeholder="Select interview type..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="functional">Functional</SelectItem>
+                    <SelectItem value="behavioral">Behavioral</SelectItem>
+                    <SelectItem value="mixed">Mixed (Functional + Behavioral)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
           </div>
         </CardContent>
@@ -1842,7 +1953,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       )}
 
       {/* Interview limit reached (recruiter flow only) */}
-      {!candidateId && interviewLimitInfo && !interviewLimitInfo.canStartInterview && (
+      {!useCandidateSelfPanel && interviewLimitInfo && !interviewLimitInfo.canStartInterview && (
         <Alert variant="destructive" className="mb-4 border-2">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Interview Limit Reached</AlertTitle>
@@ -1868,8 +1979,8 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           onClick={createInterview}
           disabled={
             isCreating ||
-            (!!candidateId && (loggedInCandidateLoading || !loggedInCandidate)) ||
-            (!candidateId && interviewLimitInfo !== null && !interviewLimitInfo.canStartInterview)
+            (!!useCandidateSelfPanel && (loggedInCandidateLoading || !loggedInCandidate)) ||
+            (!useCandidateSelfPanel && interviewLimitInfo !== null && !interviewLimitInfo.canStartInterview)
           }
           className={isCandidate ? 'px-6 sm:px-8 py-2 w-full sm:w-auto bg-sky-600 hover:bg-sky-700 text-white' : 'px-6 sm:px-8 py-2 w-full sm:w-auto'}
           size="default"
@@ -1879,7 +1990,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               Creating Interview Link...
             </>
-          ) : !candidateId && interviewLimitInfo && !interviewLimitInfo.canStartInterview ? (
+          ) : !useCandidateSelfPanel && interviewLimitInfo && !interviewLimitInfo.canStartInterview ? (
             <>
               <AlertTriangle className="h-4 w-4 mr-2" />
               Limit Reached — Upgrade to Create
@@ -1900,9 +2011,9 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <Link className="h-5 w-5" />
-                {candidateId ? 'Your interview link' : `Interview Links (${createdInterviews.length})`}
+                {useCandidateSelfPanel ? 'Your interview link' : `Interview Links (${createdInterviews.length})`}
               </CardTitle>
-              {!candidateId && (
+              {!useCandidateSelfPanel && (
                 <Button
                   onClick={async () => {
                     if (sendingEmails.size > 0) return;
@@ -1960,7 +2071,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
               const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
               return (
                 <div key={interview.interview_id} className="bg-gray-50 rounded-lg p-3 sm:p-4">
-                  {!candidateId && (
+                  {!useCandidateSelfPanel && (
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 gap-2">
                       <p className="text-xs sm:text-sm font-medium text-gray-800 break-words">
                         {interview.candidate_name} ({interview.candidate_email})
@@ -1976,7 +2087,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                       readOnly
                       className="font-mono text-xs sm:text-sm flex-1"
                     />
-                    {candidateId ? (
+                    {useCandidateSelfPanel ? (
                       <Button
                         size="sm"
                         className="w-full sm:w-auto shrink-0 bg-sky-600 hover:bg-sky-700 text-white"
@@ -1999,7 +2110,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                 </div>
               );
             })}
-            {!candidateId && (
+            {!useCandidateSelfPanel && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
                 <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
                   <p className="font-medium text-blue-800">Total Interviews</p>

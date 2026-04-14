@@ -429,7 +429,7 @@ const Dashboard = () => {
         locale={{ skip: 'Skip tour', back: 'Back', next: 'Next', last: 'Finish' }}
         styles={{
           options: {
-            primaryColor: 'hsl(220, 100%, 40%)',
+            primaryColor: '#0d6ea3',
             zIndex: 10000,
             arrowColor: '#fff',
             backgroundColor: '#fff',
@@ -467,13 +467,13 @@ const Dashboard = () => {
               <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-0 sm:space-x-2">
                 <span>© ProValuate 2025</span>
                 <span className="hidden sm:inline">|</span>
-                <Link to="/privacy" className="text-indigo-600 hover:text-indigo-800 transition-colors whitespace-nowrap">Privacy Policy</Link>
+                <Link to="/privacy" className="text-[#0d6ea3] hover:text-[#042C53] transition-colors whitespace-nowrap">Privacy Policy</Link>
                 <span className="hidden sm:inline">|</span>
-                <Link to="/terms" className="text-indigo-600 hover:text-indigo-800 transition-colors whitespace-nowrap">Terms</Link>
+                <Link to="/terms" className="text-[#0d6ea3] hover:text-[#042C53] transition-colors whitespace-nowrap">Terms</Link>
                 <span className="hidden sm:inline">|</span>
-                <a href="mailto:sales@aitamate.com?&subject=ProValuate&body=Hi,%0D%0A%0D%0AI'd like to know more about ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors whitespace-nowrap">Contact</a>
+                <a href="mailto:sales@aitamate.com?&subject=ProValuate&body=Hi,%0D%0A%0D%0AI'd like to know more about ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-[#0d6ea3] hover:text-[#042C53] transition-colors whitespace-nowrap">Contact</a>
                 <span className="hidden sm:inline">|</span>
-                <span className="whitespace-nowrap">Powered by <a href="http://aitamate.com" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-700">aitamate</a></span>
+                <span className="whitespace-nowrap">Powered by <a href="http://aitamate.com" target="_blank" rel="noopener noreferrer" className="text-[#0d6ea3] hover:text-[#042C53]">aitamate</a></span>
               </div>
             </footer>
           </main>

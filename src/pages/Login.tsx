@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Users, Clock, CheckCircle, Shield, Mail, FileText, BarChart, UserPlus, LogIn, Menu } from "lucide-react";
+import { UserPlus, LogIn, Menu } from "lucide-react";
 import { SessionManager } from '@/utils/sessionManager';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -27,10 +27,37 @@ const Login = () => {
   const [resetError, setResetError] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const WELCOME_PHRASES = ['Welcome Back, Recruiter!'];
+  const [welcomePhraseIndex, setWelcomePhraseIndex] = useState(0);
+  const [welcomeCharIndex, setWelcomeCharIndex] = useState(0);
+  const [welcomeDeleting, setWelcomeDeleting] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const isMobile = useIsMobile();
   // Remove useAuth import and usage, use Supabase directly
+
+  useEffect(() => {
+    const phrase = WELCOME_PHRASES[welcomePhraseIndex];
+    const interval = setInterval(() => {
+      if (welcomeDeleting) {
+        if (welcomeCharIndex <= 0) {
+          setWelcomeDeleting(false);
+          setWelcomePhraseIndex((i) => (i + 1) % WELCOME_PHRASES.length);
+          setWelcomeCharIndex(0);
+        } else {
+          setWelcomeCharIndex((c) => c - 1);
+        }
+      } else if (welcomeCharIndex >= phrase.length) {
+        setWelcomeDeleting(true);
+      } else {
+        setWelcomeCharIndex((c) => c + 1);
+      }
+    }, welcomeDeleting ? 70 : 120);
+
+    return () => clearInterval(interval);
+  }, [welcomePhraseIndex, welcomeCharIndex, welcomeDeleting]);
+
+  const animatedWelcome = WELCOME_PHRASES[welcomePhraseIndex].slice(0, welcomeCharIndex);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -312,317 +339,305 @@ const Login = () => {
     }
   };
 
+  const featureCards = [
+    {
+      title: 'Structured Evaluation',
+      copy: 'Consistent, criteria-driven assessment-no more gut-feel or panel chaos.',
+      className:
+        'xl:absolute xl:left-0 xl:top-4 xl:z-20 xl:w-[46%] xl:animate-[cardIn_0.55s_cubic-bezier(0.34,1.56,0.64,1)_0.15s_both]',
+      tone: 'border-[rgba(4,44,83,0.18)] bg-[rgba(8,80,120,0.12)]',
+      r: '-3deg',
+    },
+    {
+      title: 'Risk Visibility',
+      copy: 'See why Candidate A scored above B. Weighted parameters and clear risk-so you are not operating on intuition.',
+      className:
+        'xl:absolute xl:right-0 xl:top-10 xl:z-10 xl:w-[46%] xl:animate-[cardIn_0.55s_cubic-bezier(0.34,1.56,0.64,1)_0.28s_both]',
+      tone: 'border-[rgba(4,44,83,0.18)] bg-[rgba(8,80,120,0.12)]',
+      r: '3deg',
+    },
+    {
+      title: 'Built for Leadership Hiring',
+      copy: 'Mid to senior hiring with the rigor it deserves. Same process, different stakes-handled right.',
+      className:
+        'xl:absolute xl:left-0 xl:top-[208px] xl:z-20 xl:w-[46%] xl:animate-[cardIn_0.55s_cubic-bezier(0.34,1.56,0.64,1)_0.41s_both]',
+      tone: 'border-[rgba(4,44,83,0.18)] bg-[rgba(8,80,120,0.12)]',
+      r: '-2deg',
+    },
+    {
+      title: 'Unified Talent Flow',
+      copy: 'Bring applications from every channel into one structured, decision-ready evaluation journey.',
+      className:
+        'xl:absolute xl:right-0 xl:top-[250px] xl:z-20 xl:w-[46%] xl:animate-[cardIn_0.55s_cubic-bezier(0.34,1.56,0.64,1)_0.54s_both]',
+      tone: 'border-[rgba(4,44,83,0.18)] bg-[rgba(8,80,120,0.12)]',
+      r: '2deg',
+    },
+  ];
+
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header Section */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-2 sm:space-x-3">
-              <div>
-              <img src="/Logo_Transparent_BG.png" alt="ProValuate" className="h-12 sm:h-16 lg:h-20" />
-              </div>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 hidden sm:block"></h1>
-            </div>
-            <div className="flex items-center space-x-3 sm:space-x-6">
-              <Link to="/candidate-login" className="hidden sm:inline-block text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
-                Candidate login
-              </Link>
-              {/* Desktop: Pricing & Impact visible */}
-              <a href="/pricing" className="hidden sm:inline-block text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
-                Pricing
-              </a>
-              <a href="/impact" className="hidden sm:inline-block text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
-                Impact
-              </a>
-              {/* Mobile: hamburger menu with Pricing & Impact */}
-              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-                <SheetTrigger asChild>
-                  <button
-                    type="button"
-                    className="sm:hidden p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
-                    aria-label="Open menu"
-                  >
-                    <Menu className="h-6 w-6" />
-                  </button>
-                </SheetTrigger>
-                <SheetContent side="right" className="w-56">
-                  <nav className="flex flex-col gap-4 pt-8">
-                    <Link
-                      to="/candidate-login"
-                      className="text-base font-medium text-gray-700 hover:text-gray-900 transition-colors"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Candidate login
-                    </Link>
+    <div className="min-h-screen w-full bg-white">
+      <style>{`
+        @keyframes panelIn {
+          from { opacity: 0; transform: translateY(12px) scale(0.995); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes floatOrb {
+          0%, 100% { transform: translateY(0) scale(1); }
+          50% { transform: translateY(-18px) scale(1.05); }
+        }
+        @keyframes cardIn {
+          from { opacity: 0; transform: translateY(10px) rotate(var(--r, 0deg)) scale(0.95); }
+          to { opacity: 1; transform: translateY(0) rotate(var(--r, 0deg)) scale(1); }
+        }
+        @keyframes heroIn {
+          from { opacity: 0; transform: translateY(14px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+      <section className="flex min-h-screen w-full flex-col animate-[panelIn_0.45s_cubic-bezier(0.25,0.46,0.45,0.94)_both] overflow-hidden bg-white">
+          <div className="grid flex-1 grid-cols-1 md:grid-cols-2">
+            <div className="order-1 md:order-none relative flex flex-col bg-[linear-gradient(145deg,#F6FAFF_0%,#EEF6FF_55%,#FFFFFF_100%)] p-6 sm:p-8 lg:p-12">
+              <header className="relative z-50 -mx-6 -mt-6 mb-6 border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:-mx-8 sm:-mt-8 sm:px-8 sm:py-5 lg:-mx-12 lg:-mt-12 lg:px-12 lg:py-6">
+                <div className="flex items-center justify-between gap-3 sm:gap-4">
+                  <img
+                    src="/Logo_Transparent_BG.png"
+                    alt="ProValuate"
+                    className="h-12 w-auto sm:h-14 lg:h-16"
+                  />
+
+                  {/* Mobile: slide-over sidebar menu */}
+                  <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                    <SheetTrigger asChild>
+                      <button
+                        type="button"
+                        className="sm:hidden inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                        aria-label="Open menu"
+                      >
+                        <Menu className="h-5 w-5" />
+                      </button>
+                    </SheetTrigger>
+                    <SheetContent side="right" className="w-64">
+                      <div className="pt-8 space-y-2">
+                        <a
+                          href="/pricing"
+                          className="block rounded-lg px-3 py-2 text-base font-medium text-[#0d6ea3] hover:bg-slate-50 hover:text-[#042C53]"
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          Pricing
+                        </a>
+                        <a
+                          href="/impact"
+                          className="block rounded-lg px-3 py-2 text-base font-medium text-[#0d6ea3] hover:bg-slate-50 hover:text-[#042C53]"
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          Impact
+                        </a>
+                        <div className="my-3 h-px bg-slate-200" />
+                        <div className="px-3 pb-1 text-xs font-semibold text-slate-400">Access Portals</div>
+                        <Link
+                          to="/candidate-login"
+                          className="block rounded-lg px-3 py-2 text-base text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          Candidate login
+                        </Link>
+                        <Link
+                          to="/tpo-login"
+                          className="block rounded-lg px-3 py-2 text-base text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          TPO login
+                        </Link>
+                      </div>
+                    </SheetContent>
+                  </Sheet>
+
+                  {/* Desktop: inline nav */}
+                  <nav className="hidden items-center gap-1 sm:flex">
                     <a
                       href="/pricing"
-                      className="text-base font-medium text-gray-700 hover:text-gray-900 transition-colors"
-                      onClick={() => setMobileMenuOpen(false)}
+                      className="px-2.5 py-1.5 text-sm font-medium text-[#0d6ea3] hover:text-[#042C53] transition-colors rounded-md hover:bg-slate-50 sm:text-base"
                     >
                       Pricing
                     </a>
                     <a
                       href="/impact"
-                      className="text-base font-medium text-gray-700 hover:text-gray-900 transition-colors"
-                      onClick={() => setMobileMenuOpen(false)}
+                      className="px-2.5 py-1.5 text-sm font-medium text-[#0d6ea3] hover:text-[#042C53] transition-colors rounded-md hover:bg-slate-50 sm:text-base"
                     >
                       Impact
                     </a>
+
+                    <details className="relative group">
+                      <summary className="list-none inline-flex cursor-pointer items-center rounded-md px-2.5 py-1.5 text-sm font-medium text-[#0d6ea3] transition-colors hover:bg-slate-50 hover:text-[#042C53] sm:text-base">
+                        Access Portals
+                      </summary>
+                      <div className="absolute right-0 z-20 mt-2 w-40 rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">
+                        <Link
+                          to="/candidate-login"
+                          className="block rounded-md px-2 py-1.5 text-[13px] text-slate-600 hover:bg-slate-50 hover:text-slate-800"
+                        >
+                          Candidate login
+                        </Link>
+                        <Link
+                          to="/tpo-login"
+                          className="mt-1 block rounded-md px-2 py-1.5 text-[13px] text-slate-600 hover:bg-slate-50 hover:text-slate-800"
+                        >
+                          TPO login
+                        </Link>
+                      </div>
+                    </details>
                   </nav>
-                </SheetContent>
-              </Sheet>
-              <a href="mailto:sales@aitamate.com?&subject=Provaluate&body=Hi,%0D%0A%0D%0AI'm facing an issue with ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="text-indigo-600 hover:text-indigo-800 transition-colors">
-                <Mail className="h-6 w-6 sm:h-8 sm:w-8" />
-              </a>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        <div className="text-center mb-8 sm:mb-12">
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-3 sm:mb-4 px-4">
-            Hiring-Risk Intelligence Platform
-          </h2>
-          <p className="text-base sm:text-lg lg:text-xl text-gray-600 max-w-3xl mx-auto px-4">
-            Eliminate bias with weighted parameters, clear risk visibility, and structured evaluation. Hire on intelligence, not intuition.
-          </p>
-        </div>
-
-        {/* Feature Cards Section */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12">
-          <Card className="text-center border-0 shadow-lg">
-            <CardContent className="pt-4 sm:pt-6">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-green-200 flex items-center justify-center">
-                <Clock className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
-              </div>
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">Structured Evaluation</h3>
-              <p className="text-sm sm:text-base text-gray-600">Consistent, criteria-driven assessment—no more gut-feel or panel chaos.</p>
-            </CardContent>
-          </Card>
-
-          <Card className="text-center border-0 shadow-lg">
-            <CardContent className="pt-4 sm:pt-6">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-blue-200 flex items-center justify-center">
-                <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-              </div>
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">Risk Visibility</h3>
-              <p className="text-sm sm:text-base text-gray-600">See why Candidate A scored above B. Weighted parameters and clear risk—so you&apos;re not operating on intuition.</p>
-            </CardContent>
-          </Card>
-
-          <Card className="text-center border-0 shadow-lg sm:col-span-2 lg:col-span-1">
-            <CardContent className="pt-4 sm:pt-6">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-purple-200 flex items-center justify-center">
-                <Shield className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
-              </div>
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">Built for Leadership Hiring</h3>
-              <p className="text-sm sm:text-base text-gray-600">Mid to senior hiring with the rigor it deserves. Same process, different stakes—handled right.</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Login Section */}
-        <div className="flex justify-center">
-          <div className="w-full max-w-md">
-            <Card className="shadow-lg border-0">
-              <CardHeader className="space-y-1 px-4 sm:px-6 pt-4 sm:pt-6">
-                <div className="flex items-center justify-center space-x-2 mb-3 sm:mb-4">
-                  <div className="bg-indigo-600 p-2 rounded-lg">
-                    {isSignup ? (
-                      <UserPlus className="h-5 w-5 text-white" />
-                    ) : (
-                      <LogIn className="h-5 w-5 text-white" />
-                    )}
-                  </div>
-                  <CardTitle className="text-xl sm:text-2xl text-center">
-                    {isSignup ? 'Create a new Account' : 'Welcome Back'}
-                  </CardTitle>
                 </div>
-                <CardDescription className="text-center text-sm sm:text-base">
-                  {isSignup 
-                    ? 'Welcome to ProValuate! Create your account' 
-                    : 'Enter your credentials to access your dashboard'
-                  }
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
-                {!showReset ? (
-                  <>
-                    <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
-                      <div className="space-y-2">
+              </header>
+
+              <div className="relative z-0 mx-auto -mt-2 flex w-full max-w-[640px] flex-1 flex-col items-center justify-center py-6 sm:-mt-4 lg:-mt-8">
+                <div className="mb-6 min-h-8 text-center text-xl font-semibold tracking-[-0.01em] text-[#042C53] sm:mb-10 sm:text-3xl">
+                  {animatedWelcome}
+                  <span className="ml-0.5 inline-block animate-pulse text-[#0d6ea3]">|</span>
+                </div>
+                <Card className="group relative w-full overflow-hidden border border-slate-100 bg-white/95 shadow-[0_18px_40px_rgba(15,23,42,0.08)] transition-shadow hover:shadow-[0_24px_52px_rgba(13,110,163,0.16)]">
+                  <CardHeader className="space-y-2 px-5 pt-6 sm:px-8 sm:pt-9">
+                    {isSignup && (
+                      <div className="mb-3 flex items-center justify-center space-x-2 sm:mb-4">
+                        <div className="rounded-lg bg-[#0d6ea3] p-2">
+                          <UserPlus className="h-5 w-5 text-white" />
+                        </div>
+                        <CardTitle className="text-center text-xl sm:text-3xl">
+                          Create a new Account
+                        </CardTitle>
+                      </div>
+                    )}
+                    <CardDescription className="text-center text-sm sm:text-lg">
+                      {isSignup ? 'Welcome to ProValuate! Create your account' : 'Sign in to your ProValuate dashboard'}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="px-5 pb-6 sm:px-8 sm:pb-9">
+                    {!showReset ? (
+                      <>
+                        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
+                          <div className="space-y-2">
+                            <Input
+                              type="email"
+                              placeholder="Business Email address"
+                              value={email}
+                              onChange={(e) => setEmail(e.target.value)}
+                              required
+                              className="h-11 border-[#b9d7ea] text-sm focus-visible:ring-[#0d6ea3]/30 sm:h-12 sm:text-lg"
+                              disabled={isLoading}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-slate-500">Password</span>
+                              {!isSignup && (
+                                <button
+                                  type="button"
+                                  className="text-sm text-[#0d6ea3] transition-colors hover:text-[#042C53]"
+                                  onClick={() => setShowReset(true)}
+                                  disabled={isLoading}
+                                >
+                                  Forgot your password?
+                                </button>
+                              )}
+                            </div>
+                            <Input
+                              type="password"
+                              placeholder="Password"
+                              value={password}
+                              onChange={(e) => setPassword(e.target.value)}
+                              required
+                              className="h-11 border-[#cfe2ef] text-sm focus-visible:ring-[#0d6ea3]/30 sm:h-12 sm:text-lg"
+                              disabled={isLoading}
+                            />
+                          </div>
+                          <Button
+                            type="submit"
+                            className="h-11 w-full text-base text-white shadow-[0_4px_18px_rgba(13,110,163,0.28)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.34)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)] sm:h-12 sm:text-lg"
+                            disabled={isLoading}
+                          >
+                            {isLoading ? 'Please wait...' : isSignup ? 'Create Account' : 'Sign In'}
+                          </Button>
+                        </form>
+                      </>
+                    ) : (
+                      <form onSubmit={handlePasswordReset} className="mt-4 flex flex-col gap-2 sm:gap-3">
                         <Input
                           type="email"
-                          placeholder="Business Email address"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="Enter your email"
+                          value={resetEmail}
+                          onChange={(e) => setResetEmail(e.target.value)}
                           required
-                          className="h-10 sm:h-11 text-base"
-                          disabled={isLoading}
+                          className="h-11 text-sm sm:h-12 sm:text-lg"
+                          disabled={resetLoading}
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <Input
-                          type="password"
-                          placeholder="Password"
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          required
-                          className="h-10 sm:h-11 text-base"
-                          disabled={isLoading}
-                        />
-                      </div>
-                      <Button 
-                        type="submit" 
-                        className="w-full h-10 sm:h-11 bg-indigo-600 hover:bg-indigo-700 text-base"
-                        disabled={isLoading}
-                      >
-                        {isLoading 
-                          ? 'Please wait...' 
-                          : isSignup 
-                            ? 'Create Account' 
-                            : 'Sign In'
-                        }
-                      </Button>
-                    </form>
-                    <div className="mt-3 sm:mt-4 text-center">
+                        <Button type="submit" className="h-11 w-full bg-indigo-600 text-base hover:bg-indigo-700 sm:h-12 sm:text-lg" disabled={resetLoading}>
+                          {resetLoading ? 'Sending...' : 'Send Password Reset Email'}
+                        </Button>
+                        <button
+                          type="button"
+                          className="text-sm text-gray-600 underline"
+                          onClick={() => setShowReset(false)}
+                          disabled={resetLoading}
+                        >
+                          Back to login
+                        </button>
+                        {resetMessage && <div className="text-sm text-green-600">{resetMessage}</div>}
+                        {resetError && <div className="text-sm text-red-600">{resetError}</div>}
+                      </form>
+                    )}
+                    <div className="mt-4 text-center sm:mt-6">
                       <button
-                        type="button"
-                        className="text-indigo-600 underline text-xs sm:text-sm"
-                        onClick={() => setShowReset(true)}
+                        onClick={() => setIsSignup(!isSignup)}
+                        className="text-sm text-[#0d6ea3] transition-colors hover:text-[#042C53]"
                         disabled={isLoading}
                       >
-                        Forgot your password?
+                        {isSignup ? 'Already registered? Sign in' : "Don't have an account? Register Now"}
                       </button>
                     </div>
-                  </>
-                ) : (
-                  <form onSubmit={handlePasswordReset} className="flex flex-col gap-2 sm:gap-3 mt-4">
-                    <Input
-                      type="email"
-                      placeholder="Enter your email"
-                      value={resetEmail}
-                      onChange={(e) => setResetEmail(e.target.value)}
-                      required
-                      className="h-10 sm:h-11 text-base"
-                      disabled={resetLoading}
-                    />
-                    <Button type="submit" className="w-full h-10 sm:h-11 bg-indigo-600 hover:bg-indigo-700 text-base" disabled={resetLoading}>
-                      {resetLoading ? 'Sending...' : 'Send Password Reset Email'}
-                    </Button>
-                    <button
-                      type="button"
-                      className="text-gray-600 underline text-xs sm:text-sm"
-                      onClick={() => setShowReset(false)}
-                      disabled={resetLoading}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="mt-auto pt-4">
+                <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm text-muted-foreground sm:text-base">
+                  <Link to="/privacy" className="font-medium text-[#0d6ea3] hover:text-[#042C53]">Privacy Policy</Link>
+                  <span className="text-slate-300">•</span>
+                  <Link to="/terms" className="font-medium text-[#0d6ea3] hover:text-[#042C53]">Terms</Link>
+                  <span className="text-slate-300">•</span>
+                  <a href="mailto:sales@aitamate.com?subject=ProValuate%20Contact" className="font-medium text-[#0d6ea3] hover:text-[#042C53]">Contact</a>
+                </div>
+              </div>
+            </div>
+
+            <div className="order-2 md:order-none relative overflow-hidden bg-[linear-gradient(145deg,#ccddf0_0%,#b0cde5_45%,#8fb8da_100%)] p-6 sm:p-8 lg:flex lg:flex-col lg:justify-center lg:p-10 xl:p-12">
+              <div className="pointer-events-none absolute -left-16 -top-16 h-52 w-52 rounded-full bg-[rgba(4,44,83,0.16)] blur-2xl animate-[floatOrb_7s_ease-in-out_infinite]" />
+              <div className="pointer-events-none absolute -bottom-12 -right-10 h-44 w-44 rounded-full bg-[rgba(13,110,163,0.15)] blur-2xl animate-[floatOrb_7s_ease-in-out_infinite] [animation-delay:-3.5s]" />
+
+              <div className="relative z-10 mx-auto w-full max-w-[760px]">
+                <h1 className="max-w-[720px] text-[2.05rem] font-semibold leading-[1.08] tracking-[-0.015em] text-[#042C53] opacity-0 animate-[heroIn_0.55s_cubic-bezier(0.25,0.46,0.45,0.94)_0.12s_forwards] sm:text-[2.3rem] lg:max-w-none lg:whitespace-nowrap lg:text-[2.65rem] xl:text-[2.9rem]">
+                  Hiring-Risk Intelligence Platform
+                </h1>
+                <p className="mt-5 max-w-[660px] text-base leading-7 text-[#0d4060] opacity-0 animate-[heroIn_0.55s_cubic-bezier(0.25,0.46,0.45,0.94)_0.24s_forwards] sm:text-lg">
+                  Eliminate bias with weighted parameters, clear risk visibility, and structured evaluation. Hire on intelligence, not intuition.
+                </p>
+
+                <div className="relative mt-7 grid grid-cols-1 gap-4 md:grid-cols-2 xl:h-[520px] xl:block">
+                  {featureCards.map((card) => (
+                    <div
+                      key={card.title}
+                      style={{ ['--r' as any]: card.r }}
+                      className={`rounded-2xl border p-4 text-[#042C53] opacity-0 shadow-[0_4px_16px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.3)] backdrop-blur-md ${card.tone} animate-[cardIn_0.55s_cubic-bezier(0.34,1.56,0.64,1)_forwards] ${card.className}`}
                     >
-                      Back to login
-                    </button>
-                    {resetMessage && <div className="text-green-600 text-xs sm:text-sm">{resetMessage}</div>}
-                    {resetError && <div className="text-red-600 text-xs sm:text-sm">{resetError}</div>}
-                  </form>
-                )}
-                <div className="mt-4 sm:mt-6 text-center">
-                  <button
-                    onClick={() => setIsSignup(!isSignup)}
-                    className="text-indigo-600 hover:text-indigo-800 transition-colors text-xs sm:text-sm"
-                    disabled={isLoading}
-                  >
-                    {isSignup 
-                      ? 'Already registered? Sign in' 
-                      : "Don't have an account? Register Now"
-                    }
-                  </button>
+                      <div className="text-xs font-medium tracking-[0.03em] text-[#1a5070] sm:text-[13px]">{card.title}</div>
+                      <div className="mt-2 text-sm font-semibold leading-6 sm:text-base">{card.copy}</div>
+                    </div>
+                  ))}
                 </div>
 
-                {/* Remove the test account credentials display at the bottom */}
-              </CardContent>
-            </Card>
-            
-            <div className="mt-6 sm:mt-8 text-center text-xs sm:text-sm text-gray-600 px-4">
-              <p>Structured evaluation from job description to interview. Built for mid to senior hiring.</p>
-              <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-2">
-                <span className="text-gray-500">Powered by</span>
-                <a 
-                  href="https://aitamate.com/" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center space-x-1 hover:opacity-80 transition-opacity"
-                >
-                  <img 
-                    src="https://aitamate.com/Logo-transparent_bg.png" 
-                    alt="aitamate" 
-                    className="h-4 w-auto"
-                  />
-                  <span className="text-gray-600 font-medium">aitamate</span>
-                </a>
               </div>
             </div>
           </div>
-        </div>
-        
-        {/* Call to Action Section */}
-        <div className="bg-gradient-to-r from-purple-600 to-pink-500 py-4 sm:py-6 rounded-lg mx-4 sm:mx-0 mt-8">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white mb-2">
-              Start hiring on intelligence—not intuition.
-            </h3>
-            <p className="text-base sm:text-lg text-white/95 max-w-2xl mx-auto">
-              See why every candidate ranks the way they do. Weighted criteria, clear risk, and one place to run it all.
-            </p>
-          </div>
-        </div>
-      </main>
-
-      {/* Statistics Cards Section */}
-      <div className="bg-white py-8 sm:py-12 lg:py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-          <Card className="text-center border-0 shadow-lg">
-              <CardContent className="pt-4 sm:pt-6">
-                <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-green-200 flex items-center justify-center">
-                  <Users className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
-                </div>
-                <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">2,500+</h3>
-                <p className="text-sm sm:text-base text-gray-600">Resumes Processed</p>
-              </CardContent>
-            </Card>
-
-            <Card className="text-center border-0 shadow-lg">
-              <CardContent className="pt-4 sm:pt-6">
-                <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-blue-200 flex items-center justify-center">
-                  <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-                </div>
-                <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">180+</h3>
-                <p className="text-sm sm:text-base text-gray-600">Job Descriptions</p>
-              </CardContent>
-            </Card>
-
-            <Card className="text-center border-0 shadow-lg sm:col-span-2 lg:col-span-1">
-              <CardContent className="pt-4 sm:pt-6">
-                <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full border-2 border-purple-200 flex items-center justify-center">
-                  <BarChart className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
-                </div>
-                <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">50+</h3>
-                <p className="text-sm sm:text-base text-gray-600">Companies Trust Us</p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <footer className="bg-white border-t py-4">
-        <div className="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs sm:text-sm text-muted-foreground">
-          <Link to="/privacy" className="text-indigo-600 hover:text-indigo-800 font-medium">Privacy Policy</Link>
-          <span className="hidden sm:inline">|</span>
-          <Link to="/terms" className="text-indigo-600 hover:text-indigo-800 font-medium">Terms</Link>
-          <span className="hidden sm:inline">|</span>
-          <a href="mailto:sales@aitamate.com?subject=ProValuate%20Contact" className="text-indigo-600 hover:text-indigo-800">Contact</a>
-        </div>
-      </footer>
+        </section>
     </div>
   );
 };

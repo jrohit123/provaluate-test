@@ -62,6 +62,26 @@ export const API_CONFIG = {
     CANDIDATE_REFERRAL_DASHBOARD: '/api/candidate/referrals/dashboard',
     CANDIDATE_REFERRAL_SETTINGS: '/api/candidate/referral-settings',
     CANDIDATE_APPLY_REFERRAL: '/api/candidate/apply-referral',
+    CANDIDATE_PLAN_PRICING: '/api/candidate/plan-pricing',
+    CANDIDATE_COLLEGE_COURSES: '/api/candidate/college/courses',
+    CANDIDATE_COLLEGE_VERIFY: '/api/candidate/college/verify',
+    CANDIDATE_COLLEGE_AUTO_ENROLL: '/api/candidate/college/auto-enroll-from-email',
+    CANDIDATE_COLLEGE_ENROLLMENT: '/api/candidate/college/enrollment',
+    CANDIDATE_CAMPUS_INTERVIEWS: '/api/candidate/campus-interviews',
+    CANDIDATE_CAMPUS_INTERVIEW_LINK_ATTEMPT: '/api/candidate/campus-interviews/link-attempt',
+
+    // TPO onboarding and dashboard
+    TPO_ME: '/api/tpo/me',
+    TPO_ONBOARDING_COMPLETE: '/api/tpo/onboarding/complete',
+    TPO_DASHBOARD_STATS: '/api/tpo/dashboard/stats',
+    TPO_CAMPUS_INTERVIEWS: '/api/tpo/campus-interviews',
+    TPO_CAMPUS_INTERVIEW_ATTEMPTS: '/api/tpo/campus-interviews/attempts',
+    TPO_COLLEGE_COURSES: '/api/tpo/college-courses',
+    TPO_STUDENTS: '/api/tpo/students',
+    TPO_ACTIVITY_COHORT: '/api/tpo/activity/cohort',
+    TPO_CAMPUS_ROLE_INVITES: '/api/tpo/campus-role-invites',
+    TPO_CAMPUS_ROLE_APPLICATIONS: '/api/tpo/campus-role-applications',
+    CANDIDATE_CAMPUS_OPPORTUNITIES: '/api/candidate/campus-opportunities',
   },
   TIMEOUTS: {
     DEFAULT: 300000, // 30 seconds

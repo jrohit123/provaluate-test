@@ -28,7 +28,7 @@ interface AppSidebarProps {
 
 // Main Dashboard (always visible)
 const mainDashboardItem = {
-  title: 'Main Dashboard',
+  title: 'OVERVIEW',
   icon: Monitor,
   section: 'main-dashboard' as ActiveSection,
   description: 'Overview and quick actions'
@@ -109,6 +109,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
   // State for collapsible sections
   const [isCvScreeningOpen, setIsCvScreeningOpen] = useState(true);
   const [isInterviewManagementOpen, setIsInterviewManagementOpen] = useState(true);
+  const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(true);
   const [companyPlanType, setCompanyPlanType] = useState<string | null>(null);
   
   // Check if user can access settings
@@ -207,8 +208,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                   tooltip={mainDashboardItem.title}
                   data-tour={`section-${mainDashboardItem.section}`}
                 >
-                  <mainDashboardItem.icon className="w-4 h-4" />
-                  <span className="font-medium">{mainDashboardItem.title}</span>
+                  <span className="font-bold tracking-[0.06em] text-[#042C53]">{mainDashboardItem.title}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
@@ -222,13 +222,12 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
               <CollapsibleTrigger asChild>
                 <SidebarMenuButton className="cursor-pointer hover:bg-gray-50 flex items-center justify-between w-full">
                   <div className="flex items-center gap-2">
-                    <Search className="w-4 h-4" />
-                    <span className="font-bold text-[#1A56DB]">CV Screening</span>
+                    <span className="font-bold tracking-[0.06em] text-[#042C53]">CV SCREENING</span>
                   </div>
                   {isCvScreeningOpen ? (
-                    <ChevronDown className="w-4 h-4" />
+                    <ChevronDown className="w-4 h-4 text-[#042C53]" />
                   ) : (
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="w-4 h-4 text-[#042C53]" />
                   )}
                 </SidebarMenuButton>
               </CollapsibleTrigger>
@@ -248,8 +247,8 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                             data-tour={`section-${item.section}`}
                           >
                             <div className="flex items-center gap-2 min-w-0">
-                              <item.icon className="w-4 h-4 flex-shrink-0" />
-                              <span className="font-medium truncate">{item.title}</span>
+                              <item.icon className="w-4 h-4 flex-shrink-0 text-[#042C53]" />
+                              <span className="font-medium truncate text-[#042C53]">{item.title}</span>
                             </div>
                             {status.completed && (
                               <CheckCircle className="w-3 h-3 text-green-500 flex-shrink-0 ml-1.5" />
@@ -272,13 +271,12 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
               <CollapsibleTrigger asChild>
                 <SidebarMenuButton className="cursor-pointer hover:bg-gray-50 flex items-center justify-between w-full">
                   <div className="flex items-center gap-2">
-                    <Video className="w-4 h-4" />
-                    <span className="font-bold text-[#1A56DB]">Interview Management</span>
+                    <span className="font-bold tracking-[0.06em] text-[#042C53]">INTERVIEW WORKFLOW</span>
                   </div>
                   {isInterviewManagementOpen ? (
-                    <ChevronDown className="w-4 h-4" />
+                    <ChevronDown className="w-4 h-4 text-[#042C53]" />
                   ) : (
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="w-4 h-4 text-[#042C53]" />
                   )}
                 </SidebarMenuButton>
               </CollapsibleTrigger>
@@ -294,8 +292,8 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                           tooltip={item.title}
                           data-tour={`section-${item.section}`}
                         >
-                          <item.icon className="w-4 h-4" />
-                          <span className="font-medium">{item.title}</span>
+                          <item.icon className="w-4 h-4 text-[#042C53]" />
+                          <span className="font-medium text-[#042C53]">{item.title}</span>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     ))}
@@ -306,47 +304,56 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
           </SidebarGroup>
         )}
 
-        {/* Settings - Separate section */}
+        {/* ADMIN SETTINGS - group (Career Portal + Settings) */}
         {canAccessSettings && (
           <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => handleSectionChange(settingsItem.section)}
-                    isActive={activeSection === settingsItem.section}
-                    className="group relative"
-                    tooltip={settingsItem.title}
-                    data-tour="section-settings"
-                  >
-                    <settingsItem.icon className="w-4 h-4" />
-                    <span className="font-bold text-[#1A56DB]">{settingsItem.title}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+            <Collapsible open={isAdminSettingsOpen} onOpenChange={setIsAdminSettingsOpen}>
+              <CollapsibleTrigger asChild>
+                <SidebarMenuButton className="cursor-pointer hover:bg-gray-50 flex items-center justify-between w-full">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold tracking-[0.06em] text-[#042C53]">ADMIN SETTINGS</span>
+                  </div>
+                  {isAdminSettingsOpen ? (
+                    <ChevronDown className="w-4 h-4 text-[#042C53]" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-[#042C53]" />
+                  )}
+                </SidebarMenuButton>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {(companyPlanType !== null && (companyPlanType === 'cv' || companyPlanType === 'combo')) && (
+                      <SidebarMenuItem>
+                        <SidebarMenuButton
+                          onClick={() => handleSectionChange(careerPortalItem.section)}
+                          isActive={activeSection === careerPortalItem.section}
+                          className="group relative ml-4"
+                          tooltip={careerPortalItem.title}
+                          data-tour="section-career-portal"
+                        >
+                          <careerPortalItem.icon className="w-4 h-4 text-[#042C53]" />
+                          <span className="font-medium text-[#042C53]">{careerPortalItem.title}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    )}
 
-        {/* Career Portal - Below Settings (cv/combo only; hidden for interview-only). Avoid flashing while plan_type is loading. */}
-        {(companyPlanType !== null && (companyPlanType === 'cv' || companyPlanType === 'combo')) && (
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => handleSectionChange(careerPortalItem.section)}
-                    isActive={activeSection === careerPortalItem.section}
-                    className="group relative"
-                    tooltip={careerPortalItem.title}
-                    data-tour="section-career-portal"
-                  >
-                    <careerPortalItem.icon className="w-4 h-4" />
-                    <span className="font-bold text-[#1A56DB]">{careerPortalItem.title}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        onClick={() => handleSectionChange(settingsItem.section)}
+                        isActive={activeSection === settingsItem.section}
+                        className="group relative ml-4"
+                        tooltip={settingsItem.title}
+                        data-tour="section-settings"
+                      >
+                        <settingsItem.icon className="w-4 h-4 text-[#042C53]" />
+                        <span className="font-medium text-[#042C53]">{settingsItem.title}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </Collapsible>
           </SidebarGroup>
         )}
       </SidebarContent>
@@ -354,10 +361,10 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
       <SidebarFooter className="p-4">
         {/* Current Session (JD + Criteria) only for cv/combo; hidden for interview-only */}
         {(companyPlanType !== null && (companyPlanType === 'cv' || companyPlanType === 'combo')) && (
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4" data-tour="session-panel">
+          <div className="bg-gradient-to-r from-[#0d6ea3]/5 to-[#0d6ea3]/0 border border-[#0d6ea3]/20 rounded-lg p-4" data-tour="session-panel">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-blue-900">Current Session</h3>
+                <h3 className="text-sm font-semibold tracking-[0.06em] text-[#042C53]">CURRENT SESSION</h3>
                 {isSessionComplete ? (
                   <div className="flex items-center gap-1">
                     <div className="w-2 h-2 bg-green-500 rounded-full"></div>
@@ -372,12 +379,12 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
               </div>
               
               <div className="space-y-3">
-                <div className="bg-white/60 backdrop-blur-sm rounded-md p-3 border border-blue-100">
+                <div className="bg-white/60 backdrop-blur-sm rounded-md p-3 border border-[#0d6ea3]/15">
                   <div className="flex items-center gap-2 mb-1">
-                    <FileText className="w-3 h-3 text-blue-600" />
-                    <span className="text-xs font-medium text-blue-800">Job Description</span>
+                    <FileText className="w-3 h-3 text-[#0d6ea3]" />
+                    <span className="text-xs font-medium text-[#042C53]">Job Description</span>
                   </div>
-                  <div className="text-xs text-gray-700 truncate pl-5 flex items-center gap-2">
+                  <div className="text-xs text-[#042C53] truncate pl-5 flex items-center gap-2">
                     {currentJobDescription ? (
                       <>
                         <span className="truncate">
@@ -392,12 +399,12 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                   </div>
                 </div>
                 
-                <div className="bg-white/60 backdrop-blur-sm rounded-md p-3 border border-blue-100">
+                <div className="bg-white/60 backdrop-blur-sm rounded-md p-3 border border-[#0d6ea3]/15">
                   <div className="flex items-center gap-2 mb-1">
-                    <Wrench className="w-3 h-3 text-blue-600" />
-                    <span className="text-xs font-medium text-blue-800">Evaluation Criteria</span>
+                    <Wrench className="w-3 h-3 text-[#0d6ea3]" />
+                    <span className="text-xs font-medium text-[#042C53]">Evaluation Criteria</span>
                   </div>
-                  <div className="text-xs text-gray-700 truncate pl-5 flex items-center gap-2">
+                  <div className="text-xs text-[#042C53] truncate pl-5 flex items-center gap-2">
                     {currentEvaluationCriteria ? (
                       <>
                         <span className="truncate">

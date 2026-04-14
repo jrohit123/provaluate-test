@@ -3113,13 +3113,24 @@ const ConversationalInterview = () => {
       
       // Fetch role competency configuration from Supabase
       console.log('🔍 Fetching competency map for role:', position);
-      const { data: paramData, error } = await supabase
+      const currentQuestion = interviewData?.questions?.[questionIndex];
+      let query = supabase
         .from('custom_role_parameters')
         .select('custom_parameters')
-        .eq('role_name', position)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(1);
+      if (currentQuestion?.custom_role_parameters_id) {
+        query = query.eq('id', currentQuestion.custom_role_parameters_id);
+      } else {
+        query = query.eq('role_name', position);
+        if (interviewData?.interview_mode) query = query.eq('interview_mode', interviewData.interview_mode);
+        if (interviewData?.interview_type) query = query.eq('interview_type', interviewData.interview_type);
+        if (interviewData?.company_id) {
+          query = query.eq('parameter_pack_origin', 'company').eq('company_id', interviewData.company_id);
+        }
+      }
+      const { data: paramData, error } = await query;
       
       console.log('🔍 Supabase query result:', { paramData, error });
       

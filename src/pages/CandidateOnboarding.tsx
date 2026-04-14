@@ -8,16 +8,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { SessionManager } from '@/utils/sessionManager';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { API_CONFIG, buildApiUrl } from '@/constants/api';
+import { Loader2 } from 'lucide-react';
 
 declare global {
   interface Window {
-    Razorpay?: new (options: {
-      key: string;
-      amount: number;
-      currency: string;
-      order_id: string;
-      handler: (r: { razorpay_payment_id: string; razorpay_signature: string }) => void;
-    }) => { open: () => void };
+    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
   }
 }
 
@@ -50,7 +45,29 @@ export default function CandidateOnboarding() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [referralPaste, setReferralPaste] = useState('');
-  const [razorpayKeyId, setRazorpayKeyId] = useState<string | null>(null);
+
+  /** Full-screen after successful Razorpay payment until navigate (removes plan-step flash) */
+  const [finishingPayment, setFinishingPayment] = useState(false);
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
+  /** Set after onboarding when email domain matches a college — no manual student verification */
+  const [autoCollegeInfo, setAutoCollegeInfo] = useState<{
+    college_name: string;
+    college_code?: string;
+    discount_percentage: number;
+    valid_until?: string;
+    course_name?: string;
+  } | null>(null);
+  /** Domain matched college but no courses configured in admin */
+  const [autoEnrollNoCoursesMessage, setAutoEnrollNoCoursesMessage] = useState<string | null>(null);
+  const [referralMsg, setReferralMsg] = useState('');
+  /** College has multiple programs — user must pick one before enrollment is created */
+  const [pendingCollegeCourseSelection, setPendingCollegeCourseSelection] = useState<{
+    college_name: string;
+    college_code?: string;
+    discount_percentage: number;
+    courses: { id: string; course_name: string; course_code: string | null }[];
+  } | null>(null);
+  const [selectedCourseIdForEnrollment, setSelectedCourseIdForEnrollment] = useState<string>('');
 
   useEffect(() => {
     const run = async () => {
@@ -80,6 +97,22 @@ export default function CandidateOnboarding() {
     if (token) h['Authorization'] = `Bearer ${token}`;
     return h;
   };
+
+  /** Show sign-in email on plan step */
+  useEffect(() => {
+    if (step !== STEPS.PLAN) return;
+    let cancelled = false;
+    void (async () => {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (cancelled) return;
+      if (u?.email) {
+        setSessionEmail(u.email);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step]);
 
   const handleNameMobileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,6 +147,46 @@ export default function CandidateOnboarding() {
         return;
       }
       await refreshUser();
+      setAutoCollegeInfo(null);
+      setAutoEnrollNoCoursesMessage(null);
+      setReferralMsg('');
+      setPendingCollegeCourseSelection(null);
+      setSelectedCourseIdForEnrollment('');
+      const autoRes = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_COLLEGE_AUTO_ENROLL), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({}),
+      });
+      const autoData = await autoRes.json().catch(() => ({}));
+      if (autoRes.ok && autoData?.matched) {
+        if (autoData.error === 'no_courses') {
+          setAutoEnrollNoCoursesMessage(
+            autoData.message ||
+              'Your college is recognized, but courses are not set up yet. You can continue with a referral link if you have one, or complete payment — student pricing can be enabled from your dashboard once your college is fully configured.'
+          );
+        } else if (autoData.requires_course_selection && Array.isArray(autoData.courses)) {
+          setPendingCollegeCourseSelection({
+            college_name: String(autoData.college_name || ''),
+            college_code: autoData.college_code ? String(autoData.college_code) : undefined,
+            discount_percentage: Number(autoData.discount_percentage) || 0,
+            courses: autoData.courses.map((c: { id: string; course_name: string; course_code?: string | null }) => ({
+              id: String(c.id),
+              course_name: String(c.course_name || ''),
+              course_code: c.course_code != null ? String(c.course_code) : null,
+            })),
+          });
+          const first = autoData.courses[0];
+          if (first?.id) setSelectedCourseIdForEnrollment(String(first.id));
+        } else {
+          setAutoCollegeInfo({
+            college_name: String(autoData.college_name || ''),
+            college_code: autoData.college_code ? String(autoData.college_code) : undefined,
+            discount_percentage: Number(autoData.discount_percentage) || 0,
+            valid_until: autoData.valid_until ? String(autoData.valid_until) : undefined,
+            course_name: autoData.course_name ? String(autoData.course_name) : undefined,
+          });
+        }
+      }
       setStep(STEPS.PLAN);
       setError('');
       const plansRes = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_PLANS));
@@ -153,6 +226,47 @@ export default function CandidateOnboarding() {
     //   setError(err instanceof Error ? err.message : 'Something went wrong.');
     // }
     // setSubmitting(false);
+  };
+
+  const handleConfirmCourseSelection = async () => {
+    if (!selectedCourseIdForEnrollment) {
+      setError('Please select your program.');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_COLLEGE_AUTO_ENROLL), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ course_id: selectedCourseIdForEnrollment }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(typeof data?.error === 'string' ? data.error : 'Could not confirm your program.');
+        setSubmitting(false);
+        return;
+      }
+      if (data?.requires_course_selection) {
+        setError('Invalid program selection. Try again.');
+        setSubmitting(false);
+        return;
+      }
+      if (data?.matched && data?.error !== 'no_courses') {
+        setPendingCollegeCourseSelection(null);
+        setAutoCollegeInfo({
+          college_name: String(data.college_name || ''),
+          college_code: data.college_code ? String(data.college_code) : undefined,
+          discount_percentage: Number(data.discount_percentage) || 0,
+          valid_until: data.valid_until ? String(data.valid_until) : undefined,
+          course_name: data.course_name ? String(data.course_name) : undefined,
+        });
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not confirm program.');
+    }
+    setSubmitting(false);
   };
 
   // --- OTP verify (Twilio) — uncomment when OTP step is shown again ---
@@ -222,16 +336,37 @@ export default function CandidateOnboarding() {
     }
     const plan = plans.find((p) => p.id === selectedPlanId);
     if (!plan) return;
+
+    if (!autoCollegeInfo && referralPaste.trim()) {
+      setSubmitting(true);
+      setError('');
+      setReferralMsg('');
+      try {
+        const headers = await getAuthHeaders();
+        const slug = extractReferralSlug(referralPaste);
+        if (slug) {
+          const refRes = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_APPLY_REFERRAL), {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ referral_slug: slug }),
+          });
+          const refData = await refRes.json().catch(() => ({}));
+          if (!refRes.ok) {
+            setError(refData?.error || 'Could not apply referral. Fix the link or clear the field to continue.');
+            setSubmitting(false);
+            return;
+          }
+          setReferralMsg('Referral applied.');
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Referral failed');
+        setSubmitting(false);
+        return;
+      }
+      setSubmitting(false);
+    }
+
     if (plan.is_free) {
-      // const headers = await getAuthHeaders();
-      // const slug = extractReferralSlug(referralPaste);
-      // if (slug) {
-      //   await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_APPLY_REFERRAL), {
-      //     method: 'POST',
-      //     headers,
-      //     body: JSON.stringify({ referral_slug: slug }),
-      //   });
-      // }
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (authUser?.id) {
         const sessionData = await SessionManager.createSession(authUser.id);
@@ -248,14 +383,6 @@ export default function CandidateOnboarding() {
     setError('');
     try {
       const headers = await getAuthHeaders();
-      // const slug = extractReferralSlug(referralPaste);
-      // if (slug) {
-      //   await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_APPLY_REFERRAL), {
-      //     method: 'POST',
-      //     headers,
-      //     body: JSON.stringify({ referral_slug: slug }),
-      //   });
-      // }
       const orderRes = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_CREATE_ORDER), {
         method: 'POST',
         headers,
@@ -268,12 +395,11 @@ export default function CandidateOnboarding() {
         return;
       }
       const { order_id, amount, currency, key_id } = orderData;
-      setRazorpayKeyId(key_id);
       const digitsOnly = mobile.trim().replace(/\D/g, '');
       const contactForRazorpay =
         digitsOnly.length === 10 ? '91' + digitsOnly : digitsOnly.length > 0 ? digitsOnly : '';
       const { data: { user: authUser } } = await supabase.auth.getUser();
-      const options = {
+      const options: Record<string, unknown> = {
         key: key_id,
         amount,
         currency,
@@ -282,7 +408,14 @@ export default function CandidateOnboarding() {
           ...(contactForRazorpay ? { contact: contactForRazorpay } : {}),
           ...(authUser?.email && { email: authUser.email }),
         },
+        modal: {
+          ondismiss: () => {
+            setSubmitting(false);
+          },
+        },
         handler: async (response: { razorpay_payment_id: string; razorpay_signature: string }) => {
+          setFinishingPayment(true);
+          setSubmitting(false);
           try {
             const verifyRes = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_VERIFY_PAYMENT), {
               method: 'POST',
@@ -295,24 +428,24 @@ export default function CandidateOnboarding() {
             });
             const verifyData = await verifyRes.json().catch(() => ({}));
             if (!verifyRes.ok) {
+              setFinishingPayment(false);
               setError(verifyData?.error || 'Payment verification failed.');
-              setSubmitting(false);
               return;
             }
-            const { data: { user: authUser } } = await supabase.auth.getUser();
-            if (authUser?.id) {
-              const sessionData = await SessionManager.createSession(authUser.id);
+            const { data: { user: authUser2 } } = await supabase.auth.getUser();
+            if (authUser2?.id) {
+              const sessionData = await SessionManager.createSession(authUser2.id);
               if (sessionData) {
-                await SessionManager.endAllOtherSessions(authUser.id, sessionData.session_id);
+                await SessionManager.endAllOtherSessions(authUser2.id, sessionData.session_id);
                 localStorage.setItem('recruitai_auth', 'true');
                 await refreshUser();
-                navigate('/candidate-dashboard');
+                navigate('/candidate-dashboard', { replace: true });
               }
             }
           } catch (err) {
+            setFinishingPayment(false);
             setError(err instanceof Error ? err.message : 'Payment verification failed.');
           }
-          setSubmitting(false);
         },
       };
       if (window.Razorpay) {
@@ -320,11 +453,12 @@ export default function CandidateOnboarding() {
         rzp.open();
       } else {
         setError('Payment gateway could not be loaded.');
+        setSubmitting(false);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
   if (loading) {
@@ -337,9 +471,21 @@ export default function CandidateOnboarding() {
     );
   }
 
+  if (finishingPayment) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-sky-50 to-sky-100 px-4">
+        <Loader2 className="h-12 w-12 animate-spin text-sky-600 mb-4" aria-hidden />
+        <p className="text-lg font-semibold text-gray-900 text-center">Finishing payment…</p>
+        <p className="text-sm text-gray-600 mt-2 text-center max-w-sm">
+          Setting up your account. You&apos;ll be redirected to your dashboard in a moment.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-50 to-sky-100 p-3 sm:p-4 overflow-x-hidden">
-      <Card className="w-full max-w-md shadow-lg border-0 mx-2">
+      <Card className="w-full max-w-2xl shadow-lg border-0 mx-2">
         <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
           <CardTitle className="text-xl sm:text-2xl font-bold text-gray-900">
             {step === STEPS.NAME_MOBILE && 'Complete your profile'}
@@ -349,7 +495,12 @@ export default function CandidateOnboarding() {
           <p className="text-sm sm:text-base text-gray-600">
             {step === STEPS.NAME_MOBILE && 'Enter your name, then choose a plan on the next step.'}
             {step === STEPS.OTP && 'Enter the 6-digit OTP sent to your mobile.'}
-            {step === STEPS.PLAN && 'Select a plan to get started. You can pay securely via Razorpay.'}
+            {step === STEPS.PLAN &&
+              (pendingCollegeCourseSelection && !autoCollegeInfo
+                ? 'Your email matches a partner college. Select your program to activate your student discount.'
+                : autoCollegeInfo
+                  ? 'Your institutional email is verified for your college. Choose a plan and complete payment.'
+                  : 'Pick a plan, then pay. Add a referral link if someone shared one with you.')}
           </p>
         </CardHeader>
         <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
@@ -429,12 +580,80 @@ export default function CandidateOnboarding() {
 
           {step === STEPS.PLAN && (
             <div className="space-y-4">
+              {sessionEmail && (
+                <div className="rounded-md bg-sky-50 border border-sky-100 px-3 py-2 text-sm text-gray-800">
+                  <span className="text-gray-600">Signed in as </span>
+                  <span className="font-mono text-xs sm:text-sm break-all">{sessionEmail}</span>
+                </div>
+              )}
+
+              {pendingCollegeCourseSelection && (
+                <div className="rounded-lg border border-sky-200 bg-sky-50/80 px-3 py-3 space-y-3 text-sm">
+                  <p className="font-semibold text-gray-900">Select your program</p>
+                  <p className="text-xs text-gray-600">
+                    {pendingCollegeCourseSelection.college_name} offers more than one program. Choose yours so we can
+                    apply the correct student discount dates.
+                  </p>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-gray-700">Program</Label>
+                    <select
+                      className="w-full min-h-[44px] h-11 text-base border rounded-md px-3 bg-background"
+                      value={selectedCourseIdForEnrollment}
+                      onChange={(e) => setSelectedCourseIdForEnrollment(e.target.value)}
+                      disabled={submitting}
+                    >
+                      <option value="">Select a program</option>
+                      {pendingCollegeCourseSelection.courses.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.course_name}
+                          {c.course_code ? ` (${c.course_code})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <Button
+                    type="button"
+                    className="w-full min-h-[44px] h-11 text-base bg-sky-600 hover:bg-sky-700 touch-manipulation"
+                    disabled={submitting || !selectedCourseIdForEnrollment}
+                    onClick={handleConfirmCourseSelection}
+                  >
+                    {submitting ? 'Confirming…' : 'Confirm program'}
+                  </Button>
+                </div>
+              )}
+
+              {autoCollegeInfo && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-950 space-y-2">
+                  <p className="font-semibold">College email accepted</p>
+                  <div className="flex flex-col gap-1 text-emerald-900">
+                    <span>{autoCollegeInfo.college_name}</span>
+                    {autoCollegeInfo.course_name ? <span>{autoCollegeInfo.course_name}</span> : null}
+                    {autoCollegeInfo.college_code ? (
+                      <span className="font-mono text-xs sm:text-sm">code : {autoCollegeInfo.college_code}</span>
+                    ) : null}
+                  </div>
+                  <p className="text-emerald-800 pt-1 border-t border-emerald-200/80">
+                    {autoCollegeInfo.discount_percentage}% student discount applies at checkout
+                    {autoCollegeInfo.valid_until
+                      ? ` (valid through ${new Date(autoCollegeInfo.valid_until).toLocaleDateString()})`
+                      : '.'}
+                  </p>
+                </div>
+              )}
+
+              {autoEnrollNoCoursesMessage && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                  {autoEnrollNoCoursesMessage}
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-700">Plan</Label>
                 <select
                   className="w-full min-h-[44px] h-11 text-base border rounded-md px-3 bg-background"
                   value={selectedPlanId || ''}
                   onChange={(e) => setSelectedPlanId(e.target.value || null)}
+                  disabled={submitting}
                 >
                   <option value="">Select a plan</option>
                   {plans.map((p) => (
@@ -444,22 +663,24 @@ export default function CandidateOnboarding() {
                   ))}
                 </select>
               </div>
-              {/* --- Referral paste — restore with CANDIDATE_APPLY_REFERRAL calls ---
+
+              {!autoCollegeInfo && !pendingCollegeCourseSelection && (
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-700">Referral link (optional)</Label>
                 <Input
-                  placeholder="Paste the link shared by a friend"
+                  placeholder="Paste a friend's referral link — applied when you pay"
                   value={referralPaste}
                   onChange={(e) => setReferralPaste(e.target.value)}
                   className="min-h-[44px] h-11 text-base"
                   disabled={submitting}
                 />
+                {referralMsg && <p className="text-xs text-emerald-700">{referralMsg}</p>}
               </div>
-              */}
+              )}
               <Button
                 type="button"
                 className="w-full min-h-[44px] h-11 text-base bg-sky-600 hover:bg-sky-700 touch-manipulation"
-                disabled={submitting || !selectedPlanId}
+                disabled={submitting || !selectedPlanId || !!pendingCollegeCourseSelection}
                 onClick={handlePlanSelectAndPay}
               >
                 {submitting ? 'Please wait...' : plans.find((p) => p.id === selectedPlanId)?.is_free ? 'Continue to dashboard' : 'Pay & continue'}

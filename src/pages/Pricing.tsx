@@ -122,7 +122,7 @@ const Pricing = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0d6ea3] mx-auto mb-4"></div>
           <p className="text-gray-600">Loading pricing plans...</p>
         </div>
       </div>
@@ -143,7 +143,7 @@ const Pricing = () => {
             <div className="flex items-center space-x-4">
               <a
                 href="/"
-                className="text-gray-600 hover:text-gray-900 transition-colors"
+                className="font-medium text-[#0d6ea3] hover:text-[#042C53] transition-colors"
               >
                 Home
               </a>
@@ -172,7 +172,7 @@ const Pricing = () => {
               <Switch
                 checked={isAnnual}
                 onCheckedChange={setIsAnnual}
-                className="h-6 w-11"
+                className="h-6 w-11 data-[state=checked]:bg-[#0d6ea3] data-[state=unchecked]:bg-[#dbeafe]"
               />
               <span className={`text-sm font-medium ${isAnnual ? 'text-gray-900' : 'text-gray-600'}`}>
                 Annual
@@ -180,14 +180,15 @@ const Pricing = () => {
             </div>
 
             {/* Plan Type Toggle – centered between billing and currency */}
-            <div className="flex items-center justify-center gap-2 sm:space-x-2 bg-white rounded-full px-2 py-1 shadow-sm">
+            <div className="w-full sm:w-auto overflow-x-auto">
+              <div className="min-w-max flex items-center justify-center gap-2 sm:space-x-2 bg-white rounded-full px-2 py-1 shadow-sm">
               <button
                 type="button"
                 onClick={() => setPlanTypeFilter('cv')}
                 className={`px-3 py-1 text-xs sm:text-sm rounded-full font-medium transition-colors ${
                   planTypeFilter === 'cv'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-transparent text-gray-700 hover:bg-primary/10'
+                    ? 'text-white shadow-[0_4px_14px_rgba(13,110,163,0.22)] [background:linear-gradient(135deg,#042C53,#0d6ea3)]'
+                    : 'bg-transparent text-gray-700 hover:bg-[#0d6ea3]/10 hover:text-[#042C53]'
                 }`}
               >
                 CV Only
@@ -197,8 +198,8 @@ const Pricing = () => {
                 onClick={() => setPlanTypeFilter('interview')}
                 className={`px-3 py-1 text-xs sm:text-sm rounded-full font-medium transition-colors ${
                   planTypeFilter === 'interview'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-transparent text-gray-700 hover:bg-primary/10'
+                    ? 'text-white shadow-[0_4px_14px_rgba(13,110,163,0.22)] [background:linear-gradient(135deg,#042C53,#0d6ea3)]'
+                    : 'bg-transparent text-gray-700 hover:bg-[#0d6ea3]/10 hover:text-[#042C53]'
                 }`}
               >
                 Interviews Only
@@ -208,12 +209,13 @@ const Pricing = () => {
                 onClick={() => setPlanTypeFilter('combo')}
                 className={`px-3 py-1 text-xs sm:text-sm rounded-full font-medium transition-colors ${
                   planTypeFilter === 'combo'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-transparent text-gray-700 hover:bg-primary/10'
+                    ? 'text-white shadow-[0_4px_14px_rgba(13,110,163,0.22)] [background:linear-gradient(135deg,#042C53,#0d6ea3)]'
+                    : 'bg-transparent text-gray-700 hover:bg-[#0d6ea3]/10 hover:text-[#042C53]'
                 }`}
               >
                 Combo
               </button>
+              </div>
             </div>
 
             {/* Currency Toggle */}
@@ -224,7 +226,7 @@ const Pricing = () => {
               <Switch
                 checked={currency === 'USD'}
                 onCheckedChange={(checked) => setCurrency(checked ? 'USD' : 'INR')}
-                className="h-6 w-11"
+                className="h-6 w-11 data-[state=checked]:bg-[#0d6ea3] data-[state=unchecked]:bg-[#dbeafe]"
               />
               <span className={`text-sm font-medium ${currency === 'USD' ? 'text-gray-900' : 'text-gray-600'}`}>
                 USD
@@ -244,7 +246,7 @@ const Pricing = () => {
           {freePlans.map((plan) => (
             <Card
               key={plan.plan_id}
-              className="border-2 border-gray-200 hover:border-indigo-300 transition-all duration-300 flex flex-col min-w-0"
+              className="border-2 border-gray-200 hover:border-[#0d6ea3]/40 transition-all duration-300 flex flex-col min-w-0"
             >
               <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6">
                 <CardTitle className="text-xl sm:text-2xl mb-1 sm:mb-2">{plan.plan_name.replace(/_/g, ' ')}</CardTitle>
@@ -298,7 +300,11 @@ const Pricing = () => {
                     <span className="text-xs sm:text-sm text-gray-700">Standard support</span>
                   </li>
                 </ul>
-                <Button onClick={() => handleSelectPlan(plan)} variant="outline" className="w-full h-10 sm:h-11 text-sm sm:text-base">
+                <Button
+                  onClick={() => handleSelectPlan(plan)}
+                  variant="outline"
+                  className="w-full h-10 sm:h-11 text-sm sm:text-base border-[#0d6ea3]/40 text-[#0d6ea3] hover:bg-[#0d6ea3]/10 hover:text-[#042C53]"
+                >
                   Get Started
                 </Button>
               </CardContent>
@@ -316,7 +322,7 @@ const Pricing = () => {
               return (
                 <Card
                   key={plan.plan_id}
-                  className="border-2 border-gray-200 hover:border-indigo-300 transition-all duration-300 flex flex-col min-w-0"
+                  className="border-2 border-gray-200 hover:border-[#0d6ea3]/40 transition-all duration-300 flex flex-col min-w-0"
                 >
                   <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6">
                     <CardTitle className="text-xl sm:text-2xl mb-1 sm:mb-2">{plan.plan_name}</CardTitle>
@@ -405,7 +411,7 @@ const Pricing = () => {
                     <Button
                       onClick={() => handleSelectPlan(plan)}
                       variant="outline"
-                      className="w-full h-10 sm:h-11 text-sm sm:text-base"
+                      className="w-full h-10 sm:h-11 text-sm sm:text-base border-[#0d6ea3]/40 text-[#0d6ea3] hover:bg-[#0d6ea3]/10 hover:text-[#042C53]"
                     >
                       Get Started
                     </Button>
@@ -419,7 +425,7 @@ const Pricing = () => {
             <CardContent className="flex-1 flex flex-col items-center justify-center py-6 sm:py-8 px-4 text-center">
               <p className="text-base sm:text-lg font-semibold text-gray-900">One-time plans</p>
               <p className="text-xs sm:text-sm text-gray-600 mt-2 break-words">
-                Contact <a href="mailto:sales@aitamate.com" className="text-indigo-600 hover:underline">sales@aitamate.com</a> for more details.
+                Contact <a href="mailto:sales@aitamate.com" className="font-medium text-[#0d6ea3] hover:text-[#042C53] underline">sales@aitamate.com</a> for more details.
               </p>
             </CardContent>
           </Card>
@@ -481,7 +487,7 @@ const Pricing = () => {
             </p>
             <a
               href="mailto:sales@aitamate.com?subject=ProValuate%20Pricing%20Inquiry"
-              className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-medium transition-colors text-sm sm:text-base"
+              className="inline-flex items-center justify-center gap-2 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-medium transition-colors text-sm sm:text-base shadow-[0_4px_18px_rgba(13,110,163,0.28)] hover:shadow-[0_6px_22px_rgba(13,110,163,0.34)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
             >
               <Mail className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
               <span>Contact Sales</span>
@@ -499,11 +505,11 @@ const Pricing = () => {
               AI-powered resume evaluation and job matching platform for recruiters
             </p>
             <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 mt-4 text-xs sm:text-sm">
-              <Link to="/privacy" className="text-indigo-600 hover:text-indigo-800">Privacy Policy</Link>
+              <Link to="/privacy" className="font-medium text-[#0d6ea3] hover:text-[#042C53]">Privacy Policy</Link>
               <span>|</span>
-              <Link to="/terms" className="text-indigo-600 hover:text-indigo-800">Terms</Link>
+              <Link to="/terms" className="font-medium text-[#0d6ea3] hover:text-[#042C53]">Terms</Link>
               <span>|</span>
-              <a href="mailto:sales@aitamate.com?subject=ProValuate%20Contact" className="text-indigo-600 hover:text-indigo-800">Contact</a>
+              <a href="mailto:sales@aitamate.com?subject=ProValuate%20Contact" className="font-medium text-[#0d6ea3] hover:text-[#042C53]">Contact</a>
             </div>
           </div>
         </div>

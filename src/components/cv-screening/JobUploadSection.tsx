@@ -1146,7 +1146,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="text-sm font-semibold text-gray-900">
+                              <h3 className="text-sm font-semibold text-[#042C53]">
                                 Status
                               </h3>
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${currentStatus.badgeBg} ${currentStatus.badgeText}`}>
@@ -1197,7 +1197,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                               } ${isDisabled ? 'opacity-70' : 'hover:shadow-sm'}`}
                             >
                               <div className="flex-1 min-w-0 w-full sm:w-auto">
-                                <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">
+                                <p className="text-xs sm:text-sm font-medium text-[#042C53] truncate">
                                   {jd.title}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-0.5">
@@ -1381,7 +1381,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                     {viewMode === 'resolved' && resolvedJD && !isEditingResolvedJD && (
                       <div className="mt-2 p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-2">
-                          <h4 className="font-semibold text-xs sm:text-sm md:text-base text-gray-900">Resolved Job Description</h4>
+                          <h4 className="font-semibold text-xs sm:text-sm md:text-base text-[#042C53]">Resolved Job Description</h4>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1435,7 +1435,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                     {/* Extracted Text Display */}
                     {viewMode === 'extracted' && extractedText && (
                       <div className="mt-2 p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        <h4 className="font-semibold text-sm sm:text-base mb-2 text-gray-900">Extracted Job Description Text</h4>
+                        <h4 className="font-semibold text-sm sm:text-base mb-2 text-[#042C53]">Extracted Job Description Text</h4>
                         <div className="prose prose-sm max-w-none">
                           <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm bg-white p-3 sm:p-4 rounded border overflow-x-auto max-h-96 overflow-y-auto">
                             {extractedText}

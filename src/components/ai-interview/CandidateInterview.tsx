@@ -479,7 +479,7 @@ const CandidateInterview = () => {
         {/* Welcome block */}
         <section className="mb-6 sm:mb-8 min-w-0">
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2 break-words">
-            Welcome, {interviewData.candidate_name}!
+            Welcome, {interviewData.candidate_name}!{interviewData.interview_source === 'campus' ? ' (This is campus practice)' : ''}
           </h1>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-gray-600 text-sm sm:text-base break-words">
             <span className="flex items-center gap-1.5">
@@ -530,16 +530,6 @@ const CandidateInterview = () => {
                 <li>Find a quiet environment and speak clearly for the best transcription and evaluation.</li>
               </ul>
             </section>
-
-            {/* Custom Instructions */}
-            {interviewData.custom_instructions && (
-              <section className="mb-4 sm:mb-6">
-                <h3 className="font-semibold text-gray-900 mb-2 text-sm sm:text-base">Special Instructions</h3>
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg min-w-0">
-                  <p className="text-amber-900 text-sm sm:text-base break-words">{interviewData.custom_instructions}</p>
-                </div>
-              </section>
-            )}
 
             {/* System Requirements */}
             <section>

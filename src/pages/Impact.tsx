@@ -96,7 +96,7 @@ const Impact = () => {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <a href="/" className="text-gray-600 hover:text-gray-900 transition-colors">
+              <a href="/" className="text-[#0d6ea3] hover:text-[#042C53] transition-colors font-medium">
                 Home
               </a>
             </div>
@@ -234,7 +234,7 @@ const Impact = () => {
                 href="https://aitamate.com/provaluate-blog.html"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 font-semibold underline hover:no-underline"
+                className="text-[#0d6ea3] font-semibold underline hover:text-[#042C53]"
               >
                 Click here
               </a>{" "}
@@ -250,7 +250,7 @@ const Impact = () => {
             </p>
             <a
               href="mailto:sales@aitamate.com?subject=ProValuate%20Pricing%20Inquiry"
-              className="inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+              className="inline-flex items-center space-x-2 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-[0_4px_18px_rgba(13,110,163,0.28)] hover:shadow-[0_6px_22px_rgba(13,110,163,0.34)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
             >
               <Mail className="h-5 w-5" />
               <span>Contact Sales</span>
@@ -267,11 +267,11 @@ const Impact = () => {
               AI-powered resume evaluation and job matching platform for recruiters
             </p>
             <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 mt-4 text-sm">
-              <Link to="/privacy" className="text-indigo-600 hover:text-indigo-800">Privacy Policy</Link>
+              <Link to="/privacy" className="font-medium text-[#0d6ea3] hover:text-[#042C53]">Privacy Policy</Link>
               <span>|</span>
-              <Link to="/terms" className="text-indigo-600 hover:text-indigo-800">Terms</Link>
+              <Link to="/terms" className="font-medium text-[#0d6ea3] hover:text-[#042C53]">Terms</Link>
               <span>|</span>
-              <a href="mailto:sales@aitamate.com?subject=ProValuate%20Contact" className="text-indigo-600 hover:text-indigo-800">Contact</a>
+              <a href="mailto:sales@aitamate.com?subject=ProValuate%20Contact" className="font-medium text-[#0d6ea3] hover:text-[#042C53]">Contact</a>
             </div>
           </div>
         </div>

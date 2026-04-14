@@ -34,10 +34,24 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import StructuredInterviewSetup from './StructuredInterviewSetup';
 import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
-import { useInterviewCurrentStep, useInterviewNavigateToStep, INTERVIEW_WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
+import {
+  useInterviewCurrentStep,
+  useInterviewNavigateToStep,
+  INTERVIEW_WORKFLOW_STEPS,
+  TPO_DASHBOARD_WORKFLOW_STEPS,
+} from '@/hooks/useWorkflowNavigation';
 
 /** When provided, JDs are loaded from this list (e.g. candidate's jd_candidates) instead of company tables. Recruiter flow unchanged when omitted. */
-export type InjectedJD = { jd_id: string; title: string | null; extracted_text?: string | null; jd_file?: string | null; created_at?: string };
+export type InjectedJD = {
+  jd_id: string;
+  title: string | null;
+  extracted_text?: string | null;
+  jd_file?: string | null;
+  created_at?: string;
+  custom_role_parameters_id?: string | null;
+  interview_mode?: 'ai' | 'structured' | null;
+  interview_type?: 'functional' | 'behavioral' | 'mixed' | 'technical' | null;
+};
 
 interface AIsetupProps {
   onSectionReady?: () => void;
@@ -47,6 +61,11 @@ interface AIsetupProps {
   injectedLoadJobDescriptions?: () => Promise<void>;
   /** When set, uploads go to jd_candidates (candidate_id) instead of jd_for_interview (company_id). Use for candidate dashboard. */
   candidateId?: string;
+  /** TPO: persist JD upload to campus_interview_templates via POST /api/tpo/campus-interviews (do not set candidateId for this path). */
+  tpoCampusTemplatePersist?: boolean;
+  /** TPO embedded dashboard: candidate-style step bar; use with onTpoWorkflowStepClick. */
+  tpoWorkflowStepIndex?: number;
+  onTpoWorkflowStepClick?: (stepIndex: number) => void;
 }
 
 interface FormData {
@@ -62,18 +81,47 @@ interface FormData {
 }
 
 
-const CANDIDATE_WORKFLOW_PATHS = ['/candidate-dashboard/jds/configure', '/candidate-dashboard/jds/create', '/candidate-dashboard/interviews'] as const;
+const CANDIDATE_WORKFLOW_PATHS = ['/candidate-dashboard/jds/configure', '/candidate-dashboard/jds/create', '/candidate-dashboard/performance-report'] as const;
 
-const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedLoadJobDescriptions, candidateId }: AIsetupProps) => {
+const normalizeInterviewTypeForForm = (
+  type: InjectedJD['interview_type']
+): FormData['interviewType'] => {
+  if (type === 'functional' || type === 'behavioral' || type === 'mixed') return type;
+  return 'mixed';
+};
+
+const HRInterviewCreator = ({
+  onSectionReady,
+  injectedJobDescriptions,
+  injectedLoadJobDescriptions,
+  candidateId,
+  tpoCampusTemplatePersist,
+  tpoWorkflowStepIndex,
+  onTpoWorkflowStepClick,
+}: AIsetupProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
   const interviewCurrentStep = useInterviewCurrentStep();
   const interviewNavigateToStep = useInterviewNavigateToStep();
   const pathname = location.pathname;
-  const isCandidateFlow = !!candidateId;
-  const candidateCurrentStep = pathname.includes('/jds/create') ? 1 : pathname.includes('/interviews') ? 2 : 0;
+  const tpoEmbeddedWorkflow = typeof tpoWorkflowStepIndex === 'number' && !!onTpoWorkflowStepClick;
+  const embeddedInterviewWorkflowSteps = tpoEmbeddedWorkflow
+    ? TPO_DASHBOARD_WORKFLOW_STEPS
+    : INTERVIEW_WORKFLOW_STEPS;
+  const isCandidateFlow = !!candidateId || tpoEmbeddedWorkflow;
+  const candidateCurrentStep = tpoEmbeddedWorkflow
+    ? tpoWorkflowStepIndex!
+    : pathname.includes('/jds/create')
+      ? 1
+      : pathname.includes('/interviews')
+        ? 2
+        : 0;
   const candidateNavigateToStep = (stepIndex: number) => {
+    if (tpoEmbeddedWorkflow) {
+      onTpoWorkflowStepClick!(stepIndex);
+      return;
+    }
     if (stepIndex >= 0 && stepIndex < CANDIDATE_WORKFLOW_PATHS.length) {
       navigate(CANDIDATE_WORKFLOW_PATHS[stepIndex]);
     }
@@ -96,6 +144,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
   const [jobDescriptions, setJobDescriptions] = useState<JobDescription[]>([]);
   // Effective JD list: use injected (candidate jd_candidates) or internal (recruiter company JDs)
   const effectiveJobDescriptions = injectedJobDescriptions ?? jobDescriptions;
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -110,6 +159,8 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
   const [expandedCompetencies, setExpandedCompetencies] = useState<Set<string>>(new Set());
   /** Per-competency max_time before "Requires written answer" was checked; restored when unchecked */
   const [writtenAnswerPrevMaxTime, setWrittenAnswerPrevMaxTime] = useState<Record<string, number>>({});
+  const [roleNameCheckState, setRoleNameCheckState] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  const [roleNameCheckMessage, setRoleNameCheckMessage] = useState('');
 
   // Interview JD limit + manage (jd_for_interview) – recruiter only
   const [interviewJdLimitInfo, setInterviewJdLimitInfo] = useState<JobDescriptionLimitInfo | null>(null);
@@ -132,6 +183,39 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     updated_at?: string;
   }>>([]);
   const [updatingCvStatus, setUpdatingCvStatus] = useState<string | null>(null);
+  const [tpoCollegeId, setTpoCollegeId] = useState<string | null>(null);
+  const companyId = user?.profile?.company_id as string | undefined;
+  const crpScopePayload = tpoCampusTemplatePersist && tpoCollegeId
+    ? { parameter_pack_origin: 'college' as const, college_id: tpoCollegeId }
+    : companyId && !candidateId && !tpoCampusTemplatePersist
+      ? { parameter_pack_origin: 'company' as const, company_id: companyId }
+      : { parameter_pack_origin: 'personal' as const, user_id: user?.id };
+
+  useEffect(() => {
+    if (!tpoCampusTemplatePersist) return;
+    let cancelled = false;
+    const loadTpoCollegeScope = async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        if (!token) return;
+        const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.TPO_ME), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => ({} as {
+          tpo_user?: { college?: { id?: string } };
+        }));
+        const cid = data?.tpo_user?.college?.id;
+        if (!cancelled && cid) setTpoCollegeId(cid);
+      } catch {
+        // Keep existing fallback scope behavior if TPO context cannot be loaded.
+      }
+    };
+    loadTpoCollegeScope();
+    return () => {
+      cancelled = true;
+    };
+  }, [tpoCampusTemplatePersist]);
 
   // Load job descriptions from both CV screening and AI interview tables
   const loadJobDescriptions = async () => {
@@ -350,22 +434,63 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     }
   };
 
+  /** Template has configured interview variant (saved with competencies). Until then mode/type stay null client-side. */
+  const templateHasSavedInterviewVariant = (jd: InjectedJD) =>
+    !!(jd.custom_role_parameters_id || jd.interview_mode || jd.interview_type);
+
   // Handle job description selection from both CV screening and AI interview
   const handleJobDescriptionSelect = async (jdId: string) => {
-    const selectedJD = effectiveJobDescriptions.find((jd: { jd_id: string }) => jd.jd_id === jdId);
+    const selectedJD = effectiveJobDescriptions.find((jd: InjectedJD) => jd.jd_id === jdId);
     if (selectedJD) {
-      // Set the role name from the selected JD title
-      setFormData(prev => ({ ...prev, position: selectedJD.title }));
+      setSelectedTemplateId(jdId);
+      const selectedTitle = selectedJD.title ?? '';
+      const configured = templateHasSavedInterviewVariant(selectedJD);
+      // TPO campus: keep interview mode/type from form until template row has saved variant.
+      setFormData(prev => ({
+        ...prev,
+        position: selectedTitle,
+        ...(configured
+          ? {
+              interviewMode:
+                selectedJD.interview_mode === 'structured'
+                  ? 'structured'
+                  : selectedJD.interview_mode === 'ai'
+                    ? 'ai'
+                    : prev.interviewMode,
+              interviewType:
+                selectedJD.interview_type != null
+                  ? normalizeInterviewTypeForForm(selectedJD.interview_type)
+                  : prev.interviewType,
+            }
+          : {}),
+      }));
+      const modeForLoad = configured
+        ? selectedJD.interview_mode === 'structured'
+          ? 'structured'
+          : selectedJD.interview_mode === 'ai'
+            ? 'ai'
+            : formData.interviewMode
+        : formData.interviewMode;
+      const typeForLoad = configured
+        ? selectedJD.interview_type != null
+          ? normalizeInterviewTypeForForm(selectedJD.interview_type)
+          : formData.interviewType
+        : formData.interviewType;
       
       // Check if this is from jd_for_interview table (has extracted_text)
       if (selectedJD.extracted_text) {
         // Use the already extracted text from jd_for_interview table
         setFormData(prev => ({ ...prev, jobDescription: selectedJD.extracted_text }));
-        showJDLoadedToast(selectedJD.title);
+        showJDLoadedToast(selectedTitle);
         
         // Load existing competencies for this role (if any)
         console.log('🔄 Role selection: Loading competencies for:', selectedJD.title);
-        await loadCompetenciesForPosition(selectedJD.title);
+        await loadCompetenciesForPosition(
+          selectedTitle,
+          modeForLoad,
+          typeForLoad,
+          selectedJD.custom_role_parameters_id || undefined
+        );
         return;
       }
       
@@ -395,10 +520,15 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
             
             if (plainText && plainText.length > 50) { // Ensure we have meaningful text
               setFormData(prev => ({ ...prev, jobDescription: plainText }));
-              showJDLoadedToast(selectedJD.title);
+              showJDLoadedToast(selectedTitle);
               
           // Load existing competencies for this role (if any)
-              await loadCompetenciesForPosition(selectedJD.title);
+              await loadCompetenciesForPosition(
+                selectedTitle,
+                modeForLoad,
+                typeForLoad,
+                selectedJD.custom_role_parameters_id || undefined
+              );
               return; // Skip file extraction
             } else {
               console.log('⚠️ Resolved JD text too short, falling back to extraction');
@@ -438,7 +568,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
          
          // Extract original file extension from the file path
          const originalExtension = filePath.split('.').pop()?.toLowerCase() || 'pdf';
-         const fileNameWithExtension = `${selectedJD.title}.${originalExtension}`;
+         const fileNameWithExtension = `${selectedTitle || 'Untitled'}.${originalExtension}`;
          
          console.log('Original file extension detected:', originalExtension);
          console.log('Using filename:', fileNameWithExtension);
@@ -446,7 +576,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
          // Send file data directly to backend without creating File object
          const formDataForUpload = new FormData();
          formDataForUpload.append('file', fileData, fileNameWithExtension);
-         formDataForUpload.append('title', selectedJD.title);
+         formDataForUpload.append('title', selectedTitle);
 
          console.log(`Sending ${originalExtension.toUpperCase()} file to backend for text extraction...`);
          const response = await apiCall(API_CONFIG.ENDPOINTS.EXTRACT_JD_TEXT, {
@@ -458,20 +588,25 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
            const { extractedText } = await response.json();
            console.log('Text extracted successfully, length:', extractedText.length);
            setFormData(prev => ({ ...prev, jobDescription: extractedText }));
-          showJDLoadedToast(selectedJD.title);
+          showJDLoadedToast(selectedTitle);
            
           // Load existing competencies for this role (if any)
-           await loadCompetenciesForPosition(selectedJD.title);
+           await loadCompetenciesForPosition(
+             selectedTitle,
+             modeForLoad,
+             typeForLoad,
+             selectedJD.custom_role_parameters_id || undefined
+           );
          } else {
            console.error('Backend extraction failed:', response.status, response.statusText);
            // Fallback to title if extraction fails
-           setFormData(prev => ({ ...prev, jobDescription: selectedJD.title }));
+           setFormData(prev => ({ ...prev, jobDescription: selectedTitle }));
           toast.error('Failed to extract text from file', { id: 'jd-extraction-error' });
          }
        } catch (error) {
          console.error('Error loading JD file:', error);
          // Fallback to title if there's an error
-         setFormData(prev => ({ ...prev, jobDescription: selectedJD.title }));
+         setFormData(prev => ({ ...prev, jobDescription: selectedTitle }));
         toast.error('Error loading JD: ' + (error as Error).message, { id: 'jd-load-error' });
        }
     }
@@ -576,8 +711,31 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
 
       const roleNameForSave = formData.newRole;
 
-      // Save JD: candidate → jd_candidates; recruiter → jd_for_interview
-      if (candidateId) {
+      // Save JD: TPO → campus_interview_templates API; candidate → jd_candidates; recruiter → jd_for_interview
+      if (tpoCampusTemplatePersist) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.TPO_CAMPUS_INTERVIEWS), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          // Mode/type stay null until competencies are saved (matches candidate JD flow).
+          body: JSON.stringify({
+            title: roleNameForSave,
+            position: roleNameForSave,
+            jd_file: uploadData.path,
+            extracted_jd_text: cleanedText,
+            status: 'draft',
+          }),
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error((payload as { error?: string }).error || 'Failed to save campus interview template');
+        }
+        if (injectedLoadJobDescriptions) await injectedLoadJobDescriptions();
+      } else if (candidateId) {
         console.log('🔄 Saving JD record to jd_candidates (candidate)...');
         const { data: jdData, error: jdError } = await supabase
           .from('jd_candidates')
@@ -730,8 +888,15 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
 
 
 
-  const loadCompetenciesForPosition = async (position: string) => {
-    console.log('🔍 loadCompetenciesForPosition called with:', { position, interviewMode: formData.interviewMode, isLoadingCompetencies });
+  const loadCompetenciesForPosition = async (
+    position: string,
+    modeOverride?: 'ai' | 'structured',
+    typeOverride?: 'functional' | 'behavioral' | 'mixed',
+    preferredCrpId?: string
+  ) => {
+    const modeToUse = modeOverride || formData.interviewMode;
+    const typeToUse = typeOverride || formData.interviewType;
+    console.log('🔍 loadCompetenciesForPosition called with:', { position, interviewMode: modeToUse, interviewType: typeToUse, isLoadingCompetencies });
     
     if (!position) {
       console.log('🔄 No position provided, clearing competencies');
@@ -753,14 +918,29 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       console.log('🔄 Loading competencies for position:', position);
       console.log('🔄 Current customCompetencies before loading:', Object.keys(customCompetencies));
       
-      // Try to load from custom_role_parameters table first
-      const { data, error } = await supabase
+      // Prefer template-linked CRP id for TPO flow; otherwise fallback to role/mode/type lookup.
+      let query = supabase
         .from('custom_role_parameters')
-        .select('custom_parameters, interview_type, structured_questions, personalized_questions')
-        .eq('role_name', position)
+        .select('custom_parameters, interview_type, interview_mode, structured_questions, personalized_questions')
         .eq('is_active', true)
-        .order('created_at', { ascending: false })
         .limit(1);
+      if (preferredCrpId) {
+        query = query.eq('id', preferredCrpId);
+      } else {
+        query = query
+          .eq('role_name', position)
+          .eq('interview_mode', modeToUse)
+          .eq('interview_type', typeToUse)
+          .order('created_at', { ascending: false });
+        if (crpScopePayload.parameter_pack_origin === 'company') {
+          query = query.eq('parameter_pack_origin', 'company').eq('company_id', crpScopePayload.company_id as string);
+        } else if (crpScopePayload.parameter_pack_origin === 'college') {
+          query = query.eq('parameter_pack_origin', 'college').eq('college_id', crpScopePayload.college_id as string);
+        } else {
+          query = query.eq('parameter_pack_origin', 'personal').eq('user_id', (crpScopePayload.user_id as string) || '');
+        }
+      }
+      const { data, error } = await query;
       
       if (error) throw error;
       
@@ -1210,13 +1390,23 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
         });
         
         // Save competency config to custom_role_parameters (DB column name unchanged)
+        const insertPayload: Record<string, unknown> = {
+          role_name: roleName,
+          custom_parameters: generatedCompetenciesAuto,
+          interview_mode: formData.interviewMode,
+          interview_type: formData.interviewType,
+          parameter_pack_origin: crpScopePayload.parameter_pack_origin,
+        };
+        if (crpScopePayload.parameter_pack_origin === 'company') {
+          insertPayload.company_id = crpScopePayload.company_id;
+        } else if (crpScopePayload.parameter_pack_origin === 'college') {
+          insertPayload.college_id = crpScopePayload.college_id;
+        } else {
+          insertPayload.user_id = crpScopePayload.user_id;
+        }
         const { error: saveError } = await supabase
           .from('custom_role_parameters')
-          .insert({
-            role_name: roleName,
-            custom_parameters: generatedCompetenciesAuto,
-            user_id: user?.id
-          });
+          .insert(insertPayload);
 
         if (saveError) {
           console.error('Error saving competencies:', saveError);
@@ -1293,7 +1483,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     setLoadedPositions(new Set());
   }, [formData.interviewMode]);
 
-  // Load competencies when position changes (only for AI mode)
+  // Load competencies when position/type/mode changes (AI mode)
   useEffect(() => {
     console.log('🔍 Position useEffect triggered:', { 
       position: formData.position, 
@@ -1302,9 +1492,59 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     
     if (formData.position && formData.interviewMode === 'ai') {
       console.log('🔄 Position useEffect: Loading competencies for position:', formData.position);
-      loadCompetenciesForPosition(formData.position);
+      loadCompetenciesForPosition(formData.position, formData.interviewMode, formData.interviewType);
     }
-  }, [formData.position, formData.interviewMode]);
+  }, [formData.position, formData.interviewMode, formData.interviewType]);
+
+  useEffect(() => {
+    const roleName = (formData.newRole || '').trim();
+    if (roleName.length < 2) {
+      setRoleNameCheckState('idle');
+      setRoleNameCheckMessage('');
+      return;
+    }
+    let cancelled = false;
+    setRoleNameCheckState('checking');
+    setRoleNameCheckMessage('Checking role name availability...');
+    const timer = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({
+          role_name: roleName,
+          interview_mode: formData.interviewMode,
+          interview_type: formData.interviewType,
+          parameter_pack_origin: crpScopePayload.parameter_pack_origin,
+        });
+        if (crpScopePayload.parameter_pack_origin === 'company' && crpScopePayload.company_id) {
+          params.set('company_id', String(crpScopePayload.company_id));
+        } else if (crpScopePayload.parameter_pack_origin === 'college' && crpScopePayload.college_id) {
+          params.set('college_id', String(crpScopePayload.college_id));
+        } else if (crpScopePayload.user_id) {
+          params.set('user_id', String(crpScopePayload.user_id));
+        }
+        const res = await fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.CUSTOM_PARAMETERS}/check-name?${params.toString()}`));
+        const data = await res.json().catch(() => ({} as { available?: boolean; error?: string }));
+        if (cancelled) return;
+        if (!res.ok) throw new Error((data as { error?: string }).error || 'Check failed');
+        const available = Boolean((data as { available?: boolean }).available);
+        if (available) {
+          setRoleNameCheckState('available');
+          setRoleNameCheckMessage('Name is available for selected mode and type.');
+        } else {
+          setRoleNameCheckState('taken');
+          setRoleNameCheckMessage('This role name is already used for selected mode and type in your workspace.');
+        }
+      } catch (_e) {
+        if (cancelled) return;
+        setRoleNameCheckState('idle');
+        setRoleNameCheckMessage('');
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [formData.newRole, formData.interviewMode, formData.interviewType, crpScopePayload.parameter_pack_origin, crpScopePayload.company_id, crpScopePayload.user_id]);
 
   const saveCompetencies = async () => {
     const roleName = formData.newRole || formData.position;
@@ -1319,19 +1559,31 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       toast.error(`Total weight must equal 100%. Current total: ${totalWeight}%. Adjust competency weights so they sum to exactly 100.`, { id: 'params-weight-invalid' });
       return;
     }
+    if (formData.newRole.trim() && roleNameCheckState === 'taken') {
+      toast.error('This role name is already used for selected mode and type. Try a different name.', { id: 'params-role-name-taken' });
+      return;
+    }
     
     setIsSavingCompetencies(true);
     try {
       console.log('🔄 Saving competencies for role:', roleName, customCompetencies);
       
       // First check if competencies already exist for this role
-      const { data: existingData, error: checkError } = await supabase
+      let existingQuery = supabase
         .from('custom_role_parameters')
         .select('id')
         .eq('role_name', roleName)
-        .eq('user_id', user?.id)
-        .eq('is_active', true)
-        .single();
+        .eq('interview_mode', formData.interviewMode)
+        .eq('interview_type', formData.interviewType)
+        .eq('is_active', true);
+      if (crpScopePayload.parameter_pack_origin === 'company') {
+        existingQuery = existingQuery.eq('parameter_pack_origin', 'company').eq('company_id', crpScopePayload.company_id as string);
+      } else if (crpScopePayload.parameter_pack_origin === 'college') {
+        existingQuery = existingQuery.eq('parameter_pack_origin', 'college').eq('college_id', crpScopePayload.college_id as string);
+      } else {
+        existingQuery = existingQuery.eq('parameter_pack_origin', 'personal').eq('user_id', (crpScopePayload.user_id as string) || '');
+      }
+      const { data: existingData, error: checkError } = await existingQuery.single();
 
       let data, error;
       
@@ -1343,9 +1595,14 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
           .from('custom_role_parameters')
           .update({
             custom_parameters: customCompetencies,
+            interview_mode: formData.interviewMode,
             interview_type: formData.interviewType,
             structured_questions: {}, // Clear structured questions for AI interviews
             personalized_questions: formData.personalizedQuestionsEnabled ? formData.personalizedQuestions : null,
+            parameter_pack_origin: crpScopePayload.parameter_pack_origin,
+            company_id: crpScopePayload.parameter_pack_origin === 'company' ? crpScopePayload.company_id : null,
+            college_id: crpScopePayload.parameter_pack_origin === 'college' ? crpScopePayload.college_id : null,
+            user_id: crpScopePayload.parameter_pack_origin === 'personal' ? crpScopePayload.user_id : null,
             updated_at: new Date().toISOString()
           })
           .eq('id', existingData.id)
@@ -1356,17 +1613,26 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       } else {
         // Insert new record
         console.log('🔄 Creating new competencies for role:', roleName);
+        const insertPayload: Record<string, unknown> = {
+          role_name: roleName,
+          custom_parameters: customCompetencies,
+          interview_mode: formData.interviewMode,
+          interview_type: formData.interviewType,
+          structured_questions: {}, // No structured questions for AI interviews
+          personalized_questions: formData.personalizedQuestionsEnabled ? formData.personalizedQuestions : null,
+          is_active: true,
+          parameter_pack_origin: crpScopePayload.parameter_pack_origin,
+        };
+        if (crpScopePayload.parameter_pack_origin === 'company') {
+          insertPayload.company_id = crpScopePayload.company_id;
+        } else if (crpScopePayload.parameter_pack_origin === 'college') {
+          insertPayload.college_id = crpScopePayload.college_id;
+        } else {
+          insertPayload.user_id = crpScopePayload.user_id;
+        }
         const result = await supabase
           .from('custom_role_parameters')
-          .insert({
-            role_name: roleName,
-            custom_parameters: customCompetencies,
-            interview_type: formData.interviewType,
-            structured_questions: {}, // No structured questions for AI interviews
-            personalized_questions: formData.personalizedQuestionsEnabled ? formData.personalizedQuestions : null,
-            user_id: user?.id,
-            is_active: true
-          })
+          .insert(insertPayload)
           .select()
           .single();
         data = result.data;
@@ -1376,6 +1642,32 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       if (error) throw error;
 
       setCompetenciesSaved(true);
+
+      if (tpoCampusTemplatePersist && data?.id && selectedTemplateId) {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData?.session?.access_token;
+          const patchRes = await fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.TPO_CAMPUS_INTERVIEWS}/${selectedTemplateId}`), {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              custom_role_parameters_id: data.id,
+              interview_mode: formData.interviewMode,
+              interview_type: formData.interviewType,
+            }),
+          });
+          if (!patchRes.ok) {
+            console.warn('TPO template competency link failed:', await patchRes.text());
+          }
+        } catch (e) {
+          console.warn('TPO template competency link error:', e);
+        }
+      } else if (tpoCampusTemplatePersist && data?.id && !selectedTemplateId) {
+        toast.error('Please select a role template before saving competencies.', { id: 'tpo-template-select-required' });
+      }
       
       // Don't recalculate duration after saving - keep the current duration
       // The duration should remain the same as what was calculated before saving
@@ -1384,7 +1676,8 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       console.log('✅ Competencies saved/updated for role:', roleName);
     } catch (error) {
       console.error('Error saving competencies:', error);
-      toast.error('Failed to save competencies', { id: 'params-save-error' });
+      const message = error instanceof Error ? error.message : 'Failed to save competencies';
+      toast.error(message.includes('already exists') ? message : 'Failed to save competencies', { id: 'params-save-error' });
     } finally {
       setIsSavingCompetencies(false);
     }
@@ -1633,7 +1926,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
     return () => clearTimeout(t);
   }, [onSectionReady]);
 
-  const isCandidate = !!candidateId;
+  const isCandidate = !!candidateId || tpoEmbeddedWorkflow || !!tpoCampusTemplatePersist;
   const titleClass = isCandidate ? 'text-sky-800' : 'text-primary-800';
 
   return (
@@ -1642,8 +1935,8 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
       <div className="lg:hidden">
         <CompactStepProgress
           current={currentStep}
-          total={INTERVIEW_WORKFLOW_STEPS.length}
-          steps={INTERVIEW_WORKFLOW_STEPS}
+          total={embeddedInterviewWorkflowSteps.length}
+          steps={embeddedInterviewWorkflowSteps}
           onStepClick={navigateToStep}
           allowClickAnyStep={isCandidateFlow}
           theme={isCandidateFlow ? 'candidate' : 'default'}
@@ -1890,12 +2183,12 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
             <div className="space-y-4 min-w-0">
               <div className="space-y-2">
                 <Label className="text-sm sm:text-base">Select Role *</Label>
-                <Select onValueChange={handleJobDescriptionSelect}>
+                <Select value={selectedTemplateId} onValueChange={handleJobDescriptionSelect}>
                   <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
                     <SelectValue placeholder="Select a role from existing job descriptions..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {effectiveJobDescriptions.map((jd: { jd_id: string; title: string | null }) => (
+                    {effectiveJobDescriptions.map((jd: InjectedJD) => (
                       <SelectItem key={jd.jd_id} value={jd.jd_id}>
                         {jd.title ?? 'Untitled'}
                       </SelectItem>
@@ -1914,6 +2207,11 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                   placeholder="Enter new role name if creating a new position"
                   className="text-sm sm:text-base"
                 />
+                {roleNameCheckState !== 'idle' && (
+                  <p className={`text-xs ${roleNameCheckState === 'taken' ? 'text-red-600' : roleNameCheckState === 'available' ? 'text-emerald-600' : 'text-gray-500'}`}>
+                    {roleNameCheckMessage}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -1957,9 +2255,9 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                     value={formData.interviewType} 
                     onValueChange={async (value: 'functional' | 'behavioral' | 'mixed') => {
                       setFormData(prev => ({ ...prev, interviewType: value }));
-                      // Trigger competency loading when interview type changes
+                      // Load using the newly selected value (avoid stale state race)
                       if (formData.position) {
-                        await loadCompetenciesForPosition(formData.position);
+                        await loadCompetenciesForPosition(formData.position, formData.interviewMode, value);
                       }
                     }}
                   >
@@ -1989,7 +2287,7 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                 <div
                   className={`border-2 border-dashed rounded-lg p-4 sm:p-6 text-center transition-colors ${
                     isDragOver 
-                      ? (candidateId ? 'border-sky-500 bg-sky-50' : 'border-primary-500 bg-primary-50')
+                      ? (isCandidate ? 'border-sky-500 bg-sky-50' : 'border-primary-500 bg-primary-50')
                       : 'border-gray-300 hover:border-gray-400'
                   }`}
                   onDragOver={handleDragOver}
@@ -2759,7 +3057,9 @@ const HRInterviewCreator = ({ onSectionReady, injectedJobDescriptions, injectedL
                   role_name: roleName,
                   questions: questions,
                   duration: duration,
-                  user_id: user?.id
+                  interview_mode: 'structured',
+                  interview_type: formData.interviewType,
+                  ...crpScopePayload
                 })
               });
 

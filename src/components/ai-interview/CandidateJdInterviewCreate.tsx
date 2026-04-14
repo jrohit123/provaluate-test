@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 
 interface CandidateJdInterviewCreateProps {
   candidateId: string;
+  hideCandidateProfileWarning?: boolean;
 }
 
 function mapRowToInjectedJD(row: { id: string; title: string | null; extracted_text?: string | null; jd_file?: string | null; created_at?: string }): InjectedJD {
@@ -21,7 +22,10 @@ function mapRowToInjectedJD(row: { id: string; title: string | null; extracted_t
  * Interview creation (HRInterviewCreator) for candidate dashboard.
  * Loads JDs from jd_candidates only; recruiter flow is unchanged.
  */
-export default function CandidateJdInterviewCreate({ candidateId }: CandidateJdInterviewCreateProps) {
+export default function CandidateJdInterviewCreate({
+  candidateId,
+  hideCandidateProfileWarning = false,
+}: CandidateJdInterviewCreateProps) {
   const [injectedJobDescriptions, setInjectedJobDescriptions] = useState<InjectedJD[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -65,6 +69,7 @@ export default function CandidateJdInterviewCreate({ candidateId }: CandidateJdI
           injectedJobDescriptions={injectedJobDescriptions}
           injectedLoadJobDescriptions={loadJobDescriptions}
           candidateId={candidateId}
+          hideCandidateProfileWarning={hideCandidateProfileWarning}
         />
       )}
     </div>
