@@ -38,6 +38,20 @@ function formatOverallScore(score: number | string | null | undefined): string {
   return (Math.round(n * 10) / 10).toFixed(1);
 }
 
+function resolveDisplayInterviewScore(
+  interview: { overall_score?: number | string | null; total_score?: number | string | null } | null | undefined,
+  competencyCount: number
+): number | null {
+  if (!interview) return null;
+  const total = interview.total_score == null || interview.total_score === '' ? null : Number(interview.total_score);
+  const overall = interview.overall_score == null || interview.overall_score === '' ? null : Number(interview.overall_score);
+  const safeTotal = total != null && Number.isFinite(total) ? total : null;
+  const safeOverall = overall != null && Number.isFinite(overall) ? overall : null;
+
+  if (competencyCount <= 1) return safeTotal ?? safeOverall;
+  return safeOverall ?? safeTotal;
+}
+
 /** Remove "Speech Analysis Report for [Name]" line from the start of the report (bold or plain). */
 function stripSpeechReportTitleLine(raw: string): string {
   const trimmed = raw.trim();
@@ -1108,7 +1122,14 @@ const FinalResults = () => {
       reportContent += `CANDIDATE: ${reportData.interview?.candidate_name || 'N/A'}\n`;
       reportContent += `POSITION: ${reportData.interview?.position || 'N/A'}\n`;
       // Remove Interview Type from text report - not needed
-      reportContent += `OVERALL SCORE: ${formatOverallScore(reportData.interview?.overall_score)}/10\n`;
+      reportContent += `OVERALL SCORE: ${formatOverallScore(resolveDisplayInterviewScore(
+        reportData.interview,
+        Array.isArray(reportData.parameters)
+          ? reportData.parameters.length
+          : reportData.parameters
+            ? Object.keys(reportData.parameters).length
+            : 0
+      ))}/10\n`;
       reportContent += `TOTAL QUESTIONS: ${reportData.questions?.length || 0}\n`;
       reportContent += `ASSESSMENT DATE: ${formatOrdinalDate(reportData.interview?.created_at)}\n`;
       reportContent += `REPORT GENERATED: ${formatOrdinalDate(new Date())}\n\n`;
@@ -1258,7 +1279,14 @@ const FinalResults = () => {
       doc.text(`Interview Type: ${reportData.interview?.interview_type || 'N/A'}`, 15, yPosition + 16);
       
       // Right column
-      doc.text(`Overall Score: ${formatOverallScore(reportData.interview?.overall_score)}/10`, 110, yPosition);
+      doc.text(`Overall Score: ${formatOverallScore(resolveDisplayInterviewScore(
+        reportData.interview,
+        Array.isArray(reportData.parameters)
+          ? reportData.parameters.length
+          : reportData.parameters
+            ? Object.keys(reportData.parameters).length
+            : 0
+      ))}/10`, 110, yPosition);
       doc.text(`Total Questions: ${reportData.questions?.length || 0}`, 110, yPosition + 8);
       doc.text(`Date: ${formatOrdinalDate(reportData.interview?.created_at)}`, 110, yPosition + 16);
       
@@ -1437,11 +1465,25 @@ const FinalResults = () => {
       // Add data rows
       overviewSheet.addRow(['Candidate Name', reportData.interview?.candidate_name || 'N/A']);
       overviewSheet.addRow(['Position Applied', reportData.interview?.position || 'N/A']);
-      overviewSheet.addRow(['Overall Score', formatOverallScore(reportData.interview?.overall_score)]);
+      overviewSheet.addRow(['Overall Score', formatOverallScore(resolveDisplayInterviewScore(
+        reportData.interview,
+        Array.isArray(reportData.parameters)
+          ? reportData.parameters.length
+          : reportData.parameters
+            ? Object.keys(reportData.parameters).length
+            : 0
+      ))]);
       overviewSheet.addRow(['Total Questions', (reportData.questions?.length || 0).toString()]);
       overviewSheet.addRow(['Assessment Date', formatOrdinalDate(reportData.interview?.created_at)]);
       overviewSheet.addRow(['Report generated time', new Date().toLocaleTimeString()]);
-      overviewSheet.addRow(['Performance Level', getScoreLabel(reportData.interview?.overall_score || 0)]);
+      overviewSheet.addRow(['Performance Level', getScoreLabel(resolveDisplayInterviewScore(
+        reportData.interview,
+        Array.isArray(reportData.parameters)
+          ? reportData.parameters.length
+          : reportData.parameters
+            ? Object.keys(reportData.parameters).length
+            : 0
+      ) || 0)]);
       if (reportData.interview?.status === 'terminated' && reportData.interview?.termination_reason) {
         overviewSheet.addRow(['Termination Reason', reportData.interview.termination_reason]);
       }
@@ -2043,6 +2085,7 @@ const FinalResults = () => {
     : competenciesReport
       ? Object.keys(competenciesReport).length
       : 0;
+  const displayInterviewScore = resolveDisplayInterviewScore(interview, competencyCount);
 
   // PDF Generation Function
   const generatePDFReport = async () => {
@@ -2175,7 +2218,7 @@ const FinalResults = () => {
         ['Candidate', interview.candidate_name || 'N/A'],
         ['Email', interview.candidate_email || 'N/A'],
         ['Position', interview.position || 'N/A'],
-        ['Overall Score', `${formatOverallScore(interview.overall_score)}/10`],
+        ['Overall Score', `${formatOverallScore(displayInterviewScore)}/10`],
         ['Interview Date', formatOrdinalDate(interview.created_at)],
       ];
       if (interview.status === 'terminated' && interview.termination_reason) {
@@ -2193,7 +2236,7 @@ const FinalResults = () => {
           fontSize: 9,
           cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
           lineColor: [208, 223, 245] as [number, number, number],
-          lineWidth: 0.3,
+          lineWidth: 0,
           textColor: [60, 60, 80] as [number, number, number],
         },
         columnStyles: {
@@ -2211,8 +2254,26 @@ const FinalResults = () => {
         },
         margin: { left: tableMargin, right: tableMargin },
       });
+      const candidateTableEndY = (doc as any).lastAutoTable?.finalY ?? (candidateTableStartY + candidateRows.length * 10);
+      const candidateTableHeight = Math.max(8, candidateTableEndY - candidateTableStartY);
+      doc.setDrawColor(208, 223, 245);
+      doc.setLineWidth(0.3);
+      // Inner grid lines (custom) so we can keep rounded outer corners clean.
+      const rowH = candidateTableHeight / Math.max(1, candidateRows.length);
+      doc.line(
+        tableMargin + fieldColWidth,
+        candidateTableStartY,
+        tableMargin + fieldColWidth,
+        candidateTableEndY
+      );
+      for (let i = 1; i < candidateRows.length; i += 1) {
+        const y = candidateTableStartY + rowH * i;
+        doc.line(tableMargin, y, tableMargin + tableTotalWidth, y);
+      }
+      doc.setLineWidth(0.8);
+      doc.roundedRect(tableMargin, candidateTableStartY, tableTotalWidth, candidateTableHeight, 2.5, 2.5, 'S');
       const leftMargin = 15;
-      let execSummaryY = (doc as any).lastAutoTable?.finalY ?? candidateTableStartY + 20;
+      let execSummaryY = candidateTableEndY;
       execSummaryY += 18;
 
       // Executive Summary – title centered, all caps, bold; one paragraph left aligned
@@ -3463,7 +3524,7 @@ const FinalResults = () => {
         {/* Interview Overview - Two Cards */}
         <div className="grid grid-cols-1 sm:[grid-template-columns:minmax(260px,320px)_1fr] gap-4 sm:gap-6 mb-6 sm:mb-10 items-stretch">
           {/* Card 1: Overall Score - Circular Diagram */}
-          <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm flex flex-col items-center justify-center w-full">
+          <div className="rounded-lg p-4 sm:p-6 bg-[linear-gradient(145deg,#F6FAFF_0%,#EEF6FF_55%,#FFFFFF_100%)] border border-gray-200 shadow-sm flex flex-col items-center justify-center w-full">
             <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex-shrink-0">
               <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
                 {isCandidateReport && (
@@ -3488,18 +3549,18 @@ const FinalResults = () => {
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className={`text-3xl sm:text-4xl font-bold ${accentText}`}>
-                  {interview?.overall_score != null ? `${formatOverallScore(interview.overall_score)}/10` : 'N/A'}
+                  {displayInterviewScore != null ? `${formatOverallScore(displayInterviewScore)}/10` : 'N/A'}
                 </span>
                 <span className="text-sm sm:text-base text-gray-600 mt-1">Overall Score</span>
               </div>
             </div>
-            <div className={`text-sm sm:text-base mt-2 px-3 py-1 rounded-full text-white ${getScoreClass(interview?.overall_score || 0)}`}>
-              {getScoreLabel(interview?.overall_score || 0)}
+            <div className={`text-sm sm:text-base mt-2 px-3 py-1 rounded-full text-white ${getScoreClass(displayInterviewScore || 0)}`}>
+              {getScoreLabel(displayInterviewScore || 0)}
             </div>
           </div>
 
           {/* Card 2: Interview Summary */}
-          <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm">
+          <div className="rounded-lg p-4 sm:p-6 bg-[linear-gradient(145deg,#F6FAFF_0%,#EEF6FF_55%,#FFFFFF_100%)] border border-gray-200 shadow-sm">
             <h2 className="text-xl sm:text-2xl font-bold mb-4 flex items-center text-gray-900">
               <BarChart3 className={`h-5 w-5 sm:h-6 sm:w-6 mr-2 ${accentText} flex-shrink-0`} />
               Interview Summary
@@ -3542,7 +3603,7 @@ const FinalResults = () => {
 
         {/* Competency Performance */}
         {reportData?.questions?.length && reportData?.answers?.length ? (
-          <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm mb-6 sm:mb-10">
+          <div className="rounded-lg p-4 sm:p-6 bg-[linear-gradient(145deg,#F6FAFF_0%,#EEF6FF_55%,#FFFFFF_100%)] border border-gray-200 shadow-sm mb-6 sm:mb-10">
             <h2 className="text-xl sm:text-2xl font-bold mb-4 flex items-center text-gray-900">
               <Award className={`h-5 w-5 sm:h-6 sm:w-6 mr-2 ${accentText} flex-shrink-0`} />
               Competency Performance
@@ -3576,9 +3637,9 @@ const FinalResults = () => {
               return (
                 <div className="space-y-3">
                   {rows.map((r) => (
-                    <div key={r.name} className="grid grid-cols-[180px_1fr_52px] gap-3 items-center">
-                      <div className="text-base sm:text-lg text-gray-700 truncate">{r.name}</div>
-                      <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div key={r.name} className="grid grid-cols-[minmax(220px,1fr)_minmax(180px,1fr)_52px] gap-2 items-center">
+                      <div className="text-base sm:text-lg text-gray-700 leading-snug break-words">{r.name}</div>
+                      <div className="h-2.5 rounded-full bg-slate-100 border border-slate-900 overflow-hidden">
                         <div
                           className={`h-full ${colorFor(r.avg)}`}
                           style={{ width: `${Math.max(0, Math.min(100, (r.avg / 10) * 100))}%` }}
@@ -3850,7 +3911,7 @@ selectedCompetencyKey === paramKey
                           return (
                             <div
                               key={idx}
-                              className={`rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden ${cardHover} transition-colors cursor-pointer`}
+                              className={`rounded-xl border border-gray-200 bg-[linear-gradient(145deg,#F6FAFF_0%,#EEF6FF_55%,#FFFFFF_100%)] shadow-sm overflow-hidden ${cardHover} transition-colors cursor-pointer`}
                               onClick={() => toggleQuestion(expandKey)}
                               role="button"
                               tabIndex={0}
@@ -3903,7 +3964,7 @@ selectedCompetencyKey === paramKey
                                     </div>
                                   )}
                                   {(answer.behavioral || answer.behavioral_metrics) && (
-                                    <div className="p-5 bg-sky-100 rounded-lg border border-sky-200">
+                                    <div className="p-5 bg-[#BFD7FF] rounded-lg border border-sky-200">
                                       <h5 className="font-bold mb-3 text-base sm:text-lg text-gray-900">Speech Analysis</h5>
                                       {(() => {
                                         const b = answer.behavioral || answer.behavioral_metrics;
@@ -3966,7 +4027,7 @@ selectedCompetencyKey === paramKey
         {activeTab === 'sp' && (
           <div className="space-y-4 sm:space-y-6">
             {/* Speech Metrics — Overall Average */}
-            <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm">
+            <div className="rounded-lg p-4 sm:p-6 bg-[linear-gradient(145deg,#F6FAFF_0%,#EEF6FF_55%,#FFFFFF_100%)] border border-gray-200 shadow-sm">
               <div
                 className="mb-4 flex items-center justify-between gap-3 cursor-pointer select-none"
                 role="button"
@@ -4386,7 +4447,7 @@ selectedCompetencyKey === paramKey
             </div>
 
             {/* Speech Narrative */}
-            <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm">
+            <div className="rounded-lg p-4 sm:p-6 bg-[linear-gradient(145deg,#F6FAFF_0%,#EEF6FF_55%,#FFFFFF_100%)] border border-gray-200 shadow-sm">
               <div
                 className="mb-4 flex items-center justify-between gap-3 cursor-pointer select-none"
                 role="button"
@@ -4448,7 +4509,7 @@ selectedCompetencyKey === paramKey
             </div>
 
             {/* Personalised Action Plan + Checklist */}
-            <div className="rounded-lg p-4 sm:p-6 bg-white border border-gray-200 shadow-sm">
+            <div className="rounded-lg p-4 sm:p-6 bg-[linear-gradient(145deg,#F6FAFF_0%,#EEF6FF_55%,#FFFFFF_100%)] border border-gray-200 shadow-sm">
               <div
                 className="mb-2 flex items-center justify-between gap-3 cursor-pointer select-none"
                 role="button"
@@ -4490,43 +4551,75 @@ selectedCompetencyKey === paramKey
                 const planRaw = String(reportData?.interview?.personalised_action_plan ?? '').trim();
                 const items = planRaw ? parseActionPlanItems(planRaw) : [];
                 const checklistBlocks = resolveActionPlanChecklistBlocks(reportData?.interview, planRaw);
+                const normalizeLeverageLabel = (raw: string): 'Highest leverage' | 'High leverage' | 'Maintenance' | '' => {
+                  const t = String(raw || '').trim().toLowerCase();
+                  if (t === 'highest leverage') return 'Highest leverage';
+                  if (t === 'high leverage') return 'High leverage';
+                  if (t === 'maintenance') return 'Maintenance';
+                  return '';
+                };
+                const extractLeverageFromTitle = (actionName: string): { cleanName: string; leverage: 'Highest leverage' | 'High leverage' | 'Maintenance' | '' } => {
+                  const nameRaw = String(actionName || '').replace(/\*\*/g, '').trim();
+                  const m = nameRaw.match(/\b(Highest leverage|High leverage|Maintenance)\b/i);
+                  const leverage = normalizeLeverageLabel(m?.[1] ?? '');
+                  const cleanName = nameRaw
+                    .replace(/\b(Highest leverage|High leverage|Maintenance)\b/i, '')
+                    .replace(/\s{2,}/g, ' ')
+                    .trim();
+                  return { cleanName: cleanName || '—', leverage };
+                };
+                const leverageBadgeClass: Record<'Highest leverage' | 'High leverage' | 'Maintenance', string> = {
+                  'Highest leverage': 'bg-rose-100 text-rose-800 border border-rose-200',
+                  'High leverage': 'bg-amber-100 text-amber-800 border border-amber-200',
+                  Maintenance: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+                };
                 const hasAny = items.length > 0 || checklistBlocks.length > 0;
                 if (!hasAny) return <p className="text-sm sm:text-base text-gray-600">No personalised action plan available yet.</p>;
                 return (
                   <div className="space-y-6">
                     {items.length > 0 && (
                       <div className="space-y-4">
-                        {items.map((it) => (
+                        {items.map((it, idx) => {
+                          const parsed = extractLeverageFromTitle(it.actionName || '');
+                          const fallbackLeverage =
+                            idx === items.length - 1 ? 'Maintenance' : idx === 0 ? 'Highest leverage' : 'High leverage';
+                          const leverage = parsed.leverage || fallbackLeverage;
+                          return (
                       <div key={`${it.srNo}-${it.actionName}`} className="rounded-lg border border-gray-200 bg-white p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="text-xs font-semibold tracking-[0.08em] text-gray-600 uppercase">Action {it.srNo}</div>
-                            <div className="mt-1 text-base sm:text-lg font-semibold text-gray-900">{it.actionName}</div>
+                            <div className="text-sm font-bold tracking-[0.08em] text-gray-700 uppercase">Action {it.srNo}</div>
+                            <div className="mt-1 text-base sm:text-lg font-semibold text-gray-900">{parsed.cleanName}</div>
                           </div>
-                          {it.evolutionLabel ? (
-                            <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
-                              {it.evolutionLabel}
+                          <div className="shrink-0 flex items-center gap-2">
+                            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${leverageBadgeClass[leverage]}`}>
+                              {leverage}
                             </span>
-                          ) : null}
+                            {it.evolutionLabel ? (
+                              <span className="rounded-full bg-gray-100 border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                                {it.evolutionLabel}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
 
                         {it.format === 'v2' ? (
                           <div className="mt-3 space-y-3 text-sm sm:text-base text-gray-800">
                             {it.whatYouDid ? (
                               <div>
-                                <div className="text-xs font-semibold tracking-[0.08em] text-gray-600 uppercase">What you did</div>
+                                <div className="text-sm font-bold tracking-[0.08em] text-gray-700 uppercase">What you did</div>
                                 <p className="mt-1 leading-relaxed">{it.whatYouDid}</p>
                               </div>
                             ) : null}
                             {it.whyItMatters ? (
                               <div>
-                                <div className="text-xs font-semibold tracking-[0.08em] text-gray-600 uppercase">Why it matters</div>
+                                <div className="text-sm font-bold tracking-[0.08em] text-gray-700 uppercase">Why it matters</div>
                                 <p className="mt-1 leading-relaxed">{it.whyItMatters}</p>
                               </div>
                             ) : null}
                             {it.betweenInterviews ? (
                               <div className="rounded-md border border-[#0d6ea3]/20 bg-[#0d6ea3]/5 p-3">
-                                <div className="text-xs font-semibold tracking-[0.08em] text-[#0d6ea3] uppercase">Between interviews</div>
+                                <div className="text-sm font-bold tracking-[0.08em] text-[#0d6ea3] uppercase">Between interviews</div>
                                 <p className="mt-1 leading-relaxed text-gray-800">{it.betweenInterviews}</p>
                               </div>
                             ) : null}
@@ -4539,7 +4632,8 @@ selectedCompetencyKey === paramKey
                           </div>
                         )}
                       </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
 

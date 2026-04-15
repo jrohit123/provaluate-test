@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ChartContainer } from '@/components/ui/chart';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceArea } from 'recharts';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { formatScoreTenPoint } from '@/lib/formatScoreTenPoint';
 
 export type PerformanceInterviewRow = {
   id: string;
@@ -32,10 +33,29 @@ export type ProgressItem = {
   position: string;
   completed_at: string | null;
   overall_score: number | null;
+  total_score?: number | null;
+  competency_count?: number;
+  score_for_display?: number | null;
   interview_source?: string | null;
   competency_scores: Record<string, number>;
   speech_metrics?: SpeechMetrics | null;
 };
+
+function resolveDisplayScore(
+  progressItem: ProgressItem | undefined,
+  interviewRow: PerformanceInterviewRow
+): number | null {
+  if (progressItem) {
+    if (progressItem.score_for_display != null) return progressItem.score_for_display;
+    const scoreCount = typeof progressItem.competency_count === 'number'
+      ? progressItem.competency_count
+      : Object.values(progressItem.competency_scores || {}).filter((v) => v != null).length;
+    if (scoreCount <= 1 && progressItem.total_score != null) return progressItem.total_score;
+    if (progressItem.overall_score != null) return progressItem.overall_score;
+    if (progressItem.total_score != null) return progressItem.total_score;
+  }
+  return interviewRow.overall_score != null ? interviewRow.overall_score : null;
+}
 
 const CHART_OVERALL = 'overall' as const;
 type ChartMetricOption = typeof CHART_OVERALL | keyof SpeechMetrics;
@@ -125,7 +145,18 @@ export function StudentPerformanceReportView({
   const chartData = useMemo(
     () =>
       progress
-        .filter((p) => p.overall_score != null)
+        .map((p) => ({
+          ...p,
+          _display_score:
+            p.score_for_display != null
+              ? p.score_for_display
+              : ((typeof p.competency_count === 'number'
+                  ? p.competency_count
+                  : Object.values(p.competency_scores || {}).filter((v) => v != null).length) <= 1 && p.total_score != null)
+                ? p.total_score
+                : p.overall_score,
+        }))
+        .filter((p) => p._display_score != null)
         .sort((a, b) => new Date(a.completed_at || 0).getTime() - new Date(b.completed_at || 0).getTime())
         .map((p, idx) => {
           const isCampus = (p.interview_source || '').toLowerCase() === 'campus';
@@ -137,7 +168,7 @@ export function StudentPerformanceReportView({
               : `${isCampus ? `Interview ${idx + 1} (Campus)` : `Interview ${idx + 1}`}`;
           return {
             name: shortName,
-            score: p.overall_score ?? 0,
+            score: p._display_score ?? 0,
             fullLabel,
           };
         }),
@@ -196,6 +227,55 @@ export function StudentPerformanceReportView({
   const compactActionBtn =
     'h-9 min-h-[44px] sm:min-h-9 px-3 sm:px-4 text-xs sm:text-sm touch-manipulation w-auto max-w-full self-start inline-flex items-center justify-center';
 
+  const individualSummary = useMemo(() => {
+    const latest = progressSortedByDate.length > 0 ? progressSortedByDate[progressSortedByDate.length - 1] : null;
+    if (!latest) return null;
+
+    const studentName =
+      list.find((i) => (i.candidate_name || '').trim())?.candidate_name?.trim() ||
+      latest.position ||
+      'Student';
+    const roleLabel = latest.position || list.find((i) => i.position)?.position || 'Interview role';
+
+    const scores = progressSortedByDate
+      .map((p) => p.score_for_display ?? p.overall_score ?? p.total_score ?? null)
+      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const avgOverall = scores.length > 0 ? Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1)) : null;
+    const attempts = progressSortedByDate.length;
+    const status = avgOverall != null ? (avgOverall >= 7 ? 'Interview-ready' : avgOverall >= 5 ? 'Needs practice' : 'Needs coaching') : '—';
+
+    const priorAttempts = progressSortedByDate.slice(0, -1);
+    const competencyValuesByKey = new Map<string, number[]>();
+    for (const p of priorAttempts) {
+      for (const [k, v] of Object.entries(p.competency_scores || {})) {
+        if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+        if (!competencyValuesByKey.has(k)) competencyValuesByKey.set(k, []);
+        competencyValuesByKey.get(k)!.push(v);
+      }
+    }
+
+    const latestCompetencyEntries = Object.entries(latest.competency_scores || {}).filter(
+      ([, v]) => typeof v === 'number' && Number.isFinite(v)
+    ) as Array<[string, number]>;
+
+    const competencyRows = latestCompetencyEntries.map(([key, score]) => {
+      const series = competencyValuesByKey.get(key) || [];
+      const baseline = series.length > 0 ? Number((series.reduce((a, b) => a + b, 0) / series.length).toFixed(1)) : null;
+      const delta = baseline != null ? Number((score - baseline).toFixed(1)) : null;
+      return { key, score, baseline, delta };
+    });
+
+    return {
+      studentName,
+      roleLabel,
+      avgOverall,
+      attempts,
+      status,
+      baselineOverall: avgOverall,
+      competencyRows,
+    };
+  }, [progressSortedByDate, list]);
+
   return (
     <div className="w-full min-w-0 pb-4 sm:pb-0">
       <h2
@@ -238,11 +318,17 @@ export function StudentPerformanceReportView({
                 <LineChart data={chartData} margin={{ top: 10, right: 10, left: 14, bottom: 24 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(0 0% 90%)" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#111827' }} tickFormatter={() => ''} label={{ value: 'Interview', position: 'insideBottom', offset: -8, style: { fontSize: 13, fill: '#111827', fontWeight: 500 } }} />
-                  <YAxis domain={[0, 10]} tick={{ fontSize: 12, fill: '#111827' }} width={40} tickMargin={10} tickFormatter={(v) => `${v}/10`} />
+                  <YAxis
+                    domain={[0, 10]}
+                    tick={{ fontSize: 12, fill: '#111827' }}
+                    width={40}
+                    tickMargin={10}
+                    tickFormatter={(v) => `${formatScoreTenPoint(Number(v))}/10`}
+                  />
                   <Tooltip
                     contentStyle={{ fontSize: tooltipFontSize }}
                     labelStyle={{ fontSize: tooltipFontSize }}
-                    formatter={(value: number) => [`${Number(value).toFixed(1)}/10`, 'Score']}
+                    formatter={(value: number) => [`${formatScoreTenPoint(Number(value))}/10`, 'Score']}
                     labelFormatter={(_, payload) => (payload?.[0]?.payload?.fullLabel ?? '')}
                   />
                   <Line type="monotone" dataKey="score" stroke="var(--color-score)" strokeWidth={2} dot={{ r: 4 }} name="Overall score" />
@@ -323,12 +409,7 @@ export function StudentPerformanceReportView({
           {visibleInterviewList.map((i) => {
             if (isCampusInterviewRow(i)) {
               const progCampus = progressByInterviewId[i.id];
-              const scoreCampus =
-                progCampus?.overall_score != null
-                  ? progCampus.overall_score
-                  : i.overall_score != null
-                    ? i.overall_score
-                    : null;
+              const scoreCampus = resolveDisplayScore(progCampus, i);
               const completedAtRaw = progCampus?.completed_at ?? i.completed_at;
               const atMs = completedAtRaw || i.created_at;
               const dateTimeCampus = atMs ? new Date(atMs).toLocaleString() : '';
@@ -342,7 +423,7 @@ export function StudentPerformanceReportView({
                         {i.status ?? '—'}
                         {i.status === 'completed' && scoreCampus != null && (
                           <span className="ml-2 font-semibold text-sky-600">
-                            {Number(scoreCampus).toFixed(1)}/10
+                            {formatScoreTenPoint(Number(scoreCampus))}/10
                           </span>
                         )}
                       </p>
@@ -388,12 +469,7 @@ export function StudentPerformanceReportView({
             }
 
             const prog = progressByInterviewId[i.id];
-            const score =
-              prog?.overall_score != null
-                ? prog.overall_score
-                : i.overall_score != null
-                  ? i.overall_score
-                  : null;
+            const score = resolveDisplayScore(prog, i);
             const completedAtPers = prog?.completed_at ?? i.completed_at;
             const atMsPers = completedAtPers || i.created_at;
             const dateTimePersonal = atMsPers ? new Date(atMsPers).toLocaleString() : '';
@@ -406,7 +482,7 @@ export function StudentPerformanceReportView({
                     <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
                       {i.status ?? '—'}
                       {i.status === 'completed' && score != null && (
-                        <span className="ml-2 font-semibold text-sky-600">{Number(score).toFixed(1)}/10</span>
+                        <span className="ml-2 font-semibold text-sky-600">{formatScoreTenPoint(Number(score))}/10</span>
                       )}
                     </p>
                   </div>

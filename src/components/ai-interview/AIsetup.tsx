@@ -141,7 +141,7 @@ const HRInterviewCreator = ({
     personalizedQuestions: []
   });
 
-  const [jobDescriptions, setJobDescriptions] = useState<JobDescription[]>([]);
+  const [jobDescriptions, setJobDescriptions] = useState<InjectedJD[]>([]);
   // Effective JD list: use injected (candidate jd_candidates) or internal (recruiter company JDs)
   const effectiveJobDescriptions = injectedJobDescriptions ?? jobDescriptions;
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
@@ -221,7 +221,7 @@ const HRInterviewCreator = ({
   const loadJobDescriptions = async () => {
     if (!user?.profile?.company_id) return;
     
-    let allJobDescriptions: Array<{ jd_id: string; title: string | null; [key: string]: unknown }> = [];
+    let allJobDescriptions: InjectedJD[] = [];
     
     try {
       setInterviewJobDescriptions([]);
@@ -237,8 +237,11 @@ const HRInterviewCreator = ({
       } else {
         console.log('AI interview JDs loaded:', interviewData?.length || 0, interviewData);
         const mappedInterviewData = (interviewData || []).map(item => ({
-          ...item,
-          jd_id: item.id
+          jd_id: item.id,
+          title: item.title,
+          extracted_text: item.extracted_text,
+          jd_file: item.jd_file,
+          created_at: item.created_at
         }));
         allJobDescriptions = [...allJobDescriptions, ...mappedInterviewData];
         setInterviewJobDescriptions((interviewData || []).map(item => ({
@@ -257,7 +260,7 @@ const HRInterviewCreator = ({
       // Load from job_descriptions table (CV screening) - SECOND
       const { data: cvData, error: cvError } = await supabase
         .from('job_descriptions')
-        .select('jd_id, title, jd_file, created_at, status')
+        .select('jd_id, title, jd_file, created_at, status, content, extracted_text')
         .eq('company_id', user.profile.company_id)
         .eq('status', 'active')
         .order('created_at', { ascending: false });
@@ -266,7 +269,14 @@ const HRInterviewCreator = ({
         console.error('Error loading CV screening JDs:', cvError);
       } else {
         console.log('CV screening JDs loaded:', cvData?.length || 0, cvData);
-        allJobDescriptions = [...allJobDescriptions, ...(cvData || [])];
+        const mappedCvData = (cvData || []).map(item => ({
+          jd_id: item.jd_id,
+          title: item.title,
+          extracted_text: item.extracted_text,
+          jd_file: item.jd_file,
+          created_at: item.created_at
+        }));
+        allJobDescriptions = [...allJobDescriptions, ...mappedCvData];
       }
     } catch (error) {
       console.error('Error loading CV screening JDs:', error);
@@ -452,45 +462,42 @@ const HRInterviewCreator = ({
         ...(configured
           ? {
               interviewMode:
-                selectedJD.interview_mode === 'structured'
+                (selectedJD as any).interview_mode === 'structured'
                   ? 'structured'
-                  : selectedJD.interview_mode === 'ai'
+                  : (selectedJD as any).interview_mode === 'ai'
                     ? 'ai'
                     : prev.interviewMode,
               interviewType:
-                selectedJD.interview_type != null
-                  ? normalizeInterviewTypeForForm(selectedJD.interview_type)
+                (selectedJD as any).interview_type != null
+                  ? normalizeInterviewTypeForForm((selectedJD as any).interview_type)
                   : prev.interviewType,
             }
           : {}),
       }));
-      const modeForLoad = configured
-        ? selectedJD.interview_mode === 'structured'
+      const selectedModeForLoad =
+        configured && (selectedJD as any).interview_mode === 'structured'
           ? 'structured'
-          : selectedJD.interview_mode === 'ai'
-            ? 'ai'
-            : formData.interviewMode
-        : formData.interviewMode;
-      const typeForLoad = configured
-        ? selectedJD.interview_type != null
-          ? normalizeInterviewTypeForForm(selectedJD.interview_type)
-          : formData.interviewType
-        : formData.interviewType;
-      
+          : 'ai';
+      const selectedTypeForLoad =
+        configured && (selectedJD as any).interview_type != null
+          ? normalizeInterviewTypeForForm((selectedJD as any).interview_type)
+          : formData.interviewType;
+      const preferredCrpId = (selectedJD as any).custom_role_parameters_id || undefined;
+      if (preferredCrpId) {
+        // Fast path: load directly by CRP id so existing role configs appear immediately.
+        loadCompetenciesForPosition(
+          selectedTitle,
+          selectedModeForLoad,
+          selectedTypeForLoad,
+          preferredCrpId
+        );
+      }
       // Check if this is from jd_for_interview table (has extracted_text)
       if (selectedJD.extracted_text) {
         // Use the already extracted text from jd_for_interview table
         setFormData(prev => ({ ...prev, jobDescription: selectedJD.extracted_text }));
         showJDLoadedToast(selectedTitle);
         
-        // Load existing competencies for this role (if any)
-        console.log('🔄 Role selection: Loading competencies for:', selectedJD.title);
-        await loadCompetenciesForPosition(
-          selectedTitle,
-          modeForLoad,
-          typeForLoad,
-          selectedJD.custom_role_parameters_id || undefined
-        );
         return;
       }
       
@@ -522,13 +529,6 @@ const HRInterviewCreator = ({
               setFormData(prev => ({ ...prev, jobDescription: plainText }));
               showJDLoadedToast(selectedTitle);
               
-          // Load existing competencies for this role (if any)
-              await loadCompetenciesForPosition(
-                selectedTitle,
-                modeForLoad,
-                typeForLoad,
-                selectedJD.custom_role_parameters_id || undefined
-              );
               return; // Skip file extraction
             } else {
               console.log('⚠️ Resolved JD text too short, falling back to extraction');
@@ -590,13 +590,6 @@ const HRInterviewCreator = ({
            setFormData(prev => ({ ...prev, jobDescription: extractedText }));
           showJDLoadedToast(selectedTitle);
            
-          // Load existing competencies for this role (if any)
-           await loadCompetenciesForPosition(
-             selectedTitle,
-             modeForLoad,
-             typeForLoad,
-             selectedJD.custom_role_parameters_id || undefined
-           );
          } else {
            console.error('Backend extraction failed:', response.status, response.statusText);
            // Fallback to title if extraction fails
@@ -897,6 +890,10 @@ const HRInterviewCreator = ({
     const modeToUse = modeOverride || formData.interviewMode;
     const typeToUse = typeOverride || formData.interviewType;
     console.log('🔍 loadCompetenciesForPosition called with:', { position, interviewMode: modeToUse, interviewType: typeToUse, isLoadingCompetencies });
+    if (tpoCampusTemplatePersist && !tpoCollegeId && !preferredCrpId) {
+      // Wait for TPO college scope before querying CRPs; prevents false "no competencies" on first load.
+      return;
+    }
     
     if (!position) {
       console.log('🔄 No position provided, clearing competencies');
@@ -1445,18 +1442,6 @@ const HRInterviewCreator = ({
     checkInterviewJDLimit();
   }, [user?.profile?.company_id, injectedJobDescriptions]);
 
-  useEffect(() => {
-    // Immediately clear competencies when position changes to prevent showing old competencies
-    console.log('🔄 Position changed to:', formData.position);
-    setCustomCompetencies({});
-    setCompetenciesSaved(false);
-    
-    if (formData.position) {
-      // Call loadCompetenciesForPosition directly to avoid dependency issues
-      loadCompetenciesForPosition(formData.position);
-    }
-  }, [formData.position]);
-
   // Debug: Monitor customCompetencies state changes
   useEffect(() => {
     console.log('🔄 customCompetencies state changed:', Object.keys(customCompetencies).length, 'competencies');
@@ -1494,7 +1479,17 @@ const HRInterviewCreator = ({
       console.log('🔄 Position useEffect: Loading competencies for position:', formData.position);
       loadCompetenciesForPosition(formData.position, formData.interviewMode, formData.interviewType);
     }
-  }, [formData.position, formData.interviewMode, formData.interviewType]);
+  }, [
+    formData.position,
+    formData.interviewMode,
+    formData.interviewType,
+    crpScopePayload.parameter_pack_origin,
+    crpScopePayload.college_id,
+    crpScopePayload.company_id,
+    crpScopePayload.user_id,
+    tpoCampusTemplatePersist,
+    tpoCollegeId,
+  ]);
 
   useEffect(() => {
     const roleName = (formData.newRole || '').trim();
@@ -1927,7 +1922,11 @@ const HRInterviewCreator = ({
   }, [onSectionReady]);
 
   const isCandidate = !!candidateId || tpoEmbeddedWorkflow || !!tpoCampusTemplatePersist;
-  const titleClass = isCandidate ? 'text-sky-800' : 'text-primary-800';
+  const useCandidateAuthPalette = !!candidateId;
+  const titleClass = isCandidate ? '[color:#020f1a]' : '[color:#020f1a]';
+  const competencyActionBtnClass = useCandidateAuthPalette
+    ? 'flex items-center gap-2 w-full sm:w-auto [background:linear-gradient(135deg,#1a9fd6,#2563eb)] hover:[background:linear-gradient(135deg,#1490c0,#1d4ed8)] text-white'
+    : 'flex items-center gap-2 w-full sm:w-auto [background:linear-gradient(135deg,#020f1a,#042C53)] hover:[background:linear-gradient(135deg,#031525,#053565)] text-white';
 
   return (
     <div className="min-h-screen w-full min-w-0 overflow-x-hidden">
@@ -2451,7 +2450,7 @@ const HRInterviewCreator = ({
                 <Button
                   onClick={() => generateDynamicCompetencies(true)} // Always force fresh generation
                   disabled={isLoadingCompetencies || !formData.position}
-                  className={isCandidate ? 'flex items-center gap-2 w-full sm:w-auto bg-sky-600 hover:bg-sky-700 text-white' : 'flex items-center gap-2 w-full sm:w-auto'}
+                  className={competencyActionBtnClass}
                   title="Generate completely new competencies, ignoring any cached versions"
                 >
                   {isLoadingCompetencies ? (
@@ -2473,7 +2472,7 @@ const HRInterviewCreator = ({
                 <Button
                   onClick={saveCompetencies}
                   disabled={isSavingCompetencies || Math.abs(calculateTotalWeightage() - 100) > 0.01}
-                  className={isCandidate ? 'flex items-center gap-2 bg-sky-600 hover:bg-sky-700 text-white w-full sm:w-auto' : 'flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto'}
+                  className={competencyActionBtnClass}
                 >
                   {isSavingCompetencies ? (
                     <>

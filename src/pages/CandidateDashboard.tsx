@@ -28,6 +28,7 @@ import {
 } from '@/components/ai-interview/StudentPerformanceReportView';
 import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
 import { INTERVIEW_WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
+import { formatScoreTenPoint } from '@/lib/formatScoreTenPoint';
 
 const CandidateDashboard = () => {
   const { user } = useAuthContext();
@@ -307,6 +308,7 @@ function PersonalInterviewsSection({
   embedded?: boolean;
 }) {
   const [list, setList] = useState<PerformanceInterviewRow[]>([]);
+  const [displayScoreByInterviewId, setDisplayScoreByInterviewId] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -320,7 +322,7 @@ function PersonalInterviewsSection({
       const seen = new Set<string>();
       const merged: PerformanceInterviewRow[] = [];
       const selectCols =
-        'id, position, status, created_at, completed_at, overall_score, candidate_name, interview_source, campus_template_id';
+        'id, position, status, created_at, completed_at, total_score, overall_score, candidate_name, interview_source, campus_template_id';
       if (candidateId) {
         const { data, error: e } = await supabase
           .from('interviews')
@@ -355,6 +357,47 @@ function PersonalInterviewsSection({
             }
           }
         }
+      }
+      if (merged.length > 0) {
+        try {
+          const ids = merged.map((r) => r.id).filter(Boolean);
+          const { data: psRows } = await supabase
+            .from('interview_parameter_scores')
+            .select('interview_id, parameter_scores')
+            .in('interview_id', ids);
+          const psByInterview = new Map<string, Record<string, unknown>>();
+          for (const row of (psRows || []) as Array<{ interview_id?: string; parameter_scores?: Record<string, unknown> }>) {
+            if (!row?.interview_id) continue;
+            psByInterview.set(row.interview_id, row.parameter_scores || {});
+          }
+          const nextDisplay: Record<string, number> = {};
+          for (const row of merged) {
+            const ps = psByInterview.get(row.id) || {};
+            let competencyCount = 0;
+            for (const v of Object.values(ps)) {
+              if (v && typeof v === 'object') {
+                const vv = (v as Record<string, unknown>).final_score ?? (v as Record<string, unknown>).score;
+                if (typeof vv === 'number' && Number.isFinite(vv)) competencyCount += 1;
+              } else if (typeof v === 'number' && Number.isFinite(v)) {
+                competencyCount += 1;
+              }
+            }
+            const total = row.total_score;
+            const overall = row.overall_score;
+            const sc =
+              competencyCount <= 1
+                ? (total ?? overall ?? null)
+                : (overall ?? total ?? null);
+            if (typeof sc === 'number' && Number.isFinite(sc)) {
+              nextDisplay[row.id] = sc;
+            }
+          }
+          setDisplayScoreByInterviewId(nextDisplay);
+        } catch {
+          setDisplayScoreByInterviewId({});
+        }
+      } else {
+        setDisplayScoreByInterviewId({});
       }
       merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setList(merged);
@@ -401,6 +444,7 @@ function PersonalInterviewsSection({
             const inProgress =
               !!row.status && row.status !== 'completed' && row.status !== 'terminated';
             const terminated = row.status === 'terminated';
+            const displayScore = displayScoreByInterviewId[row.id] ?? row.overall_score ?? row.total_score ?? null;
 
             return (
               <li key={row.id} className={CANDIDATE_INTERVIEW_CARD_CLASS}>
@@ -409,8 +453,8 @@ function PersonalInterviewsSection({
                     <p className="font-semibold text-gray-900 text-base sm:text-lg leading-snug">{row.position ?? 'Interview'}</p>
                     <p className="text-xs sm:text-sm text-gray-500">
                       {row.status ?? '—'}
-                      {row.status === 'completed' && row.overall_score != null && (
-                        <span className="ml-2 font-semibold text-sky-600">{Number(row.overall_score).toFixed(1)}/10</span>
+                      {row.status === 'completed' && displayScore != null && (
+                        <span className="ml-2 font-semibold text-sky-600">{formatScoreTenPoint(Number(displayScore))}/10</span>
                       )}
                     </p>
                   </div>
@@ -554,18 +598,6 @@ type CampusTemplate = {
   } | null;
 };
 
-type CampusOpportunity = {
-  id: string;
-  invite_id: string;
-  template_id: string;
-  status: 'invited' | 'applied' | 'shortlisted' | 'rejected' | 'published' | 'withdrawn' | string;
-  invite_title?: string | null;
-  invite_message?: string | null;
-  template_title?: string | null;
-  template_position?: string | null;
-  applied_at?: string | null;
-};
-
 function CampusInterviewsSection({
   candidateId,
   candidateEmail,
@@ -584,10 +616,7 @@ function CampusInterviewsSection({
   const [jdModalTemplate, setJdModalTemplate] = useState<CampusTemplate | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<CampusTemplate[]>([]);
-  const [opportunities, setOpportunities] = useState<CampusOpportunity[]>([]);
-  const [loadingOpportunities, setLoadingOpportunities] = useState(false);
-  const [applyingInviteId, setApplyingInviteId] = useState<string | null>(null);
-  const isCampusLoading = loading || loadingOpportunities;
+  const isCampusLoading = loading;
 
   const getAuthHeaders = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -617,49 +646,9 @@ function CampusInterviewsSection({
     }
   }, []);
 
-  const loadOpportunities = useCallback(async () => {
-    setLoadingOpportunities(true);
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_CAMPUS_OPPORTUNITIES), {
-        method: 'GET',
-        headers,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((data as { error?: string })?.error || 'Failed to load opportunities');
-      setOpportunities(((data as { opportunities?: CampusOpportunity[] }).opportunities || []) as CampusOpportunity[]);
-    } catch {
-      setOpportunities([]);
-    } finally {
-      setLoadingOpportunities(false);
-    }
-  }, []);
-
   useEffect(() => {
     loadTemplates();
   }, [loadTemplates]);
-
-  useEffect(() => {
-    loadOpportunities();
-  }, [loadOpportunities]);
-
-  const applyForOpportunity = async (inviteId: string) => {
-    try {
-      setApplyingInviteId(inviteId);
-      const headers = await getAuthHeaders();
-      const res = await fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.CANDIDATE_CAMPUS_OPPORTUNITIES}/${inviteId}/apply`), {
-        method: 'POST',
-        headers,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((data as { error?: string })?.error || 'Could not submit application');
-      await Promise.all([loadOpportunities(), loadTemplates()]);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not submit application');
-    } finally {
-      setApplyingInviteId(null);
-    }
-  };
 
   const startCampusInterview = async (tpl: CampusTemplate) => {
     if (!candidateId || !candidateEmail) {
@@ -742,42 +731,6 @@ function CampusInterviewsSection({
         </div>
       )}
       {error && <p className="text-red-600 text-sm sm:text-base mb-4">{error}</p>}
-      {!isCampusLoading && opportunities.length > 0 ? (
-        <Card className="mb-4 border-sky-200">
-          <CardHeader>
-            <CardTitle className="text-base sm:text-lg">Role opportunities</CardTitle>
-            <CardDescription>Apply first. Once shortlisted and published by TPO, the interview appears below.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {opportunities.map((op) => (
-              <div key={op.id} className="border rounded-md p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-medium text-gray-900 truncate">{op.template_title || op.template_position || 'Campus role'}</p>
-                  <p className="text-xs sm:text-sm text-gray-600 truncate">
-                    {(op.invite_title || 'Campus interview application')} • {op.status}
-                    {op.applied_at ? ` • applied ${new Date(op.applied_at).toLocaleString()}` : ''}
-                  </p>
-                  {op.invite_message ? <p className="text-xs text-gray-500 mt-1">{op.invite_message}</p> : null}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {(op.status === 'invited' || op.status === 'withdrawn' || op.status === 'rejected') && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={applyingInviteId === op.invite_id}
-                      onClick={() => applyForOpportunity(op.invite_id)}
-                    >
-                      {applyingInviteId === op.invite_id ? 'Applying...' : 'Apply'}
-                    </Button>
-                  )}
-                  {op.status === 'applied' && <span className="text-xs text-amber-700 font-medium">Application submitted</span>}
-                  {op.status === 'shortlisted' && <span className="text-xs text-emerald-700 font-medium">Shortlisted by TPO</span>}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
       {!isCampusLoading && templates.length === 0 && !error && (
         <p className="text-gray-600">No campus interviews are available right now.</p>
       )}
@@ -804,29 +757,11 @@ function CampusInterviewsSection({
                       !!la?.status && la.status !== 'completed' && la.status !== 'terminated';
                     const compactBtn =
                       'h-9 min-h-[44px] sm:min-h-9 px-3 sm:px-4 text-xs sm:text-sm touch-manipulation w-auto max-w-full self-start inline-flex items-center justify-center';
-                    if (completed) {
-                      return (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled
-                          className={`${compactBtn} shrink-0 cursor-not-allowed border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-50 disabled:opacity-100 shadow-sm`}
-                          aria-disabled="true"
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-emerald-700" aria-hidden />
-                            Taken
-                          </span>
-                        </Button>
-                      );
-                    }
-                    const takeDisabled =
-                      (!inProgress && !tpl.can_start) || startingTemplateId === tpl.id;
-                    let label = 'Start interview';
+                    const takeDisabled = startingTemplateId === tpl.id;
+                    let label = 'Take interview';
                     if (startingTemplateId === tpl.id) label = 'Starting...';
                     else if (inProgress) label = 'Continue interview';
-                    else if (!tpl.can_start) label = 'Attempt limit reached';
+                    else if (completed) label = 'Retake interview';
                     const openExisting = () => {
                       if (tpl.last_attempt?.id) {
                         window.open(`/interview/${tpl.last_attempt.id}`, '_blank', 'noopener,noreferrer');
@@ -1039,7 +974,7 @@ function ProfileBuilderSection({ candidateId }: { candidateId: string | undefine
 
   const deleteStructuredEntry = useCallback(async (dataKey: string, index?: number) => {
     const idx = index ?? (editingEntryIndex === 'new' ? -1 : editingEntryIndex);
-    if (idx === null || idx === 'new' || idx < 0) {
+    if (idx === null || idx < 0) {
       setEditingSection(null);
       setEditingEntryIndex(null);
       return;
@@ -1161,45 +1096,52 @@ function ProfileBuilderSection({ candidateId }: { candidateId: string | undefine
                       <>
                         {list.length > 0 ? (
                           <ul className="space-y-3">
-                            {list.map((item: Record<string, unknown> | GenericEntry, i: number) => (
-                              <li key={i} className="flex gap-3 rounded border bg-gray-50 px-3 py-3 text-sm">
-                                <div className="flex-1 min-w-0 space-y-1">
-                                  {editingSection.id === 'education' && (
-                                    <>
-                                      {(item.degree || item.school) && <p className="font-medium text-gray-900">{[item.degree, item.school].filter(Boolean).join(' · ')}</p>}
-                                      {(item.start_date || item.end_date) && <p className="text-gray-600">{[item.start_date, item.end_date].filter(Boolean).join(' – ')}</p>}
-                                      {item.location && <p className="text-gray-600">{String(item.location)}</p>}
-                                      {item.description && <p className="text-gray-600 whitespace-pre-wrap">{String(item.description)}</p>}
-                                    </>
-                                  )}
-                                  {editingSection.id === 'experience' && (
-                                    <>
-                                      {(item.job_title || item.employer) && <p className="font-medium text-gray-900">{[item.job_title, item.employer].filter(Boolean).join(' · ')}</p>}
-                                      {(item.start_date || item.end_date) && <p className="text-gray-600">{[item.start_date, item.end_date].filter(Boolean).join(' – ')}</p>}
-                                      {item.location && <p className="text-gray-600">{String(item.location)}</p>}
-                                      {item.description && <p className="text-gray-600 whitespace-pre-wrap">{String(item.description)}</p>}
-                                    </>
-                                  )}
-                                  {editingSection.id === 'skills' && (
-                                    <>
-                                      {item.skill && <p className="font-medium text-gray-900">{String(item.skill)}</p>}
-                                      {item.level && <p className="text-gray-600">Level: {String(item.level)}</p>}
-                                      {item.information && <p className="text-gray-600 whitespace-pre-wrap">{String(item.information)}</p>}
-                                    </>
-                                  )}
-                                  {!isStructured && (
-                                    <>
-                                      {(item.title || item.name) && <p className="font-medium text-gray-900">{String(item.title || item.name)}</p>}
-                                      {item.description && <p className="text-gray-600 whitespace-pre-wrap">{String(item.description)}</p>}
-                                    </>
-                                  )}
-                                </div>
-                                <div className="flex shrink-0 gap-1 self-start">
-                                  <Button variant="ghost" size="sm" onClick={() => openEntryAtIndex(editingSection, i)}>Edit</Button>
-                                  <Button variant="ghost" size="sm" onClick={() => deleteStructuredEntry(editingSection.dataKey, i)}>Delete</Button>
-                                </div>
-                              </li>
-                            ))}
+                            {list.map((item: unknown, i: number) => {
+                              const obj = (item && typeof item === 'object') ? (item as Record<string, unknown>) : {};
+                              const educationItem = item as EducationEntry;
+                              const experienceItem = item as ExperienceEntry;
+                              const skillItem = item as SkillEntry;
+                              const genericItem = item as GenericEntry & { name?: string };
+                              return (
+                                <li key={i} className="flex gap-3 rounded border bg-gray-50 px-3 py-3 text-sm">
+                                  <div className="flex-1 min-w-0 space-y-1">
+                                    {editingSection.id === 'education' && (
+                                      <>
+                                        {(educationItem.degree || educationItem.school) && <p className="font-medium text-gray-900">{[educationItem.degree, educationItem.school].filter(Boolean).join(' · ')}</p>}
+                                        {(educationItem.start_date || educationItem.end_date) && <p className="text-gray-600">{[educationItem.start_date, educationItem.end_date].filter(Boolean).join(' – ')}</p>}
+                                        {educationItem.location && <p className="text-gray-600">{String(educationItem.location)}</p>}
+                                        {educationItem.description && <p className="text-gray-600 whitespace-pre-wrap">{String(educationItem.description)}</p>}
+                                      </>
+                                    )}
+                                    {editingSection.id === 'experience' && (
+                                      <>
+                                        {(experienceItem.job_title || experienceItem.employer) && <p className="font-medium text-gray-900">{[experienceItem.job_title, experienceItem.employer].filter(Boolean).join(' · ')}</p>}
+                                        {(experienceItem.start_date || experienceItem.end_date) && <p className="text-gray-600">{[experienceItem.start_date, experienceItem.end_date].filter(Boolean).join(' – ')}</p>}
+                                        {experienceItem.location && <p className="text-gray-600">{String(experienceItem.location)}</p>}
+                                        {experienceItem.description && <p className="text-gray-600 whitespace-pre-wrap">{String(experienceItem.description)}</p>}
+                                      </>
+                                    )}
+                                    {editingSection.id === 'skills' && (
+                                      <>
+                                        {skillItem.skill && <p className="font-medium text-gray-900">{String(skillItem.skill)}</p>}
+                                        {skillItem.level && <p className="text-gray-600">Level: {String(skillItem.level)}</p>}
+                                        {skillItem.information && <p className="text-gray-600 whitespace-pre-wrap">{String(skillItem.information)}</p>}
+                                      </>
+                                    )}
+                                    {!isStructured && (
+                                      <>
+                                        {(genericItem.title || genericItem.name) && <p className="font-medium text-gray-900">{String(genericItem.title || genericItem.name)}</p>}
+                                        {(genericItem.description ?? obj.description) && <p className="text-gray-600 whitespace-pre-wrap">{String(genericItem.description ?? obj.description)}</p>}
+                                      </>
+                                    )}
+                                  </div>
+                                  <div className="flex shrink-0 gap-1 self-start">
+                                    <Button variant="ghost" size="sm" onClick={() => openEntryAtIndex(editingSection, i)}>Edit</Button>
+                                    <Button variant="ghost" size="sm" onClick={() => deleteStructuredEntry(editingSection.dataKey, i)}>Delete</Button>
+                                  </div>
+                                </li>
+                              );
+                            })}
                           </ul>
                         ) : (
                           <p className="text-sm text-gray-500 py-2">No entries yet.</p>

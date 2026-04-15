@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -24,16 +24,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { API_CONFIG, buildApiUrl } from '@/constants/api';
 import TpoJdInterviewConfig from '@/components/ai-interview/TpoJdInterviewConfig';
 import {
-  StudentPerformanceReportView,
-  type PerformanceInterviewRow,
-  type ProgressItem,
-} from '@/components/ai-interview/StudentPerformanceReportView';
-import {
   TpoCohortActivityPanel,
   type CohortActivityRow,
   type CohortStats,
   type CohortTemplateInfo,
 } from '@/components/tpo/TpoCohortActivityPanel';
+import {
+  TpoIndividualJourneyPanel,
+  type TpoJourneyInterview,
+} from '@/components/tpo/TpoIndividualJourneyPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Home, Settings2, Activity, Shield, LogOut, Megaphone } from 'lucide-react';
 
@@ -90,7 +89,7 @@ function variantEligibleForCohort(v: NonNullable<TemplateItem['variants']>[numbe
   return v.status === 'published';
 }
 
-/** Campus variants usable in cohort filters: published variant, or one tied to a published student application. */
+/** Campus variants usable in cohort filters: published variants only. */
 function cohortPublishedVariants(t: TemplateItem | null | undefined): NonNullable<TemplateItem['variants']> {
   if (!t?.variants?.length) return [];
   return t.variants.filter(variantEligibleForCohort);
@@ -119,21 +118,6 @@ type InviteItem = {
   };
 };
 
-type InviteApplicationItem = {
-  id: string;
-  invite_id?: string;
-  invite_title?: string | null;
-  invite_message?: string | null;
-  candidate_id: string;
-  candidate_name?: string | null;
-  candidate_email?: string | null;
-  course_name?: string | null;
-  course_code?: string | null;
-  notes?: unknown;
-  status: 'invited' | 'applied' | 'shortlisted' | 'rejected' | 'published' | 'withdrawn' | string;
-  applied_at?: string | null;
-};
-
 type TpoStudentItem = {
   candidate_id: string;
   course_id?: string | null;
@@ -150,6 +134,7 @@ type TpoStudentInterviewItem = {
   created_at: string;
   completed_at?: string | null;
   overall_score?: number | null;
+  total_score?: number | null;
   interview_source?: 'personal' | 'campus' | string;
   campus_template_id?: string | null;
   campus_template_title?: string | null;
@@ -186,7 +171,7 @@ type TpoMeResponse = {
 };
 type TpoUserProfile = NonNullable<TpoMeResponse['tpo_user']>;
 
-type TpoSection = 'home' | 'configure' | 'invite_students' | 'publish_interviews' | 'activity' | 'settings';
+type TpoSection = 'home' | 'configure' | 'invite_students' | 'invite_review' | 'activity' | 'settings';
 
 type CollegeCourseRow = { id: string; course_name: string; course_code: string | null };
 type PublishCompetencySummary = {
@@ -221,36 +206,11 @@ function buildTpoDefaultInviteMessage(roleName: string, modeLabel: string, typeL
     '',
     `This is a message from your college Training & Placement Office (TPO). We have arranged a practice interview for the "${roleName}" role (${aOrAn} ${modeLabel} ${typeLabel} session) so you can get comfortable with the format before company interviews.`,
     '',
-    'If you would like to take part, sign in to your student portal and open Campus interviews to apply.',
+    'Sign in to your student portal, open Campus interviews, and click Take interview when you are ready.',
     '',
     'Warm regards,',
     'Training & Placement Cell',
   ].join('\n');
-}
-
-function parseInviteNotes(notes: unknown): Record<string, unknown> {
-  if (!notes) return {};
-  if (typeof notes === 'object') return notes as Record<string, unknown>;
-  if (typeof notes === 'string') {
-    try {
-      const parsed = JSON.parse(notes);
-      return typeof parsed === 'object' && parsed ? (parsed as Record<string, unknown>) : {};
-    } catch {
-      return {};
-    }
-  }
-  return {};
-}
-
-function inferVariantFromInviteText(text: string): { mode?: 'ai' | 'structured'; type?: 'functional' | 'behavioral' | 'mixed' | 'technical' } {
-  const t = text.toLowerCase();
-  const mode = t.includes('structured') ? 'structured' : t.includes('ai') ? 'ai' : undefined;
-  let type: 'functional' | 'behavioral' | 'mixed' | 'technical' | undefined;
-  if (t.includes('behavioral')) type = 'behavioral';
-  else if (t.includes('functional')) type = 'functional';
-  else if (t.includes('technical')) type = 'technical';
-  else if (t.includes('mixed')) type = 'mixed';
-  return { mode, type };
 }
 
 type TpoSidebarProps = {
@@ -262,7 +222,7 @@ type TpoSidebarProps = {
 function TpoAppSidebar({ activeSection, onSectionChange, fullName }: TpoSidebarProps) {
   const { isMobile, setOpenMobile } = useSidebar();
   const menuBtnClass =
-    'py-3.5 px-3 text-lg font-medium text-gray-800 hover:bg-sky-50 hover:text-sky-800 data-[active=true]:bg-sky-100 data-[active=true]:text-sky-800 [&>svg]:w-6 [&>svg]:h-6';
+    'py-3.5 px-3 text-lg font-medium text-gray-700 hover:bg-blue-100 hover:text-blue-800 data-[active=true]:bg-blue-200 data-[active=true]:text-blue-900 [&>svg]:w-6 [&>svg]:h-6';
 
   const handleSectionNav = (section: TpoSection) => {
     onSectionChange(section);
@@ -270,12 +230,12 @@ function TpoAppSidebar({ activeSection, onSectionChange, fullName }: TpoSidebarP
   };
 
   return (
-    <Sidebar className="border-r border-sky-100 bg-white">
+    <Sidebar className="border-r border-blue-200 [background:linear-gradient(145deg,#EEF2FF_0%,#DCE7FF_42%,#BFD7FF_100%)]">
       <SidebarContent className="gap-0 pt-4 pb-4">
         <SidebarGroup className="px-3 pb-4">
           <div className="flex flex-col items-center gap-4">
             <div
-              className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-800 font-semibold text-3xl"
+              className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-800 font-semibold text-3xl"
               aria-hidden
             >
               {getInitials(fullName)}
@@ -324,17 +284,6 @@ function TpoAppSidebar({ activeSection, onSectionChange, fullName }: TpoSidebarP
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  onClick={() => handleSectionNav('publish_interviews')}
-                  isActive={activeSection === 'publish_interviews'}
-                  tooltip="Publish steps"
-                  className={menuBtnClass}
-                >
-                  <Megaphone className="w-6 h-6 shrink-0" />
-                  <span>Publish steps</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
                   onClick={() => handleSectionNav('activity')}
                   isActive={activeSection === 'activity'}
                   tooltip="Student activity"
@@ -365,6 +314,25 @@ function TpoAppSidebar({ activeSection, onSectionChange, fullName }: TpoSidebarP
 
 const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | null }) => {
   const { toast } = useToast();
+
+  // Add CSS for progress bar animation
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes fillBar {
+        from {
+          width: 0%;
+        }
+        to {
+          width: var(--bar-width);
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<TpoSection>('home');
   const [stats, setStats] = useState<StatsResponse | null>(null);
@@ -373,6 +341,7 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
     initialTpoUser ? { tpo_user: initialTpoUser } : null
   );
   const [collegeCourses, setCollegeCourses] = useState<CollegeCourseRow[]>([]);
+  const [courseStudentCounts, setCourseStudentCounts] = useState<Record<string, number>>({});
   const [courseSelection, setCourseSelection] = useState<Record<string, string[]>>({});
   const [activityCohortCourseId, setActivityCohortCourseId] = useState<string>('');
   const [activityCohortTemplateId, setActivityCohortTemplateId] = useState<string>('');
@@ -391,25 +360,26 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
   const [activityViewTab, setActivityViewTab] = useState<'cohort' | 'individual'>('cohort');
   const [studentInterviews, setStudentInterviews] = useState<TpoStudentInterviewItem[]>([]);
   const [studentLoading, setStudentLoading] = useState(false);
-  const [studentProgress, setStudentProgress] = useState<ProgressItem[]>([]);
-  const [studentProgressLoading, setStudentProgressLoading] = useState(false);
+  const [journeyRoleFocus, setJourneyRoleFocus] = useState<string | null>(null);
+  const [studentInterviewCache, setStudentInterviewCache] = useState<Record<string, TpoStudentInterviewItem[]>>({});
+  const jumpTargetCandidateRef = useRef<string | null>(null);
+  const studentInterviewRequestSeq = useRef(0);
   const [publishTemplateId, setPublishTemplateId] = useState<string>('');
   const [publishInterviewMode, setPublishInterviewMode] = useState<'ai' | 'structured'>('ai');
   const [publishInterviewType, setPublishInterviewType] = useState<'functional' | 'behavioral' | 'mixed' | 'technical'>('mixed');
   const [inviteTitle, setInviteTitle] = useState<string>('');
   const [inviteMessage, setInviteMessage] = useState<string>('');
   const [sendingInvite, setSendingInvite] = useState(false);
+  const [inviteReviewStep, setInviteReviewStep] = useState(false);
   const [invites, setInvites] = useState<InviteItem[]>([]);
-  const [applications, setApplications] = useState<InviteApplicationItem[]>([]);
-  const [loadingApplications, setLoadingApplications] = useState(false);
-  const [selectedApplicationIds, setSelectedApplicationIds] = useState<string[]>([]);
   const [inviteMessageEdited, setInviteMessageEdited] = useState(false);
-  const [publishingSelected, setPublishingSelected] = useState(false);
   const [publishSummaryLoading, setPublishSummaryLoading] = useState(false);
   const [publishSummaryError, setPublishSummaryError] = useState<string | null>(null);
   const [publishSummary, setPublishSummary] = useState<PublishCompetencySummary | null>(null);
   const [expandedSummaryKeys, setExpandedSummaryKeys] = useState<Record<string, boolean>>({});
   const [inviteSummaryDialogOpen, setInviteSummaryDialogOpen] = useState(false);
+  const [manageRolesOpen, setManageRolesOpen] = useState(false);
+  const [updatingVariantKey, setUpdatingVariantKey] = useState<string | null>(null);
 
   const courses = useMemo(() => stats?.course_breakdown || [], [stats]);
 
@@ -499,13 +469,19 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
       const coursesJson = (await coursesRes.json().catch(() => ({}))) as { courses?: CollegeCourseRow[]; error?: string };
       if (coursesRes.ok) {
         setCollegeCourses(coursesJson.courses || []);
+
+        // Use course breakdown from stats to get student counts
+        if (statsJson.course_breakdown && statsJson.course_breakdown.length > 0) {
+          const countsMap = statsJson.course_breakdown.reduce((acc, course) => {
+            if (course.course_id) {
+              acc[course.course_id] = course.student_count || 0;
+            }
+            return acc;
+          }, {} as Record<string, number>);
+          setCourseStudentCounts(countsMap);
+        }
       } else {
-        setCollegeCourses([]);
-        toast({
-          title: 'Could not load college programs',
-          description: coursesJson.error || 'Publish tab may be limited until the server is updated.',
-          variant: 'destructive',
-        });
+        console.error('Failed to load college courses:', coursesJson.error);
       }
 
       setStats(statsJson);
@@ -567,7 +543,7 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
   }, [publishTemplateId, templates]);
 
   useEffect(() => {
-    if (activeSection !== 'invite_students' && activeSection !== 'publish_interviews') return;
+    if (activeSection !== 'invite_students') return;
     loadInvites(publishTemplateId || templates[0]?.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, publishTemplateId, templates.length]);
@@ -584,24 +560,6 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
     setInviteMessage(localMessage);
     setInviteTitle(localTitle);
   }, [templates, publishTemplateId, publishInterviewMode, publishInterviewType, inviteMessageEdited]);
-
-  useEffect(() => {
-    const appliedIds = applications
-      .filter((a) => (a.status || '').toLowerCase() === 'applied')
-      .map((a) => a.id)
-      .filter(Boolean);
-    setSelectedApplicationIds(appliedIds);
-  }, [applications]);
-
-  useEffect(() => {
-    if (activeSection !== 'publish_interviews') return;
-    loadAppliedApplicationsForTemplate(
-      publishTemplateId || templates[0]?.id,
-      publishInterviewMode,
-      publishInterviewType
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSection, publishTemplateId, publishInterviewMode, publishInterviewType, templates.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -701,10 +659,6 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
   const inviteRoleName = selectedPublishTemplate?.title || selectedPublishTemplate?.position || 'this role';
   const generatedInviteTitle = `${inviteRoleName} - ${modeLabel} ${typeLabel} practice invite`;
   const generatedInviteMessage = buildTpoDefaultInviteMessage(inviteRoleName, modeLabel, typeLabel);
-  const appliedApplications = applications.filter((a) => (a.status || '').toLowerCase() === 'applied');
-  const publishedApplications = applications.filter((a) => (a.status || '').toLowerCase() === 'published');
-  const allPublishedForRole =
-    appliedApplications.length === 0 && publishedApplications.length > 0;
 
   const handleTpoWorkflowStep = (step: number) => {
     if (step === 0) setActiveSection('configure');
@@ -751,67 +705,40 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
     }
   };
 
-  const loadAppliedApplicationsForTemplate = async (
-    templateId?: string,
-    desiredMode?: 'ai' | 'structured',
-    desiredType?: 'functional' | 'behavioral' | 'mixed' | 'technical'
+  const setVariantStatus = async (
+    templateId: string,
+    variant: TemplateItem['variants'][number],
+    nextStatus: 'draft' | 'published',
   ) => {
-    if (!templateId) {
-      setApplications([]);
-      return;
-    }
+    const variantKey = `${templateId}:${variant.interview_mode}:${variant.interview_type}`;
     try {
-      setLoadingApplications(true);
+      setUpdatingVariantKey(variantKey);
       const headers = await getAuthHeaders();
-      const q = `?template_id=${encodeURIComponent(templateId)}`;
-      const invitesRes = await fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.TPO_CAMPUS_ROLE_INVITES}${q}`), { headers });
-      const invitesData = (await invitesRes.json().catch(() => ({}))) as { invites?: InviteItem[]; error?: string };
-      if (!invitesRes.ok) throw new Error(invitesData.error || 'Failed to load invites');
-      const roleInvites = invitesData.invites || [];
-      setInvites(roleInvites);
-      if (roleInvites.length === 0) {
-        setApplications([]);
-        return;
-      }
-      const appResponses = await Promise.all(
-        roleInvites.map(async (inv) => {
-          const res = await fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.TPO_CAMPUS_ROLE_INVITES}/${inv.id}/applications`), { headers });
-          const data = (await res.json().catch(() => ({}))) as { applications?: InviteApplicationItem[]; error?: string };
-          if (!res.ok) throw new Error(data.error || `Failed to load applicants for ${inv.title}`);
-          return (data.applications || []).map((a) => ({
-            ...a,
-            invite_id: inv.id,
-            invite_title: inv.title,
-            invite_message: inv.message ?? null,
-          }));
-        })
-      );
-      const merged = appResponses.flat();
-      const filtered = merged.filter((row) => {
-        if (!desiredMode || !desiredType) return true;
-        const notesObj = parseInviteNotes(row.notes);
-        const noteMode = String(notesObj.interview_mode || '').toLowerCase();
-        const noteType = String(notesObj.interview_type || '').toLowerCase();
-        if (noteMode && noteType) {
-          return noteMode === desiredMode && noteType === desiredType;
-        }
-        // Backward compatibility for older invites created before notes stamping.
-        const inferred = inferVariantFromInviteText(`${row.invite_title || ''} ${row.invite_message || ''}`);
-        if (inferred.mode && inferred.type) {
-          return inferred.mode === desiredMode && inferred.type === desiredType;
-        }
-        return true;
+      const res = await fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.TPO_CAMPUS_INTERVIEWS}/${templateId}`), {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          interview_mode: variant.interview_mode,
+          interview_type: variant.interview_type,
+          status: nextStatus,
+          custom_role_parameters_id: variant.custom_role_parameters_id || null,
+        }),
       });
-      setApplications(filtered);
-    } catch (e: unknown) {
-      setApplications([]);
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error || 'Could not update role status');
       toast({
-        title: 'Could not load applicants',
+        title: 'Role status updated',
+        description: `${variant.interview_mode.toUpperCase()} ${variant.interview_type} is now ${nextStatus}.`,
+      });
+      await loadData();
+    } catch (e: unknown) {
+      toast({
+        title: 'Update failed',
         description: e instanceof Error ? e.message : 'Please try again.',
         variant: 'destructive',
       });
     } finally {
-      setLoadingApplications(false);
+      setUpdatingVariantKey(null);
     }
   };
 
@@ -864,64 +791,6 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
     }
   };
 
-  const publishSelectedApplicants = async () => {
-    if (selectedApplicationIds.length === 0) {
-      toast({
-        title: 'No students selected',
-        description: 'Select at least one applied student to publish this interview.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    try {
-      setPublishingSelected(true);
-      const headers = await getAuthHeaders();
-      const selectedSet = new Set(selectedApplicationIds);
-      const groupedByInvite = applications
-        .filter((a) => selectedSet.has(a.id) && a.invite_id)
-        .reduce<Record<string, string[]>>((acc, row) => {
-          const inviteId = row.invite_id as string;
-          if (!acc[inviteId]) acc[inviteId] = [];
-          acc[inviteId].push(row.id);
-          return acc;
-        }, {});
-      const inviteIds = Object.keys(groupedByInvite);
-      if (inviteIds.length === 0) {
-        throw new Error('No eligible applications found for publishing.');
-      }
-      let totalPublished = 0;
-      for (const inviteId of inviteIds) {
-        const res = await fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.TPO_CAMPUS_ROLE_INVITES}/${inviteId}/publish-selected`), {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            application_ids: groupedByInvite[inviteId],
-            interview_mode: publishInterviewMode,
-            interview_type: publishInterviewType,
-          }),
-        });
-        const data = (await res.json().catch(() => ({}))) as { error?: string; published_count?: number };
-        if (!res.ok) throw new Error(data.error || 'Failed to publish selected');
-        totalPublished += data.published_count ?? 0;
-      }
-      toast({
-        title: 'Published',
-        description: `${totalPublished} students can now take this interview.`,
-      });
-      await loadAppliedApplicationsForTemplate(publishTemplateId || templates[0]?.id);
-      await loadInvites(publishTemplateId);
-      await loadData();
-    } catch (e: unknown) {
-      toast({
-        title: 'Publish failed',
-        description: e instanceof Error ? e.message : 'Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setPublishingSelected(false);
-    }
-  };
-
   const loadActivityIndividualStudents = async (courseId: string) => {
     if (!courseId) {
       setActivityIndividualStudents([]);
@@ -949,13 +818,23 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
       setStudentInterviews([]);
       return;
     }
+    const cached = studentInterviewCache[candidateId];
+    if (cached) {
+      setStudentInterviews(cached);
+      setStudentLoading(false);
+      return;
+    }
     try {
+      const requestSeq = ++studentInterviewRequestSeq.current;
       setStudentLoading(true);
       const headers = await getAuthHeaders();
       const res = await fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.TPO_STUDENTS}/${candidateId}/interviews?limit=200`), { headers });
       const data = (await res.json().catch(() => ({}))) as { interviews?: TpoStudentInterviewItem[]; error?: string };
       if (!res.ok) throw new Error(data.error || 'Failed to load student interviews');
-      setStudentInterviews(data.interviews || []);
+      if (requestSeq !== studentInterviewRequestSeq.current) return;
+      const interviews = data.interviews || [];
+      setStudentInterviews(interviews);
+      setStudentInterviewCache((prev) => ({ ...prev, [candidateId]: interviews }));
     } catch (e: unknown) {
       setStudentInterviews([]);
       toast({
@@ -1032,10 +911,25 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
 
   useEffect(() => {
     if (activeSection !== 'activity') return;
-    loadActivityIndividualStudents(activityIndividualCourseId);
-    setActivityIndividualStudentId('all');
-    setStudentInterviews([]);
-    setStudentProgress([]);
+    let cancelled = false;
+    (async () => {
+      await loadActivityIndividualStudents(activityIndividualCourseId);
+      if (cancelled) return;
+      const jumpTargetCandidateId = jumpTargetCandidateRef.current;
+      if (jumpTargetCandidateId) {
+        setActivityIndividualStudentId(jumpTargetCandidateId);
+        const cached = studentInterviewCache[jumpTargetCandidateId];
+        if (cached) setStudentInterviews(cached);
+        jumpTargetCandidateRef.current = null;
+        return;
+      }
+      setActivityIndividualStudentId('all');
+      setStudentInterviews([]);
+      setJourneyRoleFocus(null);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [activeSection, activityIndividualCourseId]);
 
   useEffect(() => {
@@ -1107,66 +1001,25 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, activityIndividualCourseId, activityIndividualStudentId]);
 
-  useEffect(() => {
-    if (
-      activeSection !== 'activity' ||
-      activityIndividualStudentId === 'all' ||
-      !activityIndividualCourseId
-    ) {
-      setStudentProgress([]);
-      setStudentProgressLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setStudentProgressLoading(true);
-    (async () => {
-      try {
-        const headers = await getAuthHeaders();
-        const url = buildApiUrl(
-          `${API_CONFIG.ENDPOINTS.TPO_STUDENTS}/${encodeURIComponent(activityIndividualStudentId)}/interview-progress`,
-        );
-        const r = await fetch(url, { headers });
-        const raw = r.ok ? await r.json().catch(() => []) : [];
-        if (cancelled) return;
-        if (!r.ok) {
-          setStudentProgress([]);
-          return;
-        }
-        const arr = Array.isArray(raw) ? raw : [];
-        const normalized: ProgressItem[] = arr.map((item: Record<string, unknown>) => {
-          const { parameter_scores: ps, competency_scores: cs, ...rest } = item as Record<string, unknown> & {
-            parameter_scores?: Record<string, number>;
-            competency_scores?: Record<string, number>;
-          };
-          const named = typeof cs === 'object' && cs != null && Object.keys(cs).length > 0 ? cs : ps;
-          return {
-            ...rest,
-            competency_scores: (named ?? {}) as Record<string, number>,
-          } as ProgressItem;
-        });
-        setStudentProgress(normalized);
-      } catch {
-        if (!cancelled) setStudentProgress([]);
-      } finally {
-        if (!cancelled) setStudentProgressLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeSection, activityIndividualCourseId, activityIndividualStudentId]);
-
-  const tpoIndividualReportRows = useMemo((): PerformanceInterviewRow[] => {
+  const tpoJourneyInterviews = useMemo((): TpoJourneyInterview[] => {
     return studentInterviews.map((i) => ({
       id: i.id,
       position: i.position ?? null,
       status: i.status ?? null,
       created_at: i.created_at,
-      candidate_name: i.candidate_name ?? null,
-      interview_source: i.interview_source ?? null,
-      campus_template_id: i.campus_template_id ?? null,
-      overall_score: i.overall_score ?? null,
       completed_at: i.completed_at ?? null,
+      interview_source: i.interview_source ?? null,
+      interview_mode: i.interview_mode ?? null,
+      interview_type: i.interview_type ?? null,
+      campus_template_title: i.campus_template_title ?? null,
+      overall_score: i.overall_score ?? null,
+      total_score: i.total_score ?? null,
+      parameter_breakdown: (i.parameter_breakdown || []).map((p) => ({
+        key: p.key,
+        name: p.name,
+        score: p.score ?? null,
+      })),
+      speech_metrics: i.speech_metrics ?? null,
     }));
   }, [studentInterviews]);
 
@@ -1181,6 +1034,125 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
     );
   }, [activityIndividualStudents, activityIndividualStudentId, studentInterviews]);
 
+  const handleOpenCandidateJourneyFromCohort = (candidateId: string) => {
+    jumpTargetCandidateRef.current = candidateId;
+    setActivityViewTab('individual');
+    if (activityCohortCourseId && activityIndividualCourseId !== activityCohortCourseId) {
+      setActivityIndividualCourseId(activityCohortCourseId);
+    }
+    setActivityIndividualStudentId(candidateId);
+    const cached = studentInterviewCache[candidateId];
+    if (cached) setStudentInterviews(cached);
+    setJourneyRoleFocus(cohortTemplate?.title || cohortTemplate?.position || null);
+  };
+
+  const renderInviteReview = () => (
+    <div className="w-full min-w-0 space-y-6">
+      <Card className="min-h-[600px]">
+        <CardHeader className="pb-4 pt-6">
+          <CardTitle className="text-xl">Review & Send</CardTitle>
+          <CardDescription className="text-base">
+            Confirm the details and customize your invitation message before sending
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6 pb-6">
+          {/* Summary Section */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="rounded-lg border bg-sky-50 p-4 text-center">
+              <p className="text-2xl font-bold text-sky-800">
+                {courseSelection[publishTemplateId]?.length || 0}
+              </p>
+              <p className="text-sm text-sky-700">Courses Selected</p>
+            </div>
+            <div className="rounded-lg border bg-sky-50 p-4 text-center">
+              <p className="text-2xl font-bold text-sky-800">
+                {templates.find(t => t.id === publishTemplateId)?.title || 'Selected Role'}
+              </p>
+              <p className="text-sm text-sky-700">Role</p>
+            </div>
+            <div className="rounded-lg border bg-sky-50 p-4 text-center">
+              <p className="text-2xl font-bold text-sky-800">
+                {publishInterviewMode === 'ai' ? 'AI Interview' : 'Structured Interview'}
+              </p>
+              <p className="text-sm text-sky-700">Mode</p>
+            </div>
+            <div className="rounded-lg border bg-sky-50 p-4 text-center">
+              <p className="text-2xl font-bold text-sky-800 capitalize">
+                {publishInterviewType}
+              </p>
+              <p className="text-sm text-sky-700">Type</p>
+            </div>
+          </div>
+
+          {/* Selected Courses */}
+          <div className="space-y-3">
+            <p className="text-base font-medium text-gray-800">Selected Courses:</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {collegeCourses
+                .filter(course => courseSelection[publishTemplateId]?.includes(course.id))
+                .map(course => (
+                  <div key={course.id} className="flex items-center gap-2 text-base bg-gray-50 border rounded-md p-3">
+                    <Checkbox
+                      checked={true}
+                      disabled
+                      className="data-[state=checked]:bg-[#042C53] data-[state=checked]:border-[#042C53]"
+                    />
+                    <span>
+                      {course.course_name}
+                      {course.course_code ? <span className="text-gray-500"> ({course.course_code})</span> : null}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </div>
+
+          {/* Message Customization */}
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-base font-medium">Invite title</Label>
+              <input
+                className="h-11 border rounded-md px-3 text-base w-full"
+                placeholder="Invite title"
+                value={inviteTitle}
+                onChange={(e) => setInviteTitle(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-base font-medium">Invitation message</Label>
+              <Textarea
+                className="min-h-[110px] text-base"
+                placeholder="Type message shown to students"
+                value={inviteMessage}
+                onChange={(e) => {
+                  setInviteMessage(e.target.value);
+                  setInviteMessageEdited(true);
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-3 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={() => setActiveSection('invite_students')}
+            >
+              Back to Edit
+            </Button>
+            <Button
+              className="[background:linear-gradient(135deg,#020f1a,#042C53)] hover:[background:linear-gradient(135deg,#031525,#053565)] text-white"
+              onClick={handleSendInvite}
+              disabled={sendingInvite}
+            >
+              {sendingInvite ? 'Sending...' : 'Send Invite'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
   const renderInviteStudents = () => (
     <div className="w-full min-w-0 space-y-6">
       {loading ? (
@@ -1191,23 +1163,23 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
         </p>
       ) : collegeCourses.length === 0 ? (
         <p className="text-sm text-amber-800">
-          No active programs found for your college. Add <strong>college_courses</strong> before publishing.
+          No active programs found for your college. Add <strong>college_courses</strong> before sending invites.
         </p>
       ) : (
         <Fragment>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Invite students to apply</CardTitle>
-            <CardDescription>
-              Choose role, mode, and type. Send your message, then publish to applicants.
+        <Card className="min-h-[600px]">
+          <CardHeader className="pb-4 pt-6">
+            <CardTitle className="text-xl">Invite students</CardTitle>
+            <CardDescription className="text-base">
+              Choose role, mode, and type. Send invites to selected courses and manage role visibility.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="pb-2 min-h-[400px] flex flex-col gap-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div className="space-y-1.5">
-                <Label>Role</Label>
+                <Label className="text-base font-medium">Role</Label>
                 <Select value={publishTemplateId} onValueChange={setPublishTemplateId}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-11 text-base">
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1220,12 +1192,12 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Interview Mode</Label>
+                <Label className="text-base font-medium">Interview Mode</Label>
                 <Select
                   value={publishInterviewMode}
                   onValueChange={(v: 'ai' | 'structured') => setPublishInterviewMode(v)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-11 text-base">
                     <SelectValue placeholder="Select mode" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1235,12 +1207,12 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Interview Type</Label>
+                <Label className="text-base font-medium">Interview Type</Label>
                 <Select
                   value={publishInterviewType}
                   onValueChange={(v: 'functional' | 'behavioral' | 'mixed' | 'technical') => setPublishInterviewType(v)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-11 text-base">
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1265,13 +1237,13 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
 
             {selectedPublishTemplate ? (
               <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-800">Programs (courses) to invite</p>
+                <p className="text-base font-medium text-gray-800">Programs (courses) to invite</p>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="text-xs"
+                    className="text-sm"
                     onClick={() => selectAllCoursesForTemplate(selectedPublishTemplate.id, true)}
                   >
                     Select all
@@ -1280,7 +1252,7 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="text-xs"
+                    className="text-sm"
                     onClick={() => selectAllCoursesForTemplate(selectedPublishTemplate.id, false)}
                   >
                     Clear
@@ -1290,10 +1262,11 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
                   {collegeCourses.map((c) => {
                     const selected = new Set(courseSelection[selectedPublishTemplate.id] || []);
                     return (
-                      <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <label key={c.id} className="flex items-center gap-2 text-base cursor-pointer">
                         <Checkbox
                           checked={selected.has(c.id)}
                           onCheckedChange={() => toggleCourseForTemplate(selectedPublishTemplate.id, c.id)}
+                          className="data-[state=checked]:bg-[#042C53] data-[state=checked]:border-[#042C53]"
                         />
                         <span>
                           {c.course_name}
@@ -1306,41 +1279,26 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
               </div>
             ) : null}
 
-            <div className="space-y-1.5">
-              <Label>Invite title</Label>
-              <input
-                className="h-10 border rounded-md px-3 text-sm w-full"
-                placeholder="Invite title"
-                value={inviteTitle}
-                onChange={(e) => setInviteTitle(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Invitation message</Label>
-              <Textarea
-                className="min-h-[110px]"
-                placeholder="Type message shown to students"
-                value={inviteMessage}
-                onChange={(e) => {
-                  setInviteMessage(e.target.value);
-                  setInviteMessageEdited(true);
-                }}
-              />
-            </div>
-
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 justify-between mt-auto pt-2">
               <Button
-                className="bg-sky-600 hover:bg-sky-700"
-                onClick={handleSendInvite}
-                disabled={sendingInvite || !publishTemplateId}
+                type="button"
+                variant="outline"
+                onClick={() => setManageRolesOpen(true)}
               >
-                {sendingInvite ? 'Sending…' : 'Send invite to students'}
+                Manage roles
+              </Button>
+              <Button
+                className="[background:linear-gradient(135deg,#020f1a,#042C53)] hover:[background:linear-gradient(135deg,#031525,#053565)] text-white"
+                onClick={() => setActiveSection('invite_review')}
+                disabled={!publishTemplateId || !courseSelection[publishTemplateId]?.length}
+              >
+                Review & Send
               </Button>
             </div>
           </CardContent>
         </Card>
 
+        
         <Dialog open={inviteSummaryDialogOpen} onOpenChange={setInviteSummaryDialogOpen}>
           <DialogContent className="max-w-3xl lg:max-w-4xl max-h-[85vh] gap-0 p-0 overflow-hidden sm:rounded-lg grid grid-rows-[auto_minmax(0,1fr)]">
             <DialogHeader className="px-7 pt-7 pb-3 pr-14">
@@ -1374,7 +1332,13 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
                       }, 0)
                     : sq.length;
                   const totalDuration = isAI
-                    ? cpEntries.reduce((sum, [, v]) => sum + (Number(v?.max_time ?? 2) + 0.5), 4)
+                    ? cpEntries.reduce((sum, [, v]) => {
+                        const minQ = Number(v?.min_questions ?? 1);
+                        const maxQ = Number(v?.max_questions ?? 1);
+                        const avgQ = (minQ + maxQ) / 2;
+                        const perQuestionMinutes = Number(v?.max_time ?? 2) + 0.5;
+                        return sum + (avgQ * perQuestionMinutes);
+                      }, 4)
                     : sq.reduce((sum, q) => sum + Number(q?.timeLimit ?? 2), 4);
                   const totalWeight = isAI
                     ? cpEntries.reduce((sum, [, v]) => sum + Number(v?.weight ?? 0), 0)
@@ -1382,26 +1346,26 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
                   return (
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                        <div className="rounded-lg border bg-sky-50 p-3 text-center">
-                          <p className="text-xl font-bold text-sky-800">{Math.round(totalQuestions)}</p>
-                          <p className="text-xs text-sky-700">Total Questions</p>
+                        <div className="rounded-lg border bg-sky-50 p-4 text-center">
+                          <p className="text-2xl font-bold text-sky-800">{Math.round(totalQuestions)}</p>
+                          <p className="text-sm text-sky-700">Total Questions</p>
                         </div>
-                        <div className="rounded-lg border bg-sky-50 p-3 text-center">
-                          <p className="text-xl font-bold text-sky-800">{Math.round(totalDuration)} min</p>
-                          <p className="text-xs text-sky-700">Duration</p>
+                        <div className="rounded-lg border bg-sky-50 p-4 text-center">
+                          <p className="text-2xl font-bold text-sky-800">{Math.round(totalDuration)} min</p>
+                          <p className="text-sm text-sky-700">Duration</p>
                         </div>
-                        <div className="rounded-lg border bg-sky-50 p-3 text-center">
-                          <p className="text-xl font-bold text-sky-800">{isAI ? cpEntries.length : sq.length}</p>
-                          <p className="text-xs text-sky-700">{isAI ? 'Competencies' : 'Questions'}</p>
+                        <div className="rounded-lg border bg-sky-50 p-4 text-center">
+                          <p className="text-2xl font-bold text-sky-800">{isAI ? cpEntries.length : sq.length}</p>
+                          <p className="text-sm text-sky-700">{isAI ? 'Competencies' : 'Questions'}</p>
                         </div>
-                        <div className="rounded-lg border bg-sky-50 p-3 text-center">
-                          <p className="text-xl font-bold text-sky-800">{Math.round(totalWeight)}%</p>
-                          <p className="text-xs text-sky-700">Weightage</p>
+                        <div className="rounded-lg border bg-sky-50 p-4 text-center">
+                          <p className="text-2xl font-bold text-sky-800">{Math.round(totalWeight)}%</p>
+                          <p className="text-sm text-sky-700">Weightage</p>
                         </div>
                       </div>
                       {isAI ? (
                         <div className="space-y-3">
-                          <p className="text-sm font-medium text-gray-800">Competency Weightage Summary</p>
+                          <p className="text-base font-medium text-gray-800">Competency Weightage Summary</p>
                           {cpEntries.map(([key, value], idx) => {
                             const weight = Number(value?.weight ?? 0);
                             const barColor = idx % 2 === 0 ? 'bg-blue-500' : 'bg-emerald-500';
@@ -1417,29 +1381,29 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
                               .map((s) => s.trim())
                               .filter(Boolean);
                             return (
-                              <div key={key} className="rounded-md border bg-white p-3">
-                                <div className="flex items-center justify-between gap-3 mb-1">
-                                  <p className="text-sm text-gray-900">{value?.name || key}</p>
-                                  <p className="text-sm font-semibold text-gray-700">{weight}%</p>
+                              <div key={key} className="rounded-md border bg-white p-4">
+                                <div className="flex items-center justify-between gap-3 mb-2">
+                                  <p className="text-base text-gray-900">{value?.name || key}</p>
+                                  <p className="text-base font-semibold text-gray-700">{weight}%</p>
                                 </div>
-                                <div className="w-full h-1.5 rounded bg-gray-200 overflow-hidden">
-                                  <div className={`h-1.5 ${barColor}`} style={{ width: `${Math.max(0, Math.min(100, weight))}%` }} />
+                                <div className="w-full h-2 rounded bg-gray-200 overflow-hidden">
+                                  <div className={`h-2 ${barColor}`} style={{ width: `${Math.max(0, Math.min(100, weight))}%` }} />
                                 </div>
                                 <button
                                   type="button"
-                                  className="mt-2 text-xs text-sky-700 hover:text-sky-800"
+                                  className="mt-3 text-sm text-sky-700 hover:text-sky-800"
                                   onClick={() =>
                                     setExpandedSummaryKeys((prev) => ({ ...prev, [key]: !prev[key] }))
                                   }
                                 >
-                                  {isExpanded ? 'Hide Details ▲' : 'View Details ▼'}
+                                  {isExpanded ? 'View Details less' : 'View Details more'} {'\u25bc'}
                                 </button>
                                 {isExpanded ? (
-                                  <div className="mt-3 space-y-3 border-t pt-3">
+                                  <div className="mt-3 space-y-4 border-t pt-4">
                                     {descriptionPoints.length > 0 ? (
                                       <div>
-                                        <p className="text-xs font-semibold text-gray-700 mb-1">Full Description:</p>
-                                        <ul className="list-disc pl-4 space-y-1 text-xs text-gray-600">
+                                        <p className="text-sm font-semibold text-gray-700 mb-2">Full Description:</p>
+                                        <ul className="list-disc pl-4 space-y-2 text-sm text-gray-600">
                                           {descriptionPoints.map((point, pIdx) => (
                                             <li key={`${key}-desc-${pIdx}`}>{point}</li>
                                           ))}
@@ -1447,30 +1411,30 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
                                       </div>
                                     ) : null}
                                     <div>
-                                      <p className="text-xs font-semibold text-gray-700 mb-1">Competency Details:</p>
-                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-700">
-                                        <div className="rounded border p-2">
+                                      <p className="text-sm font-semibold text-gray-700 mb-2">Competency Details:</p>
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm text-gray-700">
+                                        <div className="rounded border p-3">
                                           <p className="text-gray-500">Weight</p>
-                                          <p className="font-semibold">{weight}%</p>
+                                          <p className="font-semibold text-base">{weight}%</p>
                                         </div>
-                                        <div className="rounded border p-2">
+                                        <div className="rounded border p-3">
                                           <p className="text-gray-500">Min Questions</p>
-                                          <p className="font-semibold">{Number(value?.min_questions ?? 1)}</p>
+                                          <p className="font-semibold text-base">{Number(value?.min_questions ?? 1)}</p>
                                         </div>
-                                        <div className="rounded border p-2">
+                                        <div className="rounded border p-3">
                                           <p className="text-gray-500">Max Questions</p>
-                                          <p className="font-semibold">{Number(value?.max_questions ?? 1)}</p>
+                                          <p className="font-semibold text-base">{Number(value?.max_questions ?? 1)}</p>
                                         </div>
-                                        <div className="rounded border p-2">
+                                        <div className="rounded border p-3">
                                           <p className="text-gray-500">Time (minutes)</p>
-                                          <p className="font-semibold">{Number(value?.max_time ?? 2)}</p>
+                                          <p className="font-semibold text-base">{Number(value?.max_time ?? 2)}</p>
                                         </div>
                                       </div>
                                     </div>
                                     {scoring.length > 0 ? (
                                       <div>
-                                        <p className="text-xs font-semibold text-gray-700 mb-1">Scoring Criteria:</p>
-                                        <ul className="list-disc pl-4 space-y-1 text-xs text-gray-600">
+                                        <p className="text-sm font-semibold text-gray-700 mb-2">Scoring Criteria:</p>
+                                        <ul className="list-disc pl-4 space-y-2 text-sm text-gray-600">
                                           {scoring.map((criterion, cIdx) => (
                                             <li key={`${key}-score-${cIdx}`}>{criterion}</li>
                                           ))}
@@ -1500,179 +1464,130 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
             </div>
           </DialogContent>
         </Dialog>
+        <Dialog open={manageRolesOpen} onOpenChange={setManageRolesOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Manage roles</DialogTitle>
+              <DialogDescription>
+                Set each interview configuration as published or draft. Draft roles stay hidden from candidates.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              {templates.length === 0 ? (
+                <p className="text-sm text-gray-600">No configured roles found.</p>
+              ) : (
+                templates.map((tpl) => {
+                  const roleName = tpl.title || tpl.position || 'Role';
+                  const variants = tpl.variants || [];
+                  return (
+                    <div key={tpl.id} className="rounded-md border p-3 space-y-2">
+                      <p className="text-sm font-semibold text-gray-900">{roleName}</p>
+                      {variants.length === 0 ? (
+                        <p className="text-xs text-gray-600">No mode/type variants configured yet.</p>
+                      ) : (
+                        variants.map((variant) => {
+                          const variantKey = `${tpl.id}:${variant.interview_mode}:${variant.interview_type}`;
+                          const busy = updatingVariantKey === variantKey;
+                          const isPublished = variant.status === 'published';
+                          return (
+                            <div key={variantKey} className="flex items-center justify-between rounded border px-3 py-2">
+                              <div>
+                                <p className="text-sm text-gray-900">
+                                  {variant.interview_mode.toUpperCase()} - {variant.interview_type}
+                                </p>
+                                <p className="text-xs text-gray-600">Current: {variant.status}</p>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant={isPublished ? 'outline' : 'default'}
+                                disabled={busy}
+                                onClick={() => setVariantStatus(tpl.id, variant, isPublished ? 'draft' : 'published')}
+                              >
+                                {busy ? 'Updating...' : isPublished ? 'Set draft' : 'Set published'}
+                              </Button>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
         </Fragment>
       )}
 
     </div>
   );
 
-  const renderPublishInterviews = () => (
-    <div className="w-full min-w-0 space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Publish interviews</CardTitle>
-          <CardDescription>
-            Select a role to see all applied students and publish interview links in one click.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-
-      {loading ? (
-        <p className="text-sm text-gray-600">Loading templates…</p>
-      ) : templates.length === 0 ? (
-        <p className="text-sm text-gray-600">
-          No campus interview templates yet. Use <strong>Configure interview</strong> to add a JD and competencies first.
-        </p>
-      ) : (
-        <Card>
-          <CardHeader className="pb-3 space-y-3">
-            <CardTitle className="text-lg">Applicants by role</CardTitle>
-            <div className="space-y-1.5">
-              <Label>Role</Label>
-              <Select
-                value={publishVariantValue}
-                onValueChange={(value) => {
-                  const [templateId, mode, type] = value.split('::');
-                  if (!templateId) return;
-                  setPublishTemplateId(templateId);
-                  if (mode === 'ai' || mode === 'structured') {
-                    setPublishInterviewMode(mode);
-                  }
-                  if (type === 'functional' || type === 'behavioral' || type === 'mixed' || type === 'technical') {
-                    setPublishInterviewType(type);
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select role + mode + type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {publishVariantOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {loadingApplications ? (
-              <p className="text-sm text-gray-600">Loading applicants…</p>
-            ) : invites.length === 0 ? (
-              <p className="text-sm text-gray-600">No invites sent for this role yet.</p>
-            ) : appliedApplications.length === 0 ? (
-              <p className="text-sm text-gray-600">No applied students yet for this role.</p>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <Checkbox
-                    checked={appliedApplications.length > 0 && selectedApplicationIds.length === appliedApplications.length}
-                    onCheckedChange={(checked) => {
-                      if (checked) setSelectedApplicationIds(appliedApplications.map((a) => a.id));
-                      else setSelectedApplicationIds([]);
-                    }}
-                  />
-                  <p className="text-sm text-gray-700">Select all applied students ({appliedApplications.length})</p>
-                </div>
-                {appliedApplications.map((a) => (
-                  <label key={a.id} className="border rounded-md p-3 flex items-start gap-3 cursor-pointer">
-                    <Checkbox
-                      checked={selectedApplicationIds.includes(a.id)}
-                      onCheckedChange={(checked) => {
-                        setSelectedApplicationIds((prev) => {
-                          if (checked) return Array.from(new Set([...prev, a.id]));
-                          return prev.filter((id) => id !== a.id);
-                        });
-                      }}
-                    />
-                    <div className="min-w-0">
-                      <p className="font-medium text-gray-900 truncate">{a.candidate_name || a.candidate_email || a.candidate_id}</p>
-                      <p className="text-sm text-gray-600">
-                        {(a.course_name || 'Course')} {a.course_code ? `(${a.course_code})` : ''}
-                        {a.applied_at ? ` • applied ${new Date(a.applied_at).toLocaleString()}` : ''}
-                      </p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            )}
-            <div className="pt-1 space-y-2">
-              {publishedApplications.length > 0 ? (
-                <p className="text-xs text-emerald-700">Already published for this role: {publishedApplications.length}</p>
-              ) : null}
-              <Button
-                variant={allPublishedForRole ? 'outline' : 'default'}
-                className={
-                  allPublishedForRole
-                    ? 'border-emerald-600 bg-emerald-50 text-emerald-800 hover:bg-emerald-50 disabled:opacity-100 cursor-default'
-                    : 'bg-emerald-600 hover:bg-emerald-700'
-                }
-                disabled={
-                  publishingSelected ||
-                  allPublishedForRole ||
-                  selectedApplicationIds.length === 0
-                }
-                onClick={allPublishedForRole ? undefined : publishSelectedApplicants}
-              >
-                {publishingSelected
-                  ? 'Publishing…'
-                  : allPublishedForRole
-                    ? `Published (${publishedApplications.length})`
-                    : `Publish (${selectedApplicationIds.length})`}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  );
-
   const renderHome = () => (
     <div className="space-y-6">
-      <Card>
-        <CardContent className="pt-6">
-          <p className="text-sm text-gray-500">College</p>
-          <p className="text-xl font-semibold text-gray-900">{stats?.college?.college_name || '-'}</p>
-          <p className="text-sm text-gray-600">{stats?.college?.college_code || '-'}</p>
-        </CardContent>
-      </Card>
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card><CardContent className="pt-6"><p className="text-sm text-gray-500">Total students</p><p className="text-2xl font-semibold">{stats?.stats?.total_students ?? 0}</p></CardContent></Card>
-        <Card><CardContent className="pt-6"><p className="text-sm text-gray-500">Free plan</p><p className="text-2xl font-semibold">{stats?.stats?.free_students ?? 0}</p></CardContent></Card>
-        <Card><CardContent className="pt-6"><p className="text-sm text-gray-500">Paid plan</p><p className="text-2xl font-semibold">{stats?.stats?.paid_students ?? 0}</p></CardContent></Card>
-        <Card><CardContent className="pt-6"><p className="text-sm text-gray-500">Campus interviews</p><p className="text-2xl font-semibold">{stats?.stats?.campus_interviews ?? 0}</p></CardContent></Card>
-        <Card><CardContent className="pt-6"><p className="text-sm text-gray-500">Campus attempts</p><p className="text-2xl font-semibold">{stats?.stats?.campus_attempts ?? 0}</p></CardContent></Card>
+      <div className="py-4">
+          <p className="text-3xl font-bold text-gray-900">{stats?.college?.college_name ? `${stats.college.college_name} - Placement Cell` : '-'}</p>
+        </div>
+      <section className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4 mb-6">
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <div className="text-sm text-gray-500 mb-2">Total students</div>
+          <div className="text-[40px] font-bold text-gray-900 mb-2">{stats?.stats?.total_students ?? 0}</div>
+          <div className="text-sm text-gray-400">Across all courses</div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <div className="text-sm text-gray-500 mb-2">Free plan</div>
+          <div className="text-[40px] font-bold text-gray-900 mb-2">{stats?.stats?.free_students ?? 0}</div>
+          <div className="text-sm text-gray-400">Basic access</div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <div className="text-sm text-gray-500 mb-2">Paid plan</div>
+          <div className="text-[40px] font-bold text-gray-900 mb-2">{stats?.stats?.paid_students ?? 0}</div>
+          <div className="text-sm text-gray-400">Premium access</div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <div className="text-sm text-gray-500 mb-2">Campus interviews</div>
+          <div className="text-[40px] font-bold text-gray-900 mb-2">{stats?.stats?.campus_interviews ?? 0}</div>
+          <div className="text-sm text-gray-400">Total configured</div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <div className="text-sm text-gray-500 mb-2">Campus attempts</div>
+          <div className="text-[40px] font-bold text-gray-900 mb-2">{stats?.stats?.campus_attempts ?? 0}</div>
+          <div className="text-sm text-gray-400">Total attempts</div>
+        </div>
       </section>
-      <Card>
-        <CardHeader><CardTitle>Course-wise student registration</CardTitle></CardHeader>
-        <CardContent>
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="px-6 py-5 border-b border-gray-200">
+          <h3 className="text-base font-semibold text-gray-900">Course-wise registration</h3>
+        </div>
+        <div className="p-6">
           {courses.length === 0 ? (
-            <p className="text-sm text-gray-600">No course data found.</p>
+            <p className="text-base text-gray-600">No course data found.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm border">
-                <thead>
-                  <tr className="bg-gray-50">
-                    <th className="text-left p-3 border-b">Course</th>
-                    <th className="text-left p-3 border-b">Code</th>
-                    <th className="text-left p-3 border-b">Students</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {courses.map((course) => (
-                    <tr key={course.course_id} className="border-b">
-                      <td className="p-3">{course.course_name}</td>
-                      <td className="p-3">{course.course_code || '-'}</td>
-                      <td className="p-3">{course.student_count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-4">
+              {courses.map((course, index) => {
+                const maxStudents = Math.max(...courses.map(c => c.student_count || 0));
+                const percentage = maxStudents > 0 ? ((course.student_count || 0) / maxStudents) * 100 : 0;
+                return (
+                  <div key={course.course_id} className="flex items-center gap-4">
+                    <span className="text-sm text-gray-600 w-[250px] flex-shrink-0">{course.course_name}</span>
+                    <div className="flex-1 h-3 bg-gray-100 rounded-md overflow-hidden">
+                      <div 
+                        className="h-full rounded-md [background:linear-gradient(135deg,#020f1a,#042C53)]"
+                        style={{ 
+                          '--bar-width': `${percentage}%`,
+                          width: '0%',
+                          animation: 'fillBar 2s ease-out forwards',
+                          animationDelay: `${index * 0.2}s`
+                        } as React.CSSProperties}
+                      ></div>
+                    </div>
+                    <span className="text-lg font-bold text-gray-900 w-[40px] text-right flex-shrink-0">{course.student_count || 0}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 
@@ -1829,9 +1744,8 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
 
             {activityCohortCourseId && templates.length > 0 && cohortRoleTemplates.length === 0 && (
               <p className="text-sm text-amber-800">
-                Cohort analytics lists a role when at least one mode/type is <strong>published</strong> under{' '}
-                <strong>Publish interviews</strong>, or when students have a <strong>published</strong> application that
-                references that variant (draft variants still count in that case).
+                Cohort analytics lists a role when at least one mode/type is set to <strong>published</strong> from{' '}
+                <strong>Manage roles</strong>.
               </p>
             )}
 
@@ -1861,8 +1775,8 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
               activityCohortTemplateId &&
               cohortInterviewModeOptions.length === 0 && (
                 <p className="text-sm text-amber-800">
-                  No cohort-eligible mode/type for this role. Use <strong>Publish interviews</strong> or publish student
-                  applications that reference a variant.
+                  No cohort-eligible mode/type for this role. Use <strong>Manage roles</strong> and publish at least one
+                  variant.
                 </p>
               )}
 
@@ -1876,6 +1790,7 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
                 selectedCandidateId={
                   activityIndividualStudentId !== 'all' ? activityIndividualStudentId : null
                 }
+                onViewCandidate={handleOpenCandidateJourneyFromCohort}
               />
             )}
           </TabsContent>
@@ -1928,26 +1843,10 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
             )}
 
             {activityIndividualCourseId && activityIndividualStudentId !== 'all' && (
-              <StudentPerformanceReportView
-                title={`Performance report — ${selectedStudentDisplayName}`}
-                introText={
-                  <>
-                    Same experience as the candidate <strong>Performance report</strong>: one chart with a metric dropdown
-                    (overall score and speech metrics), plus completed interviews with <strong>View results</strong> /{' '}
-                    <strong>View report</strong> (opens in a new tab).
-                  </>
-                }
-                interviewRows={tpoIndividualReportRows}
-                progress={studentProgress}
-                loadingList={studentLoading || studentProgressLoading}
-                showTakeInterview={false}
-                messageEmptyList="No interviews found for this student."
-                messageAllCampusPending={
-                  <>
-                    This student has campus attempts that are not completed yet. Completed interviews will appear here
-                    and in the charts, same as on the candidate side.
-                  </>
-                }
+              <TpoIndividualJourneyPanel
+                studentName={selectedStudentDisplayName}
+                interviews={tpoJourneyInterviews}
+                focusCampusRole={journeyRoleFocus}
               />
             )}
           </TabsContent>
@@ -1956,42 +1855,96 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
     </Card>
   );
 
-  const renderAdminSettings = () => (
-    <Card>
-      <CardHeader><CardTitle>Admin settings</CardTitle></CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm border">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="text-left p-3 border-b">Name</th>
-                <th className="text-left p-3 border-b">Email</th>
-                <th className="text-left p-3 border-b">Role</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="p-3 border-b">{tpoMe?.tpo_user?.full_name || '-'}</td>
-                <td className="p-3 border-b">{tpoMe?.tpo_user?.email || '-'}</td>
-                <td className="p-3 border-b">{tpoMe?.tpo_user?.role === 'tpo_admin' ? 'TPO Admin' : 'TPO Staff'}</td>
-              </tr>
-            </tbody>
-          </table>
+  const renderAdminSettings = () => {
+    // Use actual TPO user data from database
+    const fullName = tpoMe?.tpo_user?.full_name || '';
+    const email = tpoMe?.tpo_user?.email || '';
+    const role = tpoMe?.tpo_user?.role || '';
+    const nameParts = fullName.split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join('') || '';
+
+    return (
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="page-header">
+          <h1 className="text-[22px] font-extrabold text-gray-900 tracking-tight">Profile & Settings</h1>
+          <p className="text-[13.5px] text-gray-500 mt-1">Your account details and administrative preferences</p>
         </div>
-      </CardContent>
-    </Card>
-  );
+
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-5">
+          {/* Profile Card */}
+          <div className="bg-white border border-gray-200 rounded-[14px] shadow-sm">
+            <div className="p-6">
+              <h2 className="text-[18px] font-bold text-gray-900">Profile</h2>
+              
+              {/* Form Fields */}
+              <div className="grid grid-cols-2 gap-4 mb-[14px] mt-6">
+                <div className="space-y-[6px]">
+                  <label className="text-[12px] font-semibold text-gray-400 uppercase tracking-[0.06em]">First Name</label>
+                  <div className="h-10 px-3 border-[1.5px] border-gray-200 rounded-md bg-gray-50 text-gray-900 text-[15px] font-bold flex items-center">
+                    {firstName || '-'}
+                  </div>
+                </div>
+                <div className="space-y-[6px]">
+                  <label className="text-[12px] font-semibold text-gray-400 uppercase tracking-[0.06em]">Last Name</label>
+                  <div className="h-10 px-3 border-[1.5px] border-gray-200 rounded-md bg-gray-50 text-gray-900 text-[15px] font-bold flex items-center">
+                    {lastName || '-'}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="space-y-[6px]">
+                <label className="text-[12px] font-semibold text-gray-400 uppercase tracking-[0.06em]">Email</label>
+                <div className="h-10 px-3 border-[1.5px] border-gray-200 rounded-md bg-gray-50 text-gray-900 text-[15px] font-bold flex items-center">
+                  {email || '-'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* College Details Card */}
+          <div className="bg-white border border-gray-200 rounded-[14px] shadow-sm">
+            <div className="p-6">
+              <h2 className="text-[18px] font-bold text-gray-900">College Details</h2>
+              
+              <div className="space-y-3 mt-6">
+                <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
+                  <div className="text-[12px] font-semibold text-gray-400 uppercase tracking-[0.06em]">College Name</div>
+                  <div className="text-[17px] font-bold text-gray-900 mt-1">{stats?.college?.college_name || '-'}</div>
+                </div>
+                
+                <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
+                  <div className="text-[12px] font-semibold text-gray-400 uppercase tracking-[0.06em]">College Code</div>
+                  <div className="text-[17px] font-bold text-gray-900 mt-1">{stats?.college?.college_code || '-'}</div>
+                </div>
+                
+                <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
+                  <div className="text-[12px] font-semibold text-gray-400 uppercase tracking-[0.06em]">Email Domain</div>
+                  <div className="text-[17px] font-bold text-gray-900 mt-1 font-mono text-[15px]">
+                    @{(tpoMe?.tpo_user as any)?.matched_tpo_domain || tpoMe?.tpo_user?.email?.split('@')[1] || 'inboxbear.com'}
+                  </div>
+                  {/* TODO: This should come from college_tpo_email_domains table based on college_id */}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <SidebarProvider>
-      <div className="flex w-full min-h-screen bg-slate-50 overflow-x-hidden">
+      <div className="flex w-full min-h-screen bg-[linear-gradient(145deg,#EEF2FF_0%,#DCE7FF_42%,#BFD7FF_100%)] overflow-x-hidden">
         <TpoAppSidebar
           activeSection={activeSection}
           onSectionChange={setActiveSection}
           fullName={tpoMe?.tpo_user?.full_name}
         />
         <SidebarInset>
-          <header className="bg-sky-700 border-b border-sky-800 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 min-h-[52px] sm:min-h-[58px]">
+          <header className="[background:linear-gradient(135deg,#020f1a,#042C53)] border-b border-sky-800 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 min-h-[52px] sm:min-h-[58px]">
             <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1 overflow-hidden">
               <SidebarTrigger className="text-white flex-shrink-0 min-h-[44px] min-w-[44px] rounded-md touch-manipulation flex items-center justify-center" />
               <div className="min-w-0 flex-1 overflow-hidden">
@@ -2015,7 +1968,7 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
             </div>
           </header>
 
-          <main className="flex-1 w-full min-w-0 flex flex-col min-h-0 overflow-x-hidden">
+          <main className="flex-1 w-full min-w-0 flex flex-col min-h-0 overflow-x-hidden bg-gradient-to-br from-sky-50 to-sky-100">
             <div className="flex-1 min-h-0 p-3 sm:p-6">
               {activeSection === 'home' && loading && renderHomeLoading()}
               {activeSection === 'home' && !loading && renderHome()}
@@ -2028,7 +1981,7 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
                 </div>
               )}
               {activeSection === 'invite_students' && renderInviteStudents()}
-              {activeSection === 'publish_interviews' && renderPublishInterviews()}
+              {activeSection === 'invite_review' && renderInviteReview()}
               {activeSection === 'activity' && renderActivity()}
               {activeSection === 'settings' && renderAdminSettings()}
             </div>
