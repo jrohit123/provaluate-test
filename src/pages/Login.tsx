@@ -9,6 +9,7 @@ import { UserPlus, LogIn, Menu } from "lucide-react";
 import { SessionManager } from '@/utils/sessionManager';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { hasTpoProfile } from '@/lib/authPortalQueries';
 
 const PYTHON_API_BASE = import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com';
 
@@ -143,8 +144,18 @@ const Login = () => {
         if (candidateRow && !userProfile) {
           await supabase.auth.signOut();
           toast({
-            title: 'Use candidate login',
-            description: 'This account is a candidate account. Please sign in on the candidate login page.',
+            title: 'Candidate account',
+            description: 'This is a candidate account. Please use the candidate login page.',
+            variant: 'destructive',
+          });
+          setIsLoading(false);
+          return;
+        }
+        if (!userProfile && (await hasTpoProfile(data.user.id))) {
+          await supabase.auth.signOut();
+          toast({
+            title: 'TPO account',
+            description: 'This is a TPO account. Please use the TPO login page.',
             variant: 'destructive',
           });
           setIsLoading(false);

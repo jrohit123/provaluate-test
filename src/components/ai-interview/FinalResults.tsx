@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/dialog';
 import toast from 'react-hot-toast';
 import ExcelJS from 'exceljs';
+import type { jsPDF } from 'jspdf';
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
 
 /** Format overall_score to 1 decimal with consistent rounding (7.25 → 7.3). */
@@ -98,12 +99,203 @@ const SPEECH_RATING_STYLES: Record<SpeechMetricRating, { bg: string; text: strin
   'Needs Work': { bg: 'bg-red-50', text: 'text-red-700', rgb: [254, 226, 226], textRgb: [185, 28, 28] },
 };
 
+/** Vertex order: top → clockwise (matches reference pentagon). Keys align with overall metrics table rows. */
+const SPEECH_RADAR_ORDER = [
+  'overall_speech_quality',
+  'speaking_pace_wpm',
+  'filler_score',
+  'pause_quality_score',
+  'voice_confidence',
+] as const;
+
+type SpeechRadarMetricKey = (typeof SPEECH_RADAR_ORDER)[number];
+
+const SPEECH_RADAR_LABELS: Record<SpeechRadarMetricKey, string> = {
+  overall_speech_quality: 'Overall quality',
+  speaking_pace_wpm: 'Speaking pace',
+  filler_score: 'Filler score',
+  pause_quality_score: 'Pause & pacing',
+  voice_confidence: 'Voice confidence',
+};
+
+/** Ideal range lower bound per metric (raw units, same as the PDF table “Ideal range” column). */
+const SPEECH_RADAR_IDEAL_MIN: Record<SpeechRadarMetricKey, number> = {
+  overall_speech_quality: 85,
+  speaking_pace_wpm: 110,
+  filler_score: 85,
+  pause_quality_score: 85,
+  voice_confidence: 80,
+};
+
+/** Ideal range upper bound per metric (raw units). */
+const SPEECH_RADAR_IDEAL_MAX: Record<SpeechRadarMetricKey, number> = {
+  overall_speech_quality: 100,
+  speaking_pace_wpm: 170,
+  filler_score: 100,
+  pause_quality_score: 100,
+  voice_confidence: 100,
+};
+
+/** Map each metric to a 0–100 radius scale so unlike units are comparable on the radar. */
+function normalizeSpeechRadarValue(metricKey: string, value: number): number {
+  const clamp = (n: number) => Math.max(0, Math.min(100, n));
+  switch (metricKey) {
+    case 'overall_speech_quality':
+    case 'filler_score':
+    case 'pause_quality_score':
+    case 'voice_confidence':
+      return clamp(value);
+    case 'speaking_pace_wpm': {
+      const lo = 110;
+      const hi = 170;
+      const mid = 140;
+      if (value >= lo && value <= hi) {
+        const half = (hi - lo) / 2;
+        const dist = Math.abs(value - mid);
+        return clamp(100 - (dist / half) * 15);
+      }
+      if (value < lo) {
+        const t = value <= 0 ? 0 : value / lo;
+        return clamp(20 + t * 65);
+      }
+      return clamp(85 - Math.min(60, (value - hi) * 2));
+    }
+    default:
+      return 50;
+  }
+}
+
+function speechRadarPolygonPoints(
+  cx: number,
+  cy: number,
+  outerR: number,
+  values: number[],
+  n: number
+): [number, number][] {
+  const pts: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    const angle = Math.PI / 2 - (i * 2 * Math.PI) / n;
+    const r = outerR * (values[i] / 100);
+    pts.push([cx + r * Math.cos(angle), cy - r * Math.sin(angle)]);
+  }
+  return pts;
+}
+
+function jspdfPolygonPath(doc: jsPDF, pts: [number, number][], style: 'S' | 'F' | 'FD'): void {
+  if (pts.length < 2) return;
+  const n = pts.length;
+  const deltas: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    deltas.push([pts[j][0] - pts[i][0], pts[j][1] - pts[i][1]]);
+  }
+  doc.lines(deltas, pts[0][0], pts[0][1], [1, 1], style, true);
+}
+
+/** Pentagonal radar: grid; green = ideal **band** (min/max per axis); blue = candidate actual. */
+function drawSpeechMetricsRadarChart(
+  doc: jsPDF,
+  cx: number,
+  cy: number,
+  outerR: number,
+  candidate: number[],
+  idealMin: number[],
+  idealMax: number[],
+  labels: string[]
+): void {
+  const n = 5;
+  doc.setDrawColor(218, 220, 224);
+  doc.setLineWidth(0.12);
+  for (let ring = 1; ring <= 5; ring++) {
+    const r = (outerR * ring) / 5;
+    const ringPts = speechRadarPolygonPoints(cx, cy, r, Array(n).fill(100), n);
+    jspdfPolygonPath(doc, ringPts, 'S');
+  }
+  for (let i = 0; i < n; i++) {
+    const angle = Math.PI / 2 - (i * 2 * Math.PI) / n;
+    const x = cx + outerR * Math.cos(angle);
+    const y = cy - outerR * Math.sin(angle);
+    doc.line(cx, cy, x, y);
+  }
+
+  const outerIdealPts = speechRadarPolygonPoints(cx, cy, outerR, idealMax, n);
+  const innerIdealPts = speechRadarPolygonPoints(cx, cy, outerR, idealMin, n);
+  const candPts = speechRadarPolygonPoints(cx, cy, outerR, candidate, n);
+
+  doc.saveGraphicsState();
+  doc.setGState(doc.GState({ opacity: 0.38 }));
+  doc.setFillColor(187, 247, 208);
+  doc.moveTo(outerIdealPts[0][0], outerIdealPts[0][1]);
+  for (let i = 1; i < n; i++) doc.lineTo(outerIdealPts[i][0], outerIdealPts[i][1]);
+  doc.close();
+  doc.moveTo(innerIdealPts[0][0], innerIdealPts[0][1]);
+  for (let j = n - 1; j >= 1; j--) doc.lineTo(innerIdealPts[j][0], innerIdealPts[j][1]);
+  doc.close();
+  doc.fillEvenOdd();
+  doc.restoreGraphicsState();
+
+  doc.saveGraphicsState();
+  doc.setGState(doc.GState({ opacity: 0.42 }));
+  doc.setFillColor(219, 234, 254);
+  jspdfPolygonPath(doc, candPts, 'F');
+  doc.restoreGraphicsState();
+
+  doc.setLineWidth(0.3);
+  doc.setDrawColor(22, 163, 74);
+  jspdfPolygonPath(doc, outerIdealPts, 'S');
+  jspdfPolygonPath(doc, innerIdealPts, 'S');
+  doc.setLineWidth(0.38);
+  doc.setDrawColor(37, 99, 235);
+  jspdfPolygonPath(doc, candPts, 'S');
+
+  const idealDotR = 1.15;
+  const candDotR = 1.1;
+  const drawFilledIdealMarker = (x: number, y: number) => {
+    doc.setFillColor(21, 128, 61);
+    doc.circle(x, y, idealDotR, 'F');
+    doc.setDrawColor(16, 110, 52);
+    doc.setLineWidth(0.12);
+    doc.circle(x, y, idealDotR, 'S');
+  };
+  outerIdealPts.forEach(([x, y]) => drawFilledIdealMarker(x, y));
+  innerIdealPts.forEach(([x, y]) => drawFilledIdealMarker(x, y));
+  candPts.forEach(([x, y]) => {
+    doc.setFillColor(255, 255, 255);
+    doc.circle(x, y, candDotR + 0.45, 'F');
+    doc.setFillColor(37, 99, 235);
+    doc.circle(x, y, candDotR, 'F');
+    doc.setDrawColor(255, 255, 255);
+    doc.setLineWidth(0.14);
+    doc.circle(x, y, candDotR, 'S');
+  });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.4);
+  doc.setTextColor(55, 55, 62);
+  const labelMaxW = 26;
+  const lineH = 3.4;
+  /** Distance from chart center past the outer grid ring; index 4 = top-left “Voice confidence” needs extra mm so text does not overlap the plot. */
+  const labelRadiusBeyondOuter = [6, 7, 6, 7, 11];
+  for (let i = 0; i < n; i++) {
+    const angle = Math.PI / 2 - (i * 2 * Math.PI) / n;
+    const labelR = outerR + labelRadiusBeyondOuter[i];
+    const lx = cx + labelR * Math.cos(angle);
+    const ly = cy - labelR * Math.sin(angle);
+    const wrapW = i === 4 ? Math.min(labelMaxW, 22) : labelMaxW;
+    const wrapped = doc.splitTextToSize(labels[i], wrapW);
+    const blockH = wrapped.length * lineH;
+    wrapped.forEach((line: string, li: number) => {
+      doc.text(line, lx, ly - blockH / 2 + (li + 0.82) * lineH, { align: 'center' });
+    });
+  }
+}
+
 /** Parse speech report into section/content rows for table display. Returns [] if no clear sections.
  *  Format A (primary): bold **Section** headers — required by the prompt.
  *  Format B (fallback): plain-text section headers on their own line — for older/inconsistent LLM output.
  */
 function parseSpeechReportSections(reportText: string): { section: string; content: string }[] {
-  const text = reportText.replace(/''/g, "'").trim();
+  const text = shiftQuestionLabelsToOneBased(reportText.replace(/''/g, "'")).trim();
   const sections: { section: string; content: string }[] = [];
 
   // Format A: bold **Section Name** headers
@@ -174,9 +366,22 @@ function parseSpeechReportSections(reportText: string): { section: string; conte
   return sections;
 }
 
+/** Convert 0-based question labels in narrative text (Q0, q0, q 0) to 1-based (Q1, Q2...). */
+function shiftQuestionLabelsToOneBased(raw: string): string {
+  const text = String(raw || '');
+  // Guard: only shift when this block clearly uses zero-based labels.
+  // Prevents accidental Q1->Q2 shifts when upstream already sends one-based text.
+  if (!/\b[qQ]\s*0\b/.test(text)) return text;
+  return text.replace(/\b([Qq])\s*(\d+)\b/g, (full, _q, nStr) => {
+    const n = Number.parseInt(String(nStr), 10);
+    if (!Number.isFinite(n)) return full;
+    return `Q${n + 1}`;
+  });
+}
+
 /** Normalize action plan text: add line breaks before labels (used when falling back to plain text render). */
 function normalizeActionPlanText(raw: string): string {
-  let s = raw.replace(/''/g, "'");
+  let s = shiftQuestionLabelsToOneBased(raw.replace(/''/g, "'"));
   s = s.replace(/\s+\*\*Addresses:\*\*/g, '\n\n**Addresses:**');
   s = s.replace(/\s+\*\*Description:\*\*/g, '\n\n**Description:**');
   s = s.replace(/\s+\*\*Expected outcome:\*\*/g, '\n\n**Expected outcome:**');
@@ -277,9 +482,11 @@ function resolveActionPlanChecklistBlocks(interview: { set_of_actions?: unknown 
         .map((x) => {
           if (!x || typeof x !== 'object') return null;
           const rec = x as Record<string, unknown>;
-          const action_title = String(rec.action_title ?? rec.actionTitle ?? '').trim();
+          const action_title = shiftQuestionLabelsToOneBased(String(rec.action_title ?? rec.actionTitle ?? '').trim());
           const lev = rec.leverage != null ? String(rec.leverage).trim() : undefined;
-          const items = Array.isArray(rec.items) ? rec.items.map((t) => String(t).trim()).filter(Boolean) : [];
+          const items = Array.isArray(rec.items)
+            ? rec.items.map((t) => shiftQuestionLabelsToOneBased(String(t).trim())).filter(Boolean)
+            : [];
           if (!action_title || !items.length) return null;
           return { action_title, leverage: lev, items } as ActionPlanChecklistBlock;
         })
@@ -288,7 +495,7 @@ function resolveActionPlanChecklistBlocks(interview: { set_of_actions?: unknown 
     }
   }
   const { checklistMarkdown } = splitPersonalisedActionPlan(planRaw || '');
-  if (checklistMarkdown) return parseChecklistFromMarkdown(checklistMarkdown);
+  if (checklistMarkdown) return parseChecklistFromMarkdown(shiftQuestionLabelsToOneBased(checklistMarkdown));
   return [];
 }
 
@@ -478,7 +685,8 @@ function parseActionPlanItemsV2(text: string): ActionPlanItem[] {
  * Returns empty array only if no items could be extracted at all.
  */
 function parseActionPlanItems(raw: string): ActionPlanItem[] {
-  const { planBody } = splitPersonalisedActionPlan(raw.replace(/''/g, "'").trim());
+  const normalizedRaw = shiftQuestionLabelsToOneBased(raw.replace(/''/g, "'"));
+  const { planBody } = splitPersonalisedActionPlan(normalizedRaw.trim());
   const text = planBody;
   const items: ActionPlanItem[] = [];
 
@@ -1317,8 +1525,9 @@ const FinalResults = () => {
             // Question header with icon
             doc.setFontSize(14);
             doc.setFont('helvetica', 'bold');
-            const qOrd = question?.question_order ?? index;
-            doc.text(`Question [Q${qOrd}]`, 15, yPosition);
+            const qOrdRaw = question?.question_order ?? index;
+            const qOrdDisplay = Number.isFinite(Number(qOrdRaw)) ? Number(qOrdRaw) + 1 : index + 1;
+            doc.text(`Question [Q${qOrdDisplay}]`, 15, yPosition);
             yPosition += 10;
             
             // Question text
@@ -1709,7 +1918,7 @@ const FinalResults = () => {
         const argb = rating === 'Good' ? 'FFDCFCE7' : rating === 'Average' ? 'FFFEF3C7' : 'FFFEE2E2';
         return { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } };
       };
-      speechSheet.getCell(speechRow, 1).value = 'Speech Analysis — Overall Metrics Summary';
+      speechSheet.getCell(speechRow, 1).value = 'SPEECH ANALYSIS — OVERALL METRICS SUMMARY';
       speechSheet.getCell(speechRow, 1).font = { bold: true, size: 12 };
       speechSheet.mergeCells(speechRow, 1, speechRow, 4);
       speechRow += 2;
@@ -1782,7 +1991,9 @@ const FinalResults = () => {
       speechSheet.getCell(speechRow, 1).font = { bold: true, size: 12 };
       speechRow += 2;
       if (speechReport && String(speechReport).trim()) {
-        const reportText = stripSpeechReportTitleLine(String(speechReport).trim()).replace(/''/g, "'");
+        const reportText = shiftQuestionLabelsToOneBased(
+          stripSpeechReportTitleLine(String(speechReport).trim()).replace(/''/g, "'")
+        );
         const reportSections = parseSpeechReportSections(reportText);
         const tableSections = reportSections.filter(
           (s) => !/^What the Data Tells You$/i.test((s.section || '').trim())
@@ -2143,8 +2354,8 @@ const FinalResults = () => {
       doc.setFont('helvetica', 'bolditalic');
       doc.setFontSize(9);
       doc.setTextColor(80, 80, 80);
-      doc.text('Competency-Based Interview Analytics', pageWidth / 2, 52, { align: 'center' });
-      doc.text('Combining AI Evaluation with Advanced Insights', pageWidth / 2, 57, { align: 'center' });
+      doc.text('Competency-Based Interview Analytics', pageWidth / 2, 56, { align: 'center' });
+      doc.text('Combining AI Evaluation with Advanced Insights', pageWidth / 2, 63, { align: 'center' });
       doc.setFont('helvetica', 'normal');
 
       // Resolve candidate photo URL (server → localStorage → sessionStorage)
@@ -2176,7 +2387,7 @@ const FinalResults = () => {
 
       // ── CANDIDATE PHOTO ──────────────────────────────────────────────────────────
       const photoSize = 52;
-      const photoY = 65;
+      const photoY = 73;
       const photoX = (pageWidth - photoSize) / 2;
       const photoCx   = pageWidth / 2;
       const photoCy   = photoY + photoSize / 2;
@@ -2213,7 +2424,7 @@ const FinalResults = () => {
       });
 
       // ── CANDIDATE DETAILS TABLE ───────────────────────────────────────────────────
-      const candidateTableStartY = photoY + photoSize + 18;
+      const candidateTableStartY = photoY + photoSize + 30;
       const candidateRows: [string, string][] = [
         ['Candidate', interview.candidate_name || 'N/A'],
         ['Email', interview.candidate_email || 'N/A'],
@@ -2234,7 +2445,7 @@ const FinalResults = () => {
         tableWidth: tableTotalWidth,
         styles: {
           fontSize: 9,
-          cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+          cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
           lineColor: [208, 223, 245] as [number, number, number],
           lineWidth: 0,
           textColor: [60, 60, 80] as [number, number, number],
@@ -2272,28 +2483,12 @@ const FinalResults = () => {
       }
       doc.setLineWidth(0.8);
       doc.roundedRect(tableMargin, candidateTableStartY, tableTotalWidth, candidateTableHeight, 2.5, 2.5, 'S');
-      const leftMargin = 15;
-      let execSummaryY = candidateTableEndY;
-      execSummaryY += 18;
-
-      // Executive Summary – title centered, all caps, bold; one paragraph left aligned
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(14);
-      doc.setTextColor(...blueRgb);
-      doc.text('EXECUTIVE SUMMARY', pageWidth / 2, execSummaryY, { align: 'center' });
-      execSummaryY += 10;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.setTextColor(0, 0, 0);
       const execCandidateName = interview.candidate_name || 'the candidate';
       const execRole = interview.position || 'the applied role';
       const summaryParagraph = `This report is an overview of ${execCandidateName}, who has completed the interview for the role of ${execRole}. The following pages provide insight into the candidate's answers for various questions across competencies. This is followed by a Detailed Speech Analysis section, which presents a detailed plan and personalised feedback on the candidate's speech and delivery.`;
-      const maxLineWidth = pageWidth - leftMargin * 2;
-      const summarySegments = doc.splitTextToSize(summaryParagraph, maxLineWidth);
-      summarySegments.forEach((seg: string) => {
-        doc.text(seg, leftMargin, execSummaryY);
-        execSummaryY += 6;
-      });
+      const execSummaryMargin = 21;
+      const execSummaryMaxLineWidth = pageWidth - execSummaryMargin * 2;
+      const summarySegments = doc.splitTextToSize(summaryParagraph, execSummaryMaxLineWidth);
 
       // Prepare question data first (needed for total page count)
       const questionRows: { question: any; answer: any; competencyLabel: string; feedback: string }[] = [];
@@ -2529,6 +2724,184 @@ const FinalResults = () => {
         }
       });
 
+      // Page 2: Competency breakdown (before competency-based question detail pages)
+      const competencyBreakdownRows = Object.entries(competencyStats)
+        .map(([name, stat]) => ({
+          name,
+          score: stat.avgScore,
+        }))
+        .filter((r) => r.name && r.name.trim().length > 0)
+        .sort((a, b) => {
+          const aScore = typeof a.score === 'number' ? a.score : -1;
+          const bScore = typeof b.score === 'number' ? b.score : -1;
+          return bScore - aScore;
+        });
+
+      if (competencyBreakdownRows.length > 0) {
+        doc.addPage();
+        const leftMargin = 21;
+        const rightMargin = 21;
+        const contentWidth = pageWidth - leftMargin - rightMargin;
+        const pageBottomLimit = doc.internal.pageSize.height - 22;
+
+        // Single header block for the whole section (as requested).
+        const titleBoxY = 14;
+        const titleBoxH = 22;
+        doc.setFillColor(236, 231, 255);
+        doc.roundedRect(leftMargin, titleBoxY, contentWidth, titleBoxH, 2, 2, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.setTextColor(31, 79, 209);
+        doc.text('COMPETENCY BREAKDOWN', leftMargin + 4, titleBoxY + 8);
+        doc.setFontSize(10);
+        doc.setTextColor(77, 89, 117);
+        doc.text('Average score per competency for this interview', leftMargin + 4, titleBoxY + 14.8);
+        doc.setTextColor(0, 0, 0);
+
+        // Overall circular score indicator between header and competency bars.
+        const overallDisplayScore = resolveDisplayInterviewScore(reportData?.interview, competencyBreakdownRows.length);
+        const ringCenterX = leftMargin + (contentWidth / 2);
+        const ringCenterY = titleBoxY + titleBoxH + 27;
+        const ringRadius = 18;
+
+        // Match the existing "AI competency" circle style used in question pages.
+        doc.setDrawColor(190, 195, 205);
+        doc.setLineWidth(1.1);
+        doc.circle(ringCenterX, ringCenterY, ringRadius, 'S');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(130, 130, 130);
+        doc.text('Overall Score', ringCenterX, ringCenterY - 2.2, { align: 'center' });
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13.5);
+        doc.setTextColor(37, 99, 235);
+        doc.text(
+          overallDisplayScore != null ? `${formatOverallScore(overallDisplayScore)}/10` : 'N/A',
+          ringCenterX,
+          ringCenterY + 3.8,
+          { align: 'center' }
+        );
+        doc.setTextColor(0, 0, 0);
+
+        const nameCellWidth = contentWidth * 0.52;
+        const rightCellX = leftMargin + nameCellWidth;
+        const rightCellWidth = contentWidth - nameCellWidth;
+        const scoreColWidth = 14;
+        const barX = rightCellX + 5;
+        const barW = rightCellWidth - scoreColWidth - 10;
+        const barH = 3.2;
+        const scoreX = leftMargin + contentWidth - 1.5;
+        const rowMinHeight = 12.5;
+        const nameLineHeight = 5.2;
+        let yPos = ringCenterY + ringRadius + 24;
+
+        const pickScoreColor = (v: number): [number, number, number] => {
+          if (v >= 7) return [16, 185, 129]; // good
+          if (v >= 5) return [234, 179, 8];  // average
+          return [239, 68, 68];              // needs work
+        };
+        const wrapLabelByWordLimit = (label: string, wordsPerLine: number): string[] => {
+          const words = String(label || '').trim().split(/\s+/).filter(Boolean);
+          if (words.length === 0) return ['Competency'];
+          const lines: string[] = [];
+          for (let i = 0; i < words.length; i += wordsPerLine) {
+            lines.push(words.slice(i, i + wordsPerLine).join(' '));
+          }
+          return lines;
+        };
+
+        for (let i = 0; i < competencyBreakdownRows.length; i += 1) {
+          const row = competencyBreakdownRows[i];
+          if (yPos + 12 > pageBottomLimit) {
+            doc.addPage();
+            yPos = 20;
+          }
+          const numericScore = typeof row.score === 'number' && Number.isFinite(row.score) ? row.score : null;
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(9.8);
+          doc.setTextColor(31, 79, 209);
+          const wrappedName = wrapLabelByWordLimit(row.name, 4);
+          const textBlockHeight = Math.max(nameLineHeight, wrappedName.length * nameLineHeight);
+          const rowHeight = Math.max(rowMinHeight, textBlockHeight + 2.5);
+          const rowTopY = yPos;
+          const grayCellTopY = rowTopY - 2.5;
+          const grayCellHeight = rowHeight + 2.5;
+          const firstLineY = grayCellTopY + ((grayCellHeight - textBlockHeight) / 2) + (nameLineHeight * 0.78);
+
+          // Table-like row layout: competency cell (light gray), bar+score cell (white).
+          doc.setDrawColor(220, 225, 236);
+          doc.setLineWidth(0.25);
+          doc.setFillColor(245, 247, 251);
+          doc.rect(leftMargin, rowTopY - 2.5, nameCellWidth, rowHeight + 2.5, 'FD');
+          doc.setFillColor(255, 255, 255);
+          doc.rect(rightCellX, rowTopY - 2.5, rightCellWidth, rowHeight + 2.5, 'FD');
+
+          wrappedName.forEach((line: string, idx: number) => {
+            doc.text(line, leftMargin + (nameCellWidth / 2), firstLineY + (idx * nameLineHeight), { align: 'center' });
+          });
+
+          // For multi-line labels, align bar to the visual midpoint of the *gap*
+          // between line 1 and line 2 (not baseline midpoint).
+          const fontSize = 9.8;
+          const textTopOffset = fontSize * 0.72; // baseline -> approximate glyph top
+          const line1Baseline = firstLineY;
+          const line2Baseline = firstLineY + nameLineHeight;
+          const line1Bottom = (line1Baseline - textTopOffset) + fontSize;
+          const line2Top = line2Baseline - textTopOffset;
+          const barCenterY = wrappedName.length >= 2
+            ? (line1Bottom + line2Top) / 2
+            : firstLineY - (nameLineHeight * 0.18);
+          doc.setDrawColor(15, 23, 42);
+          doc.setLineWidth(0.3);
+          doc.setFillColor(238, 242, 255);
+          doc.roundedRect(barX, barCenterY - (barH / 2), barW, barH, 1.8, 1.8, 'FD');
+
+          if (numericScore != null) {
+            const normalized = Math.max(0, Math.min(10, numericScore));
+            const fillW = Math.max(1.2, (normalized / 10) * barW);
+            const c = pickScoreColor(normalized);
+            doc.setFillColor(c[0], c[1], c[2]);
+            doc.roundedRect(barX, barCenterY - (barH / 2), fillW, barH, 1.8, 1.8, 'F');
+          }
+
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(11);
+          doc.setTextColor(31, 41, 55);
+          doc.text(
+            numericScore != null ? Number(numericScore).toFixed(1) : 'N/A',
+            scoreX,
+            barCenterY + 1.5,
+            { align: 'right' }
+          );
+
+          yPos += rowHeight + 5.5;
+        }
+
+        // Executive Summary moved from page 1 to appear below competency breakdown.
+        let execSummaryY = yPos + 16;
+        const execSummaryNeededHeight = 10 + (summarySegments.length * 6) + 8;
+        if (execSummaryY + execSummaryNeededHeight > pageBottomLimit) {
+          doc.addPage();
+          execSummaryY = 22;
+        }
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(14);
+        doc.setTextColor(...blueRgb);
+        doc.text('EXECUTIVE SUMMARY', pageWidth / 2, execSummaryY, { align: 'center' });
+        execSummaryY += 10;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(0, 0, 0);
+        // Keep paragraph strictly within the same horizontal bounds as the violet header block.
+        const execSummaryInnerWidth = Math.max(40, contentWidth - 12);
+        const execSummaryCenteredLines = doc.splitTextToSize(summaryParagraph, execSummaryInnerWidth);
+        const execSummaryCenterX = leftMargin + (contentWidth / 2);
+        execSummaryCenteredLines.forEach((seg: string) => {
+          doc.text(seg, execSummaryCenterX, execSummaryY, { align: 'center' });
+          execSummaryY += 6;
+        });
+      }
+
       // DB-backed lookup maps for level/band text in PDF summary block.
       const paramLevelByKey: Record<string, string> = {};
       const paramLevelByName: Record<string, string> = {};
@@ -2633,7 +3006,8 @@ const FinalResults = () => {
         const scoreText = Number.isFinite(scoreNum) ? `${Math.round(scoreNum)}/10` : 'N/A';
         const qOrder = Number(row?.question?.question_order);
         const bandFallback = Number.isFinite(qOrder) ? bandByQOrder[qOrder] : undefined;
-        const bandText = String(row.answer?.band_applied || bandFallback?.band || 'N/A');
+        const bandTextRaw = String(row.answer?.band_applied || bandFallback?.band || '').trim();
+        const bandText = bandTextRaw.length > 0 ? bandTextRaw : 'Not Evaluated';
 
         doc.setDrawColor(210, 210, 210);
         doc.setLineWidth(0.5);
@@ -2720,8 +3094,8 @@ const FinalResults = () => {
 
         let yPos = contentStartY;
         const qOrderForLabel = Number.isFinite(Number(row?.question?.question_order))
-          ? Number(row.question.question_order)
-          : idx;
+          ? Number(row.question.question_order) + 1
+          : idx + 1;
         drawField(`Question [Q${qOrderForLabel}]`, row.question.questionText || 'N/A', { separator: false });
         // Candidate answer should match normal body font (no italics)
         drawField('Candidate Answer', transcript, { separator: false });
@@ -2730,6 +3104,77 @@ const FinalResults = () => {
           drawField('Written Answer', 'See written answer below', { italic: true });
         }
         drawField('AI Feedback', row.feedback || 'No feedback available');
+
+        // Per-question speech metric stat cards (5 cards) below AI Feedback.
+        const behavioral = row.answer?.behavioral || row.answer?.behavioral_metrics || {};
+        const asNumberOrNull = (v: any): number | null => {
+          if (typeof v === 'number' && Number.isFinite(v)) return v;
+          const n = Number(v);
+          return Number.isFinite(n) ? n : null;
+        };
+        const formatMetric = (
+          v: number | null,
+          opts?: { suffix?: string; decimals?: number }
+        ): string => {
+          if (v == null) return '—';
+          const decimals = typeof opts?.decimals === 'number' ? opts.decimals : 0;
+          return `${v.toFixed(decimals)}${opts?.suffix || ''}`;
+        };
+
+        const metricCards: Array<{ name: string; value: string }> = [
+          {
+            name: 'Overall Speech',
+            value: formatMetric(asNumberOrNull(behavioral?.overall_speech_quality), { suffix: '/100', decimals: 0 }),
+          },
+          {
+            name: 'Speaking Pace',
+            value: formatMetric(asNumberOrNull(behavioral?.speaking_pace_wpm), { suffix: ' WPM', decimals: 0 }),
+          },
+          {
+            name: 'Filler Score',
+            value: (() => {
+              const fillerScore = asNumberOrNull(behavioral?.filler_score);
+              if (fillerScore != null) return formatMetric(fillerScore, { suffix: '/100', decimals: 0 });
+              const fillerRate = asNumberOrNull(behavioral?.filler_rate_per_min);
+              return formatMetric(fillerRate, { suffix: '/min', decimals: 1 });
+            })(),
+          },
+          {
+            name: 'Pause Quality',
+            value: formatMetric(asNumberOrNull(behavioral?.pause_quality_score), { suffix: '/100', decimals: 0 }),
+          },
+          {
+            name: 'Voice Confidence',
+            value: formatMetric(asNumberOrNull(behavioral?.voice_confidence), { suffix: '/100', decimals: 0 }),
+          },
+        ];
+
+        const cardsGap = 3;
+        const cardsTotalWidth = pageWidth - leftMargin - rightMargin;
+        const cardW = (cardsTotalWidth - cardsGap * 4) / 5;
+        const cardH = 18;
+        const cardsY = yPos + 1;
+        const cardsNeededLines = Math.ceil((cardH + 8) / lineHeight) + 1;
+        ensureSpace(cardsNeededLines);
+
+        metricCards.forEach((card, idx) => {
+          const x = leftMargin + idx * (cardW + cardsGap);
+          doc.setDrawColor(216, 224, 236);
+          doc.setLineWidth(0.25);
+          doc.setFillColor(248, 250, 253);
+          doc.roundedRect(x, cardsY, cardW, cardH, 1.6, 1.6, 'FD');
+
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(7.2);
+          doc.setTextColor(112, 120, 132);
+          doc.text(card.name, x + cardW / 2, cardsY + 6.2, { align: 'center' });
+
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.6);
+          doc.setTextColor(31, 93, 168);
+          doc.text(card.value, x + cardW / 2, cardsY + 13.4, { align: 'center' });
+        });
+        yPos = cardsY + cardH + 6;
 
         // Written answer block: line-by-line, monospace, preserves code/SQL formatting
         if (hasWrittenAnswer && writtenAnswerRaw) {
@@ -2855,11 +3300,11 @@ const FinalResults = () => {
           doc.addPage();
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(12);
-          doc.text('Speech Analysis — Overall Metrics Summary', speechMargin, 20);
+          doc.text('SPEECH ANALYSIS — OVERALL METRICS SUMMARY', speechMargin, 20);
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(9);
           doc.setTextColor(60, 60, 60);
-          doc.text('The table below shows the candidate\'s overall average for each speech metric across the entire interview, compared against professionally accepted benchmark ranges.', speechMargin, 28, { maxWidth: speechContentWidth });
+          doc.text('The table below shows the candidate\'s overall average for each speech metric across the entire interview, compared against professionally accepted benchmark ranges.', speechMargin, 27, { maxWidth: speechContentWidth });
           doc.setTextColor(0, 0, 0);
           const overallTableBody = overallMetricsRows.map((r) => {
             return [
@@ -2873,30 +3318,46 @@ const FinalResults = () => {
           const summaryCol1 = speechContentWidth * 0.24;
           const summaryCol2 = speechContentWidth * 0.18;
           const summaryCol3 = speechContentWidth * 0.34;
+          const overallTableStartY = 36;
+          const overallHeaderH = 14;
+          const overallCornerR = 2.5;
+
+          // Custom rounded header band to avoid square-corner artifacts from autoTable headers.
+          doc.setFillColor(4, 44, 83);
+          doc.roundedRect(speechMargin, overallTableStartY, speechContentWidth, overallHeaderH, overallCornerR, overallCornerR, 'F');
+          doc.setDrawColor(255, 255, 255);
+          doc.setLineWidth(0.2);
+          const headerSep1 = speechMargin + summaryCol0;
+          const headerSep2 = headerSep1 + summaryCol1;
+          const headerSep3 = headerSep2 + summaryCol2;
+          doc.line(headerSep1, overallTableStartY, headerSep1, overallTableStartY + overallHeaderH);
+          doc.line(headerSep2, overallTableStartY, headerSep2, overallTableStartY + overallHeaderH);
+          doc.line(headerSep3, overallTableStartY, headerSep3, overallTableStartY + overallHeaderH);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          doc.setTextColor(255, 255, 255);
+          const headerCenterY = overallTableStartY + overallHeaderH / 2 + 1;
+          doc.text('Metric', speechMargin + summaryCol0 / 2, headerCenterY, { align: 'center' });
+          const hdr2 = doc.splitTextToSize('Candidate score & rating', summaryCol1 - 8);
+          hdr2.forEach((line: string, i: number) => {
+            doc.text(line, headerSep1 + summaryCol1 / 2, headerCenterY - (hdr2.length - 1) * 2.2 + i * 4.4, { align: 'center' });
+          });
+          doc.text('Ideal range', headerSep2 + summaryCol2 / 2, headerCenterY, { align: 'center' });
+          doc.text('Definition', headerSep3 + summaryCol3 / 2, headerCenterY, { align: 'center' });
+          doc.setTextColor(0, 0, 0);
+
           autoTable(doc, {
-            head: [['Metric', 'Candidate score & rating', 'Ideal range', 'Definition']],
             body: overallTableBody,
-            startY: 38,
+            startY: overallTableStartY + overallHeaderH,
             // Borderless table with light alternating row backgrounds
             styles: {
-              fontSize: 9,
-              cellPadding: 6,
-              minCellHeight: 14,
+              fontSize: 8.5,
+              cellPadding: 4,
+              minCellHeight: 11,
               lineWidth: 0,
               lineColor: [255, 255, 255],
               textColor: [40, 40, 40],
               fillColor: [242, 242, 242],
-              halign: 'center',
-              valign: 'middle',
-            },
-            headStyles: {
-              fillColor: [235, 235, 235],
-              textColor: [70, 70, 70],
-              fontStyle: 'bold',
-              fontSize: 9,
-              minCellHeight: 14,
-              lineWidth: 0,
-              lineColor: [255, 255, 255],
               halign: 'center',
               valign: 'middle',
             },
@@ -2915,7 +3376,8 @@ const FinalResults = () => {
               }
             },
             didDrawCell: (data) => {
-              if (data.section !== 'body' || data.column.index !== 1) return;
+              if (data.section !== 'body') return;
+              if (data.column.index !== 1) return;
               const row = overallMetricsRows[data.row.index];
               if (!row) return;
               const style = SPEECH_RATING_STYLES[row.rating];
@@ -2924,7 +3386,7 @@ const FinalResults = () => {
               const padX = 4;
               const padY = 2;
               const boxW = Math.min(textWidth + padX * 2, data.cell.width - 4);
-              const boxH = Math.min(10, data.cell.height - 4);
+              const boxH = Math.min(9, data.cell.height - 3);
               const boxX = data.cell.x + (data.cell.width - boxW) / 2;
               const boxY = data.cell.y + (data.cell.height - boxH) / 2;
 
@@ -2933,37 +3395,112 @@ const FinalResults = () => {
 
               const prevFontSize = doc.getFontSize();
               doc.setFont('helvetica', 'normal');
-              doc.setFontSize(9);
+              doc.setFontSize(8.5);
               doc.setTextColor(style.textRgb[0], style.textRgb[1], style.textRgb[2]);
               doc.text(text, data.cell.x + data.cell.width / 2, boxY + boxH / 2 + 1.5, { align: 'center' });
               doc.setFontSize(prevFontSize);
             },
           });
-          const legendY = ((doc as any).lastAutoTable?.finalY ?? 100) + 10;
-          // Legend for rating colours: Good (green), Average (amber), Needs Work (red)
+          const overallTableEndY = (doc as any).lastAutoTable?.finalY ?? (overallTableStartY + overallHeaderH + overallMetricsRows.length * 11);
+          const overallTableHeight = Math.max(12, overallTableEndY - overallTableStartY);
+
+          // Strong, continuous vertical separators for body rows only.
+          const bodyStartY = overallTableStartY + overallHeaderH;
+          doc.setDrawColor(208, 223, 245);
+          doc.setLineWidth(0.45);
+          doc.line(headerSep1, bodyStartY, headerSep1, overallTableEndY);
+          doc.line(headerSep2, bodyStartY, headerSep2, overallTableEndY);
+          doc.line(headerSep3, bodyStartY, headerSep3, overallTableEndY);
+
+          doc.setDrawColor(208, 223, 245);
+          doc.setLineWidth(0.8);
+          doc.roundedRect(speechMargin, overallTableStartY, speechContentWidth, overallTableHeight, overallCornerR, overallCornerR, 'S');
+
+          const rowByKey: Record<string, (typeof overallMetricsRows)[number]> = {};
+          for (const r of overallMetricsRows) rowByKey[r.key] = r;
+          const outerR = Math.min(37, speechContentWidth * 0.195);
+          const ratingLegendItems: SpeechMetricRating[] = ['Good', 'Average', 'Needs Work'];
+          const ratingBoxSize = 5;
+          const ratingItemGap = 18;
+          const gapTableToRatingLegend = 5;
+          const ratingLegendRowY = overallTableStartY + overallTableHeight + gapTableToRatingLegend;
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(9);
-          const legendItems: SpeechMetricRating[] = ['Good', 'Average', 'Needs Work'];
-          const boxSize = 5;
-          const itemGap = 18;
-          const legendBlockWidth = legendItems.reduce((acc, label, idx) => {
+          const ratingLegendBlockWidth = ratingLegendItems.reduce((acc, label, idx) => {
             const labelWidth = doc.getTextWidth(label);
-            const itemWidth = boxSize + 3 + labelWidth;
-            return acc + itemWidth + (idx < legendItems.length - 1 ? itemGap : 0);
+            const itemWidth = ratingBoxSize + 3 + labelWidth;
+            return acc + itemWidth + (idx < ratingLegendItems.length - 1 ? ratingItemGap : 0);
           }, 0);
-          const legendStartX = speechMargin + Math.max(0, (speechContentWidth - legendBlockWidth) / 2);
-          let cursorX = legendStartX;
-
-          legendItems.forEach((label, idx) => {
+          const ratingLegendStartX =
+            speechMargin + Math.max(0, (speechContentWidth - ratingLegendBlockWidth) / 2);
+          let ratingCursorX = ratingLegendStartX;
+          ratingLegendItems.forEach((label, idx) => {
             const style = SPEECH_RATING_STYLES[label];
             const labelWidth = doc.getTextWidth(label);
             doc.setFillColor(style.rgb[0], style.rgb[1], style.rgb[2]);
-            doc.rect(cursorX, legendY, boxSize, boxSize, 'F');
+            doc.rect(ratingCursorX, ratingLegendRowY, ratingBoxSize, ratingBoxSize, 'F');
             doc.setTextColor(0, 0, 0);
-            doc.text(label, cursorX + boxSize + 3, legendY + boxSize - 0.5);
-            cursorX += boxSize + 3 + labelWidth;
-            if (idx < legendItems.length - 1) cursorX += itemGap;
+            doc.text(label, ratingCursorX + ratingBoxSize + 3, ratingLegendRowY + ratingBoxSize - 0.5);
+            ratingCursorX += ratingBoxSize + 3 + labelWidth;
+            if (idx < ratingLegendItems.length - 1) ratingCursorX += ratingItemGap;
           });
+
+          const gapRatingToProfileTitle = 17;
+          const chartTitleY = ratingLegendRowY + ratingBoxSize + gapRatingToProfileTitle;
+          const gapProfileTitleToRadar = 26;
+          const radarTopY = chartTitleY + gapProfileTitleToRadar;
+
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(12);
+          doc.setTextColor(30, 93, 168);
+          doc.text('SPEECH METRIC RADAR CHART', speechMargin, chartTitleY);
+
+          const radarCanDraw = SPEECH_RADAR_ORDER.every((k) => rowByKey[k] != null);
+          let radarBottomY = radarTopY;
+          if (radarCanDraw) {
+            const candidateRadar = SPEECH_RADAR_ORDER.map((k) => {
+              const num = idealRanges.find((r) => r.key === k)?.getNum();
+              return num == null ? 0 : normalizeSpeechRadarValue(k, num);
+            });
+            const idealMinRadar = SPEECH_RADAR_ORDER.map((k) =>
+              normalizeSpeechRadarValue(k, SPEECH_RADAR_IDEAL_MIN[k])
+            );
+            const idealMaxRadar = SPEECH_RADAR_ORDER.map((k) =>
+              normalizeSpeechRadarValue(k, SPEECH_RADAR_IDEAL_MAX[k])
+            );
+            const radarLabels = SPEECH_RADAR_ORDER.map((k) => SPEECH_RADAR_LABELS[k]);
+            const cy = radarBottomY + outerR;
+            const cx = speechMargin + speechContentWidth / 2;
+            const approxLegendTextW = 30;
+            const keyBox = 3;
+            const legendX = Math.min(
+              speechMargin + speechContentWidth - (keyBox + 2 + approxLegendTextW),
+              cx + outerR + 22
+            );
+            drawSpeechMetricsRadarChart(doc, cx, cy, outerR, candidateRadar, idealMinRadar, idealMaxRadar, radarLabels);
+
+            const lineGap = 4;
+            const legendStackH = keyBox + lineGap + keyBox;
+            const row1Top = cy - legendStackH / 2;
+            doc.setFillColor(22, 163, 74);
+            doc.rect(legendX, row1Top, keyBox, keyBox, 'F');
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.9);
+            doc.setTextColor(42, 42, 48);
+            doc.text('Ideal range', legendX + keyBox + 2, row1Top + keyBox - 0.5);
+            doc.setFillColor(37, 99, 235);
+            doc.rect(legendX, row1Top + keyBox + lineGap, keyBox, keyBox, 'F');
+            doc.text('Candidate', legendX + keyBox + 2, row1Top + keyBox + lineGap + keyBox - 0.5);
+
+            radarBottomY = cy + outerR + 12;
+          } else {
+            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(8.5);
+            doc.setTextColor(120, 120, 128);
+            doc.text('Radar chart needs all five metrics; some averages are missing.', speechMargin, chartTitleY + 10);
+            doc.setFont('helvetica', 'normal');
+            radarBottomY = chartTitleY + 22;
+          }
         }
       }
 
@@ -2982,7 +3519,7 @@ const FinalResults = () => {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(9);
         doc.setTextColor(0, 0, 0);
-        const reportBody = stripSpeechReportTitleLine(String(speechReport).trim());
+        const reportBody = shiftQuestionLabelsToOneBased(stripSpeechReportTitleLine(String(speechReport).trim()));
         const reportSections = parseSpeechReportSections(reportBody);
 
         const whereDidWellIndex = reportSections.findIndex((s) =>
@@ -3033,6 +3570,18 @@ const FinalResults = () => {
           const content = (section.content || '').trim();
           if (!title && !content) return;
           const sectionColor = speechSectionColorMap[title.toLowerCase()] || PARAM_COLOR_PALETTE[sectionIdx % PARAM_COLOR_PALETTE.length];
+          const speechHeadingUpperKeys = new Set([
+            'how you opened each answer',
+            'your flow and filler pattern',
+            'how you closed each answer',
+            'your vocal presence',
+            'what to keep doing',
+            'progress over your interviews',
+            'progress over interviews',
+            'what an interviewer would have noticed',
+          ]);
+          const headingDisplay =
+            speechHeadingUpperKeys.has(title.toLowerCase()) ? title.toUpperCase() : title;
 
           // Heading
           ensureSpace(5);
@@ -3046,7 +3595,7 @@ const FinalResults = () => {
           doc.setFillColor(sectionColor.bg[0], sectionColor.bg[1], sectionColor.bg[2]);
           doc.roundedRect(speechMargin, headingBoxY, speechContentWidth, headingBoxH, 2, 2, 'F');
           doc.setTextColor(sectionColor.text[0], sectionColor.text[1], sectionColor.text[2]);
-          doc.text(title || '—', headingTextX, headingTextY);
+          doc.text(headingDisplay || '—', headingTextX, headingTextY);
           yPos = headingBoxY + headingBoxH + 6;
 
           // Body — plain text, no bold numbers (avoids jsPDF mixed-font spacing bugs)
@@ -3140,10 +3689,10 @@ const FinalResults = () => {
           const ensureSpace = (heightNeeded: number) => {
             if (yPos + heightNeeded > pageHeight - bottomMargin) {
               doc.addPage();
-              doc.setFont('helvetica', 'normal');
-              doc.setFontSize(9);
-              doc.setTextColor(0, 0, 0);
               yPos = 20;
+              // Do not reset font size/color here — callers already set typography before drawing.
+              // Previously forcing 9pt after addPage() ran between setFontSize(10) and doc.text(wrapped),
+              // so body text on continuation pages rendered smaller than page 1.
             }
           };
 
@@ -3158,27 +3707,48 @@ const FinalResults = () => {
               bodyRgb: [number, number, number];
             }
           ) => {
-            const innerPadX = 2;
-            const innerW = contentWidth - 4;
-            const wrapped = doc.splitTextToSize(body || '—', innerW);
-            const n = Math.max(1, wrapped.length);
-            const boxH = 12 + n * lineHeight;
+            const padX = 4;
+            const padTop = 6;
+            const padBottom = 5;
+            const labelFontSize = 9;
+            const bodyFontSize = 10;
+            const labelLineH = 5;
+            const bodyLineH = lineHeight;
+
+            const boxX = contentX - 1;
+            const boxW = contentWidth + 2;
+            const textMaxW = boxW - padX * 2 - 1;
+
+            const prevFontSize = doc.getFontSize();
+            doc.setFontSize(bodyFontSize);
+            const wrapped = doc.splitTextToSize(String(body || '—'), textMaxW);
+            doc.setFontSize(prevFontSize);
+
+            const bodyH = Math.max(1, wrapped.length) * bodyLineH;
+            const boxH = padTop + labelFontSize * 0.8 + labelLineH + bodyH + padBottom;
+
             ensureSpace(boxH + 4);
             const boxY = yPos;
+
             doc.setFillColor(box.fill[0], box.fill[1], box.fill[2]);
             doc.setDrawColor(box.stroke[0], box.stroke[1], box.stroke[2]);
             doc.setLineWidth(0.3);
-            doc.rect(contentX - 1, boxY, contentWidth + 2, boxH, 'FD');
-            const labelBaseline = boxY + 6;
+            doc.rect(boxX, boxY, boxW, boxH, 'FD');
+
+            const labelBaseline = boxY + padTop + labelFontSize * 0.72;
             doc.setFont('helvetica', 'bold');
-            doc.setFontSize(9);
+            doc.setFontSize(labelFontSize);
             doc.setTextColor(box.header[0], box.header[1], box.header[2]);
-            doc.text(`${label}:`, contentX + innerPadX, labelBaseline);
+            doc.text(`${label}:`, boxX + padX, labelBaseline);
+
+            const bodyStartBaseline = labelBaseline + labelLineH + 2;
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(10);
+            doc.setFontSize(bodyFontSize);
             doc.setTextColor(box.bodyRgb[0], box.bodyRgb[1], box.bodyRgb[2]);
-            const bodyFirstBaseline = labelBaseline + lineHeight + 2;
-            doc.text(wrapped, contentX + innerPadX, bodyFirstBaseline);
+            wrapped.forEach((line: string, i: number) => {
+              doc.text(line, boxX + padX, bodyStartBaseline + i * bodyLineH);
+            });
+
             yPos = boxY + boxH + 3;
           };
 
@@ -3242,12 +3812,23 @@ const FinalResults = () => {
             doc.setTextColor(76, 80, 191);
             doc.text(String(item.srNo || idx + 1), numberBoxX + numberBoxW / 2, yPos + 6.3, { align: 'center' });
 
-            // Action title
+            // Action title — light orange chip, dark orange uppercase text (matches web)
+            const titleUpper = cleanName.toUpperCase();
+            const titlePadX = 2.5;
+            const titlePadY = 2;
+            const titleLineH = 5.2;
+            const titleInnerW = Math.max(10, titleMaxWidth - titlePadX * 2);
+            const titleLines = doc.splitTextToSize(titleUpper, titleInnerW);
+            const titleBoxW = Math.min(titleMaxWidth + 4, badgeX - titleX - 2);
+            const titleBoxH = titlePadY * 2 + titleLines.length * titleLineH + 1;
+            doc.setFillColor(255, 237, 213);
+            doc.setDrawColor(254, 215, 170);
+            doc.setLineWidth(0.25);
+            doc.roundedRect(titleX - 0.5, yPos + 0.5, titleBoxW, titleBoxH, 1.4, 1.4, 'FD');
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(11);
-            doc.setTextColor(26, 26, 26);
-            const titleLines = doc.splitTextToSize(cleanName, titleMaxWidth);
-            doc.text(titleLines, titleX, yPos + 6);
+            doc.setTextColor(154, 52, 18);
+            doc.text(titleLines, titleX + titlePadX, yPos + titlePadY + 4.2);
 
             // Leverage badge
             doc.setFillColor(leverageStyle.bg[0], leverageStyle.bg[1], leverageStyle.bg[2]);
@@ -3268,7 +3849,7 @@ const FinalResults = () => {
               doc.text(evoLabel, evoBadgeX + evoBadgeW / 2, yPos + 6, { align: 'center' });
             }
 
-            yPos += 14;
+            yPos += Math.max(14, titleBoxH + 5);
 
             if (item.format === 'v2') {
               const v2PlainRows: { label: string; text: string }[] = [
@@ -3279,7 +3860,7 @@ const FinalResults = () => {
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(9);
                 doc.setTextColor(0, 0, 0);
-                doc.text(`${row.label}:`, contentX, yPos);
+                doc.text(`${row.label.toUpperCase()}:`, contentX, yPos);
                 yPos += lineHeight;
                 doc.setFont('helvetica', 'normal');
                 doc.setFontSize(10);
@@ -3292,7 +3873,7 @@ const FinalResults = () => {
               if ((item.theCue || '').trim()) {
                 drawV2HighlightBox('The cue', item.theCue || '—', cueCalloutStyle);
               }
-              drawV2HighlightBox('Between interviews', item.betweenInterviews || '—', betweenCalloutStyle);
+              drawV2HighlightBox('BETWEEN INTERVIEWS', item.betweenInterviews || '—', betweenCalloutStyle);
             } else {
               const addressesPrefix = 'Addresses: ';
               const addressesPrefixWidth = doc.getTextWidth(addressesPrefix);
@@ -3921,7 +4502,11 @@ selectedCompetencyKey === paramKey
                                 <div className="min-w-0 flex-1 text-left">
                                   <div className="flex items-center gap-3 mb-3">
                                     <span className="font-bold text-base sm:text-lg text-gray-900">
-                                      {`Question [Q${question?.question_order ?? idx}]`}
+                                      {`Question [Q${
+                                        Number.isFinite(Number(question?.question_order))
+                                          ? Number(question.question_order) + 1
+                                          : idx + 1
+                                      }]`}
                                     </span>
                                     {!competencyGroups[selectedCompetencyKey].isPersonal && answer?.score != null && (
                                       <span className={`text-xl sm:text-2xl font-bold ${getScoreColor(answer.score)}`}>{answer.score}/10</span>
@@ -4128,8 +4713,8 @@ selectedCompetencyKey === paramKey
 
                 const Radar = () => {
                   const [hovered, setHovered] = useState<null | { label: string; value: string; x: number; y: number }>(null);
-                  const size = 760;
-                  const pad = 104;
+                  const size = 700;
+                  const pad = 110;
                   const cx = size / 2;
                   const cy = size / 2;
                   const rMax = (size / 2) - pad;
@@ -4190,7 +4775,7 @@ selectedCompetencyKey === paramKey
                         <svg
                           viewBox={`0 0 ${size} ${size}`}
                           preserveAspectRatio="xMidYMid meet"
-                          className="h-[640px] w-[640px] max-w-full overflow-visible sm:h-[740px] sm:w-[740px]"
+                          className="h-[560px] w-[560px] max-w-full overflow-visible sm:h-[640px] sm:w-[640px]"
                         >
                           {/* grid */}
                           {gridLevels.map((lvl) => (
@@ -4234,7 +4819,7 @@ selectedCompetencyKey === paramKey
                           {/* labels */}
                           {axes.map((m, i) => {
                             const a = start + i * step;
-                            const p = polarPoint(cx, cy, rMax + 28, a);
+                            const p = polarPoint(cx, cy, rMax + 20, a);
                             const anchor =
                               Math.abs(Math.cos(a)) < 0.25 ? 'middle' : Math.cos(a) > 0 ? 'start' : 'end';
                             return (
@@ -4490,7 +5075,9 @@ selectedCompetencyKey === paramKey
                 if (!speechReport || !String(speechReport).trim()) {
                   return <p className="text-sm sm:text-base text-gray-600">No narrative available yet. Download the PDF for the full analysis when it’s ready.</p>;
                 }
-                const reportBody = stripSpeechReportTitleLine(String(speechReport).trim()).replace(/''/g, "'");
+                const reportBody = shiftQuestionLabelsToOneBased(
+                  stripSpeechReportTitleLine(String(speechReport).trim()).replace(/''/g, "'")
+                );
                 const sections = parseSpeechReportSections(reportBody);
                 if (!sections.length) {
                   return <p className="text-sm sm:text-base text-gray-600 whitespace-pre-line">{reportBody}</p>;
@@ -4499,7 +5086,7 @@ selectedCompetencyKey === paramKey
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {sections.map((s) => (
                       <div key={s.section} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                        <div className="text-xs font-semibold tracking-[0.08em] text-gray-600 uppercase">{s.section}</div>
+                        <div className="text-xs font-semibold tracking-[0.08em] uppercase text-[#0d6ea3]">{s.section}</div>
                         <p className="mt-2 text-sm sm:text-base text-gray-800 leading-relaxed whitespace-pre-line">{s.content}</p>
                       </div>
                     ))}
@@ -4586,10 +5173,12 @@ selectedCompetencyKey === paramKey
                           const leverage = parsed.leverage || fallbackLeverage;
                           return (
                       <div key={`${it.srNo}-${it.actionName}`} className="rounded-lg border border-gray-200 bg-white p-4">
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start justify-between gap-3 pb-4 sm:pb-5">
                           <div className="min-w-0">
                             <div className="text-sm font-bold tracking-[0.08em] text-gray-700 uppercase">Action {it.srNo}</div>
-                            <div className="mt-1 text-base sm:text-lg font-semibold text-gray-900">{parsed.cleanName}</div>
+                            <div className="mt-1 inline-block max-w-full rounded-md border border-orange-200 bg-orange-100 px-3 py-2 text-base sm:text-lg font-semibold uppercase tracking-wide text-orange-900">
+                              {parsed.cleanName}
+                            </div>
                           </div>
                           <div className="shrink-0 flex items-center gap-2">
                             <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${leverageBadgeClass[leverage]}`}>
@@ -4604,7 +5193,7 @@ selectedCompetencyKey === paramKey
                         </div>
 
                         {it.format === 'v2' ? (
-                          <div className="mt-3 space-y-3 text-sm sm:text-base text-gray-800">
+                          <div className="mt-12 sm:mt-14 space-y-5 border-l-2 border-slate-200/80 pl-4 sm:pl-5 pt-2 text-sm sm:text-base text-gray-800">
                             {it.whatYouDid ? (
                               <div>
                                 <div className="text-sm font-bold tracking-[0.08em] text-gray-700 uppercase">What you did</div>

@@ -1,5 +1,17 @@
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { User, Settings, UserPlus, Briefcase, LayoutDashboard, Share2, ClipboardList } from 'lucide-react';
+import {
+  Settings,
+  UserPlus,
+  Briefcase,
+  LayoutDashboard,
+  Share2,
+  ClipboardList,
+  ChevronDown,
+  ChevronRight,
+  Layers,
+} from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Sidebar,
   SidebarContent,
@@ -12,18 +24,22 @@ import {
 } from '@/components/ui/sidebar';
 
 const mainItem = {
-  title: 'My Dashboard',
+  title: 'OVERVIEW',
   icon: LayoutDashboard,
   path: '/candidate-dashboard',
 };
 
-const stepItems = [
-  // { title: 'My Profile', icon: User, path: '/candidate-dashboard/profile' },
+const interviewModuleItems = [
   { title: 'Customize Interview', icon: Settings, path: '/candidate-dashboard/jds/configure' },
   { title: 'Generate Interview', icon: UserPlus, path: '/candidate-dashboard/jds/create' },
   { title: 'Interviews', icon: ClipboardList, path: '/candidate-dashboard/interviews' },
-  { title: 'Performance Report', icon: Briefcase, path: '/candidate-dashboard/performance-report' },
-  { title: 'Revenue & Billing', icon: Share2, path: '/candidate-dashboard/referrals' },
+];
+
+const INTERVIEW_MODULE_PATH_PREFIXES = interviewModuleItems.map((i) => i.path);
+
+const otherStepItems = [
+  { title: 'ANALYTICS', icon: Briefcase, path: '/candidate-dashboard/performance-report' },
+  { title: 'REFERRAL SETTINGS', icon: Share2, path: '/candidate-dashboard/referrals' },
 ];
 
 function getInitials(firstName?: string, lastName?: string): string {
@@ -44,6 +60,7 @@ type CandidateAppSidebarProps = {
   lastName?: string;
 };
 
+/** Matches recruiter `AppSidebar`: navy headers, gray hover, ml-4 nested items, default sidebar button sizing. */
 export function CandidateAppSidebar({ firstName, lastName }: CandidateAppSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -51,6 +68,16 @@ export function CandidateAppSidebar({ firstName, lastName }: CandidateAppSidebar
   const pathname = location.pathname;
   const initials = getInitials(firstName, lastName);
   const fullName = getFullName(firstName, lastName);
+
+  const isInterviewModulePathActive = INTERVIEW_MODULE_PATH_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(p + '/'),
+  );
+
+  const [interviewModuleOpen, setInterviewModuleOpen] = useState(true);
+
+  useEffect(() => {
+    if (isInterviewModulePathActive) setInterviewModuleOpen(true);
+  }, [isInterviewModulePathActive]);
 
   const isActive = (path: string) => {
     if (path === '/candidate-dashboard') {
@@ -64,51 +91,103 @@ export function CandidateAppSidebar({ firstName, lastName }: CandidateAppSidebar
     if (isMobile) setOpenMobile(false);
   };
 
-  const menuBtnClass =
-    'py-3.5 px-3 text-lg font-medium text-gray-800 hover:bg-sky-50 hover:text-sky-800 data-[active=true]:bg-sky-100 data-[active=true]:text-sky-800 [&>svg]:w-6 [&>svg]:h-6';
+  /** Same vertical rhythm as recruiter `AppSidebar`: default menu gap-1, even spacing between groups. */
+  const navMenuClass = 'gap-1';
+  const navGroupClass = 'p-0 px-2';
 
   return (
-    <Sidebar className="border-r border-sky-100 bg-white" data-tour="candidate-sidebar">
-      <SidebarContent className="gap-0 pt-4 pb-4">
-        {/* Profile: circle with initials + full name */}
-        <SidebarGroup className="px-3 pb-4">
+    <Sidebar className="border-r bg-white" data-tour="candidate-sidebar">
+      <SidebarContent className="flex flex-col gap-2 pt-4 pb-4">
+        <SidebarGroup className="p-0 px-3 pb-6">
           <div className="flex flex-col items-center gap-4">
             <div
-              className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-800 font-semibold text-3xl"
+              className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-sky-100 text-[#042C53] font-semibold text-3xl"
               aria-hidden
             >
               {initials}
             </div>
-            <p className="text-center text-lg font-medium text-gray-900 leading-tight break-words max-w-full">
+            <p className="text-center text-base font-medium text-[#042C53] leading-tight break-words max-w-full">
               {fullName}
             </p>
           </div>
         </SidebarGroup>
 
-        <SidebarGroup className="pt-8 pb-0">
-          <SidebarGroupContent className="py-0">
-            <SidebarMenu className="flex flex-col gap-3">
+        {/* OVERVIEW */}
+        <SidebarGroup className={`${navGroupClass} mt-1`}>
+          <SidebarGroupContent className="p-0">
+            <SidebarMenu className={navMenuClass}>
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => handleNav(mainItem.path)}
                   isActive={isActive(mainItem.path)}
                   tooltip={mainItem.title}
-                  className={menuBtnClass}
+                  className="cursor-pointer hover:bg-gray-50"
                 >
-                  <mainItem.icon className="w-6 h-6 shrink-0" />
-                  <span>{mainItem.title}</span>
+                  <mainItem.icon className="h-4 w-4 shrink-0 text-[#042C53]" />
+                  <span className="font-bold tracking-[0.06em] text-[#042C53]">{mainItem.title}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              {stepItems.map((item) => (
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* INTERVIEW MODULE — trigger layout matches recruiter CV SCREENING / INTERVIEW WORKFLOW + leading icon for column alignment */}
+        <SidebarGroup className={navGroupClass}>
+          <Collapsible open={interviewModuleOpen} onOpenChange={setInterviewModuleOpen}>
+            <CollapsibleTrigger asChild>
+              <SidebarMenuButton
+                type="button"
+                isActive={isInterviewModulePathActive}
+                className="cursor-pointer hover:bg-gray-50 flex w-full items-center justify-between"
+                tooltip="INTERVIEW MODULE"
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <Layers className="h-4 w-4 shrink-0 text-[#042C53]" aria-hidden />
+                  <span className="font-bold tracking-[0.06em] text-[#042C53]">INTERVIEW MODULE</span>
+                </div>
+                {interviewModuleOpen ? (
+                  <ChevronDown className="h-4 w-4 shrink-0 text-[#042C53]" aria-hidden />
+                ) : (
+                  <ChevronRight className="h-4 w-4 shrink-0 text-[#042C53]" aria-hidden />
+                )}
+              </SidebarMenuButton>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent className="p-0">
+                <SidebarMenu className={navMenuClass}>
+                  {interviewModuleItems.map((item) => (
+                    <SidebarMenuItem key={item.path}>
+                      <SidebarMenuButton
+                        onClick={() => handleNav(item.path)}
+                        isActive={isActive(item.path)}
+                        className="group relative ml-4 w-full"
+                        tooltip={item.title}
+                      >
+                        <item.icon className="h-4 w-4 shrink-0 text-[#042C53]" />
+                        <span className="font-medium text-[#042C53]">{item.title}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </SidebarGroup>
+
+        {/* ANALYTICS + REFERRAL SETTINGS */}
+        <SidebarGroup className={navGroupClass}>
+          <SidebarGroupContent className="p-0">
+            <SidebarMenu className={navMenuClass}>
+              {otherStepItems.map((item) => (
                 <SidebarMenuItem key={item.path}>
                   <SidebarMenuButton
                     onClick={() => handleNav(item.path)}
                     isActive={isActive(item.path)}
                     tooltip={item.title}
-                    className={menuBtnClass}
+                    className="cursor-pointer hover:bg-gray-50"
                   >
-                    <item.icon className="w-6 h-6 shrink-0" />
-                    <span>{item.title}</span>
+                    <item.icon className="h-4 w-4 shrink-0 text-[#042C53]" />
+                    <span className="font-bold tracking-[0.06em] text-[#042C53]">{item.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}

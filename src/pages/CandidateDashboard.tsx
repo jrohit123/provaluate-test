@@ -67,7 +67,7 @@ const CandidateDashboard = () => {
               lastName={candidate?.last_name ?? undefined}
             />
         <SidebarInset>
-          <header className="bg-sky-700 border-b border-sky-800 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 min-h-[52px] sm:min-h-[58px]">
+          <header className="[background:linear-gradient(135deg,#1a9fd6,#2563eb)] border-b border-white/15 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 min-h-[52px] sm:min-h-[58px]">
             <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1 overflow-hidden">
               <SidebarTrigger className="text-white flex-shrink-0 min-h-[44px] min-w-[44px] rounded-md touch-manipulation flex items-center justify-center" />
               <div className="min-w-0 flex-1 overflow-hidden">

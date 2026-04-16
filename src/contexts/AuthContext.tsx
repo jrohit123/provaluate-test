@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { hasTpoProfile } from '@/lib/authPortalQueries';
 import type { User } from '@supabase/supabase-js';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -180,6 +181,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return {
             user: null,
             error: { message: 'This account is a recruiter account. Please sign in on the recruiter login page.' },
+          };
+        }
+        if (await hasTpoProfile(data.user.id)) {
+          await supabase.auth.signOut();
+          setUser(null);
+          setLoading(false);
+          return {
+            user: null,
+            error: { message: 'This account is a TPO account. Please sign in on the TPO login page.' },
           };
         }
         const u: AuthUser = { ...data.user, candidate: undefined };

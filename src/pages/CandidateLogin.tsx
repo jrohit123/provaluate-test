@@ -82,7 +82,7 @@ const CandidateLogin = () => {
       const { user, error, needsOnboarding } = await candidateSignIn(email, password);
       if (error) {
         toast({
-          title: 'Use recruiter login',
+          title: 'Wrong login page',
           description: error.message || 'Something went wrong.',
           variant: 'destructive',
         });

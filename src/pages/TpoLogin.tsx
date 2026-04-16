@@ -133,8 +133,20 @@ const TpoLogin = () => {
         return;
       }
 
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data: signData, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
+      const uid = signData.user?.id;
+      if (!uid) throw new Error('Login failed: no user returned.');
+      const { data: recruiterRow } = await supabase.from('users').select('user_id').eq('user_id', uid).maybeSingle();
+      if (recruiterRow) {
+        await supabase.auth.signOut();
+        throw new Error('This account is a recruiter account. Please use the recruiter login page.');
+      }
+      const { data: candidateRow } = await supabase.from('candidates').select('candidate_id').eq('auth_user_id', uid).maybeSingle();
+      if (candidateRow) {
+        await supabase.auth.signOut();
+        throw new Error('This account is a candidate account. Please use the candidate login page.');
+      }
       await loadTpoProfile();
     } catch (err: unknown) {
       toast({
