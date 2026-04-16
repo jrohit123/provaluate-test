@@ -155,8 +155,8 @@ export function CandidateMainDashboard({ candidateId, candidateEmail, onNavigate
     { title: 'Customize Interview', icon: Settings, path: '/candidate-dashboard/jds/configure' },
     { title: 'Generate Interview', icon: UserPlus, path: '/candidate-dashboard/jds/create' },
     { title: 'Interviews', icon: ClipboardList, path: '/candidate-dashboard/interviews' },
-    { title: 'ANALYTICS', icon: Briefcase, path: '/candidate-dashboard/performance-report' },
-    { title: 'REFERRAL SETTINGS', icon: Share2, path: '/candidate-dashboard/referrals' },
+    { title: 'Analytics', icon: Briefcase, path: '/candidate-dashboard/performance-report' },
+    { title: 'Referral Settings', icon: Share2, path: '/candidate-dashboard/referrals' },
   ];
 
   const quickActionCardClass =
@@ -166,8 +166,7 @@ export function CandidateMainDashboard({ candidateId, candidateEmail, onNavigate
     <div className="w-full min-w-0 p-3 sm:p-6 space-y-6 sm:space-y-8 overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <p className="text-sm sm:text-base text-gray-600 mb-1">Welcome to your candidate workspace</p>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">OVERVIEW</h1>
+          <p className="text-sm sm:text-base font-bold text-gray-600 mb-1">Welcome to your candidate workspace</p>
         </div>
       </div>
 

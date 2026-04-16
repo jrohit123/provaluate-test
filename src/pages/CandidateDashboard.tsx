@@ -60,7 +60,7 @@ const CandidateDashboard = () => {
   const truncatedGreeting = greeting.length > 30 ? `${greeting.substring(0, 27)}...` : greeting;
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={true}>
       <div className="flex w-full min-h-screen bg-gradient-to-br from-sky-50 to-sky-100 overflow-x-hidden">
         <CandidateAppSidebar
               firstName={candidate?.first_name ?? undefined}

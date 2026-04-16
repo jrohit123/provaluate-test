@@ -1936,7 +1936,7 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
   };
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={true}>
       <div className="flex w-full min-h-screen bg-[linear-gradient(145deg,#EEF2FF_0%,#DCE7FF_42%,#BFD7FF_100%)] overflow-x-hidden">
         <TpoAppSidebar
           activeSection={activeSection}
