@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { UserPlus, LogIn, Menu } from "lucide-react";
+import { UserPlus, LogIn, Menu, Eye, EyeOff } from "lucide-react";
 import { SessionManager } from '@/utils/sessionManager';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -20,6 +20,7 @@ const TEST_PASSWORD = 'testpassword123';
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isSignup, setIsSignup] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showReset, setShowReset] = useState(false);
@@ -530,15 +531,26 @@ const Login = () => {
                                 </button>
                               )}
                             </div>
-                            <Input
-                              type="password"
-                              placeholder="Password"
-                              value={password}
-                              onChange={(e) => setPassword(e.target.value)}
-                              required
-                              className="h-11 border-[#cfe2ef] text-sm focus-visible:ring-[#0d6ea3]/30 sm:h-12 sm:text-lg"
-                              disabled={isLoading}
-                            />
+                            <div className="relative">
+                              <Input
+                                type={showPassword ? "text" : "password"}
+                                placeholder="Password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                className="h-11 border-[#cfe2ef] pr-11 text-sm focus-visible:ring-[#0d6ea3]/30 sm:h-12 sm:text-lg"
+                                disabled={isLoading}
+                              />
+                              <button
+                                type="button"
+                                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-500 transition-colors hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                onClick={() => setShowPassword((prev) => !prev)}
+                                disabled={isLoading}
+                                aria-label={showPassword ? "Hide password" : "Show password"}
+                              >
+                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
                           </div>
                           <Button
                             type="submit"

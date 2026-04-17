@@ -56,13 +56,13 @@ const ResetPassword = () => {
         const tokenAccess = searchParams.get('access_token');
         const tokenRefresh = searchParams.get('refresh_token');
         const tokenType = searchParams.get('type');
-        const userType = searchParams.get('user'); // 'recruiter' | 'candidate' for post-reset redirect
+        const userType = searchParams.get('user'); // 'recruiter' | 'candidate' | 'tpo' for post-reset redirect
         if (tokenAccess) {
           sessionStorage.setItem('reset_access_token', tokenAccess);
           if (tokenRefresh) sessionStorage.setItem('reset_refresh_token', tokenRefresh);
           if (tokenType) sessionStorage.setItem('reset_type', tokenType);
         }
-        if (userType === 'recruiter' || userType === 'candidate') {
+        if (userType === 'recruiter' || userType === 'candidate' || userType === 'tpo') {
           sessionStorage.setItem('reset_redirect_user', userType);
         }
       }
@@ -257,8 +257,15 @@ const ResetPassword = () => {
         console.log('✅ Password confirmed successfully:', data);
         setMessage('Password updated successfully! Redirecting to login...');
 
-        // Redirect from Edge Function response (isCandidate set by confirm-password)
-        const loginPath = data?.isCandidate === true ? '/candidate-login' : '/login';
+        // Redirect preference: explicit reset link user param first, then Edge Function fallback
+        const redirectUser = sessionStorage.getItem('reset_redirect_user');
+        const loginPath = redirectUser === 'candidate'
+          ? '/candidate-login'
+          : redirectUser === 'tpo'
+            ? '/tpo-login'
+            : data?.isCandidate === true
+              ? '/candidate-login'
+              : '/login';
 
         // Navigate first so auth listeners don't override with /login; then sign out and clear
         const delayMs = 500;

@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { API_CONFIG, buildApiUrl } from '@/constants/api';
-import { LogIn, Menu, UserPlus } from 'lucide-react';
+import { LogIn, Menu, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 type TpoMeResponse = {
@@ -32,8 +32,14 @@ const TpoLogin = () => {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isSignup, setIsSignup] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState('');
+  const [resetError, setResetError] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const WELCOME_PHRASES = ['Welcome to the TPO Portal'];
   const [welcomePhraseIndex, setWelcomePhraseIndex] = useState(0);
@@ -193,6 +199,30 @@ const TpoLogin = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetMessage('');
+    setResetError('');
+    setResetLoading(true);
+    try {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(resetEmail)) {
+        throw new Error('Please enter a valid email address.');
+      }
+      const redirectTo = `${window.location.origin}/reset-password?user=tpo`;
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo,
+      });
+      if (error) throw error;
+      setResetMessage('Password reset email sent! Please check your inbox and spam folder.');
+      setResetEmail('');
+    } catch (err: unknown) {
+      setResetError(err instanceof Error ? err.message : 'Failed to send password reset email.');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -358,49 +388,106 @@ const TpoLogin = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="px-5 pb-6 sm:px-8 sm:pb-9">
-                  <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
-                    <div className="space-y-2">
+                  {!showReset ? (
+                    <>
+                      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
+                        <div className="space-y-2">
+                          <Input
+                            type="email"
+                            placeholder="Work email address"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                            className="h-11 border-[#b9d7ea] text-sm focus-visible:ring-[#042C53]/30 sm:h-12 sm:text-lg"
+                            disabled={isLoading}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-slate-500">Password</span>
+                            {!isSignup && (
+                              <button
+                                type="button"
+                                className="text-sm text-[#042C53] transition-colors hover:text-[#020f1a]"
+                                onClick={() => setShowReset(true)}
+                                disabled={isLoading}
+                              >
+                                Forgot your password?
+                              </button>
+                            )}
+                          </div>
+                          <div className="relative">
+                            <Input
+                              type={showPassword ? 'text' : 'password'}
+                              placeholder="Password"
+                              value={password}
+                              onChange={(e) => setPassword(e.target.value)}
+                              required
+                              minLength={isSignup ? 6 : undefined}
+                              className="h-11 border-[#cfe2ef] pr-11 text-sm focus-visible:ring-[#042C53]/30 sm:h-12 sm:text-lg"
+                              disabled={isLoading}
+                            />
+                            <button
+                              type="button"
+                              className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-500 transition-colors hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              onClick={() => setShowPassword((prev) => !prev)}
+                              disabled={isLoading}
+                              aria-label={showPassword ? 'Hide password' : 'Show password'}
+                            >
+                              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          </div>
+                        </div>
+                        <Button
+                          type="submit"
+                          className="h-11 w-full text-base text-white shadow-[0_4px_18px_rgba(4,44,83,0.30)] transition-shadow hover:shadow-[0_6px_22px_rgba(4,44,83,0.35)] [background:linear-gradient(135deg,#020f1a,#042C53)] hover:[background:linear-gradient(135deg,#031525,#053565)] sm:h-12 sm:text-lg"
+                          disabled={isLoading}
+                        >
+                          {isLoading ? 'Please wait...' : isSignup ? 'Create account' : 'Sign in'}
+                        </Button>
+                      </form>
+
+                      <div className="mt-4 text-center sm:mt-6">
+                        <button
+                          type="button"
+                          onClick={() => setIsSignup(!isSignup)}
+                          className="text-sm text-[#042C53] transition-colors hover:text-[#020f1a]"
+                          disabled={isLoading}
+                        >
+                          {isSignup ? 'Already have an account? Sign in' : "Don't have an account? Create account"}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <form onSubmit={handlePasswordReset} className="mt-4 flex flex-col gap-2 sm:gap-3">
                       <Input
                         type="email"
-                        placeholder="Work email address"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="Enter your email"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
                         required
-                        className="h-11 border-[#b9d7ea] text-sm focus-visible:ring-[#042C53]/30 sm:h-12 sm:text-lg"
-                        disabled={isLoading}
+                        className="h-11 text-sm sm:h-12 sm:text-lg"
+                        disabled={resetLoading}
                       />
-                    </div>
-                    <div className="space-y-2">
-                      <Input
-                        type="password"
-                        placeholder="Password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        minLength={isSignup ? 6 : undefined}
-                        className="h-11 border-[#cfe2ef] text-sm focus-visible:ring-[#042C53]/30 sm:h-12 sm:text-lg"
-                        disabled={isLoading}
-                      />
-                    </div>
-                    <Button
-                      type="submit"
-                      className="h-11 w-full text-base text-white shadow-[0_4px_18px_rgba(4,44,83,0.30)] transition-shadow hover:shadow-[0_6px_22px_rgba(4,44,83,0.35)] [background:linear-gradient(135deg,#020f1a,#042C53)] hover:[background:linear-gradient(135deg,#031525,#053565)] sm:h-12 sm:text-lg"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? 'Please wait...' : isSignup ? 'Create account' : 'Sign in'}
-                    </Button>
-                  </form>
-
-                  <div className="mt-4 text-center sm:mt-6">
-                    <button
-                      type="button"
-                      onClick={() => setIsSignup(!isSignup)}
-                      className="text-sm text-[#042C53] transition-colors hover:text-[#020f1a]"
-                      disabled={isLoading}
-                    >
-                      {isSignup ? 'Already have an account? Sign in' : "Don't have an account? Create account"}
-                    </button>
-                  </div>
+                      <Button
+                        type="submit"
+                        className="h-11 w-full text-base text-white shadow-[0_4px_18px_rgba(4,44,83,0.30)] transition-shadow hover:shadow-[0_6px_22px_rgba(4,44,83,0.35)] [background:linear-gradient(135deg,#020f1a,#042C53)] hover:[background:linear-gradient(135deg,#031525,#053565)] sm:h-12 sm:text-lg"
+                        disabled={resetLoading}
+                      >
+                        {resetLoading ? 'Sending...' : 'Send Password Reset Email'}
+                      </Button>
+                      <button
+                        type="button"
+                        className="text-sm text-gray-600 underline"
+                        onClick={() => setShowReset(false)}
+                        disabled={resetLoading}
+                      >
+                        Back to login
+                      </button>
+                      {resetMessage && <div className="text-sm text-green-600">{resetMessage}</div>}
+                      {resetError && <div className="text-sm text-red-600">{resetError}</div>}
+                    </form>
+                  )}
                 </CardContent>
               </Card>
             </div>

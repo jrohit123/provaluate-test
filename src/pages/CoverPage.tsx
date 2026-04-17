@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { gsap } from 'gsap/dist/gsap';
+import { ScrollTrigger } from 'gsap/dist/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
 
 type RoleId = 'candidate' | 'recruiter' | 'tpo';
 
@@ -134,17 +138,14 @@ const roles: Array<{
   },
 ];
 
+const roleOrder: RoleId[] = ['candidate', 'recruiter', 'tpo'];
+
 export default function CoverPage() {
   const navigate = useNavigate();
   const cardRefs = useRef<Record<RoleId, HTMLDivElement | null>>({
     candidate: null,
     recruiter: null,
     tpo: null,
-  });
-  const [visibleCards, setVisibleCards] = useState<Record<RoleId, boolean>>({
-    candidate: false,
-    recruiter: false,
-    tpo: false,
   });
 
   const go = (route: string) => {
@@ -159,28 +160,59 @@ export default function CoverPage() {
   };
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          const roleId = entry.target.getAttribute('data-role-id') as RoleId | null;
-          if (!roleId) return;
-          setVisibleCards((prev) => ({ ...prev, [roleId]: true }));
-          observer.unobserve(entry.target);
-        });
-      },
-      {
-        threshold: 0.25,
-        rootMargin: '0px 0px -8% 0px',
-      }
-    );
+    if (typeof window === 'undefined') return;
 
-    (Object.keys(cardRefs.current) as RoleId[]).forEach((id) => {
-      const element = cardRefs.current[id];
-      if (element) observer.observe(element);
+    const isMobile = window.matchMedia('(max-width: 767px)').matches;
+    if (!isMobile) return;
+
+    const triggers: ScrollTrigger[] = [];
+    const animations: gsap.core.Tween[] = [];
+
+    roleOrder.forEach((id, i) => {
+      const el = cardRefs.current[id];
+      if (!el) return;
+
+      gsap.set(el, {
+        opacity: 0,
+        y: 64,
+        rotationX: 20,
+        scale: 0.88,
+        transformPerspective: 900,
+        transformOrigin: '50% 100%',
+      });
+
+      const anim = gsap.to(el, {
+        opacity: 1,
+        y: 0,
+        rotationX: 0,
+        scale: 1,
+        duration: 0.7,
+        delay: i * 0.03,
+        ease: 'power3.out',
+        paused: true,
+      });
+
+      const trigger = ScrollTrigger.create({
+        trigger: el,
+        start: 'top 74%',
+        end: 'top 15%',
+        onEnter: () => anim.play(),
+        onLeaveBack: () => anim.timeScale(1.15).reverse(0),
+        onEnterBack: () => anim.play(),
+      });
+
+      animations.push(anim);
+      triggers.push(trigger);
     });
 
-    return () => observer.disconnect();
+    return () => {
+      triggers.forEach((trigger) => trigger.kill());
+      animations.forEach((anim) => anim.kill());
+      roleOrder.forEach((id) => {
+        const el = cardRefs.current[id];
+        if (el) gsap.set(el, { clearProps: 'all' });
+      });
+    };
   }, []);
 
   return (
@@ -206,20 +238,6 @@ export default function CoverPage() {
         .hero-line-2 { opacity: 0; animation: heroIn 0.55s cubic-bezier(0.25,0.46,0.45,0.94) 0.24s forwards; }
         @media (max-width: 767px) {
           .role-card-1, .role-card-2, .role-card-3 { opacity: 1; animation: none; }
-          .card-rise-mobile {
-            opacity: 0;
-            transform: perspective(1400px) rotateX(78deg) translateY(120px) scale(0.92);
-            transform-origin: center bottom;
-            transform-style: preserve-3d;
-            will-change: transform, opacity;
-            transition:
-              transform 0.85s cubic-bezier(0.22, 1, 0.36, 1),
-              opacity 0.7s ease-out;
-          }
-          .card-rise-mobile-visible {
-            opacity: 1;
-            transform: perspective(1400px) rotateX(0deg) translateY(0) scale(1);
-          }
         }
       `}</style>
 
@@ -279,9 +297,7 @@ export default function CoverPage() {
                   cardRefs.current[role.id] = element;
                 }}
                 data-role-id={role.id}
-                className={`role-card-${i + 1} card-rise-mobile ${
-                  visibleCards[role.id] ? 'card-rise-mobile-visible' : ''
-                } group relative flex cursor-pointer select-none flex-col rounded-2xl border bg-white/75 p-6 backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:bg-white/90 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/70 focus-visible:ring-offset-2 active:scale-[0.99] sm:p-7 ${role.borderColor} ${role.hoverBorder}`}
+                className={`role-card-${i + 1} group relative flex cursor-pointer select-none flex-col rounded-2xl border bg-white/75 p-6 backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:bg-white/90 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/70 focus-visible:ring-offset-2 active:scale-[0.99] sm:p-7 ${role.borderColor} ${role.hoverBorder}`}
                 style={{ transitionProperty: 'box-shadow, transform, border-color' }}
                 onClick={() => go(role.route)}
                 role="button"
