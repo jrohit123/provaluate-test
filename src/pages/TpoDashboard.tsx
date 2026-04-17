@@ -1879,26 +1879,20 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
             <div className="p-6">
               <h2 className="text-[18px] font-bold text-gray-900">Profile</h2>
               
-              {/* Form Fields */}
-              <div className="grid grid-cols-2 gap-4 mb-[14px] mt-6">
-                <div className="space-y-[6px]">
-                  <label className="text-[12px] font-semibold text-gray-400 uppercase tracking-[0.06em]">First Name</label>
-                  <div className="h-10 px-3 border-[1.5px] border-gray-200 rounded-md bg-gray-50 text-gray-900 text-[15px] font-bold flex items-center">
-                    {firstName || '-'}
-                  </div>
+              <div className="space-y-3 mt-6">
+                <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
+                  <div className="text-[12px] font-semibold text-gray-400 uppercase tracking-[0.06em]">First Name</div>
+                  <div className="text-[17px] font-bold text-gray-900 mt-1">{firstName || '-'}</div>
                 </div>
-                <div className="space-y-[6px]">
-                  <label className="text-[12px] font-semibold text-gray-400 uppercase tracking-[0.06em]">Last Name</label>
-                  <div className="h-10 px-3 border-[1.5px] border-gray-200 rounded-md bg-gray-50 text-gray-900 text-[15px] font-bold flex items-center">
-                    {lastName || '-'}
-                  </div>
+
+                <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
+                  <div className="text-[12px] font-semibold text-gray-400 uppercase tracking-[0.06em]">Last Name</div>
+                  <div className="text-[17px] font-bold text-gray-900 mt-1">{lastName || '-'}</div>
                 </div>
-              </div>
-              
-              <div className="space-y-[6px]">
-                <label className="text-[12px] font-semibold text-gray-400 uppercase tracking-[0.06em]">Email</label>
-                <div className="h-10 px-3 border-[1.5px] border-gray-200 rounded-md bg-gray-50 text-gray-900 text-[15px] font-bold flex items-center">
-                  {email || '-'}
+
+                <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
+                  <div className="text-[12px] font-semibold text-gray-400 uppercase tracking-[0.06em]">Email</div>
+                  <div className="text-[17px] font-bold text-gray-900 mt-1 break-all">{email || '-'}</div>
                 </div>
               </div>
             </div>

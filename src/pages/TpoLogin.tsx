@@ -320,22 +320,16 @@ const TpoLogin = () => {
                   </SheetTrigger>
                   <SheetContent side="right" className="w-64">
                     <div className="pt-8 space-y-2">
-                      <Link to="/login" className="block rounded-lg px-3 py-2 text-base text-slate-700 hover:bg-slate-50 hover:text-slate-900" onClick={() => setMobileMenuOpen(false)}>
-                        Recruiter login
-                      </Link>
-                      <Link to="/candidate-login" className="block rounded-lg px-3 py-2 text-base text-slate-700 hover:bg-slate-50 hover:text-slate-900" onClick={() => setMobileMenuOpen(false)}>
-                        Candidate login
+                      <Link to="/" className="block rounded-lg px-3 py-2 text-base text-slate-700 hover:bg-slate-50 hover:text-slate-900" onClick={() => setMobileMenuOpen(false)}>
+                        Choose sign-in role
                       </Link>
                     </div>
                   </SheetContent>
                 </Sheet>
 
                 <nav className="hidden items-center gap-1 sm:flex">
-                  <Link to="/login" className="px-2.5 py-1.5 text-sm font-medium text-[#042C53] hover:text-[#020f1a] transition-colors rounded-md hover:bg-slate-50 sm:text-base">
-                    Recruiter login
-                  </Link>
-                  <Link to="/candidate-login" className="px-2.5 py-1.5 text-sm font-medium text-[#042C53] hover:text-[#020f1a] transition-colors rounded-md hover:bg-slate-50 sm:text-base">
-                    Candidate login
+                  <Link to="/" className="rounded-md px-2.5 py-1.5 text-sm font-medium text-[#042C53] transition-colors hover:bg-slate-50 hover:text-[#020f1a] sm:text-base">
+                    Choose sign-in role
                   </Link>
                 </nav>
               </div>

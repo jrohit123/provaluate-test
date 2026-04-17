@@ -58,7 +58,7 @@ export const BrowserExtensionInfo = ({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-[#042C53]">
+            <DialogTitle className="text-2xl font-bold text-[#094D7B]">
               ProValuate Plugins
             </DialogTitle>
             <DialogDescription className="text-base mt-2">
@@ -69,34 +69,34 @@ export const BrowserExtensionInfo = ({
             <button
               type="button"
               onClick={() => setSelectedProvider('gmail')}
-              className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-gray-200 hover:border-[#0d6ea3] hover:bg-[#0d6ea3]/5 transition-all duration-200 text-left"
+              className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-gray-200 hover:border-[#094D7B] hover:bg-[#094D7B]/5 transition-all duration-200 text-left"
             >
               <img src={GMAIL_LOGO} alt="Gmail" className="w-14 h-14 object-contain mb-3" />
-              <span className="font-semibold text-[#042C53]">Gmail</span>
+              <span className="font-semibold text-[#094D7B]">Gmail</span>
             </button>
             <button
               type="button"
               onClick={() => setSelectedProvider('outlook')}
-              className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-gray-200 hover:border-[#0d6ea3] hover:bg-[#0d6ea3]/5 transition-all duration-200 text-left"
+              className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-gray-200 hover:border-[#094D7B] hover:bg-[#094D7B]/5 transition-all duration-200 text-left"
             >
               <img src={OUTLOOK_LOGO} alt="Outlook" className="w-14 h-14 object-contain mb-3" />
-              <span className="font-semibold text-[#042C53]">Outlook</span>
+              <span className="font-semibold text-[#094D7B]">Outlook</span>
             </button>
             <button
               type="button"
               onClick={() => setSelectedProvider('zoho')}
-              className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-gray-200 hover:border-[#0d6ea3] hover:bg-[#0d6ea3]/5 transition-all duration-200 text-left"
+              className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-gray-200 hover:border-[#094D7B] hover:bg-[#094D7B]/5 transition-all duration-200 text-left"
             >
               <img src={ZOHO_LOGO} alt="Zoho Mail" className="w-14 h-14 object-contain mb-3" />
-              <span className="font-semibold text-[#042C53]">Zoho</span>
+              <span className="font-semibold text-[#094D7B]">Zoho</span>
             </button>
             <button
               type="button"
               onClick={() => setSelectedProvider('linkedin')}
-              className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-gray-200 hover:border-[#0d6ea3] hover:bg-[#0d6ea3]/5 transition-all duration-200 text-left"
+              className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-gray-200 hover:border-[#094D7B] hover:bg-[#094D7B]/5 transition-all duration-200 text-left"
             >
               <img src={LINKEDIN_LOGO} alt="LinkedIn" className="w-14 h-14 object-contain mb-3" />
-              <span className="font-semibold text-[#042C53]">LinkedIn</span>
+              <span className="font-semibold text-[#094D7B]">LinkedIn</span>
             </button>
           </div>
         </DialogContent>
@@ -118,7 +118,7 @@ export const BrowserExtensionInfo = ({
             >
               <ArrowLeft className="w-5 h-5" /> Back
             </Button>
-            <DialogTitle className="text-2xl font-bold text-[#042C53] pt-10">
+            <DialogTitle className="text-2xl font-bold text-[#094D7B] pt-10">
               ProValuate for Gmail
             </DialogTitle>
             <DialogDescription className="text-base mt-2">
@@ -127,9 +127,9 @@ export const BrowserExtensionInfo = ({
           </DialogHeader>
 
           <div className={instructionsSectionClass}>
-            <div className="border border-[#0d6ea3]/20 rounded-lg p-5 bg-[#0d6ea3]/5">
-              <h3 className="text-lg font-semibold text-[#042C53] mb-3 flex items-center gap-2">
-                <Mail className="w-5 h-5 text-[#0d6ea3]" />
+            <div className="border border-[#094D7B]/20 rounded-lg p-5 bg-[#094D7B]/5">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-3 flex items-center gap-2">
+                <Mail className="w-5 h-5 text-[#094D7B]" />
                 What It Does
               </h3>
               <ul className="space-y-2 text-sm text-gray-700">
@@ -157,13 +157,13 @@ export const BrowserExtensionInfo = ({
             </div>
 
             <div className="border border-green-200 rounded-lg p-5 bg-green-50/50">
-              <h3 className="text-lg font-semibold text-[#042C53] mb-3 flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-3 flex items-center gap-2">
                 <FileArchive className="w-5 h-5 text-green-600" />
                 Installation Instructions
               </h3>
               <div className="space-y-4">
                 <div className="bg-white rounded-lg p-4">
-                  <h4 className="font-semibold text-[#042C53] mb-3">For Google Chrome</h4>
+                  <h4 className="font-semibold text-[#094D7B] mb-3">For Google Chrome</h4>
                   <ol className="space-y-2 text-sm text-gray-700 list-decimal list-inside">
                     <li>Download and extract the Gmail plugin ZIP file below</li>
                     <li>Open Chrome and go to <code className="bg-gray-100 px-1 rounded">chrome://extensions/</code></li>
@@ -172,7 +172,7 @@ export const BrowserExtensionInfo = ({
                   </ol>
                 </div>
                 <div className="bg-white rounded-lg p-4">
-                  <h4 className="font-semibold text-[#042C53] mb-3">For Microsoft Edge</h4>
+                  <h4 className="font-semibold text-[#094D7B] mb-3">For Microsoft Edge</h4>
                   <ol className="space-y-2 text-sm text-gray-700 list-decimal list-inside">
                     <li>Download and extract the Gmail plugin ZIP file below</li>
                     <li>Open Edge and go to <code className="bg-gray-100 px-1 rounded">edge://extensions/</code></li>
@@ -184,7 +184,7 @@ export const BrowserExtensionInfo = ({
             </div>
 
             <div className="border border-purple-200 rounded-lg p-5 bg-purple-50/50">
-              <h3 className="text-lg font-semibold text-[#042C53] mb-3 flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-3 flex items-center gap-2">
                 <Globe className="w-5 h-5 text-purple-600" />
                 How to Use
               </h3>
@@ -193,14 +193,14 @@ export const BrowserExtensionInfo = ({
               </p>
             </div>
 
-            <div className="border-2 border-[#0d6ea3]/30 rounded-lg p-5 bg-[#0d6ea3]/5">
-              <h3 className="text-lg font-semibold text-[#042C53] mb-2">Ready to Get Started?</h3>
+            <div className="border-2 border-[#094D7B]/30 rounded-lg p-5 bg-[#094D7B]/5">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-2">Ready to Get Started?</h3>
               <p className="text-sm text-gray-600 mb-4">
                 Download the Gmail plugin package. The same package works for Chrome and Edge.
               </p>
               <Button
                 onClick={() => window.open(GMAIL_PLUGIN_ZIP_URL, '_blank')}
-                className="flex items-center gap-2 text-white shadow-[0_4px_18px_rgba(13,110,163,0.28)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.34)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
+                className="flex items-center gap-2 bg-[#094D7B] text-white shadow-[0_4px_18px_rgba(9,77,123,0.28)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.34)]"
                 size="lg"
               >
                 <Download className="w-4 h-4" />
@@ -228,7 +228,7 @@ export const BrowserExtensionInfo = ({
             >
               <ArrowLeft className="w-5 h-5" /> Back
             </Button>
-            <DialogTitle className="text-2xl font-bold text-[#042C53] pt-10">
+            <DialogTitle className="text-2xl font-bold text-[#094D7B] pt-10">
               ProValuate for LinkedIn
             </DialogTitle>
             <DialogDescription className="text-base mt-2">
@@ -237,9 +237,9 @@ export const BrowserExtensionInfo = ({
           </DialogHeader>
 
           <div className={instructionsSectionClass}>
-            <div className="border border-[#0d6ea3]/20 rounded-lg p-5 bg-[#0d6ea3]/5">
-              <h3 className="text-lg font-semibold text-[#042C53] mb-3 flex items-center gap-2">
-                <Globe className="w-5 h-5 text-[#0d6ea3]" />
+            <div className="border border-[#094D7B]/20 rounded-lg p-5 bg-[#094D7B]/5">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-3 flex items-center gap-2">
+                <Globe className="w-5 h-5 text-[#094D7B]" />
                 What It Does
               </h3>
               <ul className="space-y-2 text-sm text-gray-700">
@@ -263,13 +263,13 @@ export const BrowserExtensionInfo = ({
             </div>
 
             <div className="border border-green-200 rounded-lg p-5 bg-green-50/50">
-              <h3 className="text-lg font-semibold text-[#042C53] mb-3 flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-3 flex items-center gap-2">
                 <FileArchive className="w-5 h-5 text-green-600" />
                 Installation Instructions
               </h3>
               <div className="space-y-4">
                 <div className="bg-white rounded-lg p-4">
-                  <h4 className="font-semibold text-[#042C53] mb-3">For Google Chrome</h4>
+                  <h4 className="font-semibold text-[#094D7B] mb-3">For Google Chrome</h4>
                   <ol className="space-y-2 text-sm text-gray-700 list-decimal list-inside">
                     <li>Download and extract the LinkedIn plugin ZIP file below</li>
                     <li>Open Chrome and go to <code className="bg-gray-100 px-1 rounded">chrome://extensions/</code></li>
@@ -278,7 +278,7 @@ export const BrowserExtensionInfo = ({
                   </ol>
                 </div>
                 <div className="bg-white rounded-lg p-4">
-                  <h4 className="font-semibold text-[#042C53] mb-3">For Microsoft Edge</h4>
+                  <h4 className="font-semibold text-[#094D7B] mb-3">For Microsoft Edge</h4>
                   <ol className="space-y-2 text-sm text-gray-700 list-decimal list-inside">
                     <li>Download and extract the LinkedIn plugin ZIP file below</li>
                     <li>Open Edge and go to <code className="bg-gray-100 px-1 rounded">edge://extensions/</code></li>
@@ -290,7 +290,7 @@ export const BrowserExtensionInfo = ({
             </div>
 
             <div className="border border-purple-200 rounded-lg p-5 bg-purple-50/50">
-              <h3 className="text-lg font-semibold text-[#042C53] mb-3 flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-3 flex items-center gap-2">
                 <Globe className="w-5 h-5 text-purple-600" />
                 How to Use
               </h3>
@@ -299,14 +299,14 @@ export const BrowserExtensionInfo = ({
               </p>
             </div>
 
-            <div className="border-2 border-[#0d6ea3]/30 rounded-lg p-5 bg-[#0d6ea3]/5">
-              <h3 className="text-lg font-semibold text-[#042C53] mb-2">Ready to Get Started?</h3>
+            <div className="border-2 border-[#094D7B]/30 rounded-lg p-5 bg-[#094D7B]/5">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-2">Ready to Get Started?</h3>
               <p className="text-sm text-gray-600 mb-4">
                 Download the LinkedIn plugin package. The same package works for Chrome and Edge.
               </p>
               <Button
                 onClick={() => window.open(LINKEDIN_PLUGIN_ZIP_URL, '_blank')}
-                className="flex items-center gap-2 text-white shadow-[0_4px_18px_rgba(13,110,163,0.28)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.34)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
+                className="flex items-center gap-2 bg-[#094D7B] text-white shadow-[0_4px_18px_rgba(9,77,123,0.28)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.34)]"
                 size="lg"
               >
                 <Download className="w-4 h-4" />
@@ -335,7 +335,7 @@ export const BrowserExtensionInfo = ({
             >
               <ArrowLeft className="w-5 h-5" /> Back
             </Button>
-            <DialogTitle className="text-2xl font-bold text-[#042C53] pt-10">
+            <DialogTitle className="text-2xl font-bold text-[#094D7B] pt-10">
               ProValuate for Zoho Mail
             </DialogTitle>
             <DialogDescription className="text-base mt-2">
@@ -344,9 +344,9 @@ export const BrowserExtensionInfo = ({
           </DialogHeader>
 
           <div className={instructionsSectionClass}>
-            <div className="border border-[#0d6ea3]/20 rounded-lg p-5 bg-[#0d6ea3]/5">
-              <h3 className="text-lg font-semibold text-[#042C53] mb-3 flex items-center gap-2">
-                <Mail className="w-5 h-5 text-[#0d6ea3]" />
+            <div className="border border-[#094D7B]/20 rounded-lg p-5 bg-[#094D7B]/5">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-3 flex items-center gap-2">
+                <Mail className="w-5 h-5 text-[#094D7B]" />
                 What you need
               </h3>
               <ul className="space-y-2 text-sm text-gray-700">
@@ -366,7 +366,7 @@ export const BrowserExtensionInfo = ({
             </div>
 
             <div className="border border-green-200 rounded-lg p-5 bg-green-50/50">
-              <h3 className="text-lg font-semibold text-[#042C53] mb-3 flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-3 flex items-center gap-2">
                 <Globe className="w-5 h-5 text-green-600" />
                 Connect Zoho Mail (one-time)
               </h3>
@@ -375,7 +375,7 @@ export const BrowserExtensionInfo = ({
               </p>
               <Button
                 onClick={() => window.open(zohoRegisterUrl, '_blank', 'noopener,noreferrer')}
-                className="flex items-center gap-2 text-white shadow-[0_4px_18px_rgba(13,110,163,0.28)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.34)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
+                className="flex items-center gap-2 bg-[#094D7B] text-white shadow-[0_4px_18px_rgba(9,77,123,0.28)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.34)]"
                 size="lg"
               >
                 <Mail className="w-4 h-4" />
@@ -389,7 +389,7 @@ export const BrowserExtensionInfo = ({
             </div>
 
             <div className="border border-green-200 rounded-lg p-5 bg-green-50/50">
-              <h3 className="text-lg font-semibold text-[#042C53] mb-3 flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-3 flex items-center gap-2">
                 <FileArchive className="w-5 h-5 text-green-600" />
                 Installation Instructions (Zoho Add-on)
               </h3>
@@ -408,7 +408,7 @@ export const BrowserExtensionInfo = ({
             </div>
 
             <div className="border border-purple-200 rounded-lg p-5 bg-purple-50/50">
-              <h3 className="text-lg font-semibold text-[#042C53] mb-3 flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-3 flex items-center gap-2">
                 <Globe className="w-5 h-5 text-purple-600" />
                 How to Use
               </h3>
@@ -417,14 +417,14 @@ export const BrowserExtensionInfo = ({
               </p>
             </div>
 
-            <div className="border-2 border-[#0d6ea3]/30 rounded-lg p-5 bg-[#0d6ea3]/5">
-              <h3 className="text-lg font-semibold text-[#042C53] mb-2">Ready to Get Started?</h3>
+            <div className="border-2 border-[#094D7B]/30 rounded-lg p-5 bg-[#094D7B]/5">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-2">Ready to Get Started?</h3>
               <p className="text-sm text-gray-600 mb-4">
                 Download the Zoho Add-on package. The same package works for Chrome and Edge.
               </p>
               <Button
                 onClick={() => downloadFile(ZOHO_PLUGIN_ZIP_URL, 'Zoho-Plugin.zip')}
-                className="flex items-center gap-2 text-white shadow-[0_4px_18px_rgba(13,110,163,0.28)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.34)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
+                className="flex items-center gap-2 bg-[#094D7B] text-white shadow-[0_4px_18px_rgba(9,77,123,0.28)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.34)]"
                 size="lg"
               >
                 <Download className="w-4 h-4" />
@@ -451,7 +451,7 @@ export const BrowserExtensionInfo = ({
           >
             <ArrowLeft className="w-5 h-5" /> Back
           </Button>
-          <DialogTitle className="text-2xl font-bold text-[#042C53] pt-10">
+          <DialogTitle className="text-2xl font-bold text-[#094D7B] pt-10">
             ProValuate for Outlook
           </DialogTitle>
           <DialogDescription className="text-base mt-2">
@@ -461,26 +461,26 @@ export const BrowserExtensionInfo = ({
 
         <div className={instructionsSectionClass}>
           <div className="border border-green-200 rounded-lg p-5 bg-green-50/50">
-            <h3 className="text-lg font-semibold text-[#042C53] mb-3 flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-[#094D7B] mb-3 flex items-center gap-2">
               <FileCode className="w-5 h-5 text-green-600" />
               Installation &amp; usage
             </h3>
             <ol className="space-y-3 text-sm text-gray-700 list-decimal list-inside">
-              <li>Download the manifest (XML) below and add the add-in in Outlook: <strong>Get Add-ins</strong> → <strong>My Add-ins</strong> → <strong>Add a custom add-in</strong> → <strong>Add from file</strong>. Can&apos;t find where? See Microsoft&apos;s guide: <a href="https://aka.ms/olksideload" target="_blank" rel="noopener noreferrer" className="text-[#0d6ea3] hover:underline font-medium">aka.ms/olksideload</a>.</li>
+              <li>Download the manifest (XML) below and add the add-in in Outlook: <strong>Get Add-ins</strong> → <strong>My Add-ins</strong> → <strong>Add a custom add-in</strong> → <strong>Add from file</strong>. Can&apos;t find where? See Microsoft&apos;s guide: <a href="https://aka.ms/olksideload" target="_blank" rel="noopener noreferrer" className="text-[#094D7B] hover:underline font-medium">aka.ms/olksideload</a>.</li>
               <li>Log in to this website (ProValuate) with your credentials — they will be saved for the add-in.</li>
               <li>In Outlook, open an email that has resume attachments, open the ProValuate pane, and click <strong>Sign in for Outlook</strong>.</li>
               <li>Press <strong>Assess Resumes</strong>. That’s it.</li>
             </ol>
           </div>
 
-          <div className="border-2 border-[#0d6ea3]/30 rounded-lg p-5 bg-[#0d6ea3]/5">
-            <h3 className="text-lg font-semibold text-[#042C53] mb-2">Download manifest</h3>
+          <div className="border-2 border-[#094D7B]/30 rounded-lg p-5 bg-[#094D7B]/5">
+            <h3 className="text-lg font-semibold text-[#094D7B] mb-2">Download manifest</h3>
             <p className="text-sm text-gray-600 mb-4">
               Add this manifest in Outlook to install the ProValuate add-in.
             </p>
             <Button
               onClick={() => downloadFile(OUTLOOK_MANIFEST_URL, 'manifest.xml')}
-              className="flex items-center gap-2 text-white shadow-[0_4px_18px_rgba(13,110,163,0.28)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.34)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
+              className="flex items-center gap-2 bg-[#094D7B] text-white shadow-[0_4px_18px_rgba(9,77,123,0.28)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.34)]"
               size="lg"
             >
               <FileCode className="w-4 h-4" />

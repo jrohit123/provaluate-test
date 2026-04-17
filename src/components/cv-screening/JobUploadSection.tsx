@@ -4,7 +4,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, FileText, Edit, RefreshCw, Loader2, Type, FileUp, Settings, Wrench, ArrowRight } from 'lucide-react';
+import { Upload, FileText, Edit, RefreshCw, Loader2, Type, FileUp, Settings, Wrench, ArrowRight, ChevronsUpDown } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -97,6 +97,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
   const [isExtractingText, setIsExtractingText] = useState(false);
   const [viewMode, setViewMode] = useState<'resolved' | 'extracted' | null>(null);
   const [extractedText, setExtractedText] = useState<string>('');
+  const [expandedEditorFields, setExpandedEditorFields] = useState<Record<string, boolean>>({});
 
   // Get JD status configuration based on usage
   const getJDStatusConfig = (jdLimitInfo: any) => {
@@ -943,6 +944,20 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
           console.log('✅ Setting selectedJobDescriptionId to:', result.jd_id);
           setSelectedJobDescriptionId(result.jd_id);
           sessionStorage.setItem('selectedJDId', result.jd_id);
+          const { data: newJD } = await supabase
+            .from('job_descriptions')
+            .select('jd_id, title, jd_file, description')
+            .eq('jd_id', result.jd_id)
+            .single();
+
+          if (newJD) {
+            setCurrentJobDescription({
+              id: newJD.jd_id,
+              title: newJD.title,
+              file: newJD.jd_file,
+              description: newJD.description || ''
+            });
+          }
         } else {
           console.log('❌ No jd_id in result');
         }
@@ -1018,7 +1033,8 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
       setCurrentJobDescription({
         id: selectedJD.jd_id,
         title: selectedJD.title,
-        file: selectedJD.jd_file
+        file: selectedJD.jd_file,
+        description: selectedJD.description || ''
       });
       
       // Load extracted text if available
@@ -1042,6 +1058,166 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
     setPageNumber(1);
+  };
+
+  const toggleEditorExpansion = (fieldKey: string) => {
+    setExpandedEditorFields((prev) => ({
+      ...prev,
+      [fieldKey]: !prev[fieldKey],
+    }));
+  };
+
+  const isSkillAttribute = (attributeName: string) => attributeName.toLowerCase().includes('skill');
+
+  const shouldStoreAsList = (attributeName: string, subAttributeName: string, currentValue: any) => {
+    if (Array.isArray(currentValue)) return true;
+    if (!isSkillAttribute(attributeName)) return false;
+    const normalizedSubKey = subAttributeName.trim().toLowerCase();
+    return ['required', 'preferred', 'mandatory'].includes(normalizedSubKey);
+  };
+
+  const parseEditorValue = (rawValue: string, storeAsList: boolean) => {
+    if (!storeAsList) return rawValue;
+    return rawValue
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  };
+
+  const makeUniqueKey = (existingKeys: string[], baseKey: string) => {
+    let nextKey = baseKey;
+    let counter = 2;
+    while (existingKeys.includes(nextKey)) {
+      nextKey = `${baseKey} ${counter}`;
+      counter += 1;
+    }
+    return nextKey;
+  };
+
+  const normalizeAttributesForEditing = (attributes?: Record<string, any>) => {
+    const source = attributes || {};
+    const normalized: Record<string, any> = {};
+    Object.entries(source).forEach(([attrKey, attrValue]) => {
+      if (attrValue && typeof attrValue === 'object' && !Array.isArray(attrValue)) {
+        normalized[attrKey] = { ...attrValue };
+      } else if (Array.isArray(attrValue)) {
+        normalized[attrKey] = { value: [...attrValue] };
+      } else {
+        normalized[attrKey] = { value: attrValue ?? '' };
+      }
+    });
+    return normalized;
+  };
+
+  const addAttributeField = () => {
+    setResolvedJD((prev) => {
+      if (!prev) return prev;
+      const attrs = { ...(prev.attributes || {}) };
+      const newKey = makeUniqueKey(Object.keys(attrs), 'New Attribute');
+      const nextAttrs = {
+        [newKey]: { value: '' },
+        ...attrs,
+      };
+      return { ...prev, attributes: nextAttrs };
+    });
+  };
+
+  const removeAttributeField = (attrKey: string) => {
+    setResolvedJD((prev) => {
+      if (!prev?.attributes) return prev;
+      const attrs = { ...prev.attributes };
+      delete attrs[attrKey];
+      return { ...prev, attributes: attrs };
+    });
+  };
+
+  const renameAttributeField = (oldKey: string, newKeyRaw: string) => {
+    const newKey = newKeyRaw.trim();
+    if (!newKey || newKey === oldKey) return;
+    setResolvedJD((prev) => {
+      if (!prev?.attributes) return prev;
+      if (Object.prototype.hasOwnProperty.call(prev.attributes, newKey)) {
+        toast({
+          title: "Duplicate attribute",
+          description: `"${newKey}" already exists.`,
+          variant: "destructive",
+        });
+        return prev;
+      }
+      const next: Record<string, any> = {};
+      Object.entries(prev.attributes).forEach(([key, value]) => {
+        next[key === oldKey ? newKey : key] = value;
+      });
+      return { ...prev, attributes: next };
+    });
+  };
+
+  const addSubAttributeField = (attrKey: string) => {
+    setResolvedJD((prev) => {
+      if (!prev?.attributes) return prev;
+      const currentAttrValue = prev.attributes[attrKey];
+      const attrObj = currentAttrValue && typeof currentAttrValue === 'object' && !Array.isArray(currentAttrValue)
+        ? { ...currentAttrValue }
+        : { value: currentAttrValue ?? '' };
+      const newSubKey = makeUniqueKey(Object.keys(attrObj), 'new_sub_attribute');
+      const nextAttrObj = {
+        [newSubKey]: '',
+        ...attrObj,
+      };
+      return {
+        ...prev,
+        attributes: {
+          ...prev.attributes,
+          [attrKey]: nextAttrObj,
+        },
+      };
+    });
+  };
+
+  const removeSubAttributeField = (attrKey: string, subKey: string) => {
+    setResolvedJD((prev) => {
+      if (!prev?.attributes) return prev;
+      const currentAttrValue = prev.attributes[attrKey];
+      if (!currentAttrValue || typeof currentAttrValue !== 'object' || Array.isArray(currentAttrValue)) return prev;
+      const nextAttrObj = { ...currentAttrValue };
+      delete nextAttrObj[subKey];
+      return {
+        ...prev,
+        attributes: {
+          ...prev.attributes,
+          [attrKey]: nextAttrObj,
+        },
+      };
+    });
+  };
+
+  const renameSubAttributeField = (attrKey: string, oldSubKey: string, newSubKeyRaw: string) => {
+    const newSubKey = newSubKeyRaw.trim();
+    if (!newSubKey || newSubKey === oldSubKey) return;
+    setResolvedJD((prev) => {
+      if (!prev?.attributes) return prev;
+      const currentAttrValue = prev.attributes[attrKey];
+      if (!currentAttrValue || typeof currentAttrValue !== 'object' || Array.isArray(currentAttrValue)) return prev;
+      if (Object.prototype.hasOwnProperty.call(currentAttrValue, newSubKey)) {
+        toast({
+          title: "Duplicate sub-attribute",
+          description: `"${newSubKey}" already exists in ${attrKey}.`,
+          variant: "destructive",
+        });
+        return prev;
+      }
+      const nextAttrObj: Record<string, any> = {};
+      Object.entries(currentAttrValue).forEach(([key, value]) => {
+        nextAttrObj[key === oldSubKey ? newSubKey : key] = value;
+      });
+      return {
+        ...prev,
+        attributes: {
+          ...prev.attributes,
+          [attrKey]: nextAttrObj,
+        },
+      };
+    });
   };
 
   return (
@@ -1121,7 +1297,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                       <Button
                         variant="default"
                         size="sm"
-                        className="w-full sm:w-auto text-xs sm:text-sm h-9 sm:h-10"
+                        className="w-full sm:w-auto h-9 sm:h-10 text-xs sm:text-sm text-white bg-[#094D7B] shadow-[0_4px_18px_rgba(9,77,123,0.20)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.26)]"
                       >
                         <Settings className="w-4 h-4 mr-1.5 sm:mr-2" />
                         <span className="hidden sm:inline">Manage Job Descriptions</span>
@@ -1146,7 +1322,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="text-sm font-semibold text-[#042C53]">
+                              <h3 className="text-sm font-semibold text-[#094D7B]">
                                 Status
                               </h3>
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${currentStatus.badgeBg} ${currentStatus.badgeText}`}>
@@ -1197,7 +1373,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                               } ${isDisabled ? 'opacity-70' : 'hover:shadow-sm'}`}
                             >
                               <div className="flex-1 min-w-0 w-full sm:w-auto">
-                                <p className="text-xs sm:text-sm font-medium text-[#042C53] truncate">
+                                <p className="text-xs sm:text-sm font-medium text-[#094D7B] truncate">
                                   {jd.title}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-0.5">
@@ -1381,11 +1557,20 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                     {viewMode === 'resolved' && resolvedJD && !isEditingResolvedJD && (
                       <div className="mt-2 p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-2">
-                          <h4 className="font-semibold text-xs sm:text-sm md:text-base text-[#042C53]">Resolved Job Description</h4>
+                          <h4 className="font-semibold text-xs sm:text-sm md:text-base text-[#094D7B]">Resolved Job Description</h4>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setIsEditingResolvedJD(true)}
+                            onClick={() => {
+                              setResolvedJD((prev) => {
+                                if (!prev) return prev;
+                                return {
+                                  ...prev,
+                                  attributes: normalizeAttributesForEditing(prev.attributes),
+                                };
+                              });
+                              setIsEditingResolvedJD(true);
+                            }}
                             className="w-full sm:w-auto"
                           >
                             <Edit className="w-4 h-4 mr-2" />
@@ -1435,7 +1620,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                     {/* Extracted Text Display */}
                     {viewMode === 'extracted' && extractedText && (
                       <div className="mt-2 p-3 sm:p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        <h4 className="font-semibold text-sm sm:text-base mb-2 text-[#042C53]">Extracted Job Description Text</h4>
+                        <h4 className="font-semibold text-sm sm:text-base mb-2 text-[#094D7B]">Extracted Job Description Text</h4>
                         <div className="prose prose-sm max-w-none">
                           <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm bg-white p-3 sm:p-4 rounded border overflow-x-auto max-h-96 overflow-y-auto">
                             {extractedText}
@@ -1445,7 +1630,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                     )}
                     
                     {isWaitingForResolvedJD && (
-                      <div className="flex items-center justify-center text-xs text-blue-600">
+                      <div className="flex items-center justify-center text-xs text-[#094D7B]">
                         <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
                         Resolving JD...
                       </div>
@@ -1475,7 +1660,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
             <div className="space-y-2">
               <Button 
                 onClick={handleProcessJobDescription} 
-                className="w-full h-10 sm:h-11 text-base"
+                className="w-full h-10 sm:h-11 text-base text-white bg-[#094D7B] shadow-[0_4px_18px_rgba(9,77,123,0.20)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.26)]"
                 disabled={processingStatus === 'processing' || (jdLimitInfo && !jdLimitInfo.canCreateJD)}
               >
                 {processingStatus === 'processing' ? (
@@ -1516,65 +1701,150 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
 
         {resolvedJD && isEditingResolvedJD && (
           <div className="mt-4 space-y-3">
-            <h4 className="font-semibold">Edit Resolved Information</h4>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <h4 className="font-semibold">Edit Resolved Information</h4>
+              <Button type="button" variant="outline" size="sm" onClick={addAttributeField}>
+                + Add Attribute
+              </Button>
+            </div>
             {resolvedJD.attributes && Object.entries(resolvedJD.attributes).map(([key, value]) => (
-              <div key={key} className="space-y-1">
-                <label className="text-sm font-medium capitalize">
-                  {key.replace(/_/g, ' ')}
-                </label>
-                {typeof value === 'object' && value !== null ? (
+              <div key={key} className="space-y-2 rounded-md border border-gray-200 p-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Input
+                    defaultValue={key}
+                    onBlur={(e) => renameAttributeField(key, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
+                    className="h-9 text-sm font-medium"
+                    placeholder="Attribute name"
+                  />
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => addSubAttributeField(key)}>
+                      + Sub-attribute
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => removeAttributeField(key)}>
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+                {typeof value === 'object' && value !== null && !Array.isArray(value) ? (
                   <div className="space-y-2">
                     {Object.entries(value).map(([subKey, subValue]) => (
-                      <div key={subKey} className="space-y-1">
-                        <label className="text-xs font-medium text-gray-600 capitalize">
-                          {subKey}:
-                        </label>
-                        <Textarea
-                          value={Array.isArray(subValue) ? subValue.join(', ') : String(subValue) || ''}
-                          onChange={(e) => {
-                            const newValue = Array.isArray(subValue) 
-                              ? e.target.value.split(',').map(item => item.trim()).filter(item => item)
-                              : e.target.value;
-                            
-                            setResolvedJD(prev => ({
-                              ...prev!,
-                              attributes: {
-                                ...prev!.attributes,
-                                [key]: {
-                                  ...(prev!.attributes![key] as any),
-                                  [subKey]: newValue
-                                }
+                      <div key={subKey} className="space-y-1 rounded-md border border-gray-100 p-2">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <Input
+                            defaultValue={subKey}
+                            onBlur={(e) => renameSubAttributeField(key, subKey, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                (e.target as HTMLInputElement).blur();
                               }
-                            }));
-                          }}
-                          className="min-h-[40px] text-sm"
-                          placeholder={`Enter ${subKey}...`}
-                        />
+                            }}
+                            className="h-8 text-xs font-medium text-gray-700"
+                            placeholder="Sub-attribute name"
+                          />
+                          <Button type="button" variant="outline" size="sm" onClick={() => removeSubAttributeField(key, subKey)}>
+                            Remove
+                          </Button>
+                        </div>
+                        {(() => {
+                          const fieldKey = `${key}::${subKey}`;
+                          const isExpanded = !!expandedEditorFields[fieldKey];
+                          const storeAsList = shouldStoreAsList(key, subKey, subValue);
+                          return (
+                            <div className="space-y-1">
+                              <div className="flex justify-end">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs"
+                                  onClick={() => toggleEditorExpansion(fieldKey)}
+                                  title={isExpanded ? 'Collapse' : 'Expand'}
+                                >
+                                  <ChevronsUpDown className="mr-1 h-3.5 w-3.5" />
+                                  {isExpanded ? 'Collapse' : 'Expand'}
+                                </Button>
+                              </div>
+                              <Textarea
+                                value={Array.isArray(subValue) ? subValue.join(', ') : String(subValue) || ''}
+                                onChange={(e) => {
+                                  const newValue = parseEditorValue(
+                                    e.target.value,
+                                    storeAsList
+                                  );
+                                  
+                                  setResolvedJD(prev => ({
+                                    ...prev!,
+                                    attributes: {
+                                      ...prev!.attributes,
+                                      [key]: {
+                                        ...(prev!.attributes![key] as any),
+                                        [subKey]: newValue
+                                      }
+                                    }
+                                  }));
+                                }}
+                                className={`${isExpanded ? 'min-h-[220px]' : 'min-h-[72px]'} resize-none overflow-hidden text-sm`}
+                                placeholder={`Enter ${subKey}...`}
+                              />
+                              {storeAsList && (
+                                <p className="text-[11px] text-gray-500">
+                                  Use comma to separate multiple values (e.g., Python, SQL, Power BI).
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <Textarea
-                    value={String(value) || ''}
-                    onChange={(e) => 
-                      setResolvedJD(prev => ({
-                        ...prev!,
-                        attributes: {
-                          ...prev!.attributes,
-                          [key]: e.target.value
-                        }
-                      }))
-                    }
-                    className="min-h-[60px]"
-                    placeholder={`Enter ${key.replace(/_/g, ' ')}...`}
-                  />
+                  (() => {
+                    const fieldKey = `${key}::value`;
+                    const isExpanded = !!expandedEditorFields[fieldKey];
+                    return (
+                      <div className="space-y-1">
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => toggleEditorExpansion(fieldKey)}
+                            title={isExpanded ? 'Collapse' : 'Expand'}
+                          >
+                            <ChevronsUpDown className="mr-1 h-3.5 w-3.5" />
+                            {isExpanded ? 'Collapse' : 'Expand'}
+                          </Button>
+                        </div>
+                        <Textarea
+                          value={String(value) || ''}
+                          onChange={(e) => 
+                            setResolvedJD(prev => ({
+                              ...prev!,
+                              attributes: {
+                                ...prev!.attributes,
+                                [key]: e.target.value
+                              }
+                            }))
+                          }
+                          className={`${isExpanded ? 'min-h-[220px]' : 'min-h-[72px]'} resize-none overflow-hidden`}
+                          placeholder={`Enter ${key.replace(/_/g, ' ')}...`}
+                        />
+                      </div>
+                    );
+                  })()
                 )}
               </div>
             ))}
             <div className="flex gap-2">
               <Button
                 onClick={updateResolvedJD}
-                className="flex-1"
+                className="flex-1 text-white bg-[#094D7B] shadow-[0_4px_18px_rgba(9,77,123,0.20)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.26)]"
               >
                 Save Changes
               </Button>

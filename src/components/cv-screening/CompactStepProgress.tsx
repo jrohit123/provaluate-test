@@ -23,8 +23,8 @@ export const CompactStepProgress: React.FC<CompactStepProgressProps> = ({
   className = ''
 }) => {
   const isCandidate = theme === 'candidate';
-  const btnActiveClass = isCandidate ? 'bg-sky-700 text-white hover:bg-sky-800' : 'bg-primary text-white hover:bg-primary/90';
-  const barActiveClass = isCandidate ? 'bg-sky-700' : 'bg-blue-600';
+  const btnActiveClass = 'bg-[#094D7B] text-white hover:bg-[#094D7B]/90';
+  const barActiveClass = isCandidate ? 'bg-[#094D7B]' : 'bg-[#094D7B]';
   const handlePrevious = () => {
     if (current > 0 && onStepClick) {
       onStepClick(current - 1);
@@ -99,7 +99,7 @@ export const CompactStepProgress: React.FC<CompactStepProgressProps> = ({
             })}
           </div>
           <div className="flex flex-col items-center sm:items-start min-w-0">
-            <span className="text-xs font-medium text-[#042C53] whitespace-nowrap">
+            <span className="text-xs font-medium text-[#094D7B] whitespace-nowrap">
               Step {current + 1} of {total}
             </span>
             <span className="text-[10px] sm:text-xs text-gray-500 truncate w-full text-center sm:text-left max-w-[140px] sm:max-w-[200px]" title={steps[current]?.label}>
@@ -160,7 +160,7 @@ export const MiniStepProgress: React.FC<CompactStepProgressProps> = ({
                 className={`
                   transition-all duration-200
                   ${isActive 
-                    ? 'w-6 h-1.5 bg-blue-600 rounded-full' 
+                    ? 'w-6 h-1.5 bg-[#094D7B] rounded-full'
                     : isCompleted
                     ? 'w-1.5 h-1.5 bg-green-500 rounded-full'
                     : 'w-1.5 h-1.5 bg-gray-300 rounded-full'

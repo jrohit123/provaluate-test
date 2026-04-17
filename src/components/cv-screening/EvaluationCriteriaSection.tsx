@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, Plus, Trash2, Download, Save, Grid, Briefcase, AlertCircle, ArrowRight } from 'lucide-react';
+import { Upload, Plus, Trash2, Download, Save, Grid, Briefcase, AlertCircle, ArrowRight, Sparkles, Loader2 } from 'lucide-react';
 import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
 import { useCurrentStep, useNavigateToStep, WORKFLOW_STEPS } from '@/hooks/useWorkflowNavigation';
 import * as XLSX from 'xlsx';
@@ -45,6 +45,7 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
   const [gridName, setGridName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [criteriaUploading, setCriteriaUploading] = useState(false);
+  const [isGeneratingCriteria, setIsGeneratingCriteria] = useState(false);
   const [jobDescriptions, setJobDescriptions] = useState<any[]>([]);
   const [selectedJobDescriptionId, setSelectedJobDescriptionId] = useState<string>(() => {
     // Initialize from sessionStorage first
@@ -503,6 +504,69 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
     }
   };
 
+  const handleGenerateAICriteria = async () => {
+    const jdId = selectedJobDescriptionId || currentJobDescription?.id || currentJobDescription?.jd_id;
+
+    if (!jdId) {
+      toast({
+        title: "No Job Description Selected",
+        description: "Please select a job description first before generating criteria.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGeneratingCriteria(true);
+    try {
+      const BACKEND_URL = import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com';
+      const response = await fetch(`${BACKEND_URL}/api/generate-criteria`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jd_id: jdId }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error || `Server error: ${response.status}`);
+      }
+
+      if (!Array.isArray(result.criteria) || result.criteria.length === 0) {
+        throw new Error('AI returned empty criteria. Please try again.');
+      }
+
+      const newCriteria: CriteriaItem[] = result.criteria.map(
+        (item: { parameter: string; weightage: number; calc_note: string }, index: number) => ({
+          id: `${Date.now()}_${index}`,
+          parameter: item.parameter || '',
+          weightage: Number(item.weightage) || 0,
+          notes: item.calc_note || '',
+        })
+      );
+
+      setCriteriaData(newCriteria);
+      setSelectedGridId('');
+      sessionStorage.removeItem('selectedCriteriaGridId');
+
+      const selectedJDTitle = selectedJD?.title || currentJobDescription?.title || 'Generated';
+      setGridName(`${selectedJDTitle} - AI Criteria`);
+
+      const total = newCriteria.reduce((sum, c) => sum + c.weightage, 0);
+      toast({
+        title: "Criteria Generated",
+        description: `${newCriteria.length} parameters generated from JD (${total}%). Review and save.`,
+      });
+    } catch (err: any) {
+      console.error('Criteria generation error:', err);
+      toast({
+        title: "Generation Failed",
+        description: err?.message || "Could not generate criteria from JD. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingCriteria(false);
+    }
+  };
+
   const selectedJD = jobDescriptions.find(jd => jd.jd_id === selectedJobDescriptionId);
 
   return (
@@ -523,12 +587,12 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
           <Card className="bg-blue-50 border-blue-200 animate-fade-in">
             <CardContent className="p-3 sm:p-4">
               <div className="flex items-center gap-2">
-                <Briefcase className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                <Briefcase className="w-4 h-4 text-[#094D7B] flex-shrink-0" />
                 <span className="text-xs sm:text-sm font-medium text-blue-800 break-words">
                   Creating criteria for: <strong>{selectedJD.title}</strong>
                 </span>
               </div>
-              <p className="text-xs text-blue-600 mt-1">
+              <p className="mt-1 text-xs text-[#094D7B]">
                 This criteria will be associated with the selected job description. To create a default criteria that works for all JDs, include "Default" in the name.
               </p>
             </CardContent>
@@ -558,7 +622,25 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
                 <Grid className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
                 Evaluation Criteria
               </div>
-              
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleGenerateAICriteria}
+                disabled={isGeneratingCriteria || !(selectedJobDescriptionId || currentJobDescription?.id || currentJobDescription?.jd_id)}
+                className="h-10 gap-2 whitespace-nowrap bg-[#094D7B] text-white shadow-[0_4px_18px_rgba(9,77,123,0.20)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.26)]"
+              >
+                {isGeneratingCriteria ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Generate from JD
+                  </>
+                )}
+              </Button>
             </CardTitle>
           <CardDescription>
             Configure the parameters and weights for the CV evaluation
@@ -582,11 +664,11 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
               </SelectContent>
             </Select>
           </div>
-          
-          <div className="flex items-center gap-2 sm:gap-4 my-4 sm:my-6 text-xs sm:text-sm font-medium text-[#1e5da8]">
-              <span className="flex-1 h-px bg-[#1e5da8]/30" />
+
+          <div className="flex items-center gap-2 sm:gap-4 my-4 sm:my-6 text-xs sm:text-sm font-medium text-[#094D7B]">
+              <span className="flex-1 h-px bg-[#094D7B]/30" />
               <span className="whitespace-nowrap">OR Create new</span>
-              <span className="flex-1 h-px bg-[#1e5da8]/30" />
+              <span className="flex-1 h-px bg-[#094D7B]/30" />
             </div>
             {/* Mobile Card Layout */}
             <div className="block md:hidden space-y-3">
@@ -716,17 +798,17 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
               </span>
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-4 my-4 sm:my-6 text-xs sm:text-sm font-medium text-[#1e5da8]">
-              <span className="flex-1 h-px bg-[#1e5da8]/30" />
+            <div className="flex items-center gap-2 sm:gap-4 my-4 sm:my-6 text-xs sm:text-sm font-medium text-[#094D7B]">
+              <span className="flex-1 h-px bg-[#094D7B]/30" />
               <span className="whitespace-nowrap">OR Upload Excel</span>
-              <span className="flex-1 h-px bg-[#1e5da8]/30" />
+              <span className="flex-1 h-px bg-[#094D7B]/30" />
             </div>
 
             <Button
                 variant="default"
                 size="sm"
                 onClick={handleDownloadTemplate}
-                className="flex items-center justify-center gap-2 text-sm sm:text-xs bg-primary-600 hover:bg-primary-700 text-gray-200 hover:text-white h-11 sm:h-9 w-full sm:w-auto"
+                className="flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap bg-[#094D7B] text-sm text-white shadow-[0_4px_18px_rgba(9,77,123,0.20)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.26)] sm:h-9 sm:w-auto sm:text-xs"
               >
                 <Download className="w-4 h-4 sm:w-3 sm:h-3" />
                 Download Excel Template
@@ -765,7 +847,7 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
               />
               <Button 
                 onClick={handleSaveCriteria} 
-                className="whitespace-nowrap w-full sm:w-auto h-11 sm:h-10"
+                className="h-11 w-full whitespace-nowrap bg-[#094D7B] text-white shadow-[0_4px_18px_rgba(9,77,123,0.20)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.26)] sm:h-10 sm:w-auto"
                 disabled={!gridName || !isValidTotal || isLoading}
               >
                 <Save className="w-4 h-4 mr-2" />

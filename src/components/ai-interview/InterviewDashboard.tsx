@@ -382,7 +382,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
         <div></div>
         <Button 
           onClick={() => onSectionChange?.('ai-interview')}
-          className="bg-primary-600 hover:bg-primary-700 text-white w-full sm:w-auto"
+          className="w-full bg-[#094D7B] text-white hover:bg-[#094D7B]/90 sm:w-auto"
         >
           Start New Interview
         </Button>
@@ -497,7 +497,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
               <p className="text-sm text-muted-foreground mt-2">Start your first interview to see results here</p>
               <Button
                 onClick={() => onSectionChange?.('ai-interview')}
-                className="mt-4 bg-primary-600 hover:bg-primary-700"
+                className="mt-4 bg-[#094D7B] text-white hover:bg-[#094D7B]/90"
               >
                 Start New Interview
               </Button>

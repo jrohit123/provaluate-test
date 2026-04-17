@@ -1926,7 +1926,7 @@ const HRInterviewCreator = ({
   const titleClass = isCandidate ? '[color:#020f1a]' : '[color:#020f1a]';
   const competencyActionBtnClass = useCandidateAuthPalette
     ? 'flex items-center gap-2 w-full sm:w-auto [background:linear-gradient(135deg,#1a9fd6,#2563eb)] hover:[background:linear-gradient(135deg,#1490c0,#1d4ed8)] text-white'
-    : 'flex items-center gap-2 w-full sm:w-auto [background:linear-gradient(135deg,#020f1a,#042C53)] hover:[background:linear-gradient(135deg,#031525,#053565)] text-white';
+    : 'flex items-center gap-2 w-full sm:w-auto bg-[#094D7B] hover:bg-[#094D7B]/90 text-white';
 
   return (
     <div className="min-h-screen w-full min-w-0 overflow-x-hidden">
@@ -2037,7 +2037,11 @@ const HRInterviewCreator = ({
                 }
               }}>
                 <DialogTrigger asChild>
-                  <Button variant="default" size="sm" className="w-full sm:w-auto text-xs sm:text-sm h-9 sm:h-10">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="h-9 w-full bg-[#094D7B] text-xs text-white hover:bg-[#094D7B]/90 sm:h-10 sm:w-auto sm:text-sm"
+                  >
                     <Settings className="h-4 w-4 mr-1.5 sm:mr-2" />
                     <span className="hidden sm:inline">Manage Job Descriptions</span>
                     <span className="sm:hidden">Manage Jobs</span>

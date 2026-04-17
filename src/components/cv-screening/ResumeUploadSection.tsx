@@ -114,7 +114,7 @@ const getRecommendationStyle = (status: string): string => {
     case 'Review Further':
       return 'bg-yellow-100 text-yellow-700';
     default:
-      return 'bg-blue-100 text-blue-700';
+      return 'bg-[#094D7B]/15 text-[#094D7B]';
   }
 };
 
@@ -2100,7 +2100,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
               
               <div className="flex items-center gap-2 mb-2">
                 <Briefcase className="w-4 h-4 text-primary-600" />
-                <h3 className="font-medium text-[#042C53]">Job Description</h3>
+                <h3 className="font-medium text-[#094D7B]">Job Description</h3>
               </div>
               <Select value={selectedJobDescriptionId} onValueChange={handleJobDescriptionSelect}>
                 <SelectTrigger className="w-full">
@@ -2142,7 +2142,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
             <div className="space-y-3">
               <div className="flex items-center gap-2 mb-2">
                 <Grid className="w-4 h-4 text-primary-600" />
-                <h3 className="font-medium text-[#042C53]">Evaluation Criteria</h3>
+                <h3 className="font-medium text-[#094D7B]">Evaluation Criteria</h3>
               </div>
               <Select value={selectedCriteriaGridId} onValueChange={handleCriteriaGridSelect}>
                 <SelectTrigger className="w-full">
@@ -2226,7 +2226,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                         <FileText className={`w-4 h-4 ${
                           fileData.status === 'completed' ? 'text-green-600' :
                           fileData.status === 'error' ? 'text-red-600' :
-                          fileData.status === 'uploading' ? 'text-blue-600' : 'text-muted-foreground'
+                          fileData.status === 'uploading' ? 'text-[#094D7B]' : 'text-muted-foreground'
                         }`} />
                         <span className="truncate max-w-xs">{fileData.file.name}</span>
                         <span className="text-xs">({(fileData.file.size / 1024 / 1024).toFixed(1)} MB)</span>
@@ -2237,8 +2237,8 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                           )}
                           {fileData.status === 'uploading' || currentlyProcessing === index && fileData.status === 'pending' && (
                             <div className="flex items-center gap-1">
-                              <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
-                              <span className="text-xs text-blue-600">Uploading...</span>
+                              <Loader2 className="h-3 w-3 animate-spin text-[#094D7B]" />
+                              <span className="text-xs text-[#094D7B]">Uploading...</span>
                             </div>
                           )}
                           {fileData.status === 'completed' && (
@@ -2274,7 +2274,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                 <p className={`mb-4 ${
                   selectedFiles.every(f => f.status === 'completed') ? 'text-green-600' :
                   selectedFiles.some(f => f.status === 'error') ? 'text-red-600' :
-                  selectedFiles.some(f => f.status === 'uploading') ? 'text-blue-600' :
+                  selectedFiles.some(f => f.status === 'uploading') ? 'text-[#094D7B]' :
                   'text-gray-700'
                 }`}>
                   {selectedFiles.every(f => f.status === 'completed') ? 'All files uploaded successfully! You can add more files or proceed with evaluation.' :
@@ -2287,7 +2287,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                   <Button 
                     onClick={handleFileSelect}
                     disabled={(companyUsageInfo && !companyUsageInfo.canProcessCV) || jdCriteriaMismatch?.isMismatched}
-                    className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-[#094D7B] text-white shadow-[0_4px_18px_rgba(9,77,123,0.20)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.26)] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Add More Files
                   </Button>
@@ -2338,7 +2338,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                     handleFileSelect();
                   }}
                   disabled={(companyUsageInfo && !companyUsageInfo.canProcessCV) || jdCriteriaMismatch?.isMismatched}
-                  className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-[#094D7B] text-white shadow-[0_4px_18px_rgba(9,77,123,0.20)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.26)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Select Files
                 </Button>
@@ -2358,7 +2358,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                   disabled={isEvaluating || !selectedJobDescriptionId || !selectedCriteriaGridId || !hasResumesToAnalyze || (companyUsageInfo && !companyUsageInfo.canProcessCV) || jdCriteriaMismatch?.isMismatched}
                   className={`relative w-full ${
                     processingState.status === 'processing' 
-                      ? 'bg-blue-600 hover:bg-blue-700' 
+                      ? 'bg-[#094D7B] hover:bg-[#094D7B]/90' 
                       : processingState.status === 'error'
                       ? 'bg-red-600 hover:bg-red-700'
                       : processingState.status === 'success'
@@ -2408,12 +2408,12 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-blue-800">Plan: {companyUsageInfo.planName}</span>
-                        <span className="text-blue-600">
+                        <span className="text-[#094D7B]">
                           {companyUsageInfo.maxCVs === 0 ? 'Unlimited' : `${companyUsageInfo.currentCVCount}/${companyUsageInfo.maxCVs}`} CVs
                         </span>
                       </div>
                       {companyUsageInfo.maxCVs > 0 && (
-                        <div className="text-xs text-blue-600">
+                        <div className="text-xs text-[#094D7B]">
                           {companyUsageInfo.remainingCVs > 0 ? `${companyUsageInfo.remainingCVs} remaining` : 'Limit reached'}
                         </div>
                       )}
@@ -2421,7 +2421,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                     {companyUsageInfo.maxCVs > 0 && (
                       <div className="mt-2 w-full bg-blue-200 rounded-full h-2">
                         <div 
-                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          className="h-2 rounded-full bg-[#094D7B] transition-all duration-300"
                           style={{ 
                             width: `${Math.min(100, (companyUsageInfo.currentCVCount / companyUsageInfo.maxCVs) * 100)}%` 
                           }}
@@ -2460,7 +2460,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
             </Button>
             
             {isWaitingForAssessments && (
-              <div className="flex items-center text-xs text-blue-600">
+              <div className="flex items-center text-xs text-[#094D7B]">
                 <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
                 {(() => {
                   if (expectedResumeCount > 0) {
@@ -2526,7 +2526,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                               e.stopPropagation();
                               handleViewPdf(report.resume_url, report.candidate_name || 'Unknown');
                             }}
-                            className="text-blue-600 hover:text-blue-800 underline hover:underline bg-transparent border-none cursor-pointer p-0"
+                            className="cursor-pointer border-none bg-transparent p-0 text-[#094D7B] underline hover:text-[#094D7B]/80 hover:underline"
                           >
                             View Candidate
                           </button>
@@ -2542,12 +2542,12 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                       {recommendationStatus}
                     </div>
                     {isProcessingReport ? (
-                      <div className="flex items-center gap-2 text-xs sm:text-sm text-blue-600">
+                      <div className="flex items-center gap-2 text-xs text-[#094D7B] sm:text-sm">
                         <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
                         <span>Processing...</span>
                       </div>
                     ) : (
-                      <div className="text-base sm:text-lg font-bold text-[#042C53]">
+                      <div className="text-base sm:text-lg font-bold text-[#094D7B]">
                         {`${Math.round((normalizedOverallScore ?? 0) * 10)}%`}
                       </div>
                     )}
@@ -2575,7 +2575,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                           <div className="flex-1">
                             <div className="relative w-full h-2 sm:h-3 bg-gray-200 rounded-full">
                               <div
-                                className="absolute top-0 left-0 h-2 sm:h-3 rounded-full bg-blue-600"
+                                className="absolute left-0 top-0 h-2 rounded-full bg-[#094D7B] sm:h-3"
                                 style={{ width: `${percentage !== null ? Math.max(0, Math.min(100, percentage)) : 0}%` }}
                               />
                             </div>
@@ -2594,7 +2594,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                   </div>
                 )}
                 {isProcessingReport && (
-                  <div className="mt-4 flex items-center gap-2 text-sm text-blue-600">
+                  <div className="mt-4 flex items-center gap-2 text-sm text-[#094D7B]">
                     {/* <Loader2 className="w-4 h-4 animate-spin" /> */}
                     {/* <span>We're evaluating this resume. Scores will appear soon.</span> */}
                   </div>
@@ -2661,7 +2661,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
                   // Navigate to admin user management for recharge
                   window.location.href = '/dashboard?section=admin-user-management';
                 }}
-                className="flex-1 bg-[#1A56DB] hover:bg-[#1A56DB]/90"
+                className="flex-1 bg-[#094D7B] hover:bg-[#094D7B]/90"
               >
                 Go to Recharge
               </Button>

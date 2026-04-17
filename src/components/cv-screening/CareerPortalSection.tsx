@@ -270,7 +270,11 @@ export function CareerPortalSection({ onSectionReady }: CareerPortalSectionProps
               <span className="text-xs text-muted-foreground">{formVision.length}/400</span>
             )}
           </div>
-          <Button onClick={handleSaveCompany} disabled={savingCompany} className="min-h-10 px-4 touch-manipulation">
+          <Button
+            onClick={handleSaveCompany}
+            disabled={savingCompany}
+            className="min-h-10 touch-manipulation bg-[#094D7B] px-4 text-white hover:bg-[#094D7B]/90"
+          >
             {savingCompany ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
             Save
           </Button>
@@ -319,7 +323,16 @@ export function CareerPortalSection({ onSectionReady }: CareerPortalSectionProps
                   <SelectContent>
                     {jds.map((jd) => (
                       <SelectItem key={jd.jd_id} value={jd.jd_id}>
-                        {jd.title || 'Untitled'}
+                        <div className="flex w-full items-center justify-between gap-2">
+                          <span className="truncate">{jd.title || 'Untitled'}</span>
+                          <span
+                            className={`shrink-0 text-xs font-medium ${
+                              jd.post_on_career_page ? 'text-emerald-600' : 'text-slate-500'
+                            }`}
+                          >
+                            {jd.post_on_career_page ? '● Active' : '○ Inactive'}
+                          </span>
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -361,7 +374,7 @@ export function CareerPortalSection({ onSectionReady }: CareerPortalSectionProps
                           checked={jd.post_on_career_page ?? false}
                           onCheckedChange={(v) => handleSetPostOnCareerPage(jd.jd_id, v)}
                           disabled={!!savingJd}
-                          className="touch-manipulation"
+                          className="touch-manipulation data-[state=checked]:bg-[#094D7B] data-[state=unchecked]:bg-input"
                         />
                         <Label htmlFor={`post-${jd.jd_id}`} className="text-sm cursor-pointer">
                           Post on career page

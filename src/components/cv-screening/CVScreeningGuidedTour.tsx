@@ -116,7 +116,7 @@ export const CVScreeningGuidedTour = ({
                 key={step.id}
                 className={[
                   'h-1.5 w-4 rounded-full transition-colors',
-                  index === currentStep ? 'bg-[#0d6ea3]' : 'bg-gray-200',
+                  index === currentStep ? 'bg-[#094D7B]' : 'bg-gray-200',
                 ].join(' ')}
               />
             ))}
@@ -124,13 +124,13 @@ export const CVScreeningGuidedTour = ({
         </div>
 
         {/* Active step content */}
-        <div className="mt-4 border border-[#0d6ea3]/20 rounded-xl p-4 sm:p-5 bg-[#0d6ea3]/5 space-y-3">
+        <div className="mt-4 border border-[#094D7B]/20 rounded-xl p-4 sm:p-5 bg-[#094D7B]/5 space-y-3">
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm border border-[#0d6ea3]/20 flex-shrink-0">
-              <activeStep.icon className="w-4 h-4 text-[#0d6ea3]" />
+            <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm border border-[#094D7B]/20 flex-shrink-0">
+              <activeStep.icon className="w-4 h-4 text-[#094D7B]" />
             </div>
             <div className="flex-1 min-w-0 space-y-1">
-              <h3 className="text-sm sm:text-base font-semibold text-[#042C53]">
+              <h3 className="text-sm sm:text-base font-semibold text-[#094D7B]">
                 {activeStep.title}
               </h3>
               <p className="text-xs sm:text-sm text-gray-600">
@@ -149,7 +149,7 @@ export const CVScreeningGuidedTour = ({
             <Button
               variant="outline"
               size="sm"
-              className="w-full sm:w-auto flex items-center justify-center gap-2 border-[#0d6ea3]/35 text-[#0d6ea3] hover:bg-[#0d6ea3]/10 hover:text-[#042C53]"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 border-[#094D7B]/35 text-[#094D7B] hover:bg-[#094D7B]/10 hover:text-[#094D7B]"
               onClick={() => handleNavigate(activeStep.section)}
             >
               {activeStep.primaryCta}
@@ -173,7 +173,7 @@ export const CVScreeningGuidedTour = ({
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 sm:flex-none border-[#0d6ea3]/25"
+              className="flex-1 sm:flex-none border-[#094D7B]/25"
               disabled={currentStep === 0}
               onClick={() => setCurrentStep((prev) => Math.max(0, prev - 1))}
             >
@@ -181,7 +181,7 @@ export const CVScreeningGuidedTour = ({
             </Button>
             <Button
               size="sm"
-              className="flex-1 sm:flex-none text-white shadow-[0_4px_18px_rgba(13,110,163,0.28)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.34)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)]"
+              className="flex-1 sm:flex-none text-white shadow-[0_4px_18px_rgba(9,77,123,0.28)] transition-shadow hover:shadow-[0_6px_22px_rgba(9,77,123,0.34)] bg-[#094D7B] hover:bg-[#094D7B]"
               onClick={() => {
                 if (currentStep < totalSteps - 1) {
                   setCurrentStep((prev) => Math.min(totalSteps - 1, prev + 1));

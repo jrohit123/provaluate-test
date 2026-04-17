@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,16 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { API_CONFIG, buildApiUrl } from '@/constants/api';
 import { useToast } from '@/hooks/use-toast';
-import { Copy, Check, Loader2, Share2, Settings2, ArrowRight } from 'lucide-react';
+import { Copy, Check, Loader2, Share2, Settings2, ArrowRight, ReceiptText, Eye, Download } from 'lucide-react';
+import { isCandidate, useAuthContext } from '@/contexts/AuthContext';
+import {
+  CandidatePaymentReceipt,
+  downloadCandidateReceiptPdf,
+  formatReceiptCurrency,
+  formatReceiptDate,
+  getReceiptReference,
+  type CandidateReceiptPurchase,
+} from '@/components/ai-interview/CandidatePaymentReceipt';
 
 type ReferralRow = {
   name: string;
@@ -58,7 +67,11 @@ type ReferralSettings = {
   college_discount_stacks_with_credits: boolean;
 };
 
+type CandidatePlanPurchaseRow = CandidateReceiptPurchase;
+
 export function ReferralsSection() {
+  const { user } = useAuthContext();
+  const candidate = isCandidate(user) ? user.candidate : null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
@@ -84,11 +97,23 @@ export function ReferralsSection() {
   });
   const [collegeEnrollment, setCollegeEnrollment] = useState<CollegeEnrollmentBanner>(null);
   const [pricingPreview, setPricingPreview] = useState<PlanPricing | null>(null);
+  const [receiptsLoading, setReceiptsLoading] = useState(true);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
+  const [purchases, setPurchases] = useState<CandidatePlanPurchaseRow[]>([]);
+  const [selectedReceipt, setSelectedReceipt] = useState<CandidatePlanPurchaseRow | null>(null);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState<string | null>(null);
   const isCurrentPlanFree = Boolean(
     currentPlan &&
     ((Number(currentPlan.cost) || 0) <= 0 || /free/i.test(String(currentPlan.plan_name || '')))
   );
   const { toast } = useToast();
+  const candidateName = useMemo(() => {
+    const first = candidate?.first_name?.trim() || '';
+    const last = candidate?.last_name?.trim() || '';
+    return [first, last].filter(Boolean).join(' ') || 'Candidate';
+  }, [candidate?.first_name, candidate?.last_name]);
+  const candidateEmail = candidate?.email || user?.email || '';
 
   const getAuthHeaders = async (): Promise<Record<string, string>> => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -149,6 +174,58 @@ export function ReferralsSection() {
     loadData();
     loadSettings();
   }, [loadData, loadSettings]);
+
+  const loadReceipts = useCallback(async () => {
+    if (!candidate?.candidate_id) {
+      setPurchases([]);
+      setReceiptsLoading(false);
+      return;
+    }
+    setReceiptsLoading(true);
+    setReceiptError(null);
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('candidate_plan_purchases')
+        .select('id, plan_id, plan_name, gross_amount, credits_used, amount_paid, payment_status, razorpay_order_id, razorpay_payment_id, payment_date, purchased_at, metadata')
+        .eq('candidate_id', candidate.candidate_id)
+        .eq('payment_status', 'completed')
+        .order('payment_date', { ascending: false, nullsFirst: false });
+      if (fetchError) {
+        setReceiptError(fetchError.message);
+        setPurchases([]);
+      } else {
+        setPurchases((data || []) as CandidatePlanPurchaseRow[]);
+      }
+    } catch (e) {
+      setReceiptError(e instanceof Error ? e.message : 'Failed to load payment receipts.');
+      setPurchases([]);
+    } finally {
+      setReceiptsLoading(false);
+    }
+  }, [candidate?.candidate_id]);
+
+  useEffect(() => {
+    loadReceipts();
+  }, [loadReceipts]);
+
+  const openReceipt = (purchase: CandidatePlanPurchaseRow) => {
+    setSelectedReceipt(purchase);
+    setReceiptOpen(true);
+  };
+
+  const handleDownloadReceipt = async (purchase: CandidatePlanPurchaseRow) => {
+    setDownloadingReceiptId(purchase.id);
+    try {
+      await downloadCandidateReceiptPdf({
+        candidateName,
+        candidateEmail,
+        candidateMobile,
+        purchase,
+      });
+    } finally {
+      setDownloadingReceiptId(null);
+    }
+  };
 
   const handleGenerateLink = async () => {
     setGenerating(true);
@@ -311,6 +388,7 @@ export function ReferralsSection() {
             setPlanSettingsOpen(false);
             setPlanStep('choose');
             loadData();
+            loadReceipts();
           } catch (e) {
             setPlanError(e instanceof Error ? e.message : 'Verification failed.');
           }
@@ -525,6 +603,73 @@ export function ReferralsSection() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ReceiptText className="h-4 w-4" />
+            Payment receipts
+          </CardTitle>
+          <p className="text-sm text-gray-600">
+            View or download receipts for completed plan purchases. Existing completed purchases are supported too.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {receiptError && (
+            <div className="rounded-md bg-red-50 border border-red-200 text-red-700 px-4 py-2 text-sm">
+              {receiptError}
+            </div>
+          )}
+          {receiptsLoading ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-sky-600" />
+            </div>
+          ) : purchases.length === 0 ? (
+            <p className="text-sm text-gray-500">No completed plan purchases found yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {purchases.map((purchase) => (
+                <div
+                  key={purchase.id}
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-4 shadow-sm"
+                >
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-slate-900">
+                        {purchase.plan_name || 'Selected Plan'}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-600 space-y-1">
+                        <p>Receipt Reference: {getReceiptReference(purchase)}</p>
+                        <p>Date Paid: {formatReceiptDate(purchase.payment_date || purchase.purchased_at)}</p>
+                        <p>Total Paid: {formatReceiptCurrency(purchase.amount_paid)}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" onClick={() => openReceipt(purchase)}>
+                        <Eye className="h-4 w-4 mr-2" />
+                        View
+                      </Button>
+                      <Button
+                        type="button"
+                        className="bg-sky-600 hover:bg-sky-700"
+                        disabled={downloadingReceiptId === purchase.id}
+                        onClick={() => handleDownloadReceipt(purchase)}
+                      >
+                        {downloadingReceiptId === purchase.id ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4 mr-2" />
+                        )}
+                        Download PDF
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Dialog
         open={planSettingsOpen}
         onOpenChange={(open) => {
@@ -688,6 +833,42 @@ export function ReferralsSection() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Payment receipt preview</DialogTitle>
+            <DialogDescription>
+              Review the receipt and download a PDF copy for your records.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedReceipt ? (
+            <div className="space-y-4">
+              <CandidatePaymentReceipt
+                candidateName={candidateName}
+                candidateEmail={candidateEmail}
+                candidateMobile={candidateMobile}
+                purchase={selectedReceipt}
+              />
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  className="bg-sky-600 hover:bg-sky-700"
+                  disabled={downloadingReceiptId === selectedReceipt.id}
+                  onClick={() => handleDownloadReceipt(selectedReceipt)}
+                >
+                  {downloadingReceiptId === selectedReceipt.id ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  Download PDF
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

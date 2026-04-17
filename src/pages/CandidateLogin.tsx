@@ -195,11 +195,8 @@ const CandidateLogin = () => {
                       <Link to="/candidate-pricing" className="block rounded-lg px-3 py-2 text-base font-medium text-[#1a9fd6] hover:bg-slate-50 hover:text-[#0a3a5a]" onClick={() => setMobileMenuOpen(false)}>
                         Pricing
                       </Link>
-                      <Link to="/login" className="block rounded-lg px-3 py-2 text-base text-slate-700 hover:bg-slate-50 hover:text-slate-900" onClick={() => setMobileMenuOpen(false)}>
-                        Recruiter login
-                      </Link>
-                      <Link to="/tpo-login" className="block rounded-lg px-3 py-2 text-base text-slate-700 hover:bg-slate-50 hover:text-slate-900" onClick={() => setMobileMenuOpen(false)}>
-                        TPO login
+                      <Link to="/" className="block rounded-lg px-3 py-2 text-base text-slate-700 hover:bg-slate-50 hover:text-slate-900" onClick={() => setMobileMenuOpen(false)}>
+                        Choose sign-in role
                       </Link>
                     </div>
                   </SheetContent>
@@ -209,11 +206,8 @@ const CandidateLogin = () => {
                   <Link to="/candidate-pricing" className="px-2.5 py-1.5 text-sm font-medium text-[#1a9fd6] hover:text-[#0a3a5a] transition-colors rounded-md hover:bg-slate-50 sm:text-base">
                     Pricing
                   </Link>
-                  <Link to="/login" className="px-2.5 py-1.5 text-sm font-medium text-[#1a9fd6] hover:text-[#0a3a5a] transition-colors rounded-md hover:bg-slate-50 sm:text-base">
-                    Recruiter login
-                  </Link>
-                  <Link to="/tpo-login" className="px-2.5 py-1.5 text-sm font-medium text-[#1a9fd6] hover:text-[#0a3a5a] transition-colors rounded-md hover:bg-slate-50 sm:text-base">
-                    TPO login
+                  <Link to="/" className="rounded-md px-2.5 py-1.5 text-sm font-medium text-[#1a9fd6] transition-colors hover:bg-slate-50 hover:text-[#0a3a5a] sm:text-base">
+                    Choose sign-in role
                   </Link>
                 </nav>
               </div>

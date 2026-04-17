@@ -30,6 +30,7 @@ export default function CompanyCareerJobPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -108,6 +109,7 @@ export default function CompanyCareerJobPage() {
       if (json.status === 'success') {
         setUploadSuccess(true);
         setUploadError(null);
+        setSelectedFile(null);
         setTimeout(() => setUploadSuccess(false), 5000);
       } else {
         setUploadError(json.error || 'Upload failed.');
@@ -142,7 +144,7 @@ export default function CompanyCareerJobPage() {
             {companySlug && (
               <Link
                 to={`/careers/${companySlug}`}
-                className="inline-flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 mt-4"
+                className="mt-4 inline-flex items-center gap-2 text-sm text-[#094D7B] hover:text-[#094D7B]/90"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Back to open positions
@@ -156,12 +158,12 @@ export default function CompanyCareerJobPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
-      <header className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-primary-50/80 to-primary-100 border-b border-primary-100 w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
-        <div className="absolute top-0 right-0 w-64 h-64 sm:w-96 sm:h-96 bg-primary-200/30 rounded-full blur-3xl pointer-events-none -translate-y-1/2 translate-x-1/2" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 sm:w-72 sm:h-72 bg-primary-200/40 rounded-full blur-3xl pointer-events-none translate-y-1/2 -translate-x-1/2" />
+      <header className="relative w-full overflow-hidden border-b border-[#094D7B]/15 bg-gradient-to-br from-[#094D7B]/5 via-[#094D7B]/5 to-[#094D7B]/12 px-3 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <div className="pointer-events-none absolute right-0 top-0 h-64 w-64 translate-x-1/2 -translate-y-1/2 rounded-full bg-[#094D7B]/20 blur-3xl sm:h-96 sm:w-96" />
+        <div className="pointer-events-none absolute bottom-0 left-0 h-48 w-48 -translate-x-1/2 translate-y-1/2 rounded-full bg-[#094D7B]/25 blur-3xl sm:h-72 sm:w-72" />
         <div className="relative w-full flex flex-row items-start sm:items-center justify-between gap-3 sm:gap-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 min-w-0 flex-1">
-            <div className="flex-shrink-0 bg-white rounded-xl sm:rounded-2xl shadow-md border border-primary-100 p-3 sm:p-5 flex items-center justify-center h-20 w-24 sm:min-h-[100px] sm:h-28 sm:w-44 lg:h-36 lg:w-56">
+            <div className="flex h-20 w-24 flex-shrink-0 items-center justify-center rounded-xl border border-[#094D7B]/15 bg-white p-3 shadow-md sm:min-h-[100px] sm:h-28 sm:w-44 sm:rounded-2xl sm:p-5 lg:h-36 lg:w-56">
               {company.career_logo_url ? (
                 <img
                   src={company.career_logo_url}
@@ -169,7 +171,7 @@ export default function CompanyCareerJobPage() {
                   className="max-h-full max-w-full w-auto h-14 sm:h-28 object-contain"
                 />
               ) : (
-                <span className="text-xl sm:text-3xl font-bold text-white bg-primary-600 rounded-full w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 flex items-center justify-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#094D7B] text-xl font-bold text-white sm:h-14 sm:w-14 sm:text-3xl lg:h-16 lg:w-16">
                   {company.company_name?.charAt(0)?.toUpperCase() || '?'}
                 </span>
               )}
@@ -201,7 +203,7 @@ export default function CompanyCareerJobPage() {
           </div>
           <Link
             to={`/careers/${companySlug}`}
-            className="flex-shrink-0 inline-flex items-center justify-center rounded-xl sm:rounded-2xl border border-primary-100 bg-white px-4 py-3 sm:px-5 sm:py-3 shadow-md text-sm font-medium text-primary-600 hover:text-primary-700 active:bg-gray-100 transition-colors min-h-[44px] touch-manipulation"
+            className="min-h-[44px] touch-manipulation inline-flex flex-shrink-0 items-center justify-center rounded-xl border border-[#094D7B]/15 bg-white px-4 py-3 text-sm font-medium text-[#094D7B] shadow-md transition-colors hover:text-[#094D7B]/90 active:bg-gray-100 sm:rounded-2xl sm:px-5 sm:py-3"
           >
             <span className="sm:hidden">Back</span>
             <span className="hidden sm:inline">Back to roles</span>
@@ -227,19 +229,38 @@ export default function CompanyCareerJobPage() {
               className="sr-only"
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) handleUpload(file);
+                if (file) {
+                  setSelectedFile(file);
+                  setUploadError(null);
+                  setUploadSuccess(false);
+                }
                 e.target.value = '';
               }}
               disabled={uploading}
             />
-            <Button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="hidden sm:inline-flex bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-lg px-5 py-2.5 min-h-[44px] touch-manipulation"
-            >
-              {uploading ? 'Uploading...' : 'Upload your CV'}
-            </Button>
+            <div className="hidden items-center gap-2 sm:flex">
+              <Button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="min-h-[44px] touch-manipulation rounded-lg bg-[#094D7B] px-5 py-2.5 font-medium text-white hover:bg-[#094D7B]/90"
+              >
+                {selectedFile ? 'Change file' : 'Select file'}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => selectedFile && handleUpload(selectedFile)}
+                disabled={uploading || !selectedFile}
+                className="min-h-[44px] touch-manipulation rounded-lg bg-[#094D7B] px-5 py-2.5 font-medium text-white hover:bg-[#094D7B]/90 disabled:opacity-60"
+              >
+                {uploading ? 'Submitting...' : 'Submit'}
+              </Button>
+            </div>
+            {selectedFile && (
+              <p className="mt-2 text-xs sm:text-sm text-gray-600">
+                Selected file: <span className="font-medium">{selectedFile.name}</span>
+              </p>
+            )}
             <p className="mt-2 text-xs sm:text-sm text-gray-500">Supported formats: PDF, DOCX, or TXT.</p>
             {uploadSuccess && (
               <p className="mt-1 text-sm text-green-600">
@@ -253,12 +274,12 @@ export default function CompanyCareerJobPage() {
         <Card className="w-full overflow-hidden">
           <CardHeader className="pb-2 px-3 sm:px-6 pt-4 sm:pt-6">
             <CardTitle className="text-base flex items-center gap-2">
-              <FileText className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0 text-primary-600" />
+              <FileText className="h-4 w-4 flex-shrink-0 text-[#094D7B] sm:h-5 sm:w-5" />
               <span>Job Description</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0 px-3 sm:px-6 pb-4 sm:pb-6 w-full">
-            <div className="rounded-lg sm:rounded-md bg-primary-50/50 border border-primary-200 p-3 sm:p-6 text-base text-gray-700 whitespace-pre-wrap leading-relaxed w-full max-w-none break-words overflow-x-auto min-h-0">
+            <div className="min-h-0 w-full max-w-none overflow-x-auto break-words whitespace-pre-wrap rounded-lg border border-[#094D7B]/20 bg-[#094D7B]/5 p-3 text-base leading-relaxed text-gray-700 sm:rounded-md sm:p-6">
               {description ?? 'Loading...'}
             </div>
           </CardContent>
@@ -267,23 +288,33 @@ export default function CompanyCareerJobPage() {
 
       {/* Fixed Apply bar for mobile only */}
       <div className="fixed bottom-0 left-0 right-0 z-50 p-3 bg-white border-t border-gray-200 sm:hidden">
-        <Button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className="w-full bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-lg py-3 min-h-[48px] touch-manipulation"
-        >
-          {uploading ? 'Uploading...' : 'Upload your CV'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="min-h-[48px] flex-1 touch-manipulation rounded-lg bg-[#094D7B] py-3 font-medium text-white hover:bg-[#094D7B]/90"
+          >
+            {selectedFile ? 'Change file' : 'Select file'}
+          </Button>
+          <Button
+            type="button"
+            onClick={() => selectedFile && handleUpload(selectedFile)}
+            disabled={uploading || !selectedFile}
+            className="min-h-[48px] flex-1 touch-manipulation rounded-lg bg-[#094D7B] py-3 font-medium text-white hover:bg-[#094D7B]/90 disabled:opacity-60"
+          >
+            {uploading ? 'Submitting...' : 'Submit'}
+          </Button>
+        </div>
       </div>
 
       <footer className="border-t mt-8 sm:mt-12 py-4 px-4 sm:px-6 lg:px-8 text-center text-xs text-gray-500">
         <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
-          <Link to="/privacy" className="text-primary-600 hover:text-primary-700">Privacy Policy</Link>
+          <Link to="/privacy" className="text-[#094D7B] hover:text-[#094D7B]/90">Privacy Policy</Link>
           <span>|</span>
-          <Link to="/terms" className="text-primary-600 hover:text-primary-700">Terms</Link>
+          <Link to="/terms" className="text-[#094D7B] hover:text-[#094D7B]/90">Terms</Link>
           <span>|</span>
-          <a href="mailto:sales@aitamate.com?subject=ProValuate%20Contact" className="text-primary-600 hover:text-primary-700">Contact</a>
+          <a href="mailto:sales@aitamate.com?subject=ProValuate%20Contact" className="text-[#094D7B] hover:text-[#094D7B]/90">Contact</a>
           <span>|</span>
           <span>Powered by ProValuate</span>
         </div>

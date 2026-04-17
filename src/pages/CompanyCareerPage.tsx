@@ -63,8 +63,8 @@ function JdCard({ jd, companySlug, isOpen, onToggle }: JdCardProps) {
     <Card
       className={`group cursor-pointer transition-all duration-200 border-2 ${
         isOpen
-          ? 'border-primary-200 shadow-md shadow-primary/10'
-          : 'border-gray-200 hover:border-primary-200'
+          ? 'border-[#094D7B]/20 shadow-md shadow-[rgba(9,77,123,0.10)]'
+          : 'border-gray-200 hover:border-[#094D7B]/20'
       }`}
       onClick={() => !isOpen && onToggle()}
     >
@@ -79,7 +79,7 @@ function JdCard({ jd, companySlug, isOpen, onToggle }: JdCardProps) {
       >
         <div
           className={`flex-shrink-0 flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl transition-colors ${
-            isOpen ? 'bg-primary-100 text-primary-600' : 'bg-gray-100 text-gray-600 group-hover:bg-primary-50'
+            isOpen ? 'bg-[#094D7B]/15 text-[#094D7B]' : 'bg-gray-100 text-gray-600 group-hover:bg-[#094D7B]/5'
           }`}
         >
           <Briefcase className="h-5 w-5 sm:h-6 sm:w-6" />
@@ -87,7 +87,7 @@ function JdCard({ jd, companySlug, isOpen, onToggle }: JdCardProps) {
         <div className="min-w-0 flex-1">
           <h3
             className={`font-semibold text-base sm:text-lg break-words transition-colors ${
-              isOpen ? 'text-primary-700' : 'text-gray-900 hover:text-primary-700'
+              isOpen ? 'text-[#094D7B]' : 'text-gray-900 hover:text-[#094D7B]'
             }`}
           >
             {jd.title || 'Untitled role'}
@@ -102,7 +102,7 @@ function JdCard({ jd, companySlug, isOpen, onToggle }: JdCardProps) {
             e.stopPropagation();
             onToggle();
           }}
-          className="flex-shrink-0 flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[#094D7B] text-white transition-colors hover:bg-[#094D7B]/90 sm:h-10 sm:w-10"
           aria-label={isOpen ? 'Collapse' : 'Expand'}
         >
           {isOpen ? <Minus className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
@@ -117,10 +117,10 @@ function JdCard({ jd, companySlug, isOpen, onToggle }: JdCardProps) {
           <CardContent className="pt-5 pb-5 sm:pb-6 px-4 sm:px-6" onClick={(e) => e.stopPropagation()}>
             <div className="space-y-4 w-full">
               <h4 className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <FileText className="h-4 w-4 text-primary-600" />
+                <FileText className="h-4 w-4 text-[#094D7B]" />
                 Job description
               </h4>
-              <div className="rounded-md bg-primary-50/50 border border-primary-200 p-3 sm:p-4 text-sm text-gray-700 whitespace-pre-wrap w-full">
+              <div className="w-full whitespace-pre-wrap rounded-md border border-[#094D7B]/20 bg-[#094D7B]/5 p-3 text-sm text-gray-700 sm:p-4">
                 {loadingDesc ? (
                   <div className="space-y-2">
                     <Skeleton className="h-3 w-full" />
@@ -137,11 +137,9 @@ function JdCard({ jd, companySlug, isOpen, onToggle }: JdCardProps) {
               </div>
               <Link
                 to={`/careers/${companySlug}/job/${jd.jd_id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 mt-5"
+                className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-[#094D7B] hover:text-[#094D7B]/90"
               >
-                Read full job description and apply →
+                Read full job description and apply
               </Link>
             </div>
           </CardContent>
@@ -290,13 +288,13 @@ export default function CompanyCareerPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero header */}
-      <header className="relative overflow-hidden bg-gradient-to-br from-primary-50 via-primary-50/80 to-primary-100 border-b border-primary-100 px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        <div className="absolute top-0 right-0 w-64 h-64 sm:w-96 sm:h-96 bg-primary-200/30 rounded-full blur-3xl pointer-events-none -translate-y-1/2 translate-x-1/2" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 sm:w-72 sm:h-72 bg-primary-200/40 rounded-full blur-3xl pointer-events-none translate-y-1/2 -translate-x-1/2" />
+      <header className="relative overflow-hidden border-b border-[#094D7B]/15 bg-gradient-to-br from-[#094D7B]/5 via-[#094D7B]/5 to-[#094D7B]/12 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <div className="pointer-events-none absolute right-0 top-0 h-64 w-64 translate-x-1/2 -translate-y-1/2 rounded-full bg-[#094D7B]/20 blur-3xl sm:h-96 sm:w-96" />
+        <div className="pointer-events-none absolute bottom-0 left-0 h-48 w-48 -translate-x-1/2 translate-y-1/2 rounded-full bg-[#094D7B]/25 blur-3xl sm:h-72 sm:w-72" />
         <div className="relative flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
           {/* Logo — large and clearly visible */}
           <div className="flex-shrink-0">
-            <div className="bg-white rounded-2xl shadow-md border border-primary-100 p-4 sm:p-5 flex items-center justify-center min-h-[100px] h-28 sm:h-36 w-44 sm:w-56">
+            <div className="flex h-28 w-44 min-h-[100px] items-center justify-center rounded-2xl border border-[#094D7B]/15 bg-white p-4 shadow-md sm:h-36 sm:w-56 sm:p-5">
               {company.career_logo_url ? (
                 <img
                   src={company.career_logo_url}
@@ -304,7 +302,7 @@ export default function CompanyCareerPage() {
                   className="max-h-full max-w-full w-auto h-20 sm:h-28 object-contain"
                 />
               ) : (
-                <span className="text-2xl sm:text-3xl font-bold text-white bg-primary-600 rounded-full w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#094D7B] text-2xl font-bold text-white sm:h-16 sm:w-16 sm:text-3xl">
                   {company.company_name?.charAt(0)?.toUpperCase() || '?'}
                 </span>
               )}
@@ -335,8 +333,8 @@ export default function CompanyCareerPage() {
             })()}
           </div>
           <div className="flex-shrink-0">
-            <div className="bg-white rounded-2xl shadow-md border border-primary-100 px-4 py-3 sm:px-5 sm:py-4 text-center">
-              <div className="text-2xl sm:text-3xl font-bold text-primary-600">{jds.length}</div>
+            <div className="rounded-2xl border border-[#094D7B]/15 bg-white px-4 py-3 text-center shadow-md sm:px-5 sm:py-4">
+              <div className="text-2xl font-bold text-[#094D7B] sm:text-3xl">{jds.length}</div>
               <div className="text-xs uppercase tracking-wide text-gray-500 mt-0.5">Open Roles</div>
             </div>
           </div>
@@ -372,7 +370,7 @@ export default function CompanyCareerPage() {
                 placeholder={animatedPlaceholder}
                 value={query}
                 onChange={(e) => handleSearch(e.target.value)}
-                className="w-full pl-10 pr-10 py-3.5 min-h-[48px] rounded-lg border border-gray-200 bg-white text-sm sm:text-base placeholder:text-gray-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-shadow"
+                className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-white py-3.5 pl-10 pr-10 text-sm placeholder:text-gray-400 transition-shadow focus:border-[#094D7B] focus:outline-none focus:ring-2 focus:ring-[#094D7B]/20 sm:text-base"
               />
               {query.trim() && (
                 <button
@@ -438,8 +436,8 @@ export default function CompanyCareerPage() {
                           onClick={() => handlePageChange(i)}
                           className={`rounded-full transition-colors ${
                             i === currentPage
-                              ? 'w-2.5 h-2.5 sm:w-3 sm:h-3 bg-primary-600'
-                              : 'w-2.5 h-2.5 sm:w-3 sm:h-3 border-2 border-gray-300 hover:border-primary-400'
+                              ? 'h-2.5 w-2.5 bg-[#094D7B] sm:h-3 sm:w-3'
+                              : 'h-2.5 w-2.5 border-2 border-gray-300 hover:border-[#094D7B]/60 sm:h-3 sm:w-3'
                           }`}
                           aria-label={`Page ${i + 1}`}
                           aria-current={i === currentPage ? 'page' : undefined}
@@ -465,11 +463,11 @@ export default function CompanyCareerPage() {
 
       <footer className="border-t mt-8 sm:mt-12 py-4 px-4 sm:px-6 lg:px-8 text-center text-xs text-gray-500">
         <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
-          <Link to="/privacy" className="text-primary-600 hover:text-primary-700">Privacy Policy</Link>
+          <Link to="/privacy" className="text-[#094D7B] hover:text-[#094D7B]/90">Privacy Policy</Link>
           <span>|</span>
-          <Link to="/terms" className="text-primary-600 hover:text-primary-700">Terms</Link>
+          <Link to="/terms" className="text-[#094D7B] hover:text-[#094D7B]/90">Terms</Link>
           <span>|</span>
-          <a href="mailto:sales@aitamate.com?subject=ProValuate%20Contact" className="text-primary-600 hover:text-primary-700">Contact</a>
+          <a href="mailto:sales@aitamate.com?subject=ProValuate%20Contact" className="text-[#094D7B] hover:text-[#094D7B]/90">Contact</a>
           <span>|</span>
           <span>Powered by ProValuate</span>
         </div>

@@ -318,7 +318,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                 plan_name: planName
               },
               theme: {
-                color: "#1A56DB"
+                color: "#094D7B"
               },
               handler: async function (subResponse: any) {
                 // Subscription activated!
@@ -390,7 +390,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
               action: 'upgrade'
             },
             theme: {
-              color: "#1A56DB"
+              color: "#094D7B"
             },
             handler: async function (response: any) {
               try {
@@ -429,7 +429,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                         plan_name: planName
                       },
                       theme: {
-                        color: "#1A56DB"
+                        color: "#094D7B"
                       },
                       handler: async function (subResponse: any) {
                         // Subscription activated!
@@ -597,7 +597,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
           plan_name: plan.plan_name,
           recharge_type: 'topup'
         },
-        theme: { color: "#1A56DB" },
+        theme: { color: "#094D7B" },
         handler: async function (rzpResponse: any) {
           try {
             const verifyResponse = await fetch(`${API_BASE_URL}/payments/verify`, {
@@ -775,7 +775,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
           plan_name: plan.plan_name
         },
         theme: {
-          color: "#1A56DB"
+          color: "#094D7B"
         },
         handler: async function (response: any) {
           try {
@@ -894,7 +894,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
           plan_name: planName
         },
         theme: {
-          color: "#1A56DB"
+          color: "#094D7B"
         },
         handler: async function (response: any) {
           try {
@@ -1367,7 +1367,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                           ₹{availablePlans.find(p => p.plan_id === selectedRechargePlan)?.plan_cost || 0}/month
                         </span>
                       </div>
-                      <p className="text-xs text-blue-700 mt-2">
+                      <p className="mt-2 text-xs text-[#094D7B]">
                         This amount will be automatically charged monthly after activation.
                       </p>
                     </div>

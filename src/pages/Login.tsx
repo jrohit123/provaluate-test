@@ -444,20 +444,12 @@ const Login = () => {
                           Impact
                         </a>
                         <div className="my-3 h-px bg-slate-200" />
-                        <div className="px-3 pb-1 text-xs font-semibold text-slate-400">Access Portals</div>
                         <Link
-                          to="/candidate-login"
+                          to="/"
                           className="block rounded-lg px-3 py-2 text-base font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900"
                           onClick={() => setMobileMenuOpen(false)}
                         >
-                          Candidate login
-                        </Link>
-                        <Link
-                          to="/tpo-login"
-                          className="block rounded-lg px-3 py-2 text-base font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          TPO login
+                          Choose sign-in role
                         </Link>
                       </div>
                     </SheetContent>
@@ -478,25 +470,12 @@ const Login = () => {
                       Impact
                     </a>
 
-                    <details className="relative group">
-                      <summary className="list-none inline-flex cursor-pointer items-center rounded-md px-2.5 py-1.5 text-sm font-medium text-[#0d6ea3] transition-colors hover:bg-slate-50 hover:text-[#042C53] sm:text-base">
-                        Access Portals
-                      </summary>
-                      <div className="absolute right-0 z-20 mt-2 w-40 rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">
-                        <Link
-                          to="/candidate-login"
-                          className="block rounded-md px-2 py-1.5 text-[13px] font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-800"
-                        >
-                          Candidate login
-                        </Link>
-                        <Link
-                          to="/tpo-login"
-                          className="mt-1 block rounded-md px-2 py-1.5 text-[13px] font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-800"
-                        >
-                          TPO login
-                        </Link>
-                      </div>
-                    </details>
+                    <Link
+                      to="/"
+                      className="rounded-md px-2.5 py-1.5 text-sm font-medium text-[#0d6ea3] transition-colors hover:bg-slate-50 hover:text-[#042C53] sm:text-base"
+                    >
+                      Choose sign-in role
+                    </Link>
                   </nav>
                 </div>
               </header>

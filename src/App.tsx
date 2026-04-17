@@ -29,6 +29,7 @@ import CandidateOnboarding from "./pages/CandidateOnboarding";
 import CandidateDashboard from "./pages/CandidateDashboard";
 import TpoLogin from "./pages/TpoLogin";
 import TpoDashboard from "./pages/TpoDashboard";
+import CoverPage from "./pages/CoverPage";
 
 // Import AI Interview components (now TypeScript)
 import InterviewDashboard from "./components/ai-interview/InterviewDashboard";
@@ -391,8 +392,8 @@ const App = () => {
             <Route path="/careers/:companySlug/job/:jdId" element={<CompanyCareerJobPage />} />
             <Route path="/careers/:companySlug" element={<CompanyCareerPage />} />
             
-            {/* Default route - redirect to login */}
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            {/* Landing: choose recruiter / candidate / TPO sign-in */}
+            <Route path="/" element={<CoverPage />} />
             <Route path="*" element={<NotFound />} />
                 </Routes>
                 {/* Toast Providers */}

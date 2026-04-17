@@ -1,9 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
+interface JobDescriptionSession {
+  id: string;
+  title: string;
+  file: string;
+  description?: string;
+  jd_id?: string;
+}
+
 interface SessionContextType {
-  currentJobDescription: any | null;
+  currentJobDescription: JobDescriptionSession | null;
   currentEvaluationCriteria: any | null;
-  setCurrentJobDescription: (jobDescription: any | null) => void;
+  setCurrentJobDescription: (jobDescription: JobDescriptionSession | null) => void;
   setCurrentEvaluationCriteria: (criteria: any | null) => void;
   clearSession: () => void;
   isSessionComplete: boolean;
@@ -12,7 +20,7 @@ interface SessionContextType {
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [currentJobDescription, setCurrentJobDescription] = useState<any | null>(null);
+  const [currentJobDescription, setCurrentJobDescription] = useState<JobDescriptionSession | null>(null);
   const [currentEvaluationCriteria, setCurrentEvaluationCriteria] = useState<any | null>(null);
 
   // Load session from localStorage on mount

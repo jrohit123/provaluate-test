@@ -1982,7 +1982,11 @@ const HRInterviewCreator = ({
             (!!useCandidateSelfPanel && (loggedInCandidateLoading || !loggedInCandidate)) ||
             (!useCandidateSelfPanel && interviewLimitInfo !== null && !interviewLimitInfo.canStartInterview)
           }
-          className={isCandidate ? 'px-6 sm:px-8 py-2 w-full sm:w-auto bg-sky-600 hover:bg-sky-700 text-white' : 'px-6 sm:px-8 py-2 w-full sm:w-auto'}
+          className={
+            isCandidate
+              ? 'w-full px-6 py-2 text-white sm:w-auto sm:px-8 bg-sky-600 hover:bg-sky-700'
+              : 'w-full px-6 py-2 text-white sm:w-auto sm:px-8 bg-[#094D7B] hover:bg-[#094D7B]/90'
+          }
           size="default"
         >
           {isCreating ? (
@@ -2056,6 +2060,7 @@ const HRInterviewCreator = ({
                   }}
                   size="sm"
                   disabled={sendingEmails.size > 0}
+                  className="bg-[#094D7B] text-white hover:bg-[#094D7B]/90"
                 >
                   {sendingEmails.size > 0 ? (
                     <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending...</>
@@ -2100,7 +2105,7 @@ const HRInterviewCreator = ({
                       <Button
                         onClick={() => copyInterviewLink(interview.interview_id)}
                         size="sm"
-                        className="w-full sm:w-auto"
+                        className="w-full bg-[#094D7B] text-white hover:bg-[#094D7B]/90 sm:w-auto"
                       >
                         <Copy className="h-4 w-4 sm:mr-2" />
                         <span className="hidden sm:inline">Copy</span>
