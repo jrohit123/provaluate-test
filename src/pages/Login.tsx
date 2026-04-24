@@ -387,77 +387,48 @@ const Login = () => {
   ];
 
   return (
-    <div className="min-h-screen w-full bg-white">
-      <style>{`
-        @keyframes panelIn {
-          from { opacity: 0; transform: translateY(12px) scale(0.995); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        @keyframes floatOrb {
-          0%, 100% { transform: translateY(0) scale(1); }
-          50% { transform: translateY(-18px) scale(1.05); }
-        }
-        @keyframes cardIn {
-          from { opacity: 0; transform: translateY(10px) rotate(var(--r, 0deg)) scale(0.95); }
-          to { opacity: 1; transform: translateY(0) rotate(var(--r, 0deg)) scale(1); }
-        }
-        @keyframes heroIn {
-          from { opacity: 0; transform: translateY(14px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
-      <section className="flex min-h-screen w-full flex-col animate-[panelIn_0.45s_cubic-bezier(0.25,0.46,0.45,0.94)_both] overflow-hidden bg-white">
-          <div className="grid flex-1 grid-cols-1 md:grid-cols-2">
-            <div className="order-1 md:order-none relative flex flex-col bg-[linear-gradient(145deg,#F6FAFF_0%,#EEF6FF_55%,#FFFFFF_100%)] p-6 sm:p-8 lg:p-12">
-              <header className="relative z-50 -mx-6 -mt-6 mb-6 border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:-mx-8 sm:-mt-8 sm:px-8 sm:py-5 lg:-mx-12 lg:-mt-12 lg:px-12 lg:py-6">
-                <div className="flex items-center justify-between gap-3 sm:gap-4">
-                  <img
-                    src="/Logo_Transparent_BG.png"
-                    alt="ProValuate"
-                    className="h-12 w-auto sm:h-14 lg:h-16"
-                  />
-
-                  {/* Mobile: slide-over sidebar menu */}
-                  <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-                    <SheetTrigger asChild>
-                      <button
-                        type="button"
-                        className="sm:hidden inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                        aria-label="Open menu"
-                      >
-                        <Menu className="h-5 w-5" />
-                      </button>
-                    </SheetTrigger>
-                    <SheetContent side="right" className="w-64">
-                      <div className="pt-8 space-y-2">
-                        <a
-                          href="/pricing"
-                          className="block rounded-lg px-3 py-2 text-base font-medium text-[#0d6ea3] hover:bg-slate-50 hover:text-[#042C53]"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Pricing
-                        </a>
-                        <a
-                          href="/impact"
-                          className="block rounded-lg px-3 py-2 text-base font-medium text-[#0d6ea3] hover:bg-slate-50 hover:text-[#042C53]"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Impact
-                        </a>
-                        <div className="my-3 h-px bg-slate-200" />
-                        <Link
-                          to="/"
-                          className="block rounded-lg px-3 py-2 text-base font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Choose sign-in role
-                        </Link>
-                      </div>
-                    </SheetContent>
-                  </Sheet>
-
-                  {/* Desktop: inline nav */}
-                  <nav className="hidden items-center gap-1 sm:flex">
+    <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Header Section */}
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <div>
+              <img src="/Logo_Transparent_BG.png" alt="ProValuate" className="h-12 sm:h-16 lg:h-20" />
+              </div>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 hidden sm:block"></h1>
+            </div>
+            <div className="flex items-center space-x-3 sm:space-x-6">
+              {/* <Link to="/candidate-login" className="hidden sm:inline-block text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
+                Candidate login
+              </Link> */}
+              {/* Desktop: Pricing & Impact visible */}
+              <a href="/pricing" className="hidden sm:inline-block text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
+                Pricing
+              </a>
+              <a href="/impact" className="hidden sm:inline-block text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
+                Impact
+              </a>
+              {/* Mobile: hamburger menu with Pricing & Impact */}
+              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <button
+                    type="button"
+                    className="sm:hidden p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+                    aria-label="Open menu"
+                  >
+                    <Menu className="h-6 w-6" />
+                  </button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-56">
+                  <nav className="flex flex-col gap-4 pt-8">
+                    {/* <Link
+                      to="/candidate-login"
+                      className="text-base font-medium text-gray-700 hover:text-gray-900 transition-colors"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Candidate login
+                    </Link> */}
                     <a
                       href="/pricing"
                       className="px-2.5 py-1.5 text-sm font-medium text-[#0d6ea3] hover:text-[#042C53] transition-colors rounded-md hover:bg-slate-50 sm:text-base"
