@@ -35,6 +35,7 @@ import {
 } from '@/components/tpo/TpoIndividualJourneyPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Home, Settings2, Activity, Shield, LogOut, Megaphone } from 'lucide-react';
+import { useAnimatedNumber } from '@/hooks/useAnimatedNumber';
 
 type StatsResponse = {
   college?: { id: string; college_name: string; college_code: string };
@@ -659,6 +660,11 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
   const inviteRoleName = selectedPublishTemplate?.title || selectedPublishTemplate?.position || 'this role';
   const generatedInviteTitle = `${inviteRoleName} - ${modeLabel} ${typeLabel} practice invite`;
   const generatedInviteMessage = buildTpoDefaultInviteMessage(inviteRoleName, modeLabel, typeLabel);
+  const animatedTotalStudents = useAnimatedNumber(loading ? 0 : (stats?.stats?.total_students ?? 0));
+  const animatedFreeStudents = useAnimatedNumber(loading ? 0 : (stats?.stats?.free_students ?? 0));
+  const animatedPaidStudents = useAnimatedNumber(loading ? 0 : (stats?.stats?.paid_students ?? 0));
+  const animatedCampusInterviews = useAnimatedNumber(loading ? 0 : (stats?.stats?.campus_interviews ?? 0));
+  const animatedCampusAttempts = useAnimatedNumber(loading ? 0 : (stats?.stats?.campus_attempts ?? 0));
 
   const handleTpoWorkflowStep = (step: number) => {
     if (step === 0) setActiveSection('configure');
@@ -1530,27 +1536,27 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
       <section className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4 mb-6">
         <div className="bg-white border border-gray-200 rounded-lg p-6">
           <div className="text-sm text-gray-500 mb-2">Total students</div>
-          <div className="text-[40px] font-bold text-gray-900 mb-2">{stats?.stats?.total_students ?? 0}</div>
+          <div className="text-[40px] font-bold text-gray-900 mb-2">{animatedTotalStudents}</div>
           <div className="text-sm text-gray-400">Across all courses</div>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-6">
           <div className="text-sm text-gray-500 mb-2">Free plan</div>
-          <div className="text-[40px] font-bold text-gray-900 mb-2">{stats?.stats?.free_students ?? 0}</div>
+          <div className="text-[40px] font-bold text-gray-900 mb-2">{animatedFreeStudents}</div>
           <div className="text-sm text-gray-400">Basic access</div>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-6">
           <div className="text-sm text-gray-500 mb-2">Paid plan</div>
-          <div className="text-[40px] font-bold text-gray-900 mb-2">{stats?.stats?.paid_students ?? 0}</div>
+          <div className="text-[40px] font-bold text-gray-900 mb-2">{animatedPaidStudents}</div>
           <div className="text-sm text-gray-400">Premium access</div>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-6">
           <div className="text-sm text-gray-500 mb-2">Campus interviews</div>
-          <div className="text-[40px] font-bold text-gray-900 mb-2">{stats?.stats?.campus_interviews ?? 0}</div>
+          <div className="text-[40px] font-bold text-gray-900 mb-2">{animatedCampusInterviews}</div>
           <div className="text-sm text-gray-400">Total configured</div>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-6">
           <div className="text-sm text-gray-500 mb-2">Campus attempts</div>
-          <div className="text-[40px] font-bold text-gray-900 mb-2">{stats?.stats?.campus_attempts ?? 0}</div>
+          <div className="text-[40px] font-bold text-gray-900 mb-2">{animatedCampusAttempts}</div>
           <div className="text-sm text-gray-400">Total attempts</div>
         </div>
       </section>

@@ -10,6 +10,7 @@ import { ActiveSection } from '@/pages/Dashboard';
 import { UiAnalyticsService } from '@/services/uiAnalyticsService';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useAnimatedNumber } from '@/hooks/useAnimatedNumber';
 
 interface MainDashboardProps {
   onSectionChange: (section: string) => void;
@@ -171,6 +172,15 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
         ? 'combo'
         : null;
 
+  const animatedJobDescriptions = useAnimatedNumber(loading ? 0 : stats.jobDescriptions);
+  const animatedCriteriaSets = useAnimatedNumber(loading ? 0 : stats.criteriaSets);
+  const animatedAssessments = useAnimatedNumber(loading ? 0 : stats.assessments);
+  const animatedInterviewJds = useAnimatedNumber(loading ? 0 : stats.interviewJobDescriptions);
+  const animatedInterviewsCompleted = useAnimatedNumber(loading ? 0 : stats.interviewsCompleted);
+  const animatedConsumedCVs = useAnimatedNumber(loading ? 0 : consumedCVs);
+  const animatedConsumedUsers = useAnimatedNumber(loading ? 0 : consumedUsers);
+  const animatedCompanyInterviewCount = useAnimatedNumber(loading ? 0 : (companyData?.interview_count ?? 0));
+
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
@@ -255,7 +265,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                     <div>
                       <div className="font-medium text-[#094D7B]">Max CVs</div>
                       <div className="text-[#094D7B]">
-                        {loading ? '...' : `${consumedCVs} / ${planData.max_cvs === 0 ? 'Unlimited' : planData.max_cvs}`}
+                        {loading ? '...' : `${animatedConsumedCVs} / ${planData.max_cvs === 0 ? 'Unlimited' : planData.max_cvs}`}
                       </div>
                     </div>
                   )}
@@ -263,20 +273,20 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                     <div>
                       <div className="font-medium text-[#094D7B]">Max Interviews</div>
                       <div className="text-[#094D7B]">
-                        {loading ? '...' : `${companyData?.interview_count ?? 0} / ${planData.max_interviews === 0 ? 'Unlimited' : planData.max_interviews}`}
+                        {loading ? '...' : `${animatedCompanyInterviewCount} / ${planData.max_interviews === 0 ? 'Unlimited' : planData.max_interviews}`}
                       </div>
                     </div>
                   )}
                   <div>
                     <div className="font-medium text-[#094D7B]">Max Users</div>
                     <div className="text-[#094D7B]">
-                      {loading ? '...' : `${consumedUsers} / ${planData.max_users || 'N/A'}`}
+                      {loading ? '...' : `${animatedConsumedUsers} / ${planData.max_users || 'N/A'}`}
                     </div>
                   </div>
                   <div>
                     <div className="font-medium text-[#094D7B]">Active JDs</div>
                     <div className="text-[#094D7B]">
-                      {stats.jobDescriptions} / {planData.active_jobs === 0 ? 'Unlimited' : planData.active_jobs}
+                      {animatedJobDescriptions} / {planData.active_jobs === 0 ? 'Unlimited' : planData.active_jobs}
                     </div>
                   </div>
                 </div>
@@ -313,19 +323,19 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                 <>
                   <div className="flex-1 min-w-0 flex flex-col items-center text-center">
                     <div className="text-lg sm:text-2xl font-bold text-[#094D7B]">
-                      {loading ? '...' : stats.jobDescriptions}
+                      {loading ? '...' : animatedJobDescriptions}
                     </div>
                     <div className="text-xs sm:text-sm text-[#094D7B] min-h-[2.5rem] flex items-center justify-center break-words">CV JDs CREATED</div>
                   </div>
                   <div className="flex-1 min-w-0 flex flex-col items-center text-center">
                     <div className="text-lg sm:text-2xl font-bold text-[#094D7B]">
-                      {loading ? '...' : stats.criteriaSets}
+                      {loading ? '...' : animatedCriteriaSets}
                     </div>
                     <div className="text-xs sm:text-sm text-[#094D7B] min-h-[2.5rem] flex items-center justify-center break-words">EVALUATION CRITERIA</div>
                   </div>
                   <div className="flex-1 min-w-0 flex flex-col items-center text-center">
                     <div className="text-lg sm:text-2xl font-bold text-[#094D7B]">
-                      {loading ? '...' : stats.assessments}
+                      {loading ? '...' : animatedAssessments}
                     </div>
                     <div className="text-xs sm:text-sm text-[#094D7B] min-h-[2.5rem] flex items-center justify-center break-words">ASSESSMENTS</div>
                   </div>
@@ -336,13 +346,13 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                 <>
                   <div className="flex-1 min-w-0 flex flex-col items-center text-center">
                     <div className="text-lg sm:text-2xl font-bold text-[#094D7B]">
-                      {loading ? '...' : stats.interviewJobDescriptions}
+                      {loading ? '...' : animatedInterviewJds}
                     </div>
                     <div className="text-xs sm:text-sm text-[#094D7B] min-h-[2.5rem] flex items-center justify-center break-words">INTERVIEW JDs CREATED</div>
                   </div>
                   <div className="flex-1 min-w-0 flex flex-col items-center text-center">
                     <div className="text-lg sm:text-2xl font-bold text-[#094D7B]">
-                      {loading ? '...' : stats.interviewsCompleted}
+                      {loading ? '...' : animatedInterviewsCompleted}
                     </div>
                     <div className="text-xs sm:text-sm text-[#094D7B] min-h-[2.5rem] flex items-center justify-center break-words">INTERVIEWS COMPLETED</div>
                   </div>

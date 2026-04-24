@@ -270,6 +270,7 @@ export interface Database {
           candidate_id: string
           auth_user_id: string
           email: string
+          avatar_url: string | null
           first_name: string | null
           last_name: string | null
           email_confirmed_at: string | null
@@ -280,6 +281,7 @@ export interface Database {
           candidate_id?: string
           auth_user_id: string
           email: string
+          avatar_url?: string | null
           first_name?: string | null
           last_name?: string | null
           email_confirmed_at?: string | null
@@ -290,6 +292,7 @@ export interface Database {
           candidate_id?: string
           auth_user_id?: string
           email?: string
+          avatar_url?: string | null
           first_name?: string | null
           last_name?: string | null
           email_confirmed_at?: string | null

@@ -32,6 +32,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StructuredInterviewSetup from './StructuredInterviewSetup';
 import { CompactStepProgress } from '@/components/cv-screening/CompactStepProgress';
 import {
@@ -126,6 +127,28 @@ const HRInterviewCreator = ({
       navigate(CANDIDATE_WORKFLOW_PATHS[stepIndex]);
     }
   };
+
+  const saveCandidateRoleDraft = async () => {
+    if (!candidateId) return;
+    const roleName = formData.newRole.trim();
+    if (!roleName) {
+      toast.error('Please enter a role name');
+      return;
+    }
+    if (!uploadedFile) {
+      toast.error('Please upload a JD file before saving');
+      return;
+    }
+    if (roleNameCheckState === 'taken') {
+      toast.error('This role name is already used for selected mode and type. Try a different name.');
+      return;
+    }
+    try {
+      await extractTextUploadAndSaveCandidateJD(uploadedFile, roleName);
+    } catch (err) {
+      toast.error((err as Error)?.message ?? 'Failed to save role');
+    }
+  };
   const currentStep = isCandidateFlow ? candidateCurrentStep : interviewCurrentStep;
   const navigateToStep = isCandidateFlow ? candidateNavigateToStep : interviewNavigateToStep;
   
@@ -161,6 +184,11 @@ const HRInterviewCreator = ({
   const [writtenAnswerPrevMaxTime, setWrittenAnswerPrevMaxTime] = useState<Record<string, number>>({});
   const [roleNameCheckState, setRoleNameCheckState] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
   const [roleNameCheckMessage, setRoleNameCheckMessage] = useState('');
+  const [candidateRoleTab, setCandidateRoleTab] = useState<'create' | 'existing'>('existing');
+  const [candidateRoleSaveState, setCandidateRoleSaveState] = useState<{ status: 'idle' | 'saved'; roleName?: string; jdId?: string }>({ status: 'idle' });
+  const [pendingUploadedJdPath, setPendingUploadedJdPath] = useState<string | null>(null);
+  const [pendingExtractedJdText, setPendingExtractedJdText] = useState<string>('');
+  const [pendingSelectJdId, setPendingSelectJdId] = useState<string | null>(null);
 
   // Interview JD limit + manage (jd_for_interview) – recruiter only
   const [interviewJdLimitInfo, setInterviewJdLimitInfo] = useState<JobDescriptionLimitInfo | null>(null);
@@ -627,13 +655,90 @@ const HRInterviewCreator = ({
       }
       
       setUploadedFile(file);
-      
+
+      // Candidate Create tab: extract only when Save is clicked
+      if (candidateId && candidateRoleTab === 'create') {
+        setFormData(prev => ({ ...prev, jobDescription: '' }));
+        return;
+      }
+
       // Extract text from PDF and upload to storage
       await extractTextAndUploadJD(file);
     }
   };
 
+  const extractTextUploadAndSaveCandidateJD = async (file: File, roleName: string) => {
+    if (!candidateId) return;
+    console.log('🔄 Candidate save: upload + extract + persist for role:', roleName);
+    setIsExtractingText(true);
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('job-descriptions')
+        .upload(fileName, file);
+
+      if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+
+      const formDataForExtraction = new FormData();
+      formDataForExtraction.append('file', file);
+      formDataForExtraction.append('title', roleName);
+
+      const response = await apiCall(API_CONFIG.ENDPOINTS.EXTRACT_JD_TEXT, {
+        method: 'POST',
+        body: formDataForExtraction,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to extract text from file: ${errorText}`);
+      }
+
+      const { extractedText } = await response.json();
+      const cleanedText = String(extractedText || '')
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, (ch) => (ch === '\n' || ch === '\r' ? ch : ''))
+        .replace(/\\u[0-9A-Fa-f]{4}/g, '')
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\[tbf]/g, ' ')
+        .replace(/[^\x20-\x7E\u00A0-\u00FF\n\r]/g, '')
+        .replace(/[&]{2,}/g, ' ')
+        .replace(/[0-9]{6,}/g, '')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\r\n|\r/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
+      const { data: jdData, error: jdError } = await supabase
+        .from('jd_candidates')
+        .insert({
+          candidate_id: candidateId,
+          title: roleName,
+          jd_file: uploadData.path,
+          extracted_text: cleanedText,
+        })
+        .select()
+        .single();
+
+      if (jdError) throw new Error(jdError.message);
+
+      if (injectedLoadJobDescriptions) await injectedLoadJobDescriptions();
+
+      setCandidateRoleSaveState({ status: 'saved', roleName, jdId: jdData?.id ?? jdData?.jd_id });
+      setPendingSelectJdId(jdData?.id ?? jdData?.jd_id ?? null);
+      setUploadedFile(null);
+      setFormData(prev => ({ ...prev, newRole: '', jobDescription: '' }));
+      toast.success('Your role has been saved', { id: 'candidate-role-saved' });
+    } finally {
+      setIsExtractingText(false);
+      setIsUploading(false);
+    }
+  };
+
   // Extract text from PDF and upload directly to Supabase (like CV screening)
+  // Candidate Create Role tab uses this to prepare a draft; saving happens via explicit Save.
   const extractTextAndUploadJD = async (file: File) => {
     if (!formData.newRole.trim()) {
       toast.error('Please enter a new role before uploading');
@@ -703,6 +808,15 @@ const HRInterviewCreator = ({
       console.log('🔄 Cleaned text length:', cleanedText.length);
 
       const roleNameForSave = formData.newRole;
+
+      // Candidate create-role tab: prepare draft (do not persist JD row yet)
+      if (candidateId && candidateRoleTab === 'create') {
+        setPendingUploadedJdPath(uploadData.path);
+        setPendingExtractedJdText(cleanedText);
+        setFormData(prev => ({ ...prev, jobDescription: cleanedText }));
+        toast.success('JD text extracted. Click Save to create the role.', { id: 'jd-extracted-candidate' });
+        return;
+      }
 
       // Save JD: TPO → campus_interview_templates API; candidate → jd_candidates; recruiter → jd_for_interview
       if (tpoCampusTemplatePersist) {
@@ -1541,6 +1655,14 @@ const HRInterviewCreator = ({
     };
   }, [formData.newRole, formData.interviewMode, formData.interviewType, crpScopePayload.parameter_pack_origin, crpScopePayload.company_id, crpScopePayload.user_id]);
 
+  useEffect(() => {
+    if (!pendingSelectJdId) return;
+    const exists = effectiveJobDescriptions.some((jd) => jd.jd_id === pendingSelectJdId);
+    if (!exists) return;
+    handleJobDescriptionSelect(pendingSelectJdId);
+    setPendingSelectJdId(null);
+  }, [pendingSelectJdId, effectiveJobDescriptions]);
+
   const saveCompetencies = async () => {
     const roleName = formData.newRole || formData.position;
     
@@ -1927,6 +2049,8 @@ const HRInterviewCreator = ({
   const competencyActionBtnClass = useCandidateAuthPalette
     ? 'flex items-center gap-2 w-full sm:w-auto [background:linear-gradient(135deg,#1a9fd6,#2563eb)] hover:[background:linear-gradient(135deg,#1490c0,#1d4ed8)] text-white'
     : 'flex items-center gap-2 w-full sm:w-auto bg-[#094D7B] hover:bg-[#094D7B]/90 text-white';
+  const showCandidateConfiguration = !candidateId || candidateRoleTab === 'existing';
+  const stepProgressTheme = candidateId ? 'candidate' : tpoEmbeddedWorkflow ? 'tpo' : 'recruiter';
 
   return (
     <div className="min-h-screen w-full min-w-0 overflow-x-hidden">
@@ -1938,7 +2062,7 @@ const HRInterviewCreator = ({
           steps={embeddedInterviewWorkflowSteps}
           onStepClick={navigateToStep}
           allowClickAnyStep={isCandidateFlow}
-          theme={isCandidateFlow ? 'candidate' : 'default'}
+          theme={stepProgressTheme}
         />
       </div>
       <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
@@ -2181,172 +2305,427 @@ const HRInterviewCreator = ({
               </Dialog>
             </div>
           )}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            {/* Left Column */}
-            <div className="space-y-4 min-w-0">
-              <div className="space-y-2">
-                <Label className="text-sm sm:text-base">Select Role *</Label>
-                <Select value={selectedTemplateId} onValueChange={handleJobDescriptionSelect}>
-                  <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
-                    <SelectValue placeholder="Select a role from existing job descriptions..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {effectiveJobDescriptions.map((jd: InjectedJD) => (
-                      <SelectItem key={jd.jd_id} value={jd.jd_id}>
-                        {jd.title ?? 'Untitled'}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          {candidateId ? (
+            <Tabs value={candidateRoleTab} onValueChange={(v) => setCandidateRoleTab(v as 'create' | 'existing')}>
+              <TabsList className="w-full grid grid-cols-2">
+                <TabsTrigger value="create">Create New Role</TabsTrigger>
+                <TabsTrigger value="existing">Existing Roles</TabsTrigger>
+              </TabsList>
 
-              <div className="space-y-2">
-                <Label htmlFor="newRole" className="text-sm sm:text-base">New Role *</Label>
-                <Input
-                  id="newRole"
-                  name="newRole"
-                  value={formData.newRole}
-                  onChange={handleInputChange}
-                  placeholder="Enter new role name if creating a new position"
-                  className="text-sm sm:text-base"
-                />
-                {roleNameCheckState !== 'idle' && (
-                  <p className={`text-xs ${roleNameCheckState === 'taken' ? 'text-red-600' : roleNameCheckState === 'available' ? 'text-emerald-600' : 'text-gray-500'}`}>
-                    {roleNameCheckMessage}
-                  </p>
-                )}
-              </div>
+              <TabsContent value="create" className="space-y-4">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="newRole" className="text-sm sm:text-base">Role Name *</Label>
+                    <Input
+                      id="newRole"
+                      name="newRole"
+                      value={formData.newRole}
+                      onChange={(e) => {
+                        setCandidateRoleSaveState({ status: 'idle' });
+                        handleInputChange(e);
+                      }}
+                      placeholder="Enter role name"
+                      className="text-sm sm:text-base w-full"
+                    />
+                    {roleNameCheckState !== 'idle' && (
+                      <p className={`text-xs ${roleNameCheckState === 'taken' ? 'text-red-600' : roleNameCheckState === 'available' ? 'text-emerald-600' : 'text-gray-500'}`}>
+                        {roleNameCheckMessage}
+                      </p>
+                    )}
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="interviewMode" className="text-sm sm:text-base">Interview Mode *</Label>
-                <Select 
-                  value={formData.interviewMode} 
-                  onValueChange={(value: 'ai' | 'structured') => 
-                    setFormData(prev => ({ ...prev, interviewMode: value }))
-                  }
-                >
-                  <SelectTrigger className="w-full min-h-[44px] h-12 sm:h-14 touch-manipulation">
-                    <SelectValue placeholder="Select interview mode..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ai">
-                      <div className="flex items-center gap-3">
-                        <span>🤖</span>
-                        <div>
-                          <div className="font-medium text-sm sm:text-base">AI Interview (Dynamic)</div>
-                          <div className="text-xs sm:text-sm text-gray-500">Questions generated based on candidate answers</div>
+                  <div className="space-y-2">
+                    <Label className="text-sm sm:text-base">Upload New Job Description</Label>
+                    <div
+                      className={`border-2 border-dashed rounded-lg p-4 sm:p-6 text-center transition-colors ${
+                        isDragOver ? 'border-sky-500 bg-sky-50' : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                    >
+                      <Upload className="mx-auto h-6 w-6 sm:h-8 sm:w-8 text-gray-400 mb-2" />
+                      <p className="text-xs sm:text-sm font-medium text-gray-900 mb-1">
+                        Drop files here or click to browse (PDF, DOCX, TXT)
+                      </p>
+                      <p className="text-xs text-gray-500 mb-3">Maximum file size: 3MB</p>
+                      <Input
+                        type="file"
+                        accept=".pdf,.docx,.txt"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                        id="file-upload"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => document.getElementById('file-upload')?.click()}
+                        disabled={isUploading || isExtractingText}
+                        className="w-full sm:w-auto"
+                      >
+                        {isExtractingText ? 'Extracting Text...' : isUploading ? 'Saving...' : 'Choose File'}
+                      </Button>
+                    </div>
+
+                    {uploadedFile && (
+                      <div className="flex items-center justify-between p-2 bg-gray-50 rounded border">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-gray-500" />
+                          <div>
+                            <p className="text-xs font-medium text-gray-900">{uploadedFile.name}</p>
+                            <p className="text-xs text-gray-500">{(uploadedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                          </div>
                         </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={removeUploadedFile}
+                          className="h-6 w-6 p-0"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
                       </div>
-                    </SelectItem>
-                    <SelectItem value="structured">
-                      <div className="flex items-center gap-3">
-                        <span>📝</span>
-                        <div>
-                          <div className="font-medium text-sm sm:text-base">Structured Interview (Pre-defined)</div>
-                          <div className="text-xs sm:text-sm text-gray-500">HR writes custom questions and competencies</div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                    )}
+                  </div>
 
-              {formData.interviewMode === 'ai' && (
-                <div className="space-y-2">
-                  <Label htmlFor="interviewType" className="text-sm sm:text-base">Interview Type *</Label>
-                  <Select 
-                    value={formData.interviewType} 
-                    onValueChange={async (value: 'functional' | 'behavioral' | 'mixed') => {
-                      setFormData(prev => ({ ...prev, interviewType: value }));
-                      // Load using the newly selected value (avoid stale state race)
-                      if (formData.position) {
-                        await loadCompetenciesForPosition(formData.position, formData.interviewMode, value);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
-                      <SelectValue placeholder="Select interview type..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="functional">Functional</SelectItem>
-                      <SelectItem value="behavioral">Behavioral</SelectItem>
-                      <SelectItem value="mixed">Mixed (Functional + Behavioral)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex justify-center">
+                    <Button
+                      type="button"
+                      onClick={saveCandidateRoleDraft}
+                      disabled={isUploading || isExtractingText || !formData.newRole.trim() || !uploadedFile}
+                      className={competencyActionBtnClass}
+                    >
+                      <Save className="h-4 w-4" />
+                      Save
+                    </Button>
+                  </div>
+
+                  {candidateRoleSaveState.status === 'saved' && (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                      <p className="text-sm font-medium text-emerald-800">Your role has been saved.</p>
+                      <Button
+                        type="button"
+                        className="mt-2 w-full"
+                        onClick={() => {
+                          setCandidateRoleTab('existing');
+                        }}
+                      >
+                        Proceed to configuration of competancies
+                      </Button>
+                    </div>
+                  )}
                 </div>
-              )}
+              </TabsContent>
 
+              <TabsContent value="existing" className="space-y-3">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 items-stretch">
+                  <div className="space-y-4 min-w-0">
+                    <div className="space-y-2">
+                      <Label className="text-sm sm:text-base">Role Name *</Label>
+                      <Select value={selectedTemplateId} onValueChange={handleJobDescriptionSelect}>
+                        <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
+                          <SelectValue placeholder="Select a role from existing job descriptions..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {effectiveJobDescriptions.map((jd: InjectedJD) => (
+                            <SelectItem key={jd.jd_id} value={jd.jd_id}>
+                              {jd.title ?? 'Untitled'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-            </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="interviewMode" className="text-sm sm:text-base">Interview Mode *</Label>
+                      <Select
+                        value={formData.interviewMode}
+                        onValueChange={(value: 'ai' | 'structured') =>
+                          setFormData(prev => ({ ...prev, interviewMode: value }))
+                        }
+                      >
+                        <SelectTrigger className="w-full min-h-[44px] h-12 sm:h-14 touch-manipulation">
+                          <SelectValue placeholder="Select interview mode..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ai">
+                            <div className="flex items-center gap-3">
+                              <span>🤖</span>
+                              <div>
+                                <div className="font-medium text-sm sm:text-base">AI Interview (Dynamic)</div>
+                                <div className="text-xs sm:text-sm text-gray-500">Questions generated based on candidate answers</div>
+                              </div>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="structured">
+                            <div className="flex items-center gap-3">
+                              <span>📝</span>
+                              <div>
+                                <div className="font-medium text-sm sm:text-base">Structured Interview (Pre-defined)</div>
+                                <div className="text-xs sm:text-sm text-gray-500">HR writes custom questions and competencies</div>
+                              </div>
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-            {/* Right Column */}
-            <div className="space-y-4">
+                    {formData.interviewMode === 'ai' && (
+                      <div className="space-y-2">
+                        <Label htmlFor="interviewType" className="text-sm sm:text-base">Interview Type *</Label>
+                        <Select
+                          value={formData.interviewType}
+                          onValueChange={async (value: 'functional' | 'behavioral' | 'mixed') => {
+                            setFormData(prev => ({ ...prev, interviewType: value }));
+                            if (formData.position) {
+                              await loadCompetenciesForPosition(formData.position, formData.interviewMode, value);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
+                            <SelectValue placeholder="Select interview type..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="functional">Functional</SelectItem>
+                            <SelectItem value="behavioral">Behavioral</SelectItem>
+                            <SelectItem value="mixed">Mixed (Functional + Behavioral)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 flex flex-col h-full">
+                    {/* Job Description Field */}
+                    <div className="space-y-2 flex flex-col flex-1">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                        <Label htmlFor="jobDescription" className="text-sm sm:text-base">Job Description *</Label>
+                        {formData.jobDescription && (
+                          <Dialog open={isExpandDialogOpen} onOpenChange={setIsExpandDialogOpen}>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-blue-600 hover:text-blue-700 flex items-center gap-1 w-full sm:w-auto"
+                              >
+                                <Maximize2 className="h-4 w-4" />
+                                Expand
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[80vh] overflow-hidden">
+                              <DialogHeader>
+                                <DialogTitle className="text-lg sm:text-xl">Job Description - Full Text</DialogTitle>
+                                <DialogDescription className="text-sm sm:text-base">
+                                  View the complete job description text that was extracted from the uploaded PDF file.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="overflow-y-auto max-h-[60vh]">
+                                <div className="whitespace-pre-wrap text-xs sm:text-sm leading-relaxed p-3 sm:p-4 bg-gray-50 rounded-lg border">
+                                  {formData.jobDescription}
+                                </div>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        )}
+                      </div>
+                      <Textarea
+                        id="jobDescription"
+                        name="jobDescription"
+                        value={formData.jobDescription}
+                        onChange={handleInputChange}
+                        placeholder="Job description will be auto-filled when you select a role above..."
+                        rows={8}
+                        className="resize-none text-sm sm:text-base flex-1 min-h-[260px]"
+                        readOnly
+                      />
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+              {/* Left Column */}
+              <div className="space-y-4 min-w-0">
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-sm sm:text-base">Select Role *</Label>
+                    <Select value={selectedTemplateId} onValueChange={handleJobDescriptionSelect}>
+                      <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
+                        <SelectValue placeholder="Select a role from existing job descriptions..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {effectiveJobDescriptions.map((jd: InjectedJD) => (
+                          <SelectItem key={jd.jd_id} value={jd.jd_id}>
+                            {jd.title ?? 'Untitled'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="newRole" className="text-sm sm:text-base">New Role *</Label>
+                    <Input
+                      id="newRole"
+                      name="newRole"
+                      value={formData.newRole}
+                      onChange={handleInputChange}
+                      placeholder="Enter new role name if creating a new position"
+                      className="text-sm sm:text-base"
+                    />
+                    {roleNameCheckState !== 'idle' && (
+                      <p className={`text-xs ${roleNameCheckState === 'taken' ? 'text-red-600' : roleNameCheckState === 'available' ? 'text-emerald-600' : 'text-gray-500'}`}>
+                        {roleNameCheckMessage}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="interviewMode" className="text-sm sm:text-base">Interview Mode *</Label>
+                    <Select
+                      value={formData.interviewMode}
+                      onValueChange={(value: 'ai' | 'structured') =>
+                        setFormData(prev => ({ ...prev, interviewMode: value }))
+                      }
+                    >
+                      <SelectTrigger className="w-full min-h-[44px] h-12 sm:h-14 touch-manipulation">
+                        <SelectValue placeholder="Select interview mode..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ai">
+                          <div className="flex items-center gap-3">
+                            <span>🤖</span>
+                            <div>
+                              <div className="font-medium text-sm sm:text-base">AI Interview (Dynamic)</div>
+                              <div className="text-xs sm:text-sm text-gray-500">Questions generated based on candidate answers</div>
+                            </div>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="structured">
+                          <div className="flex items-center gap-3">
+                            <span>📝</span>
+                            <div>
+                              <div className="font-medium text-sm sm:text-base">Structured Interview (Pre-defined)</div>
+                              <div className="text-xs sm:text-sm text-gray-500">HR writes custom questions and competencies</div>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {formData.interviewMode === 'ai' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="interviewType" className="text-sm sm:text-base">Interview Type *</Label>
+                      <Select
+                        value={formData.interviewType}
+                        onValueChange={async (value: 'functional' | 'behavioral' | 'mixed') => {
+                          setFormData(prev => ({ ...prev, interviewType: value }));
+                          if (formData.position) {
+                            await loadCompetenciesForPosition(formData.position, formData.interviewMode, value);
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
+                          <SelectValue placeholder="Select interview type..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="functional">Functional</SelectItem>
+                          <SelectItem value="behavioral">Behavioral</SelectItem>
+                          <SelectItem value="mixed">Mixed (Functional + Behavioral)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </>
+              </div>
+
+              {/* Right Column */}
+              <div className="space-y-4">
+
 
 
 
               {/* Drag and Drop Upload Area */}
-              <div className="space-y-2">
-                <Label className="text-sm sm:text-base">Upload New Job Description</Label>
-                <div
-                  className={`border-2 border-dashed rounded-lg p-4 sm:p-6 text-center transition-colors ${
-                    isDragOver 
-                      ? (isCandidate ? 'border-sky-500 bg-sky-50' : 'border-primary-500 bg-primary-50')
-                      : 'border-gray-300 hover:border-gray-400'
-                  }`}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                >
-                  <Upload className="mx-auto h-6 w-6 sm:h-8 sm:w-8 text-gray-400 mb-2" />
-                  <p className="text-xs sm:text-sm font-medium text-gray-900 mb-1">
-                    Drop files here or click to browse (PDF, DOCX, TXT)
-                  </p>
-                  <p className="text-xs text-gray-500 mb-3">
-                    Maximum file size: 3MB
-                  </p>
-                  <Input
-                    type="file"
-                    accept=".pdf,.docx,.txt"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    id="file-upload"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => document.getElementById('file-upload')?.click()}
-                    disabled={isUploading || isExtractingText}
-                    className="w-full sm:w-auto"
+              {(!candidateId || candidateRoleTab === 'create') && (
+                <div className="space-y-2">
+                  <Label className="text-sm sm:text-base">Upload New Job Description</Label>
+                  <div
+                    className={`border-2 border-dashed rounded-lg p-4 sm:p-6 text-center transition-colors ${
+                      isDragOver 
+                        ? (isCandidate ? 'border-sky-500 bg-sky-50' : 'border-primary-500 bg-primary-50')
+                        : 'border-gray-300 hover:border-gray-400'
+                    }`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
                   >
-                    {isExtractingText ? 'Extracting Text...' : isUploading ? 'Uploading...' : 'Choose File'}
-                  </Button>
-                </div>
-
-                {/* Uploaded File Display */}
-                {uploadedFile && (
-                  <div className="flex items-center justify-between p-2 bg-gray-50 rounded border">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-gray-500" />
-                      <div>
-                        <p className="text-xs font-medium text-gray-900">{uploadedFile.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
-                      </div>
-                    </div>
+                    <Upload className="mx-auto h-6 w-6 sm:h-8 sm:w-8 text-gray-400 mb-2" />
+                    <p className="text-xs sm:text-sm font-medium text-gray-900 mb-1">
+                      Drop files here or click to browse (PDF, DOCX, TXT)
+                    </p>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Maximum file size: 3MB
+                    </p>
+                    <Input
+                      type="file"
+                      accept=".pdf,.docx,.txt"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      id="file-upload"
+                    />
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      onClick={removeUploadedFile}
-                      className="h-6 w-6 p-0"
+                      onClick={() => document.getElementById('file-upload')?.click()}
+                      disabled={isUploading || isExtractingText}
+                      className="w-full sm:w-auto"
                     >
-                      <X className="h-3 w-3" />
+                      {isExtractingText ? 'Extracting Text...' : isUploading ? 'Uploading...' : 'Choose File'}
                     </Button>
                   </div>
-                )}
-              </div>
+
+                  {candidateId && candidateRoleTab === 'create' && (
+                    <Button
+                      type="button"
+                      onClick={saveCandidateRoleDraft}
+                      disabled={isUploading || isExtractingText || !formData.newRole.trim() || !pendingUploadedJdPath || !pendingExtractedJdText.trim()}
+                      className={competencyActionBtnClass}
+                    >
+                      <Save className="h-4 w-4" />
+                      Save
+                    </Button>
+                  )}
+
+                  {/* Uploaded File Display */}
+                  {uploadedFile && (
+                    <div className="flex items-center justify-between p-2 bg-gray-50 rounded border">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-gray-500" />
+                        <div>
+                          <p className="text-xs font-medium text-gray-900">{uploadedFile.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={removeUploadedFile}
+                        className="h-6 w-6 p-0"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Job Description Field */}
               <div className="space-y-2">
@@ -2393,11 +2772,12 @@ const HRInterviewCreator = ({
               </div>
             </div>
           </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Interview Summary Section */}
-            {formData.position && Object.keys(customCompetencies).length > 0 && (
+            {showCandidateConfiguration && formData.position && Object.keys(customCompetencies).length > 0 && (
         <Card className="animate-fade-in">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -2436,7 +2816,7 @@ const HRInterviewCreator = ({
       )}
 
       {/* Conditional Rendering based on Interview Mode */}
-      {formData.interviewMode === 'ai' ? (
+      {showCandidateConfiguration && formData.interviewMode === 'ai' ? (
         <div>
 
         {/* AI Interview - Competencies Section */}
@@ -3038,7 +3418,7 @@ const HRInterviewCreator = ({
       </Card>
 
         </div>
-      ) : (
+      ) : showCandidateConfiguration ? (
         /* Structured Interview Section */
         <StructuredInterviewSetup
           position={formData.position || formData.newRole}
@@ -3079,7 +3459,7 @@ const HRInterviewCreator = ({
             }
           }}
         />
-      )}
+      ) : null}
 
       </div>
     </div>

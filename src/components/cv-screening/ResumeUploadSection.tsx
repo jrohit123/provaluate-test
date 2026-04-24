@@ -19,7 +19,7 @@ import { useSearchParams } from 'react-router-dom'; // ✅ ADD: Import useSearch
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { LoadingOverlay } from '@/components/LoadingOverlay';
+import { ProcessingOverlay } from './ProcessingOverlay';
 import { UiAnalyticsService } from '@/services/uiAnalyticsService';
 
 interface ResumeData {
@@ -204,17 +204,33 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
     reason: string;
   } | null>(null);
 
-  const [userDismissedProcessingOverlay, setUserDismissedProcessingOverlay] = useState(false);
+  const [showProcessingOverlay, setShowProcessingOverlay] = useState(false);
+  const [processingResumeCount, setProcessingResumeCount] = useState(0);
+  const [overlayStepIndex, setOverlayStepIndex] = useState(0);
+  const [isOverlayComplete, setIsOverlayComplete] = useState(false);
+  const [totalInitialReportCount, setTotalInitialReportCount] = useState(0);
+  const overlayStepTimerRef = React.useRef<NodeJS.Timeout | null>(null);
 
   const isProcessingOverlayVisible =
     processingState.status === 'processing' || isWaitingForAssessments;
 
-  // Reset dismissed state when processing finishes (so overlay shows again next run)
+  // Auto-close overlay after 1.5 s once backend signals complete
   useEffect(() => {
-    if (!isProcessingOverlayVisible) {
-      setUserDismissedProcessingOverlay(false);
-    }
-  }, [isProcessingOverlayVisible]);
+    if (!isOverlayComplete) return;
+    const t = setTimeout(() => setShowProcessingOverlay(false), 1500);
+    return () => clearTimeout(t);
+  }, [isOverlayComplete]);
+
+  // Safety: force-close after 5 minutes so the overlay never gets permanently stuck
+  useEffect(() => {
+    if (!showProcessingOverlay) return;
+    const t = setTimeout(() => {
+      setShowProcessingOverlay(false);
+      setIsOverlayComplete(false);
+      setOverlayStepIndex(0);
+    }, 5 * 60 * 1000);
+    return () => clearTimeout(t);
+  }, [showProcessingOverlay]);
 
   // Track completion of a full CV screening run
   useEffect(() => {
@@ -380,11 +396,11 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
         if (attempts >= maxAttempts) {
           console.log('❌ Max attempts reached, stopping refresh');
           stopAutoRefreshAssessments();
-          toast({
-            title: "Processing Taking Longer",
-            description: "Assessment processing is taking longer than expected. You can manually refresh or try again later.",
-            variant: "default",
-          });
+          // toast({
+          //   title: "Processing Taking Longer",
+          //   description: "Assessment processing is taking longer than expected. You can manually refresh or try again later.",
+          //   variant: "default",
+          // });
         }
       } catch (error) {
         console.error('Auto-refresh error:', error);
@@ -401,6 +417,10 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
     if (autoRefreshInterval) {
       clearInterval(autoRefreshInterval);
       setAutoRefreshInterval(null);
+    }
+    if (overlayStepTimerRef.current) {
+      clearTimeout(overlayStepTimerRef.current);
+      overlayStepTimerRef.current = null;
     }
     setIsWaitingForAssessments(false);
     setExpectedResumeCount(0);
@@ -433,26 +453,52 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
         console.log(`📈 Progress update: ${newCompletedCount} (previous: ${lastProgressCount})`);
         setLastProgressCount(newCompletedCount);
 
-        // Show progress toast
-        toast({
-          title: "Processing Update",
-          description: `${newCompletedCount} of ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'} completed.`,
-        });
-
         // If all expected resumes are processed
         if (newCompletedCount >= expectedResumeCount) {
           console.log('✅ All expected resumes processed! Stopping auto-refresh.');
           stopAutoRefreshAssessments();
-          toast({
-            title: "All Resumes Processed!",
-            description: `Successfully processed all ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'}.`,
-          });
+          // toast({
+          //   title: "All Resumes Processed!",
+          //   description: `Successfully processed all ${expectedResumeCount} resume${expectedResumeCount === 1 ? '' : 's'}.`,
+          // });
         }
       }
     } catch (error) {
       console.error('❌ Error in assessment monitoring:', error);
     }
   }, [assessmentReports, isWaitingForAssessments, expectedResumeCount, initialReportCount, lastProgressCount]);
+
+  // Drive overlay step index from real backend data
+  useEffect(() => {
+    if (!showProcessingOverlay || isOverlayComplete) return;
+
+    const totalRows = assessmentReports.length;
+
+    // Step 2: any new row appeared in DB (save_resume_analysis ran -> row exists, final_match still null)
+    if (totalRows > totalInitialReportCount) {
+      setOverlayStepIndex(prev => Math.max(prev, 2));
+    }
+
+    // Step 3 + complete: at least one row has final_match populated (calculate_resume_score done)
+    const newlyCompleted = assessmentReports.filter(r =>
+      r.final_match !== null && r.final_match !== undefined,
+    ).length;
+    const netNew = Math.max(0, newlyCompleted - initialReportCount);
+
+    if (netNew > 0) {
+      setOverlayStepIndex(3);
+    }
+    if (expectedResumeCount > 0 && netNew >= expectedResumeCount) {
+      setIsOverlayComplete(true);
+    }
+  }, [
+    assessmentReports,
+    showProcessingOverlay,
+    isOverlayComplete,
+    totalInitialReportCount,
+    initialReportCount,
+    expectedResumeCount,
+  ]);
 
   // Cleanup interval on unmount
   useEffect(() => {
@@ -796,10 +842,12 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
       }
       
       setAssessmentReports(data || []);
+      return data || [];
     } catch (err) {
       console.error('❌ Error fetching assessment reports:', err);
       setAssessmentReports([]);
-      // No error toast - this is normal when no reports exist yet
+      setLoadingReports(false);
+      return [];
     } finally {
       setLoadingReports(false);
     }
@@ -1061,6 +1109,23 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
       return;
     }
 
+    const queuedFiles = getSessionUploadedFiles();
+    const resumesBeingProcessed =
+      queuedFiles.length > 0 ? queuedFiles.length : Math.max(1, assessmentReports.length);
+    setProcessingResumeCount(resumesBeingProcessed);
+
+    // Reset overlay state for new run
+    setOverlayStepIndex(0);
+    setIsOverlayComplete(false);
+    setTotalInitialReportCount(assessmentReports.length);   // snapshot of rows before this run
+    if (overlayStepTimerRef.current) clearTimeout(overlayStepTimerRef.current);
+    // Step 1 (AI analysis) fires automatically after 4 s -- text extraction is fast
+    overlayStepTimerRef.current = setTimeout(
+      () => setOverlayStepIndex(prev => Math.max(prev, 1)),
+      4000,
+    );
+    setShowProcessingOverlay(true);
+
     try {
       setIsEvaluating(true);
       setProcessingState({
@@ -1173,35 +1238,39 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
         
                   setProcessingState({
             status: 'success',
-            message: hasNewUploads 
-              ? `Successfully started CV Analyzer processing for ${resumeUrls.length} resume${resumeUrls.length > 1 ? 's' : ''}`
-              : `Successfully loaded ${assessmentReports.length} existing assessment${assessmentReports.length > 1 ? 's' : ''}`
+            message: hasNewUploads
+              ? `Successfully processed ${resumeUrls.length} resume${resumeUrls.length > 1 ? 's' : ''}` 
+              : `Successfully loaded ${assessmentReports.length} existing assessment${assessmentReports.length > 1 ? 's' : ''}`,
           });
 
-          toast({
-            title: hasNewUploads ? "CV Analyzer Processing Started" : "Existing Assessments Loaded",
-            description: hasNewUploads 
-              ? `Successfully sent ${resumeUrls.length} new resume${resumeUrls.length > 1 ? 's' : ''} to CV Analyzer. Fetching results...`
-              : `Successfully loaded ${assessmentReports.length} existing assessment${assessmentReports.length > 1 ? 's' : ''}. You can view the results below.`,
-          });
+          // 
+          // toast({
+          //   title: hasNewUploads ? 'Processing Complete' : 'Assessments Loaded',
+          //   description: hasNewUploads
+          //     ? `${resumeUrls.length} resume${resumeUrls.length > 1 ? 's' : ''} processed. Loading results...` 
+          //     : `Loaded ${assessmentReports.length} existing assessment${assessmentReports.length > 1 ? 's' : ''}.`,
+          // });
 
-          // Auto-fetch results after a short delay for new uploads
+          // Backend already finished everything (synchronous call)  advance overlay to step 3 immediately
           if (hasNewUploads) {
-            setTimeout(async () => {
-              console.log('🔄 Auto-fetching assessment reports after processing...');
-              await fetchAssessmentReports();
-              toast({
-                title: "Results Updated",
-                description: "Assessment results are now displayed below.",
-              });
-            }, 5000); // Wait 5 seconds before first auto-fetch
-            
-            // Then start the regular auto-refresh cycle with 30s delay
-            setTimeout(() => {
-              if (isWaitingForAssessments) {
-                startAutoRefreshAssessments();
-              }
-            }, 30000);
+            setOverlayStepIndex(3); // scoring is done, show "Saving results" as active
+
+            // Fetch immediately (no delay)  final_match is already written when the backend returned 200
+            const updatedReports = await fetchAssessmentReports();
+
+            // Determine how many new completed reports exist after this run
+            const nowCompleted = assessmentReports.filter(
+              r => r.final_match !== null && r.final_match !== undefined,
+            ).length;
+            const netNew = Math.max(0, nowCompleted - initialReportCount);
+
+            if (netNew >= resumeUrls.length) {
+              // All scored  mark overlay complete (will auto-close after 1.5 s)
+              setIsOverlayComplete(true);
+            } else {
+              // Scoring is still in progress for some resumes  start polling
+              startAutoRefreshAssessments();
+            }
           }
 
         // Mark processing as completed
@@ -1675,10 +1744,10 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
         }
       }, 30000); // Wait 30 seconds before starting auto-refresh
 
-      toast({
-        title: "Processing Started",
-        description: `Successfully sent ${resumeUrls.length} new resumes to CV Analyzer for processing.`,
-      });
+      // toast({
+        //   title: "Processing Started",
+        //   description: `Successfully sent ${resumeUrls.length} new resumes to CV Analyzer for processing.`,
+        // });
 
     } catch (error: any) {
       console.error('Error processing new resumes:', error);
@@ -2607,13 +2676,11 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
       </div>
 
       {/* Global processing overlay for long-running evaluation */}
-      <LoadingOverlay
-        isOpen={isProcessingOverlayVisible && !userDismissedProcessingOverlay}
-        contextKey="cv-screening"
-        messagesCategory="cv-screening"
-        title="Analyzing resumes against your job criteria…"
-        subtitle="We’re parsing profiles, aligning them to your JD, and computing match scores."
-        onDismiss={() => setUserDismissedProcessingOverlay(true)}
+      <ProcessingOverlay
+        isVisible={showProcessingOverlay}
+        resumeCount={processingResumeCount}
+        currentStepIndex={overlayStepIndex}
+        isComplete={isOverlayComplete}
       />
 
       {/* Scorecard Dialog */}

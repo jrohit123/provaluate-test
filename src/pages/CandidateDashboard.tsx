@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthContext, isCandidate } from '@/contexts/AuthContext';
-import { FileText, User, Briefcase, ExternalLink, ClipboardList, Loader2, Globe, Award, Lightbulb, BookOpen, Heart, Trophy, FolderGit2, Users, Building2, PenLine, BookMarked, Hash, X, Check, Settings, UserPlus, Trash2 } from 'lucide-react';
+import { FileText, User, Briefcase, ExternalLink, ClipboardList, Loader2, Globe, Award, Lightbulb, BookOpen, Heart, Trophy, FolderGit2, Users, Building2, PenLine, BookMarked, Hash, X, Check, Settings, UserPlus, Trash2, Plus, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -16,6 +16,7 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { CandidateAppSidebar } from '@/components/ai-interview/CandidateAppSidebar';
 import { CandidateMainDashboard } from '@/components/ai-interview/CandidateMainDashboard';
+import { ResumeBuilderPage } from '@/components/ai-interview/ResumeBuilderPage';
 import CandidateJdInterviewConfig from '@/components/ai-interview/CandidateJdInterviewConfig';
 import CandidateJdInterviewCreate from '@/components/ai-interview/CandidateJdInterviewCreate';
 import { ReferralsSection } from '@/components/ai-interview/ReferralsSection';
@@ -47,6 +48,7 @@ const CandidateDashboard = () => {
   const isPersonalInterviewsLegacy = path.startsWith('/candidate-dashboard/personal-interviews');
   const isCampusInterviewsLegacy = path.startsWith('/candidate-dashboard/campus-interviews');
   const isReferrals = path.startsWith('/candidate-dashboard/referrals');
+  const isResumeBuilder = path.startsWith('/candidate-dashboard/resume-builder');
 
   const handleSignOut = useCallback(async () => {
     await supabase.auth.signOut();
@@ -63,8 +65,10 @@ const CandidateDashboard = () => {
     <SidebarProvider defaultOpen={true}>
       <div className="flex w-full min-h-screen bg-gradient-to-br from-sky-50 to-sky-100 overflow-x-hidden">
         <CandidateAppSidebar
+              candidateId={candidate?.candidate_id}
               firstName={candidate?.first_name ?? undefined}
               lastName={candidate?.last_name ?? undefined}
+              avatarUrl={candidate?.avatar_url ?? undefined}
             />
         <SidebarInset>
           <header className="[background:linear-gradient(135deg,#1a9fd6,#2563eb)] border-b border-white/15 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 min-h-[52px] sm:min-h-[58px]">
@@ -90,7 +94,7 @@ const CandidateDashboard = () => {
           </header>
 
           <main className="flex-1 w-full min-w-0 flex flex-col min-h-0 overflow-x-hidden">
-            <div className="flex-1 min-h-0 px-3 sm:px-6 py-4 sm:py-8">
+            <div className={isResumeBuilder ? 'flex-1 min-h-0' : 'flex-1 min-h-0 px-3 sm:px-6 py-4 sm:py-8'}>
               {isHome && (
                 <CandidateMainDashboard
                   candidateId={candidate?.candidate_id}
@@ -155,8 +159,11 @@ const CandidateDashboard = () => {
                 />
               )}
               {isReferrals && <ReferralsSection />}
+              {isResumeBuilder && (
+                <ResumeBuilderPage candidateId={candidate?.candidate_id} />
+              )}
             </div>
-            <footer className="flex-shrink-0 bg-white border-t border-sky-100 px-4 sm:px-6 py-3 sm:py-4 text-center text-xs sm:text-sm text-muted-foreground">
+            {!isResumeBuilder && <footer className="flex-shrink-0 bg-white border-t border-sky-100 px-4 sm:px-6 py-3 sm:py-4 text-center text-xs sm:text-sm text-muted-foreground">
               <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-0 sm:space-x-2">
                 <span>© ProValuate 2025</span>
                 <span className="hidden sm:inline">|</span>
@@ -168,7 +175,7 @@ const CandidateDashboard = () => {
                 <span className="hidden sm:inline">|</span>
                 <span className="whitespace-nowrap">Powered by <a href="https://aitamate.com" target="_blank" rel="noopener noreferrer" className="text-sky-600 hover:text-sky-800">aitamate</a></span>
               </div>
-            </footer>
+            </footer>}
           </main>
         </SidebarInset>
       </div>
@@ -853,48 +860,146 @@ function MyJdsSection({ candidateId }: { candidateId: string | undefined }) {
 // --- Profile builder (candidate_profile_details.profile_data) ---
 type ProfileData = Record<string, unknown>;
 
-type EducationEntry = { degree?: string; school?: string; school_url?: string; start_date?: string; end_date?: string; location?: string; description?: string };
-type ExperienceEntry = { job_title?: string; employer?: string; employer_url?: string; start_date?: string; end_date?: string; location?: string; description?: string };
-type SkillEntry = { skill?: string; information?: string; level?: string };
+type PersonalEntry = {
+  full_name?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  headline?: string;
+  linkedin_url?: string;
+  github_url?: string;
+  website_url?: string;
+  portfolio_url?: string;
+  custom_links?: Array<{ label: string; url: string }>;
+};
+
+type EducationEntry = {
+  institution?: string;
+  degree?: string;
+  field_of_study?: string;
+  start_date?: string;
+  end_date?: string;
+  location?: string;
+  gpa?: string;
+  achievements?: string;
+};
+
+type ExperienceEntry = {
+  job_title?: string;
+  employer?: string;
+  employment_type?: string;
+  work_mode?: string;
+  start_date?: string;
+  end_date?: string;
+  location?: string;
+  bullets?: string[];
+};
+
+type SkillGroupEntry = { category?: string; items?: string[] };
+type ProjectEntry = { name?: string; project_type?: string; tech_stack?: string; url?: string; repo_url?: string; bullets?: string[] };
+type CertificationEntry = { name?: string; issuer?: string; issue_date?: string; expiry_date?: string; credential_id?: string; url?: string };
+type LanguageEntry = { language?: string; proficiency?: string };
+type AwardEntry = { title?: string; issuer?: string; year?: string; description?: string };
+type ReferenceEntry = { name?: string; job_title?: string; company?: string; email?: string };
+type PublicationEntry = { title?: string; year?: string; journal_or_conference?: string; url?: string };
 type GenericEntry = { title?: string; description?: string };
 
-const STRUCTURED_SECTION_IDS = ['education', 'experience', 'skills'];
+const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship', 'Freelance', 'Apprenticeship'];
+const WORK_MODES = ['On-site', 'Remote', 'Hybrid'];
+const PROFICIENCY_LEVELS = ['Native', 'Fluent', 'Professional Working', 'Conversational', 'Basic'];
 
-function normalizeListItems(list: unknown[]): GenericEntry[] {
-  return list.map((item) => {
-    if (item && typeof item === 'object' && 'title' in item) return item as GenericEntry;
-    if (typeof item === 'string') return { title: item, description: '' };
-    if (item && typeof item === 'object') return { title: String((item as Record<string, unknown>).title ?? (item as Record<string, unknown>).name ?? 'Entry'), description: String((item as Record<string, unknown>).description ?? '') };
-    return { title: 'Entry', description: '' };
-  });
-}
+const STRUCTURED_SECTION_IDS = new Set([
+  'education', 'experience', 'skills', 'projects', 'languages', 'certifications', 'awards', 'references', 'publications',
+]);
 
-const SKILL_LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'Expert'];
-
-const PROFILE_SECTIONS: {
+type SectionDef = {
   id: string;
   dataKey: string;
   title: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
   isArray: boolean;
-}[] = [
-  { id: 'profile', dataKey: 'summary', title: 'Profile', description: 'Add a short summary of your key strengths, experience, and career goals.', icon: User, isArray: false },
-  { id: 'education', dataKey: 'education', title: 'Education', description: 'Add your degrees and schools. Include your focus, honors, or exchange terms.', icon: BookOpen, isArray: true },
-  { id: 'experience', dataKey: 'experience', title: 'Professional Experience', description: 'Add your professional roles and employer history including internships.', icon: Briefcase, isArray: true },
-  { id: 'languages', dataKey: 'languages', title: 'Languages', description: 'Add your languages and proficiency level to show your communication range.', icon: Globe, isArray: true },
-  { id: 'certificates', dataKey: 'certificates', title: 'Certificates', description: 'Add your industry certificates or licences. Include issuer and date earned.', icon: Award, isArray: true },
-  { id: 'skills', dataKey: 'skills', title: 'Skills', description: 'Add your hard and soft skills that help you stand out from the crowd today.', icon: Lightbulb, isArray: true },
-  { id: 'courses', dataKey: 'courses', title: 'Courses', description: 'Add online or in-person courses and trainings you joined and completed.', icon: BookOpen, isArray: true },
-  { id: 'interests', dataKey: 'interests', title: 'Interests', description: 'Add relevant personal interests that support your career story and cultural fit.', icon: Heart, isArray: true },
-  { id: 'awards', dataKey: 'awards', title: 'Awards', description: 'Add your awards and recognitions from industry, competitions, or academia.', icon: Trophy, isArray: true },
-  { id: 'projects', dataKey: 'projects', title: 'Projects', description: 'Add key projects you participated in and highlight your challenges, role, and impact.', icon: FolderGit2, isArray: true },
-  { id: 'references', dataKey: 'references', title: 'References', description: 'Add your references from managers or coworkers, including their contact details.', icon: Users, isArray: true },
-  { id: 'organisations', dataKey: 'organisations', title: 'Organisations', description: 'Add your memberships or volunteering with organisations including your role.', icon: Building2, isArray: true },
-  { id: 'declaration', dataKey: 'declaration', title: 'Declaration', description: 'Add your declaration by creating or uploading your personal signature.', icon: PenLine, isArray: false },
-  { id: 'publications', dataKey: 'publications', title: 'Publications', description: 'Add publications, articles, or books you wrote or contributed to.', icon: BookMarked, isArray: true },
-  { id: 'custom', dataKey: 'custom_sections', title: 'Custom', description: 'Add a custom section for anything else, or combine sections cleanly.', icon: Hash, isArray: true },
+};
+
+const PROFILE_SECTIONS: SectionDef[] = [
+  { id: 'personal', dataKey: 'personal', title: 'Personal Information', description: 'Name, email, phone, location, headline and all links.', icon: User, isArray: false },
+  { id: 'profile', dataKey: 'summary', title: 'Profile Summary', description: 'A concise 2–3 sentence summary of your experience and career goals.', icon: User, isArray: false },
+  { id: 'experience', dataKey: 'experience', title: 'Work Experience', description: 'Roles, employers and bullet-point achievements for each position.', icon: Briefcase, isArray: true },
+  { id: 'education', dataKey: 'education', title: 'Education', description: 'Degrees, institutions, GPA and academic honors or activities.', icon: BookOpen, isArray: true },
+  { id: 'projects', dataKey: 'projects', title: 'Projects', description: 'Personal or open-source projects with tech stack, links and impact.', icon: FolderGit2, isArray: true },
+  { id: 'skills', dataKey: 'skills', title: 'Technical Skills', description: 'Group your skills by category — Languages, Frameworks, Tools etc.', icon: Lightbulb, isArray: true },
+  { id: 'certifications', dataKey: 'certifications', title: 'Certifications', description: 'Industry certs with issuer, issue/expiry dates and credential ID.', icon: Award, isArray: true },
+  { id: 'languages', dataKey: 'languages', title: 'Languages', description: 'Languages you speak and your proficiency level for each.', icon: Globe, isArray: true },
+  { id: 'awards', dataKey: 'awards', title: 'Awards & Honors', description: 'Prizes, recognitions and competitive achievements.', icon: Trophy, isArray: true },
+  { id: 'publications', dataKey: 'publications', title: 'Publications', description: 'Research papers, journal articles or books you have authored.', icon: BookMarked, isArray: true },
+  { id: 'references', dataKey: 'references', title: 'References', description: 'Professional references from managers or senior colleagues.', icon: Users, isArray: true },
+  { id: 'organisations', dataKey: 'organisations', title: 'Organisations', description: 'Memberships, volunteering and leadership roles in organisations.', icon: Building2, isArray: true },
+  { id: 'courses', dataKey: 'courses', title: 'Courses & Training', description: 'Online or classroom courses and professional training completed.', icon: BookOpen, isArray: true },
+  { id: 'interests', dataKey: 'interests', title: 'Interests', description: 'Relevant personal interests that support your professional profile.', icon: Heart, isArray: true },
+  { id: 'declaration', dataKey: 'declaration', title: 'Declaration', description: 'A personal declaration statement for the bottom of your resume.', icon: PenLine, isArray: false },
+  { id: 'custom', dataKey: 'custom_sections', title: 'Custom Section', description: 'Add a custom section for anything that does not fit elsewhere.', icon: Hash, isArray: true },
 ];
+
+function getEntrySummary(sectionId: string, item: unknown): { primary: string; secondary?: string } {
+  const obj = (item && typeof item === 'object') ? item as Record<string, unknown> : {};
+  switch (sectionId) {
+    case 'experience':
+      return {
+        primary: [obj.job_title, obj.employer].filter(Boolean).join(' @ ') || 'Untitled Role',
+        secondary: [obj.employment_type, obj.start_date && obj.end_date ? `${obj.start_date} – ${obj.end_date}` : obj.start_date].filter(Boolean).join(' · ') || undefined,
+      };
+    case 'education':
+      return { primary: [obj.degree, obj.institution].filter(Boolean).join(', ') || 'Untitled', secondary: obj.field_of_study as string | undefined };
+    case 'skills':
+      return {
+        primary: (obj.category as string) || 'Skill Group',
+        secondary: Array.isArray(obj.items) ? (obj.items as string[]).slice(0, 5).join(', ') + ((obj.items as string[]).length > 5 ? '…' : '') : undefined,
+      };
+    case 'projects':
+      return { primary: (obj.name as string) || 'Untitled Project', secondary: (obj.tech_stack as string) || undefined };
+    case 'certifications':
+      return { primary: (obj.name as string) || 'Untitled', secondary: [obj.issuer, obj.issue_date].filter(Boolean).join(' · ') || undefined };
+    case 'languages':
+      return { primary: (obj.language as string) || 'Language', secondary: (obj.proficiency as string) || undefined };
+    case 'awards':
+      return { primary: (obj.title as string) || 'Untitled', secondary: [obj.issuer, obj.year].filter(Boolean).join(', ') || undefined };
+    case 'publications':
+      return { primary: (obj.title as string) || 'Untitled', secondary: (obj.journal_or_conference as string) || (obj.year as string) || undefined };
+    case 'references':
+      return { primary: (obj.name as string) || 'Untitled', secondary: [obj.job_title, obj.company].filter(Boolean).join(', ') || undefined };
+    default: {
+      const title = (obj.title as string) || (obj.name as string) || 'Entry';
+      const desc = typeof obj.description === 'string' ? obj.description.substring(0, 60) : undefined;
+      return { primary: title, secondary: desc };
+    }
+  }
+}
+
+function FF({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">{label}</Label>
+      {hint && <p className="text-[11px] text-slate-400">{hint}</p>}
+      {children}
+    </div>
+  );
+}
+
+function ActionRow({ onSave, onDelete, saving, isNew }: { onSave: () => void; onDelete: () => void; saving: boolean; isNew: boolean }) {
+  return (
+    <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+      {!isNew && (
+        <Button type="button" size="sm" variant="outline" className="h-9 w-full text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 sm:w-auto sm:shrink-0" onClick={onDelete}>
+          <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
+        </Button>
+      )}
+      <Button className="flex-1 bg-sky-600 hover:bg-sky-700 text-white h-9 text-sm" onClick={onSave} disabled={saving}>
+        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Check className="h-3.5 w-3.5 mr-1.5" />}
+        Save
+      </Button>
+    </div>
+  );
+}
 
 function ProfileBuilderSection({ candidateId }: { candidateId: string | undefined }) {
   const navigate = useNavigate();
@@ -902,12 +1007,20 @@ function ProfileBuilderSection({ candidateId }: { candidateId: string | undefine
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editingSection, setEditingSection] = useState<typeof PROFILE_SECTIONS[0] | null>(null);
-  const [editValue, setEditValue] = useState('');
+  const [editingSection, setEditingSection] = useState<SectionDef | null>(null);
   const [editingEntryIndex, setEditingEntryIndex] = useState<number | 'new' | null>(null);
+  const [summaryValue, setSummaryValue] = useState('');
+  const [declarationValue, setDeclarationValue] = useState('');
+  const [personalEntry, setPersonalEntry] = useState<PersonalEntry>({});
   const [educationEntry, setEducationEntry] = useState<EducationEntry>({});
-  const [experienceEntry, setExperienceEntry] = useState<ExperienceEntry>({});
-  const [skillEntry, setSkillEntry] = useState<SkillEntry>({});
+  const [experienceEntry, setExperienceEntry] = useState<ExperienceEntry>({ bullets: [] });
+  const [skillGroupEntry, setSkillGroupEntry] = useState<SkillGroupEntry>({ category: '', items: [] });
+  const [projectEntry, setProjectEntry] = useState<ProjectEntry>({ bullets: [] });
+  const [certificationEntry, setCertificationEntry] = useState<CertificationEntry>({});
+  const [languageEntry, setLanguageEntry] = useState<LanguageEntry>({});
+  const [awardEntry, setAwardEntry] = useState<AwardEntry>({});
+  const [referenceEntry, setReferenceEntry] = useState<ReferenceEntry>({});
+  const [publicationEntry, setPublicationEntry] = useState<PublicationEntry>({});
   const [genericEntry, setGenericEntry] = useState<GenericEntry>({ title: '', description: '' });
 
   useEffect(() => {
@@ -926,99 +1039,440 @@ function ProfileBuilderSection({ candidateId }: { candidateId: string | undefine
     })();
   }, [candidateId]);
 
-  const persistProfile = useCallback(async (next: ProfileData) => {
-    if (!candidateId) return;
+  const persistProfile = useCallback(async (next: ProfileData): Promise<boolean> => {
+    if (!candidateId) return false;
     setSaving(true);
     setError(null);
     const { error: e } = await supabase
       .from('candidate_profile_details')
       .upsert({ candidate_id: candidateId, profile_data: next, updated_at: new Date().toISOString() }, { onConflict: 'candidate_id' });
     setSaving(false);
-    if (e) setError(e.message);
-    return e;
+    if (e) {
+      setError(e.message);
+      return false;
+    }
+    return true;
   }, [candidateId]);
 
-  const saveSection = useCallback(async () => {
-    if (!candidateId || !editingSection) return;
+  const openSection = useCallback((section: SectionDef) => {
+    setEditingEntryIndex(null);
     setError(null);
-    let value: unknown;
-    if (editingSection.isArray) {
-      try {
-        value = editValue.trim() ? JSON.parse(editValue) : [];
-      } catch {
-        value = editValue.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
-      }
-      if (!Array.isArray(value)) value = [];
-    } else {
-      value = editValue.trim();
-    }
-    const next = { ...profileData, [editingSection.dataKey]: value };
-    setProfileData(next);
-    const err = await persistProfile(next);
-    if (!err) setEditingSection(null);
-  }, [candidateId, editingSection, editValue, profileData, persistProfile]);
+    const raw = profileData[section.dataKey];
+    if (section.id === 'personal') setPersonalEntry((typeof raw === 'object' && raw !== null && !Array.isArray(raw)) ? raw as PersonalEntry : {});
+    else if (section.id === 'profile') setSummaryValue(typeof raw === 'string' ? raw : '');
+    else if (section.id === 'declaration') setDeclarationValue(typeof raw === 'string' ? raw : '');
+    setEditingSection(section);
+  }, [profileData]);
 
-  const saveStructuredEntry = useCallback(async (sectionId: string, dataKey: string, entry: EducationEntry | ExperienceEntry | SkillEntry | GenericEntry) => {
-    const list = Array.isArray(profileData[dataKey]) ? [...(profileData[dataKey] as object[])] : [];
-    const idx = editingEntryIndex === 'new' ? list.length : editingEntryIndex;
-    if (typeof idx === 'number' && idx >= 0 && idx < list.length) {
-      list[idx] = entry;
-    } else {
-      list.push(entry);
+  const openEntryAtIndex = useCallback((section: SectionDef, index: number | 'new') => {
+    setEditingSection(section);
+    setEditingEntryIndex(index);
+    setError(null);
+    const list = Array.isArray(profileData[section.dataKey]) ? (profileData[section.dataKey] as unknown[]) : [];
+    const item: unknown = index === 'new' ? {} : list[index];
+    const obj = (item && typeof item === 'object') ? item as Record<string, unknown> : {};
+    switch (section.id) {
+      case 'education':
+        setEducationEntry(index === 'new' ? {} : obj as EducationEntry);
+        break;
+      case 'experience':
+        setExperienceEntry(index === 'new' ? { bullets: [] } : { ...obj as ExperienceEntry, bullets: Array.isArray(obj.bullets) ? obj.bullets as string[] : [] });
+        break;
+      case 'skills':
+        setSkillGroupEntry(index === 'new' ? { category: '', items: [] } : { category: obj.category as string ?? '', items: Array.isArray(obj.items) ? obj.items as string[] : [] });
+        break;
+      case 'projects':
+        setProjectEntry(index === 'new' ? { bullets: [] } : { ...obj as ProjectEntry, bullets: Array.isArray(obj.bullets) ? obj.bullets as string[] : [] });
+        break;
+      case 'certifications':
+        setCertificationEntry(index === 'new' ? {} : obj as CertificationEntry);
+        break;
+      case 'languages':
+        setLanguageEntry(index === 'new' ? {} : obj as LanguageEntry);
+        break;
+      case 'awards':
+        setAwardEntry(index === 'new' ? {} : obj as AwardEntry);
+        break;
+      case 'references':
+        setReferenceEntry(index === 'new' ? {} : obj as ReferenceEntry);
+        break;
+      case 'publications':
+        setPublicationEntry(index === 'new' ? {} : obj as PublicationEntry);
+        break;
+      default:
+        setGenericEntry(index === 'new' ? { title: '', description: '' } : { title: String(obj.title ?? obj.name ?? ''), description: String(obj.description ?? '') });
     }
+  }, [profileData]);
+
+  const saveListEntry = useCallback(async (dataKey: string, entry: unknown) => {
+    const list = Array.isArray(profileData[dataKey]) ? [...(profileData[dataKey] as unknown[])] : [];
+    const idx = editingEntryIndex === 'new' ? list.length : editingEntryIndex as number;
+    if (typeof idx === 'number' && idx >= 0 && idx < list.length) list[idx] = entry;
+    else list.push(entry);
     const next = { ...profileData, [dataKey]: list };
     setProfileData(next);
-    const err = await persistProfile(next);
-    if (!err) setEditingEntryIndex(null);
+    const ok = await persistProfile(next);
+    if (ok) setEditingEntryIndex(null);
   }, [profileData, editingEntryIndex, persistProfile]);
 
-  const deleteStructuredEntry = useCallback(async (dataKey: string, index?: number) => {
-    const idx = index ?? (editingEntryIndex === 'new' ? -1 : editingEntryIndex);
-    if (idx === null || idx < 0) {
-      setEditingSection(null);
-      setEditingEntryIndex(null);
-      return;
-    }
-    const list = Array.isArray(profileData[dataKey]) ? [...(profileData[dataKey] as object[])] : [];
-    if (idx >= list.length) return;
+  const deleteListEntry = useCallback(async (dataKey: string, idx: number) => {
+    const list = Array.isArray(profileData[dataKey]) ? [...(profileData[dataKey] as unknown[])] : [];
+    if (idx < 0 || idx >= list.length) return;
     list.splice(idx, 1);
     const next = { ...profileData, [dataKey]: list };
     setProfileData(next);
-    const err = await persistProfile(next);
-    if (!err) {
-      setEditingSection(null);
-      setEditingEntryIndex(null);
-    }
-  }, [profileData, editingEntryIndex, persistProfile]);
+    const ok = await persistProfile(next);
+    if (ok) setEditingEntryIndex(null);
+  }, [profileData, persistProfile]);
 
-  const openSection = useCallback((section: typeof PROFILE_SECTIONS[0]) => {
-    const raw = profileData[section.dataKey];
-    setEditingEntryIndex(null);
-    if (STRUCTURED_SECTION_IDS.includes(section.id)) {
-      setEducationEntry({});
-      setExperienceEntry({});
-      setSkillEntry({});
-    } else if (section.isArray) {
-      setGenericEntry({ title: '', description: '' });
-    } else {
-      setEditValue(typeof raw === 'string' ? raw : raw != null ? String(raw) : '');
-    }
-    setEditingSection(section);
-    setError(null);
-  }, [profileData]);
+  const savePersonal = useCallback(async () => {
+    const next = { ...profileData, personal: personalEntry };
+    setProfileData(next);
+    const ok = await persistProfile(next);
+    if (ok) setEditingSection(null);
+  }, [profileData, personalEntry, persistProfile]);
 
-  const openEntryAtIndex = useCallback((section: typeof PROFILE_SECTIONS[0], index: number) => {
+  const saveTextField = useCallback(async (dataKey: string, value: string) => {
+    const next = { ...profileData, [dataKey]: value };
+    setProfileData(next);
+    const ok = await persistProfile(next);
+    if (ok) setEditingSection(null);
+  }, [profileData, persistProfile]);
+
+  const isSectionFilled = (section: SectionDef): { filled: boolean; count?: number } => {
     const raw = profileData[section.dataKey];
-    const list = Array.isArray(raw) ? (raw as unknown[]) : [];
-    const item = list[index];
-    setEditingSection(section);
-    setEditingEntryIndex(index);
-    if (section.id === 'education') setEducationEntry((item || {}) as EducationEntry);
-    else if (section.id === 'experience') setExperienceEntry((item || {}) as ExperienceEntry);
-    else if (section.id === 'skills') setSkillEntry((item || {}) as SkillEntry);
-    else setGenericEntry(normalizeListItems(list)[index] ?? { title: '', description: '' });
-    setError(null);
-  }, [profileData]);
+    if (section.isArray) {
+      const count = Array.isArray(raw) ? raw.length : 0;
+      return { filled: count > 0, count };
+    }
+    if (typeof raw === 'string') return { filled: raw.trim().length > 0 };
+    if (typeof raw === 'object' && raw !== null) return { filled: Object.keys(raw).length > 0 };
+    return { filled: false };
+  };
+
+  const renderForm = () => {
+    if (!editingSection) return null;
+    if (!editingSection.isArray) {
+      if (editingSection.id === 'personal') {
+        const addLink = () => setPersonalEntry((p) => ({ ...p, custom_links: [...(p.custom_links ?? []), { label: '', url: '' }] }));
+        const removeLink = (i: number) => setPersonalEntry((p) => ({ ...p, custom_links: (p.custom_links ?? []).filter((_, idx) => idx !== i) }));
+        const updateLink = (i: number, f: 'label' | 'url', v: string) => setPersonalEntry((p) => {
+          const links = [...(p.custom_links ?? [])];
+          links[i] = { ...links[i], [f]: v };
+          return { ...p, custom_links: links };
+        });
+        return (
+          <>
+            <DialogHeader className="pb-2"><DialogTitle>Personal Information</DialogTitle></DialogHeader>
+            <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-1">
+              <div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Identity</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <FF label="Full Name"><Input value={personalEntry.full_name ?? ''} onChange={(e) => setPersonalEntry((p) => ({ ...p, full_name: e.target.value }))} className="h-9" /></FF>
+                  <FF label="Professional Headline"><Input value={personalEntry.headline ?? ''} onChange={(e) => setPersonalEntry((p) => ({ ...p, headline: e.target.value }))} className="h-9" /></FF>
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Contact Details</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <FF label="Email"><Input type="email" value={personalEntry.email ?? ''} onChange={(e) => setPersonalEntry((p) => ({ ...p, email: e.target.value }))} className="h-9" /></FF>
+                  <FF label="Phone"><Input value={personalEntry.phone ?? ''} onChange={(e) => setPersonalEntry((p) => ({ ...p, phone: e.target.value }))} className="h-9" /></FF>
+                  <FF label="City & Country"><Input value={personalEntry.location ?? ''} onChange={(e) => setPersonalEntry((p) => ({ ...p, location: e.target.value }))} className="h-9" /></FF>
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Social & Profile Links</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <FF label="LinkedIn"><Input value={personalEntry.linkedin_url ?? ''} onChange={(e) => setPersonalEntry((p) => ({ ...p, linkedin_url: e.target.value }))} className="h-9" /></FF>
+                  <FF label="GitHub"><Input value={personalEntry.github_url ?? ''} onChange={(e) => setPersonalEntry((p) => ({ ...p, github_url: e.target.value }))} className="h-9" /></FF>
+                  <FF label="Personal Website"><Input value={personalEntry.website_url ?? ''} onChange={(e) => setPersonalEntry((p) => ({ ...p, website_url: e.target.value }))} className="h-9" /></FF>
+                  <FF label="Portfolio"><Input value={personalEntry.portfolio_url ?? ''} onChange={(e) => setPersonalEntry((p) => ({ ...p, portfolio_url: e.target.value }))} className="h-9" /></FF>
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Custom Links</div>
+                  <Button type="button" variant="ghost" size="sm" className="h-7 text-xs text-sky-600 hover:text-sky-700 px-2" onClick={addLink}>
+                    <Plus className="h-3 w-3 mr-1" /> Add Link
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {(personalEntry.custom_links ?? []).map((link, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      <Input placeholder="Label" value={link.label} onChange={(e) => updateLink(i, 'label', e.target.value)} className="h-8 w-28 text-xs shrink-0" />
+                      <Input placeholder="URL" value={link.url} onChange={(e) => updateLink(i, 'url', e.target.value)} className="h-8 text-xs flex-1 min-w-0" />
+                      <button type="button" className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-red-500 shrink-0 rounded hover:bg-red-50 transition-colors" onClick={() => removeLink(i)}>
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <Button className="w-full bg-sky-600 hover:bg-sky-700 text-white h-10 text-sm mt-2" onClick={savePersonal} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />} Save Personal Information
+              </Button>
+            </div>
+          </>
+        );
+      }
+      const isDeclaration = editingSection.id === 'declaration';
+      const value = isDeclaration ? declarationValue : summaryValue;
+      const setValue = isDeclaration ? setDeclarationValue : setSummaryValue;
+      return (
+        <>
+          <DialogHeader className="pb-2"><DialogTitle>{editingSection.title}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <Textarea value={value} onChange={(e) => setValue(e.target.value)} className="min-h-[160px] text-sm leading-relaxed" />
+            <Button className="w-full bg-sky-600 hover:bg-sky-700 text-white h-10 text-sm" onClick={() => saveTextField(editingSection.dataKey, value)} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />} Save
+            </Button>
+          </div>
+        </>
+      );
+    }
+
+    const list = Array.isArray(profileData[editingSection.dataKey]) ? profileData[editingSection.dataKey] as unknown[] : [];
+    if (editingEntryIndex === null) {
+      return (
+        <>
+          <DialogHeader className="pb-2"><DialogTitle>{editingSection.title}</DialogTitle></DialogHeader>
+          <div className="space-y-2">
+            {list.length === 0 && <p className="text-sm text-slate-500 py-3 text-center">No entries yet. Add your first one below.</p>}
+            {list.map((item, i) => {
+              const { primary, secondary } = getEntrySummary(editingSection.id, item);
+              return (
+                <div key={i} className="flex items-center gap-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-3 py-2.5 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate">{primary}</p>
+                    {secondary && <p className="text-xs text-slate-500 truncate mt-0.5">{secondary}</p>}
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-slate-500 hover:text-sky-600" onClick={() => openEntryAtIndex(editingSection, i)}>Edit</Button>
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-slate-500 hover:text-red-600" onClick={() => deleteListEntry(editingSection.dataKey, i)}>Delete</Button>
+                  </div>
+                </div>
+              );
+            })}
+            <Button variant="outline" className="w-full h-9 text-sm border-dashed border-sky-300 text-sky-600 hover:bg-sky-50 hover:border-sky-400" onClick={() => openEntryAtIndex(editingSection, 'new')}>
+              <Plus className="h-4 w-4 mr-1.5" /> Add {editingSection.title}
+            </Button>
+          </div>
+        </>
+      );
+    }
+
+    const isNew = editingEntryIndex === 'new';
+    const entryIdx = isNew ? -1 : editingEntryIndex as number;
+    const handleDelete = () => { if (!isNew) void deleteListEntry(editingSection.dataKey, entryIdx); };
+    const header = (
+      <DialogHeader className="pb-2">
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-slate-700" onClick={() => setEditingEntryIndex(null)}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <DialogTitle>{isNew ? `Add ${editingSection.title}` : `Edit ${editingSection.title}`}</DialogTitle>
+        </div>
+      </DialogHeader>
+    );
+    if (editingSection.id === 'experience') {
+      return (
+        <>
+          {header}
+          <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FF label="Job Title"><Input value={experienceEntry.job_title ?? ''} onChange={(e) => setExperienceEntry((p) => ({ ...p, job_title: e.target.value }))} className="h-9" /></FF>
+              <FF label="Employer / Company"><Input value={experienceEntry.employer ?? ''} onChange={(e) => setExperienceEntry((p) => ({ ...p, employer: e.target.value }))} className="h-9" /></FF>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FF label="Employment Type">
+                <Select value={experienceEntry.employment_type ?? ''} onValueChange={(v) => setExperienceEntry((p) => ({ ...p, employment_type: v }))}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Select type" /></SelectTrigger>
+                  <SelectContent>{EMPLOYMENT_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                </Select>
+              </FF>
+              <FF label="Work Mode">
+                <Select value={experienceEntry.work_mode ?? ''} onValueChange={(v) => setExperienceEntry((p) => ({ ...p, work_mode: v }))}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Select mode" /></SelectTrigger>
+                  <SelectContent>{WORK_MODES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                </Select>
+              </FF>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <FF label="Start Date"><Input value={experienceEntry.start_date ?? ''} onChange={(e) => setExperienceEntry((p) => ({ ...p, start_date: e.target.value }))} className="h-9" /></FF>
+              <FF label="End Date"><Input value={experienceEntry.end_date ?? ''} onChange={(e) => setExperienceEntry((p) => ({ ...p, end_date: e.target.value }))} className="h-9" /></FF>
+              <FF label="Location"><Input value={experienceEntry.location ?? ''} onChange={(e) => setExperienceEntry((p) => ({ ...p, location: e.target.value }))} className="h-9" /></FF>
+            </div>
+            <FF label="Key Responsibilities & Achievements">
+              <Textarea value={(experienceEntry.bullets ?? []).join('\n')} onChange={(e) => setExperienceEntry((p) => ({ ...p, bullets: e.target.value.split('\n') }))} className="min-h-[130px] text-sm font-mono leading-relaxed" />
+            </FF>
+            <ActionRow onSave={() => void saveListEntry(editingSection.dataKey, { ...experienceEntry, bullets: (experienceEntry.bullets ?? []).filter(Boolean) })} onDelete={handleDelete} saving={saving} isNew={isNew} />
+          </div>
+        </>
+      );
+    }
+
+    if (editingSection.id === 'education') {
+      return (
+        <>
+          {header}
+          <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FF label="Degree / Qualification"><Input value={educationEntry.degree ?? ''} onChange={(e) => setEducationEntry((p) => ({ ...p, degree: e.target.value }))} className="h-9" /></FF>
+              <FF label="Field of Study"><Input value={educationEntry.field_of_study ?? ''} onChange={(e) => setEducationEntry((p) => ({ ...p, field_of_study: e.target.value }))} className="h-9" /></FF>
+            </div>
+            <FF label="Institution / University"><Input value={educationEntry.institution ?? ''} onChange={(e) => setEducationEntry((p) => ({ ...p, institution: e.target.value }))} className="h-9" /></FF>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <FF label="Start Date"><Input value={educationEntry.start_date ?? ''} onChange={(e) => setEducationEntry((p) => ({ ...p, start_date: e.target.value }))} className="h-9" /></FF>
+              <FF label="End Date"><Input value={educationEntry.end_date ?? ''} onChange={(e) => setEducationEntry((p) => ({ ...p, end_date: e.target.value }))} className="h-9" /></FF>
+              <FF label="GPA / Score"><Input value={educationEntry.gpa ?? ''} onChange={(e) => setEducationEntry((p) => ({ ...p, gpa: e.target.value }))} className="h-9" /></FF>
+            </div>
+            <FF label="City, Country"><Input value={educationEntry.location ?? ''} onChange={(e) => setEducationEntry((p) => ({ ...p, location: e.target.value }))} className="h-9" /></FF>
+            <FF label="Achievements, Activities & Coursework"><Textarea value={educationEntry.achievements ?? ''} onChange={(e) => setEducationEntry((p) => ({ ...p, achievements: e.target.value }))} className="min-h-[80px] text-sm" /></FF>
+            <ActionRow onSave={() => void saveListEntry(editingSection.dataKey, educationEntry)} onDelete={handleDelete} saving={saving} isNew={isNew} />
+          </div>
+        </>
+      );
+    }
+
+    if (editingSection.id === 'skills') {
+      return (
+        <>
+          {header}
+          <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+            <FF label="Category"><Input value={skillGroupEntry.category ?? ''} onChange={(e) => setSkillGroupEntry((p) => ({ ...p, category: e.target.value }))} className="h-9" /></FF>
+            <FF label="Skills">
+              <Textarea value={(skillGroupEntry.items ?? []).join(', ')} onChange={(e) => setSkillGroupEntry((p) => ({ ...p, items: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) }))} className="min-h-[80px] text-sm" />
+            </FF>
+            <ActionRow onSave={() => void saveListEntry(editingSection.dataKey, skillGroupEntry)} onDelete={handleDelete} saving={saving} isNew={isNew} />
+          </div>
+        </>
+      );
+    }
+
+    if (editingSection.id === 'projects') {
+      return (
+        <>
+          {header}
+          <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FF label="Project Name"><Input value={projectEntry.name ?? ''} onChange={(e) => setProjectEntry((p) => ({ ...p, name: e.target.value }))} className="h-9" /></FF>
+              <FF label="Type"><Input value={projectEntry.project_type ?? ''} onChange={(e) => setProjectEntry((p) => ({ ...p, project_type: e.target.value }))} className="h-9" /></FF>
+            </div>
+            <FF label="Tech Stack"><Input value={projectEntry.tech_stack ?? ''} onChange={(e) => setProjectEntry((p) => ({ ...p, tech_stack: e.target.value }))} className="h-9" /></FF>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FF label="Live URL"><Input value={projectEntry.url ?? ''} onChange={(e) => setProjectEntry((p) => ({ ...p, url: e.target.value }))} className="h-9" /></FF>
+              <FF label="Repository URL"><Input value={projectEntry.repo_url ?? ''} onChange={(e) => setProjectEntry((p) => ({ ...p, repo_url: e.target.value }))} className="h-9" /></FF>
+            </div>
+            <FF label="Key Points / Bullets"><Textarea value={(projectEntry.bullets ?? []).join('\n')} onChange={(e) => setProjectEntry((p) => ({ ...p, bullets: e.target.value.split('\n') }))} className="min-h-[120px] text-sm font-mono leading-relaxed" /></FF>
+            <ActionRow onSave={() => void saveListEntry(editingSection.dataKey, { ...projectEntry, bullets: (projectEntry.bullets ?? []).filter(Boolean) })} onDelete={handleDelete} saving={saving} isNew={isNew} />
+          </div>
+        </>
+      );
+    }
+
+    if (editingSection.id === 'certifications') {
+      return (
+        <>
+          {header}
+          <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+            <FF label="Certification Name"><Input value={certificationEntry.name ?? ''} onChange={(e) => setCertificationEntry((p) => ({ ...p, name: e.target.value }))} className="h-9" /></FF>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FF label="Issuing Organisation"><Input value={certificationEntry.issuer ?? ''} onChange={(e) => setCertificationEntry((p) => ({ ...p, issuer: e.target.value }))} className="h-9" /></FF>
+              <FF label="Credential ID"><Input value={certificationEntry.credential_id ?? ''} onChange={(e) => setCertificationEntry((p) => ({ ...p, credential_id: e.target.value }))} className="h-9" /></FF>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <FF label="Issue Date"><Input value={certificationEntry.issue_date ?? ''} onChange={(e) => setCertificationEntry((p) => ({ ...p, issue_date: e.target.value }))} className="h-9" /></FF>
+              <FF label="Expiry Date"><Input value={certificationEntry.expiry_date ?? ''} onChange={(e) => setCertificationEntry((p) => ({ ...p, expiry_date: e.target.value }))} className="h-9" /></FF>
+            </div>
+            <FF label="Verification URL"><Input value={certificationEntry.url ?? ''} onChange={(e) => setCertificationEntry((p) => ({ ...p, url: e.target.value }))} className="h-9" /></FF>
+            <ActionRow onSave={() => void saveListEntry(editingSection.dataKey, certificationEntry)} onDelete={handleDelete} saving={saving} isNew={isNew} />
+          </div>
+        </>
+      );
+    }
+
+    if (editingSection.id === 'languages') {
+      return (
+        <>
+          {header}
+          <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FF label="Language"><Input value={languageEntry.language ?? ''} onChange={(e) => setLanguageEntry((p) => ({ ...p, language: e.target.value }))} className="h-9" /></FF>
+              <FF label="Proficiency Level">
+                <Select value={languageEntry.proficiency ?? ''} onValueChange={(v) => setLanguageEntry((p) => ({ ...p, proficiency: v }))}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Select level" /></SelectTrigger>
+                  <SelectContent>{PROFICIENCY_LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+                </Select>
+              </FF>
+            </div>
+            <ActionRow onSave={() => void saveListEntry(editingSection.dataKey, languageEntry)} onDelete={handleDelete} saving={saving} isNew={isNew} />
+          </div>
+        </>
+      );
+    }
+
+    if (editingSection.id === 'awards') {
+      return (
+        <>
+          {header}
+          <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+            <FF label="Award / Honor Title"><Input value={awardEntry.title ?? ''} onChange={(e) => setAwardEntry((p) => ({ ...p, title: e.target.value }))} className="h-9" /></FF>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FF label="Issuer / Organisation"><Input value={awardEntry.issuer ?? ''} onChange={(e) => setAwardEntry((p) => ({ ...p, issuer: e.target.value }))} className="h-9" /></FF>
+              <FF label="Year"><Input value={awardEntry.year ?? ''} onChange={(e) => setAwardEntry((p) => ({ ...p, year: e.target.value }))} className="h-9" /></FF>
+            </div>
+            <FF label="Description (optional)"><Textarea value={awardEntry.description ?? ''} onChange={(e) => setAwardEntry((p) => ({ ...p, description: e.target.value }))} className="min-h-[70px] text-sm" /></FF>
+            <ActionRow onSave={() => void saveListEntry(editingSection.dataKey, awardEntry)} onDelete={handleDelete} saving={saving} isNew={isNew} />
+          </div>
+        </>
+      );
+    }
+
+    if (editingSection.id === 'references') {
+      return (
+        <>
+          {header}
+          <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+            <FF label="Full Name"><Input value={referenceEntry.name ?? ''} onChange={(e) => setReferenceEntry((p) => ({ ...p, name: e.target.value }))} className="h-9" /></FF>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FF label="Job Title"><Input value={referenceEntry.job_title ?? ''} onChange={(e) => setReferenceEntry((p) => ({ ...p, job_title: e.target.value }))} className="h-9" /></FF>
+              <FF label="Company"><Input value={referenceEntry.company ?? ''} onChange={(e) => setReferenceEntry((p) => ({ ...p, company: e.target.value }))} className="h-9" /></FF>
+            </div>
+            <FF label="Email"><Input type="email" value={referenceEntry.email ?? ''} onChange={(e) => setReferenceEntry((p) => ({ ...p, email: e.target.value }))} className="h-9" /></FF>
+            <ActionRow onSave={() => void saveListEntry(editingSection.dataKey, referenceEntry)} onDelete={handleDelete} saving={saving} isNew={isNew} />
+          </div>
+        </>
+      );
+    }
+
+    if (editingSection.id === 'publications') {
+      return (
+        <>
+          {header}
+          <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+            <FF label="Publication Title"><Input value={publicationEntry.title ?? ''} onChange={(e) => setPublicationEntry((p) => ({ ...p, title: e.target.value }))} className="h-9" /></FF>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FF label="Journal / Conference"><Input value={publicationEntry.journal_or_conference ?? ''} onChange={(e) => setPublicationEntry((p) => ({ ...p, journal_or_conference: e.target.value }))} className="h-9" /></FF>
+              <FF label="Year"><Input value={publicationEntry.year ?? ''} onChange={(e) => setPublicationEntry((p) => ({ ...p, year: e.target.value }))} className="h-9" /></FF>
+            </div>
+            <FF label="URL / DOI (optional)"><Input value={publicationEntry.url ?? ''} onChange={(e) => setPublicationEntry((p) => ({ ...p, url: e.target.value }))} className="h-9" /></FF>
+            <ActionRow onSave={() => void saveListEntry(editingSection.dataKey, publicationEntry)} onDelete={handleDelete} saving={saving} isNew={isNew} />
+          </div>
+        </>
+      );
+    }
+
+    return (
+      <>
+        {header}
+        <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+          <FF label="Title / Name"><Input value={genericEntry.title ?? ''} onChange={(e) => setGenericEntry((p) => ({ ...p, title: e.target.value }))} className="h-9" /></FF>
+          <FF label="Description / Details"><Textarea value={genericEntry.description ?? ''} onChange={(e) => setGenericEntry((p) => ({ ...p, description: e.target.value }))} className="min-h-[80px] text-sm" /></FF>
+          <ActionRow onSave={() => void saveListEntry(editingSection.dataKey, genericEntry)} onDelete={handleDelete} saving={saving} isNew={isNew} />
+        </div>
+      </>
+    );
+  };
 
   if (!candidateId) {
     return (
@@ -1031,190 +1485,48 @@ function ProfileBuilderSection({ candidateId }: { candidateId: string | undefine
 
   return (
     <div className="w-full">
-      {/* Header: Add content + Close */}
-      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
-        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Add content</h1>
-        <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] touch-manipulation" onClick={() => navigate('/candidate-dashboard')} aria-label="Close">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5 sm:mb-6">
+        <div>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Add Content</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Fill in each section — data appears live in your Resume Builder.</p>
+        </div>
+        <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" onClick={() => navigate('/candidate-dashboard')} aria-label="Close">
           <X className="h-5 w-5" />
         </Button>
       </div>
 
-      {loading && (
-        <div className="flex items-center gap-2 text-gray-600">
-          <Loader2 className="h-5 w-5 animate-spin" /> Loading…
-        </div>
-      )}
+      {loading && <div className="flex items-center gap-2 text-gray-600"><Loader2 className="h-5 w-5 animate-spin" /> Loading…</div>}
 
       {!loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6 md:gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
           {PROFILE_SECTIONS.map((section) => {
             const Icon = section.icon;
-            const isCustom = section.id === 'custom';
-            const raw = profileData[section.dataKey];
-            const isFilled = section.isArray
-              ? Array.isArray(raw) && raw.length > 0
-              : typeof raw === 'string' && raw.trim().length > 0;
+            const { filled, count } = isSectionFilled(section);
             return (
               <button
                 key={section.id}
                 type="button"
                 onClick={() => openSection(section)}
-                className={`relative text-left p-4 sm:p-6 md:p-8 rounded-xl border bg-white transition shadow-sm hover:shadow-md hover:border-sky-200 flex flex-col gap-3 min-h-[120px] sm:min-h-[140px] touch-manipulation overflow-hidden ${isCustom ? 'border-dashed border-2 border-gray-300' : 'border-gray-200'}`}
+                className={`relative text-left p-4 sm:p-5 rounded-xl border bg-white transition shadow-sm hover:shadow-md flex flex-col gap-2.5 min-h-[120px] touch-manipulation ${section.id === 'custom' ? 'border-dashed border-2 border-gray-300' : 'border-gray-200 hover:border-sky-200'}`}
               >
-                <div className="flex items-center gap-3">
-                  <div className="p-3 rounded-xl bg-sky-100 text-sky-600 flex-shrink-0">
-                    <Icon className="h-6 w-6 sm:h-7 sm:w-7" />
-                  </div>
-                  <span className="font-semibold text-gray-900 text-base sm:text-lg">{section.title}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="p-2.5 rounded-xl bg-sky-50 text-sky-600 shrink-0"><Icon className="h-5 w-5" /></div>
+                  {filled && <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 shrink-0">{count !== undefined ? `${count} ${count === 1 ? 'entry' : 'entries'}` : '✓ Filled'}</span>}
                 </div>
-                <p className="text-sm sm:text-base text-gray-600 leading-snug">{section.description}</p>
-                {isFilled && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-sky-700 rounded-b-xl" aria-hidden />
-                )}
+                <span className="font-semibold text-gray-900 text-sm">{section.title}</span>
+                <p className="text-xs text-gray-500 leading-snug">{section.description}</p>
+                {filled && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-sky-500 rounded-b-xl" />}
               </button>
             );
           })}
         </div>
       )}
 
-      {error && <p className="text-red-600 mt-4">{error}</p>}
+      {error && <p className="text-red-600 mt-4 text-sm">{error}</p>}
 
-      <Dialog open={!!editingSection} onOpenChange={(open) => !open && (setEditingSection(null), setEditingEntryIndex(null))}>
-        <DialogContent className="max-w-[calc(100vw-1.5rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          {editingSection && editingSection.isArray ? (
-            editingEntryIndex === null ? (
-              <>
-                <DialogHeader className="flex flex-row items-center justify-between space-y-0">
-                  <DialogTitle>{editingSection.title}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-3">
-                  {(() => {
-                    const rawList = Array.isArray(profileData[editingSection.dataKey]) ? (profileData[editingSection.dataKey] as unknown[]) : [];
-                    const isStructured = STRUCTURED_SECTION_IDS.includes(editingSection.id);
-                    const list = isStructured ? rawList : normalizeListItems(rawList);
-                    return (
-                      <>
-                        {list.length > 0 ? (
-                          <ul className="space-y-3">
-                            {list.map((item: unknown, i: number) => {
-                              const obj = (item && typeof item === 'object') ? (item as Record<string, unknown>) : {};
-                              const educationItem = item as EducationEntry;
-                              const experienceItem = item as ExperienceEntry;
-                              const skillItem = item as SkillEntry;
-                              const genericItem = item as GenericEntry & { name?: string };
-                              return (
-                                <li key={i} className="flex gap-3 rounded border bg-gray-50 px-3 py-3 text-sm">
-                                  <div className="flex-1 min-w-0 space-y-1">
-                                    {editingSection.id === 'education' && (
-                                      <>
-                                        {(educationItem.degree || educationItem.school) && <p className="font-medium text-gray-900">{[educationItem.degree, educationItem.school].filter(Boolean).join(' · ')}</p>}
-                                        {(educationItem.start_date || educationItem.end_date) && <p className="text-gray-600">{[educationItem.start_date, educationItem.end_date].filter(Boolean).join(' – ')}</p>}
-                                        {educationItem.location && <p className="text-gray-600">{String(educationItem.location)}</p>}
-                                        {educationItem.description && <p className="text-gray-600 whitespace-pre-wrap">{String(educationItem.description)}</p>}
-                                      </>
-                                    )}
-                                    {editingSection.id === 'experience' && (
-                                      <>
-                                        {(experienceItem.job_title || experienceItem.employer) && <p className="font-medium text-gray-900">{[experienceItem.job_title, experienceItem.employer].filter(Boolean).join(' · ')}</p>}
-                                        {(experienceItem.start_date || experienceItem.end_date) && <p className="text-gray-600">{[experienceItem.start_date, experienceItem.end_date].filter(Boolean).join(' – ')}</p>}
-                                        {experienceItem.location && <p className="text-gray-600">{String(experienceItem.location)}</p>}
-                                        {experienceItem.description && <p className="text-gray-600 whitespace-pre-wrap">{String(experienceItem.description)}</p>}
-                                      </>
-                                    )}
-                                    {editingSection.id === 'skills' && (
-                                      <>
-                                        {skillItem.skill && <p className="font-medium text-gray-900">{String(skillItem.skill)}</p>}
-                                        {skillItem.level && <p className="text-gray-600">Level: {String(skillItem.level)}</p>}
-                                        {skillItem.information && <p className="text-gray-600 whitespace-pre-wrap">{String(skillItem.information)}</p>}
-                                      </>
-                                    )}
-                                    {!isStructured && (
-                                      <>
-                                        {(genericItem.title || genericItem.name) && <p className="font-medium text-gray-900">{String(genericItem.title || genericItem.name)}</p>}
-                                        {(genericItem.description ?? obj.description) && <p className="text-gray-600 whitespace-pre-wrap">{String(genericItem.description ?? obj.description)}</p>}
-                                      </>
-                                    )}
-                                  </div>
-                                  <div className="flex shrink-0 gap-1 self-start">
-                                    <Button variant="ghost" size="sm" onClick={() => openEntryAtIndex(editingSection, i)}>Edit</Button>
-                                    <Button variant="ghost" size="sm" onClick={() => deleteStructuredEntry(editingSection.dataKey, i)}>Delete</Button>
-                                  </div>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        ) : (
-                          <p className="text-sm text-gray-500 py-2">No entries yet.</p>
-                        )}
-                        <Button className="w-full" variant="outline" onClick={() => { setEditingEntryIndex('new'); setEducationEntry({}); setExperienceEntry({}); setSkillEntry({}); setGenericEntry({ title: '', description: '' }); }}>
-                          Add entry
-                        </Button>
-                      </>
-                    );
-                  })()}
-                </div>
-              </>
-            ) : (
-              <>
-                <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <DialogTitle>{editingSection.title}</DialogTitle>
-                  <Button variant="ghost" size="sm" onClick={() => deleteStructuredEntry(editingSection.dataKey)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
-                </DialogHeader>
-                {editingSection.id === 'education' && (
-                  <div className="space-y-3">
-                    <div><Label>Degree</Label><Input placeholder="Enter Degree / Field Of Study" value={educationEntry.degree || ''} onChange={(e) => setEducationEntry((p) => ({ ...p, degree: e.target.value }))} className="mt-1" /></div>
-                    <div><Label>School</Label><Input placeholder="Enter school / university" value={educationEntry.school || ''} onChange={(e) => setEducationEntry((p) => ({ ...p, school: e.target.value }))} className="mt-1" /></div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div><Label>Start Date</Label><Input placeholder="MM/YYYY" value={educationEntry.start_date || ''} onChange={(e) => setEducationEntry((p) => ({ ...p, start_date: e.target.value }))} className="mt-1 min-h-[44px]" /></div>
-                      <div><Label>End Date</Label><Input placeholder="MM/YYYY" value={educationEntry.end_date || ''} onChange={(e) => setEducationEntry((p) => ({ ...p, end_date: e.target.value }))} className="mt-1 min-h-[44px]" /></div>
-                      <div><Label>Location</Label><Input placeholder="City, Country" value={educationEntry.location || ''} onChange={(e) => setEducationEntry((p) => ({ ...p, location: e.target.value }))} className="mt-1 min-h-[44px]" /></div>
-                    </div>
-                    <div><Label>Description</Label><Textarea placeholder="Add a description of your education entry..." value={educationEntry.description || ''} onChange={(e) => setEducationEntry((p) => ({ ...p, description: e.target.value }))} className="mt-1 min-h-[80px]" /></div>
-                    <Button className="w-full bg-sky-600 hover:bg-sky-700 text-white" onClick={() => saveStructuredEntry('education', 'education', educationEntry)} disabled={saving}><Check className="h-4 w-4 mr-2" /> Done</Button>
-                  </div>
-                )}
-                {editingSection.id === 'experience' && (
-                  <div className="space-y-3">
-                    <div><Label>Job Title</Label><Input placeholder="Enter Job Title" value={experienceEntry.job_title || ''} onChange={(e) => setExperienceEntry((p) => ({ ...p, job_title: e.target.value }))} className="mt-1" /></div>
-                    <div><Label>Employer</Label><Input placeholder="Enter employer" value={experienceEntry.employer || ''} onChange={(e) => setExperienceEntry((p) => ({ ...p, employer: e.target.value }))} className="mt-1" /></div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div><Label>Start Date</Label><Input placeholder="MM/YYYY" value={experienceEntry.start_date || ''} onChange={(e) => setExperienceEntry((p) => ({ ...p, start_date: e.target.value }))} className="mt-1 min-h-[44px]" /></div>
-                      <div><Label>End Date</Label><Input placeholder="MM/YYYY" value={experienceEntry.end_date || ''} onChange={(e) => setExperienceEntry((p) => ({ ...p, end_date: e.target.value }))} className="mt-1 min-h-[44px]" /></div>
-                      <div><Label>Location</Label><Input placeholder="City, Country" value={experienceEntry.location || ''} onChange={(e) => setExperienceEntry((p) => ({ ...p, location: e.target.value }))} className="mt-1 min-h-[44px]" /></div>
-                    </div>
-                    <div><Label>Description</Label><Textarea placeholder="Describe your role & achievements" value={experienceEntry.description || ''} onChange={(e) => setExperienceEntry((p) => ({ ...p, description: e.target.value }))} className="mt-1 min-h-[80px]" /></div>
-                    <Button className="w-full bg-sky-600 hover:bg-sky-700 text-white" onClick={() => saveStructuredEntry('experience', 'experience', experienceEntry)} disabled={saving}><Check className="h-4 w-4 mr-2" /> Done</Button>
-                  </div>
-                )}
-                {editingSection.id === 'skills' && (
-                  <div className="space-y-3">
-                    <div><Label>Skill</Label><Input placeholder="Enter Skill" value={skillEntry.skill || ''} onChange={(e) => setSkillEntry((p) => ({ ...p, skill: e.target.value }))} className="mt-1" /></div>
-                    <div><Label>Information / Sub-skills</Label><Textarea placeholder="Enter information or sub-skills" value={skillEntry.information || ''} onChange={(e) => setSkillEntry((p) => ({ ...p, information: e.target.value }))} className="mt-1 min-h-[60px]" /></div>
-                    <div><Label>Skill level</Label><Select value={skillEntry.level || ''} onValueChange={(v) => setSkillEntry((p) => ({ ...p, level: v }))}><SelectTrigger className="mt-1"><SelectValue placeholder="Select skill level" /></SelectTrigger><SelectContent>{SKILL_LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent></Select></div>
-                    <Button className="w-full bg-sky-600 hover:bg-sky-700 text-white" onClick={() => saveStructuredEntry('skills', 'skills', skillEntry)} disabled={saving}><Check className="h-4 w-4 mr-2" /> Done</Button>
-                  </div>
-                )}
-                {STRUCTURED_SECTION_IDS.includes(editingSection.id) === false && (
-                  <div className="space-y-3">
-                    <div><Label>Title / Name</Label><Input placeholder="Enter title or name" value={genericEntry.title || ''} onChange={(e) => setGenericEntry((p) => ({ ...p, title: e.target.value }))} className="mt-1" /></div>
-                    <div><Label>Description / Details</Label><Textarea placeholder="Add details (optional)" value={genericEntry.description || ''} onChange={(e) => setGenericEntry((p) => ({ ...p, description: e.target.value }))} className="mt-1 min-h-[80px]" /></div>
-                    <Button className="w-full bg-sky-600 hover:bg-sky-700 text-white" onClick={() => saveStructuredEntry(editingSection.id, editingSection.dataKey, genericEntry)} disabled={saving}><Check className="h-4 w-4 mr-2" /> Done</Button>
-                  </div>
-                )}
-              </>
-            )
-          ) : editingSection ? (
-            <>
-              <DialogHeader className="flex flex-row items-center justify-between space-y-0">
-                <DialogTitle>{editingSection.title}</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3">
-                <Label>{editingSection.isArray ? 'Content (JSON array or comma-separated)' : 'Content'}</Label>
-                <Textarea value={editValue} onChange={(e) => setEditValue(e.target.value)} className="min-h-[200px] font-mono text-sm" placeholder={editingSection.isArray ? '[] or ["Item 1", "Item 2"]' : 'Enter text…'} />
-                <Button className="w-full bg-sky-600 hover:bg-sky-700 text-white" onClick={saveSection} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />} Done</Button>
-              </div>
-            </>
-          ) : null}
+      <Dialog open={!!editingSection} onOpenChange={(open) => { if (!open) { setEditingSection(null); setEditingEntryIndex(null); } }}>
+        <DialogContent className="max-w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[92vh] overflow-y-auto gap-4">
+          {renderForm()}
         </DialogContent>
       </Dialog>
     </div>

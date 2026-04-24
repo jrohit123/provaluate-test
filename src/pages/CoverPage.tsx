@@ -241,7 +241,7 @@ export default function CoverPage() {
         }
       `}</style>
 
-      <video
+      {/* <video
         autoPlay
         muted
         loop
@@ -249,7 +249,10 @@ export default function CoverPage() {
         className="pointer-events-none fixed inset-0 z-0 h-full w-full object-cover"
         src="/videos/video.mp4"
       />
-      <div className="pointer-events-none fixed inset-0 z-0 bg-white/70" />
+      <div className="pointer-events-none fixed inset-0 z-0 bg-white/70" /> */}
+      
+      {/* Light blue background matching Login page */}
+      <div className="pointer-events-none fixed inset-0 z-0 bg-[linear-gradient(145deg,#F6FAFF_0%,#EEF6FF_55%,#FFFFFF_100%)]" />
 
       <div className="cover-panel relative z-10 flex min-h-screen flex-col">
         <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-8 sm:py-5 lg:px-12 lg:py-6">

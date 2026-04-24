@@ -368,6 +368,11 @@ const App = () => {
                 <CandidateDashboard />
               </CandidateProtectedRoute>
             } />
+            <Route path="/candidate-dashboard/resume-builder" element={
+              <CandidateProtectedRoute>
+                <CandidateDashboard />
+              </CandidateProtectedRoute>
+            } />
             <Route path="/tpo-dashboard" element={
               <TpoProtectedRoute>
                 <TpoDashboard />

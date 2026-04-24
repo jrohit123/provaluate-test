@@ -4,6 +4,7 @@ import { Settings, UserPlus, Briefcase, Share2, ClipboardList } from 'lucide-rea
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { API_CONFIG, buildApiUrl } from '@/constants/api';
+import { useAnimatedNumber } from '@/hooks/useAnimatedNumber';
 
 /** Profile section keys in candidate_profile_details.profile_data (must match Profile Builder). */
 const PROFILE_SECTION_KEYS = [
@@ -162,6 +163,10 @@ export function CandidateMainDashboard({ candidateId, candidateEmail, onNavigate
   const quickActionCardClass =
     'h-auto min-h-[80px] sm:min-h-[88px] p-4 sm:p-5 flex flex-col items-center justify-center gap-2 rounded-lg bg-sky-50 border border-sky-100 hover:border-sky-200 hover:bg-sky-100/80 transition-colors text-gray-900 font-semibold text-base sm:text-lg text-center touch-manipulation';
 
+  const animatedInterviewsCompleted = useAnimatedNumber(loadingPlan ? 0 : stats.interviewsCompleted);
+  const animatedJdCount = useAnimatedNumber(loadingPlan ? 0 : stats.jobDescriptions);
+  const animatedReferrals = useAnimatedNumber(loadingPlan ? 0 : referralCount);
+
   return (
     <div className="w-full min-w-0 p-3 sm:p-6 space-y-6 sm:space-y-8 overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -185,19 +190,19 @@ export function CandidateMainDashboard({ candidateId, candidateEmail, onNavigate
             </div>
             <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center">
               <div className="text-lg sm:text-2xl font-bold text-gray-900 w-full text-center">
-                {loadingPlan ? '...' : (currentPlanDetails?.interview_count != null ? `${stats.interviewsCompleted} / ${currentPlanDetails.interview_count}` : '—')}
+                {loadingPlan ? '...' : (currentPlanDetails?.interview_count != null ? `${animatedInterviewsCompleted} / ${currentPlanDetails.interview_count}` : '—')}
               </div>
               <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words w-full text-center">INTERVIEWS (USED / PLAN)</div>
             </div>
             <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center">
               <div className="text-lg sm:text-2xl font-bold text-gray-900 w-full text-center">
-                {loadingPlan ? '...' : (currentPlanDetails?.jd_count != null ? `${stats.jobDescriptions} / ${currentPlanDetails.jd_count}` : '—')}
+                {loadingPlan ? '...' : (currentPlanDetails?.jd_count != null ? `${animatedJdCount} / ${currentPlanDetails.jd_count}` : '—')}
               </div>
               <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words w-full text-center">JDs (USED / PLAN)</div>
             </div>
             <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center">
               <div className="text-lg sm:text-2xl font-bold text-gray-900 w-full text-center">
-                {loadingPlan ? '...' : referralCount}
+                {loadingPlan ? '...' : animatedReferrals}
               </div>
               <div className="text-xs sm:text-sm text-gray-600 min-h-[2.5rem] flex items-center justify-center break-words w-full text-center">REFERRALS (USED MY LINK)</div>
             </div>

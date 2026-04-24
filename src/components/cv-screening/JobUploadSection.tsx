@@ -4,7 +4,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, FileText, Edit, RefreshCw, Loader2, Type, FileUp, Settings, Wrench, ArrowRight, ChevronsUpDown } from 'lucide-react';
+import { Upload, FileText, Edit, RefreshCw, Loader2, Type, FileUp, Settings, Wrench, ArrowRight, ChevronRight, Plus, Trash2, X, Pencil, List, AlignLeft } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -37,6 +37,16 @@ interface ResolvedJD {
   //cleaned_length?: number;
   //jd_file_url?: string;
 }
+
+type JDSubAttrValue =
+  | { _type: 'text'; _value: string }
+  | { _type: 'list'; _value: string[] };
+
+type JDAttrValue =
+  | { _type: 'text'; _value: string }
+  | { _type: 'object'; [subKey: string]: JDSubAttrValue | string };
+
+type JDEditingAttributes = Record<string, JDAttrValue>;
 
 const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
 const ALLOWED_FILE_TYPES = ['.pdf', '.docx', '.txt'];
@@ -97,7 +107,10 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
   const [isExtractingText, setIsExtractingText] = useState(false);
   const [viewMode, setViewMode] = useState<'resolved' | 'extracted' | null>(null);
   const [extractedText, setExtractedText] = useState<string>('');
-  const [expandedEditorFields, setExpandedEditorFields] = useState<Record<string, boolean>>({});
+  const [editorDraft, setEditorDraft] = useState<JDEditingAttributes>({});
+  const [openEditorAttributes, setOpenEditorAttributes] = useState<Record<string, boolean>>({});
+  const [editorTagInput, setEditorTagInput] = useState<Record<string, string>>({});
+  const [isSavingEditor, setIsSavingEditor] = useState(false);
 
   // Get JD status configuration based on usage
   const getJDStatusConfig = (jdLimitInfo: any) => {
@@ -580,8 +593,9 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
     }
   };
 
-  const updateResolvedJD = async () => {
-    if (!resolvedJDId || !resolvedJD || !user?.id) {
+  const updateResolvedJD = async (resolvedJDPayload?: ResolvedJD) => {
+    const payloadToSave = resolvedJDPayload || resolvedJD;
+    if (!resolvedJDId || !payloadToSave || !user?.id) {
       toast({
         title: "Update Error",
         description: "Cannot update resolved JD. Missing required data.",
@@ -594,7 +608,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
       const { error } = await supabase
         .from('resolved_jd')
         .update({
-          parameter: resolvedJD,
+          parameter: payloadToSave,
           updated_at: new Date().toISOString(),
           updated_by: user.id
         })
@@ -1060,30 +1074,6 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
     setPageNumber(1);
   };
 
-  const toggleEditorExpansion = (fieldKey: string) => {
-    setExpandedEditorFields((prev) => ({
-      ...prev,
-      [fieldKey]: !prev[fieldKey],
-    }));
-  };
-
-  const isSkillAttribute = (attributeName: string) => attributeName.toLowerCase().includes('skill');
-
-  const shouldStoreAsList = (attributeName: string, subAttributeName: string, currentValue: any) => {
-    if (Array.isArray(currentValue)) return true;
-    if (!isSkillAttribute(attributeName)) return false;
-    const normalizedSubKey = subAttributeName.trim().toLowerCase();
-    return ['required', 'preferred', 'mandatory'].includes(normalizedSubKey);
-  };
-
-  const parseEditorValue = (rawValue: string, storeAsList: boolean) => {
-    if (!storeAsList) return rawValue;
-    return rawValue
-      .split(',')
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0);
-  };
-
   const makeUniqueKey = (existingKeys: string[], baseKey: string) => {
     let nextKey = baseKey;
     let counter = 2;
@@ -1094,49 +1084,72 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
     return nextKey;
   };
 
-  const normalizeAttributesForEditing = (attributes?: Record<string, any>) => {
-    const source = attributes || {};
-    const normalized: Record<string, any> = {};
-    Object.entries(source).forEach(([attrKey, attrValue]) => {
-      if (attrValue && typeof attrValue === 'object' && !Array.isArray(attrValue)) {
-        normalized[attrKey] = { ...attrValue };
-      } else if (Array.isArray(attrValue)) {
-        normalized[attrKey] = { value: [...attrValue] };
+  const toEditingModel = (raw?: Record<string, any>): JDEditingAttributes => {
+    if (!raw) return {};
+    const out: JDEditingAttributes = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (typeof value === 'string' || value === null || value === undefined) {
+        out[key] = { _type: 'text', _value: String(value ?? '') };
+      } else if (Array.isArray(value)) {
+        out[key] = { _type: 'object', value: { _type: 'list', _value: value.map((item) => String(item ?? '')) } };
+      } else if (typeof value === 'object') {
+        const nested: Record<string, JDSubAttrValue> = {};
+        for (const [subKey, subValue] of Object.entries(value)) {
+          if (Array.isArray(subValue)) {
+            nested[subKey] = { _type: 'list', _value: subValue.map((item) => String(item ?? '')) };
+          } else {
+            nested[subKey] = { _type: 'text', _value: String(subValue ?? '') };
+          }
+        }
+        out[key] = { _type: 'object', ...nested };
       } else {
-        normalized[attrKey] = { value: attrValue ?? '' };
+        out[key] = { _type: 'text', _value: String(value) };
       }
-    });
-    return normalized;
+    }
+    return out;
   };
 
-  const addAttributeField = () => {
-    setResolvedJD((prev) => {
-      if (!prev) return prev;
-      const attrs = { ...(prev.attributes || {}) };
-      const newKey = makeUniqueKey(Object.keys(attrs), 'New Attribute');
-      const nextAttrs = {
-        [newKey]: { value: '' },
-        ...attrs,
-      };
-      return { ...prev, attributes: nextAttrs };
-    });
+  const fromEditingModel = (model: JDEditingAttributes): Record<string, any> => {
+    const out: Record<string, any> = {};
+    for (const [key, value] of Object.entries(model)) {
+      if (value._type === 'text') {
+        out[key] = value._value;
+      } else {
+        const nested: Record<string, any> = {};
+        for (const [subKey, subValue] of Object.entries(value)) {
+          if (subKey.startsWith('_')) continue;
+          const typedSubValue = subValue as JDSubAttrValue;
+          nested[subKey] = typedSubValue._type === 'list' ? typedSubValue._value : typedSubValue._value;
+        }
+        out[key] = nested;
+      }
+    }
+    return out;
   };
 
-  const removeAttributeField = (attrKey: string) => {
-    setResolvedJD((prev) => {
-      if (!prev?.attributes) return prev;
-      const attrs = { ...prev.attributes };
-      delete attrs[attrKey];
-      return { ...prev, attributes: attrs };
+  const openResolvedEditor = () => {
+    const baseModel = toEditingModel(resolvedJD?.attributes || {});
+    setEditorDraft(baseModel);
+    const initialOpenState: Record<string, boolean> = {};
+    Object.keys(baseModel).forEach((key) => {
+      initialOpenState[key] = false;
     });
+    setOpenEditorAttributes(initialOpenState);
+    setEditorTagInput({});
+    setIsEditingResolvedJD(true);
   };
 
-  const renameAttributeField = (oldKey: string, newKeyRaw: string) => {
+  const addEditorAttribute = () => {
+    const newKey = makeUniqueKey(Object.keys(editorDraft), 'New Attribute');
+    setEditorDraft((prev) => ({ ...prev, [newKey]: { _type: 'text', _value: '' } }));
+    setOpenEditorAttributes((prev) => ({ ...prev, [newKey]: true }));
+  };
+
+  const renameEditorAttribute = (oldKey: string, newKeyRaw: string) => {
     const newKey = newKeyRaw.trim();
     if (!newKey || newKey === oldKey) return;
-    setResolvedJD((prev) => {
-      if (!prev?.attributes) return prev;
-      if (Object.prototype.hasOwnProperty.call(prev.attributes, newKey)) {
+    setEditorDraft((prev) => {
+      if (Object.prototype.hasOwnProperty.call(prev, newKey)) {
         toast({
           title: "Duplicate attribute",
           description: `"${newKey}" already exists.`,
@@ -1144,61 +1157,52 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
         });
         return prev;
       }
-      const next: Record<string, any> = {};
-      Object.entries(prev.attributes).forEach(([key, value]) => {
+      const next: JDEditingAttributes = {};
+      Object.entries(prev).forEach(([key, value]) => {
         next[key === oldKey ? newKey : key] = value;
       });
-      return { ...prev, attributes: next };
+      return next;
+    });
+    setOpenEditorAttributes((prev) => {
+      const next: Record<string, boolean> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        next[key === oldKey ? newKey : key] = value;
+      });
+      return next;
     });
   };
 
-  const addSubAttributeField = (attrKey: string) => {
-    setResolvedJD((prev) => {
-      if (!prev?.attributes) return prev;
-      const currentAttrValue = prev.attributes[attrKey];
-      const attrObj = currentAttrValue && typeof currentAttrValue === 'object' && !Array.isArray(currentAttrValue)
-        ? { ...currentAttrValue }
-        : { value: currentAttrValue ?? '' };
-      const newSubKey = makeUniqueKey(Object.keys(attrObj), 'new_sub_attribute');
-      const nextAttrObj = {
-        [newSubKey]: '',
-        ...attrObj,
-      };
-      return {
-        ...prev,
-        attributes: {
-          ...prev.attributes,
-          [attrKey]: nextAttrObj,
-        },
-      };
+  const removeEditorAttribute = (attrKey: string) => {
+    setEditorDraft((prev) => {
+      const next = { ...prev };
+      delete next[attrKey];
+      return next;
+    });
+    setOpenEditorAttributes((prev) => {
+      const next = { ...prev };
+      delete next[attrKey];
+      return next;
     });
   };
 
-  const removeSubAttributeField = (attrKey: string, subKey: string) => {
-    setResolvedJD((prev) => {
-      if (!prev?.attributes) return prev;
-      const currentAttrValue = prev.attributes[attrKey];
-      if (!currentAttrValue || typeof currentAttrValue !== 'object' || Array.isArray(currentAttrValue)) return prev;
-      const nextAttrObj = { ...currentAttrValue };
-      delete nextAttrObj[subKey];
-      return {
-        ...prev,
-        attributes: {
-          ...prev.attributes,
-          [attrKey]: nextAttrObj,
-        },
-      };
+  const addEditorSubAttribute = (attrKey: string) => {
+    setEditorDraft((prev) => {
+      const attr = prev[attrKey];
+      if (!attr || attr._type !== 'object') return prev;
+      const subKeys = Object.keys(attr).filter((key) => !key.startsWith('_'));
+      const newSubKey = makeUniqueKey(subKeys, 'Sub-attribute');
+      const nextAttr = { ...attr, [newSubKey]: { _type: 'text', _value: '' } as JDSubAttrValue };
+      return { ...prev, [attrKey]: nextAttr };
     });
   };
 
-  const renameSubAttributeField = (attrKey: string, oldSubKey: string, newSubKeyRaw: string) => {
+  const renameEditorSubAttribute = (attrKey: string, oldSubKey: string, newSubKeyRaw: string) => {
     const newSubKey = newSubKeyRaw.trim();
     if (!newSubKey || newSubKey === oldSubKey) return;
-    setResolvedJD((prev) => {
-      if (!prev?.attributes) return prev;
-      const currentAttrValue = prev.attributes[attrKey];
-      if (!currentAttrValue || typeof currentAttrValue !== 'object' || Array.isArray(currentAttrValue)) return prev;
-      if (Object.prototype.hasOwnProperty.call(currentAttrValue, newSubKey)) {
+    setEditorDraft((prev) => {
+      const attr = prev[attrKey];
+      if (!attr || attr._type !== 'object') return prev;
+      if (Object.prototype.hasOwnProperty.call(attr, newSubKey)) {
         toast({
           title: "Duplicate sub-attribute",
           description: `"${newSubKey}" already exists in ${attrKey}.`,
@@ -1206,18 +1210,37 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
         });
         return prev;
       }
-      const nextAttrObj: Record<string, any> = {};
-      Object.entries(currentAttrValue).forEach(([key, value]) => {
-        nextAttrObj[key === oldSubKey ? newSubKey : key] = value;
+      const nextAttr: Record<string, any> = { _type: 'object' };
+      Object.entries(attr).forEach(([subKey, value]) => {
+        if (subKey === '_type') return;
+        nextAttr[subKey === oldSubKey ? newSubKey : subKey] = value;
       });
-      return {
-        ...prev,
-        attributes: {
-          ...prev.attributes,
-          [attrKey]: nextAttrObj,
-        },
-      };
+      return { ...prev, [attrKey]: nextAttr as JDAttrValue };
     });
+  };
+
+  const removeEditorSubAttribute = (attrKey: string, subKey: string) => {
+    setEditorDraft((prev) => {
+      const attr = prev[attrKey];
+      if (!attr || attr._type !== 'object') return prev;
+      const nextAttr: Record<string, any> = { ...attr };
+      delete nextAttr[subKey];
+      return { ...prev, [attrKey]: nextAttr as JDAttrValue };
+    });
+  };
+
+  const handleEditorSave = async () => {
+    if (!resolvedJD) return;
+    setIsSavingEditor(true);
+    try {
+      const updatedAttributes = fromEditingModel(editorDraft);
+      const nextResolvedJD: ResolvedJD = { ...resolvedJD, attributes: updatedAttributes };
+      setResolvedJD(nextResolvedJD);
+      await updateResolvedJD(nextResolvedJD);
+      setIsEditingResolvedJD(false);
+    } finally {
+      setIsSavingEditor(false);
+    }
   };
 
   return (
@@ -1561,16 +1584,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => {
-                              setResolvedJD((prev) => {
-                                if (!prev) return prev;
-                                return {
-                                  ...prev,
-                                  attributes: normalizeAttributesForEditing(prev.attributes),
-                                };
-                              });
-                              setIsEditingResolvedJD(true);
-                            }}
+                            onClick={openResolvedEditor}
                             className="w-full sm:w-auto"
                           >
                             <Edit className="w-4 h-4 mr-2" />
@@ -1699,165 +1713,309 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
           </CardContent>
         </Card>
 
-        {resolvedJD && isEditingResolvedJD && (
-          <div className="mt-4 space-y-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <h4 className="font-semibold">Edit Resolved Information</h4>
-              <Button type="button" variant="outline" size="sm" onClick={addAttributeField}>
-                + Add Attribute
-              </Button>
-            </div>
-            {resolvedJD.attributes && Object.entries(resolvedJD.attributes).map(([key, value]) => (
-              <div key={key} className="space-y-2 rounded-md border border-gray-200 p-3">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <Input
-                    defaultValue={key}
-                    onBlur={(e) => renameAttributeField(key, e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        (e.target as HTMLInputElement).blur();
-                      }
-                    }}
-                    className="h-9 text-sm font-medium"
-                    placeholder="Attribute name"
-                  />
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => addSubAttributeField(key)}>
-                      + Sub-attribute
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => removeAttributeField(key)}>
-                      Remove
-                    </Button>
-                  </div>
+        <Dialog open={isEditingResolvedJD} onOpenChange={setIsEditingResolvedJD}>
+          <DialogContent className="max-w-[96vw] sm:max-w-5xl max-h-[88vh] overflow-hidden p-0">
+            <DialogHeader className="px-4 sm:px-5 pt-4 sm:pt-5 pb-2 border-b border-gray-200">
+              <DialogTitle className="text-base sm:text-lg text-[#094D7B]">Edit Resolved JD</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                Rename keys inline, switch sub-attribute type between text/list, and save once done.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="overflow-y-auto max-h-[72vh] px-4 sm:px-5 pb-5 pt-2">
+              <div className="sticky top-0 z-30 bg-white border-b border-gray-200 py-2 mb-3 flex items-center justify-between gap-2">
+                <div className="text-xs sm:text-sm font-semibold text-[#094D7B]">Editing Resolved Attributes</div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setIsEditingResolvedJD(false)} disabled={isSavingEditor}>
+                    Discard
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleEditorSave}
+                    disabled={isSavingEditor}
+                    className="bg-[#094D7B] text-white hover:bg-[#094D7B]/90"
+                  >
+                    {isSavingEditor && <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />}
+                    Save Changes
+                  </Button>
                 </div>
-                {typeof value === 'object' && value !== null && !Array.isArray(value) ? (
-                  <div className="space-y-2">
-                    {Object.entries(value).map(([subKey, subValue]) => (
-                      <div key={subKey} className="space-y-1 rounded-md border border-gray-100 p-2">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                          <Input
-                            defaultValue={subKey}
-                            onBlur={(e) => renameSubAttributeField(key, subKey, e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                (e.target as HTMLInputElement).blur();
-                              }
-                            }}
-                            className="h-8 text-xs font-medium text-gray-700"
-                            placeholder="Sub-attribute name"
-                          />
-                          <Button type="button" variant="outline" size="sm" onClick={() => removeSubAttributeField(key, subKey)}>
-                            Remove
-                          </Button>
-                        </div>
-                        {(() => {
-                          const fieldKey = `${key}::${subKey}`;
-                          const isExpanded = !!expandedEditorFields[fieldKey];
-                          const storeAsList = shouldStoreAsList(key, subKey, subValue);
-                          return (
-                            <div className="space-y-1">
-                              <div className="flex justify-end">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  onClick={() => toggleEditorExpansion(fieldKey)}
-                                  title={isExpanded ? 'Collapse' : 'Expand'}
-                                >
-                                  <ChevronsUpDown className="mr-1 h-3.5 w-3.5" />
-                                  {isExpanded ? 'Collapse' : 'Expand'}
-                                </Button>
-                              </div>
-                              <Textarea
-                                value={Array.isArray(subValue) ? subValue.join(', ') : String(subValue) || ''}
-                                onChange={(e) => {
-                                  const newValue = parseEditorValue(
-                                    e.target.value,
-                                    storeAsList
-                                  );
-                                  
-                                  setResolvedJD(prev => ({
-                                    ...prev!,
-                                    attributes: {
-                                      ...prev!.attributes,
-                                      [key]: {
-                                        ...(prev!.attributes![key] as any),
-                                        [subKey]: newValue
-                                      }
-                                    }
-                                  }));
-                                }}
-                                className={`${isExpanded ? 'min-h-[220px]' : 'min-h-[72px]'} resize-none overflow-hidden text-sm`}
-                                placeholder={`Enter ${subKey}...`}
-                              />
-                              {storeAsList && (
-                                <p className="text-[11px] text-gray-500">
-                                  Use comma to separate multiple values (e.g., Python, SQL, Power BI).
-                                </p>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  (() => {
-                    const fieldKey = `${key}::value`;
-                    const isExpanded = !!expandedEditorFields[fieldKey];
-                    return (
-                      <div className="space-y-1">
-                        <div className="flex justify-end">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => toggleEditorExpansion(fieldKey)}
-                            title={isExpanded ? 'Collapse' : 'Expand'}
-                          >
-                            <ChevronsUpDown className="mr-1 h-3.5 w-3.5" />
-                            {isExpanded ? 'Collapse' : 'Expand'}
-                          </Button>
-                        </div>
-                        <Textarea
-                          value={String(value) || ''}
-                          onChange={(e) => 
-                            setResolvedJD(prev => ({
-                              ...prev!,
-                              attributes: {
-                                ...prev!.attributes,
-                                [key]: e.target.value
-                              }
-                            }))
-                          }
-                          className={`${isExpanded ? 'min-h-[220px]' : 'min-h-[72px]'} resize-none overflow-hidden`}
-                          placeholder={`Enter ${key.replace(/_/g, ' ')}...`}
-                        />
-                      </div>
-                    );
-                  })()
-                )}
               </div>
-            ))}
-            <div className="flex gap-2">
-              <Button
-                onClick={updateResolvedJD}
-                className="flex-1 text-white bg-[#094D7B] shadow-[0_4px_18px_rgba(9,77,123,0.20)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.26)]"
-              >
-                Save Changes
-              </Button>
-              <Button
-                onClick={() => setIsEditingResolvedJD(false)}
-                variant="outline"
-                className="flex-1"
-              >
-                Cancel
-              </Button>
+
+              <div className="space-y-3">
+                {Object.entries(editorDraft).map(([attrKey, attrValue]) => {
+                  const isObject = attrValue._type === 'object';
+                  const subKeys = isObject ? Object.keys(attrValue).filter((subKey) => !subKey.startsWith('_')) : [];
+                  const isOpen = !!openEditorAttributes[attrKey];
+
+                  return (
+                    <div key={attrKey} className={`rounded-lg border overflow-hidden ${isOpen ? 'border-blue-200' : 'border-gray-200'}`}>
+                      <div
+                        className="flex items-center gap-2 px-3 py-2.5 bg-blue-50/60 hover:bg-blue-50 cursor-pointer transition-colors"
+                        onClick={() => setOpenEditorAttributes((prev) => ({ ...prev, [attrKey]: !prev[attrKey] }))}
+                      >
+                        <ChevronRight className={`w-4 h-4 text-blue-600 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                        <Input
+                          defaultValue={attrKey}
+                          onBlur={(e) => renameEditorAttribute(attrKey, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === 'Tab') {
+                              e.preventDefault();
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          title="Click to rename this attribute"
+                          className="h-8 text-sm font-semibold text-[#094D7B] border-transparent bg-transparent hover:bg-white hover:border-gray-300 focus:bg-white focus:border-[#094D7B]"
+                        />
+                        <Pencil className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                          {isObject ? `${subKeys.length} sub-attr${subKeys.length !== 1 ? 's' : ''}` : 'text'}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-gray-500 hover:text-red-500"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeEditorAttribute(attrKey);
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+
+                      {isOpen && (
+                        <div className="p-3 space-y-2">
+                          {!isObject ? (
+                            <Textarea
+                              value={(attrValue as { _type: 'text'; _value: string })._value}
+                              onChange={(e) =>
+                                setEditorDraft((prev) => ({
+                                  ...prev,
+                                  [attrKey]: { _type: 'text', _value: e.target.value },
+                                }))
+                              }
+                              rows={2}
+                              className="w-full resize-none text-sm min-h-[72px] max-h-[220px] bg-gray-50 focus:bg-white"
+                              placeholder={`Enter ${attrKey.replace(/_/g, ' ')}...`}
+                            />
+                          ) : (
+                            <>
+                              {subKeys.map((subKey) => {
+                                const subValue = (attrValue as any)[subKey] as JDSubAttrValue;
+                                const isList = subValue?._type === 'list';
+                                const tagInputKey = `${attrKey}::${subKey}`;
+                                const currentTagInput = editorTagInput[tagInputKey] || '';
+
+                                return (
+                                  <div key={`${attrKey}-${subKey}`} className="rounded-md border border-gray-200 overflow-hidden">
+                                    <div className="flex items-center gap-2 px-2.5 py-1.5 bg-gray-50 border-b border-gray-200">
+                                      <Input
+                                        defaultValue={subKey}
+                                        onBlur={(e) => renameEditorSubAttribute(attrKey, subKey, e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' || e.key === 'Tab') {
+                                            e.preventDefault();
+                                            (e.target as HTMLInputElement).blur();
+                                          }
+                                        }}
+                                        title="Click to rename"
+                                        className="h-7 text-xs font-medium border-transparent bg-transparent hover:bg-white hover:border-gray-300 focus:bg-white focus:border-[#094D7B]"
+                                      />
+
+                                      <div className="flex items-center gap-1 border border-gray-200 rounded p-0.5 bg-white">
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="ghost"
+                                          className={`h-6 px-2 text-[11px] ${!isList ? 'bg-[#094D7B] text-white hover:bg-[#094D7B]' : 'text-gray-600'}`}
+                                          onClick={() => {
+                                            if (!isList) return;
+                                            const listValue = Array.isArray(subValue._value) ? subValue._value : [];
+                                            setEditorDraft((prev) => ({
+                                              ...prev,
+                                              [attrKey]: {
+                                                ...(prev[attrKey] as any),
+                                                [subKey]: { _type: 'text', _value: listValue.join(', ') },
+                                              },
+                                            }));
+                                          }}
+                                        >
+                                          <AlignLeft className="w-3 h-3 mr-1" /> Text
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="ghost"
+                                          className={`h-6 px-2 text-[11px] ${isList ? 'bg-[#094D7B] text-white hover:bg-[#094D7B]' : 'text-gray-600'}`}
+                                          onClick={() => {
+                                            if (isList) return;
+                                            const textValue = typeof subValue._value === 'string' ? subValue._value : '';
+                                            const tags = textValue.split(/[,\n]+/).map((item) => item.trim()).filter(Boolean);
+                                            setEditorDraft((prev) => ({
+                                              ...prev,
+                                              [attrKey]: {
+                                                ...(prev[attrKey] as any),
+                                                [subKey]: { _type: 'list', _value: tags },
+                                              },
+                                            }));
+                                          }}
+                                        >
+                                          <List className="w-3 h-3 mr-1" /> List
+                                        </Button>
+                                      </div>
+
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 px-2 text-gray-500 hover:text-red-500"
+                                        onClick={() => removeEditorSubAttribute(attrKey, subKey)}
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </Button>
+                                    </div>
+
+                                    <div className="p-2.5">
+                                      {isList ? (
+                                        <div>
+                                          <div className="flex flex-wrap gap-1.5 p-2 min-h-[40px] bg-white border border-gray-200 rounded-md focus-within:border-[#094D7B]">
+                                            {(subValue._value as string[]).map((tag, index) => (
+                                              <span key={`${tag}-${index}`} className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-xs px-2.5 py-1 rounded-full">
+                                                {tag}
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const nextTags = (subValue._value as string[]).filter((_, i) => i !== index);
+                                                    setEditorDraft((prev) => ({
+                                                      ...prev,
+                                                      [attrKey]: {
+                                                        ...(prev[attrKey] as any),
+                                                        [subKey]: { _type: 'list', _value: nextTags },
+                                                      },
+                                                    }));
+                                                  }}
+                                                  className="w-3.5 h-3.5 rounded-full bg-blue-200 hover:bg-red-400 hover:text-white flex items-center justify-center"
+                                                >
+                                                  <X className="w-2.5 h-2.5" />
+                                                </button>
+                                              </span>
+                                            ))}
+                                            <input
+                                              value={currentTagInput}
+                                              onChange={(e) =>
+                                                setEditorTagInput((prev) => ({
+                                                  ...prev,
+                                                  [tagInputKey]: e.target.value,
+                                                }))
+                                              }
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ',') {
+                                                  e.preventDefault();
+                                                  const nextTag = currentTagInput.trim().replace(/,+$/, '');
+                                                  if (!nextTag) return;
+                                                  if ((subValue._value as string[]).includes(nextTag)) return;
+                                                  setEditorDraft((prev) => ({
+                                                    ...prev,
+                                                    [attrKey]: {
+                                                      ...(prev[attrKey] as any),
+                                                      [subKey]: {
+                                                        _type: 'list',
+                                                        _value: [...(subValue._value as string[]), nextTag],
+                                                      },
+                                                    },
+                                                  }));
+                                                  setEditorTagInput((prev) => ({ ...prev, [tagInputKey]: '' }));
+                                                } else if (e.key === 'Backspace' && currentTagInput === '' && (subValue._value as string[]).length > 0) {
+                                                  setEditorDraft((prev) => ({
+                                                    ...prev,
+                                                    [attrKey]: {
+                                                      ...(prev[attrKey] as any),
+                                                      [subKey]: {
+                                                        _type: 'list',
+                                                        _value: (subValue._value as string[]).slice(0, -1),
+                                                      },
+                                                    },
+                                                  }));
+                                                }
+                                              }}
+                                              onBlur={() => {
+                                                const nextTag = currentTagInput.trim().replace(/,+$/, '');
+                                                if (!nextTag) return;
+                                                if ((subValue._value as string[]).includes(nextTag)) return;
+                                                setEditorDraft((prev) => ({
+                                                  ...prev,
+                                                  [attrKey]: {
+                                                    ...(prev[attrKey] as any),
+                                                    [subKey]: {
+                                                      _type: 'list',
+                                                      _value: [...(subValue._value as string[]), nextTag],
+                                                    },
+                                                  },
+                                                }));
+                                                setEditorTagInput((prev) => ({ ...prev, [tagInputKey]: '' }));
+                                              }}
+                                              placeholder={(subValue._value as string[]).length === 0 ? 'Type and press Enter...' : 'Add more...'}
+                                              className="flex-1 min-w-[120px] bg-transparent border-none outline-none text-xs text-gray-700"
+                                            />
+                                          </div>
+                                          <p className="text-[11px] text-gray-400 mt-1">Press Enter or comma to add · Backspace removes last tag</p>
+                                        </div>
+                                      ) : (
+                                        <Textarea
+                                          value={String(subValue._value || '')}
+                                          onChange={(e) =>
+                                            setEditorDraft((prev) => ({
+                                              ...prev,
+                                              [attrKey]: {
+                                                ...(prev[attrKey] as any),
+                                                [subKey]: { _type: 'text', _value: e.target.value },
+                                              },
+                                            }))
+                                          }
+                                          rows={2}
+                                          className="w-full resize-none text-sm min-h-[64px] max-h-[220px] bg-gray-50 focus:bg-white"
+                                          placeholder={`Describe "${subKey}" requirement...`}
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 text-xs"
+                                onClick={() => addEditorSubAttribute(attrKey)}
+                              >
+                                <Plus className="w-3.5 h-3.5 mr-1.5" />
+                                Add Sub-attribute
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={addEditorAttribute}
+                  className="w-full rounded-lg border-2 border-dashed border-blue-200 p-4 text-center hover:border-[#094D7B] hover:bg-blue-50/40 transition-colors"
+                >
+                  <div className="mx-auto mb-1 flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-[#094D7B]">
+                    <Plus className="w-4 h-4" />
+                  </div>
+                  <p className="text-sm text-gray-600">Add a new attribute</p>
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

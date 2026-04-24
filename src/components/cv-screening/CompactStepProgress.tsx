@@ -8,8 +8,8 @@ interface CompactStepProgressProps {
   onStepClick?: (index: number) => void;
   /** When true, any step is clickable (e.g. candidate can jump to any step). When false, only completed steps are clickable. */
   allowClickAnyStep?: boolean;
-  /** Use candidate (sky/cerulean) theme to match candidate dashboard header. */
-  theme?: 'default' | 'candidate';
+  /** Theme controls primary brand color for the progress bar + nav buttons. */
+  theme?: 'recruiter' | 'candidate' | 'tpo' | 'default';
   className?: string;
 }
 
@@ -19,12 +19,32 @@ export const CompactStepProgress: React.FC<CompactStepProgressProps> = ({
   steps,
   onStepClick,
   allowClickAnyStep = false,
-  theme = 'default',
+  theme = 'recruiter',
   className = ''
 }) => {
-  const isCandidate = theme === 'candidate';
-  const btnActiveClass = 'bg-[#094D7B] text-white hover:bg-[#094D7B]/90';
-  const barActiveClass = isCandidate ? 'bg-[#094D7B]' : 'bg-[#094D7B]';
+  const themeConfig =
+    theme === 'candidate'
+      ? {
+          btnActiveClass:
+            'text-white [background:linear-gradient(135deg,#1a9fd6,#2563eb)] hover:[background:linear-gradient(135deg,#1490c0,#1d4ed8)]',
+          barActiveClass: 'bg-[#2563eb]',
+          labelTextClass: 'text-[#2563eb]',
+        }
+      : theme === 'tpo'
+        ? {
+            btnActiveClass:
+              'text-white [background:linear-gradient(135deg,#020f1a,#042C53)] hover:[background:linear-gradient(135deg,#031525,#053565)]',
+            barActiveClass: 'bg-[#042C53]',
+            labelTextClass: 'text-[#042C53]',
+          }
+      : {
+          btnActiveClass: 'bg-[#094D7B] text-white hover:bg-[#094D7B]/90',
+          barActiveClass: 'bg-[#094D7B]',
+          labelTextClass: 'text-[#094D7B]',
+        };
+
+  const btnActiveClass = themeConfig.btnActiveClass;
+  const barActiveClass = themeConfig.barActiveClass;
   const handlePrevious = () => {
     if (current > 0 && onStepClick) {
       onStepClick(current - 1);
@@ -99,7 +119,7 @@ export const CompactStepProgress: React.FC<CompactStepProgressProps> = ({
             })}
           </div>
           <div className="flex flex-col items-center sm:items-start min-w-0">
-            <span className="text-xs font-medium text-[#094D7B] whitespace-nowrap">
+            <span className={`text-xs font-medium whitespace-nowrap ${themeConfig.labelTextClass}`}>
               Step {current + 1} of {total}
             </span>
             <span className="text-[10px] sm:text-xs text-gray-500 truncate w-full text-center sm:text-left max-w-[140px] sm:max-w-[200px]" title={steps[current]?.label}>
@@ -136,8 +156,16 @@ export const MiniStepProgress: React.FC<CompactStepProgressProps> = ({
   total,
   steps,
   onStepClick,
+  theme = 'recruiter',
   className = ''
 }) => {
+  const themeConfig = {
+    recruiter: { active: 'bg-[#094D7B]' },
+    candidate: { active: 'bg-[#2563eb]' },
+    tpo: { active: 'bg-[#042C53]' },
+  };
+  const activeClass = themeConfig[theme as keyof typeof themeConfig]?.active ?? themeConfig.recruiter.active;
+
   return (
     <div 
       className={`sticky top-0 z-50 bg-white border-b px-4 py-2 ${className}`}
@@ -160,7 +188,7 @@ export const MiniStepProgress: React.FC<CompactStepProgressProps> = ({
                 className={`
                   transition-all duration-200
                   ${isActive 
-                    ? 'w-6 h-1.5 bg-[#094D7B] rounded-full'
+                    ? `w-6 h-1.5 ${activeClass} rounded-full`
                     : isCompleted
                     ? 'w-1.5 h-1.5 bg-green-500 rounded-full'
                     : 'w-1.5 h-1.5 bg-gray-300 rounded-full'
