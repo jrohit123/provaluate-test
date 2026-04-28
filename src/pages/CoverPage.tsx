@@ -236,6 +236,28 @@ export default function CoverPage() {
         .role-card-3 { opacity: 0; animation: cardIn 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.41s forwards; }
         .hero-line-1 { opacity: 0; animation: heroIn 0.55s cubic-bezier(0.25,0.46,0.45,0.94) 0.12s forwards; }
         .hero-line-2 { opacity: 0; animation: heroIn 0.55s cubic-bezier(0.25,0.46,0.45,0.94) 0.24s forwards; }
+        
+        /* --- NEW: Desktop Hover Expansion Logic --- */
+        @media (min-width: 768px) {
+          .cards-container { 
+            display: flex; 
+            align-items: stretch; 
+            height: 480px; /* Fixed height prevents vertical bouncing during width expansion */
+          }
+          .expandable-card { 
+            flex: 1; 
+            transition: flex 0.5s cubic-bezier(0.25, 1, 0.5, 1), filter 0.5s ease, transform 0.4s ease, box-shadow 0.4s ease; 
+          }
+          .cards-container:hover .expandable-card { 
+            filter: grayscale(60%) opacity(0.6); 
+          }
+          .cards-container .expandable-card:hover { 
+            flex: 1.35; 
+            filter: grayscale(0%) opacity(1); 
+            transform: translateY(-8px); 
+          }
+        }
+        
         @media (max-width: 767px) {
           .role-card-1, .role-card-2, .role-card-3 { opacity: 1; animation: none; }
         }
@@ -292,7 +314,7 @@ export default function CoverPage() {
             CONTINUE AS
           </p>
 
-          <div className="grid w-full max-w-5xl grid-cols-1 gap-5 md:grid-cols-3">
+          <div className="flex flex-col md:flex-row w-full max-w-6xl gap-4 md:gap-5 cards-container">
             {roles.map((role, i) => (
               <div
                 key={role.id}
@@ -300,7 +322,7 @@ export default function CoverPage() {
                   cardRefs.current[role.id] = element;
                 }}
                 data-role-id={role.id}
-                className={`role-card-${i + 1} group relative flex cursor-pointer select-none flex-col rounded-2xl border bg-white/75 p-6 backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:bg-white/90 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/70 focus-visible:ring-offset-2 active:scale-[0.99] sm:p-7 ${role.borderColor} ${role.hoverBorder}`}
+                className={`role-card-${i + 1} expandable-card flex-1 group relative flex cursor-pointer select-none flex-col rounded-2xl border bg-white/75 p-6 backdrop-blur-md hover:bg-white/90 hover:shadow-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/70 focus-visible:ring-offset-2 active:scale-[0.99] sm:p-7 ${role.borderColor} ${role.hoverBorder}`}
                 style={{ transitionProperty: 'box-shadow, transform, border-color' }}
                 onClick={() => go(role.route)}
                 role="button"

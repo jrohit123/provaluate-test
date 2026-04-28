@@ -462,7 +462,7 @@ const ConversationalInterview = () => {
       userAgent: userAgent.substring(0, 100),
       isChrome,
       isEdge,
-      detected: isChrome ? 'Chrome (OpenAI)' : isEdge ? 'Edge (Web Speech)' : 'Other'
+      detected: isChrome ? 'Chrome (Deepgram→OpenAI→AssemblyAI)' : isEdge ? 'Edge (Deepgram→AssemblyAI→OpenAI→WebSpeech)' : 'Other'
     });
     
     return { isChrome, isEdge, userAgent };
@@ -597,7 +597,7 @@ const ConversationalInterview = () => {
           }
         } catch (e) {}
       };
-      const tryFallbackToOpenAI = () => {
+      const tryFallbackFromDeepgram = () => {
         if (transcriptionModeRef.current !== 'deepgram') return;
         if (openAIAudioStreamRef.current) {
           openAIAudioStreamRef.current.getTracks().forEach((t: MediaStreamTrack) => t.stop());
@@ -606,16 +606,23 @@ const ConversationalInterview = () => {
         if (deepgramWsRef.current) { try { deepgramWsRef.current.close(); } catch (_) {} deepgramWsRef.current = null; }
         if (deepgramScriptNodeRef.current) { try { deepgramScriptNodeRef.current.disconnect(); } catch (_) {} deepgramScriptNodeRef.current = null; }
         if (deepgramAudioContextRef.current) { deepgramAudioContextRef.current.close().catch(() => {}); deepgramAudioContextRef.current = null; }
-        transcriptionModeRef.current = 'openai';
-        console.log('🔄 [DEEPGRAM] Fallback to OpenAI Realtime');
-        initOpenAIRealtimeSpeechRef.current?.();
+        const { isEdge } = detectBrowser();
+        if (isEdge) {
+          transcriptionModeRef.current = 'assemblyai';
+          console.log('🔄 [DEEPGRAM] Edge: Fallback to AssemblyAI');
+          initAssemblyAIRealtimeSpeechRef.current?.();
+        } else {
+          transcriptionModeRef.current = 'openai';
+          console.log('🔄 [DEEPGRAM] Chrome: Fallback to OpenAI Realtime');
+          initOpenAIRealtimeSpeechRef.current?.();
+        }
       };
       ws.onerror = () => {
-        toast.error('Deepgram connection error — switching to OpenAI.');
-        tryFallbackToOpenAI();
+        toast.error('Deepgram connection error — switching to next provider.');
+        tryFallbackFromDeepgram();
       };
       ws.onclose = (ev) => {
-        if (ev.code !== 1000 && transcriptionModeRef.current === 'deepgram') tryFallbackToOpenAI();
+        if (ev.code !== 1000 && transcriptionModeRef.current === 'deepgram') tryFallbackFromDeepgram();
       };
       const audioContext = new AudioContext({ sampleRate: 16000 });
       deepgramAudioContextRef.current = audioContext;
@@ -629,12 +636,19 @@ const ConversationalInterview = () => {
       scriptNode.connect(silentGain);
       silentGain.connect(audioContext.destination);
     } catch (error: any) {
-      toast.error('Failed to start Deepgram — trying OpenAI.');
       webSpeechActiveRef.current = true;
-      transcriptionModeRef.current = 'openai';
-      await initOpenAIRealtimeSpeechRef.current?.();
+      const { isEdge } = detectBrowser();
+      if (isEdge) {
+        toast.error('Failed to start Deepgram — trying AssemblyAI.');
+        transcriptionModeRef.current = 'assemblyai';
+        await initAssemblyAIRealtimeSpeechRef.current?.();
+      } else {
+        toast.error('Failed to start Deepgram — trying OpenAI.');
+        transcriptionModeRef.current = 'openai';
+        await initOpenAIRealtimeSpeechRef.current?.();
+      }
     }
-  }, [cleanTranscript]);
+  }, [cleanTranscript, detectBrowser]);
 
   // OpenAI Realtime API (for Chrome) - Real-time streaming transcription
   const initOpenAIRealtimeSpeech = useCallback(async () => {
@@ -692,7 +706,7 @@ const ConversationalInterview = () => {
       const ws = new WebSocket('wss://api.openai.com/v1/realtime', ['realtime', `openai-insecure-api-key.${ephemeralKey}`]);
       openAIRealtimeWsRef.current = ws;
 
-      const tryFallbackToAssemblyAI = () => {
+      const tryFallbackFromOpenAI = () => {
         if (transcriptionModeRef.current !== 'openai') return;
         if (openAIAudioStreamRef.current) {
           openAIAudioStreamRef.current.getTracks().forEach((t: MediaStreamTrack) => t.stop());
@@ -701,9 +715,20 @@ const ConversationalInterview = () => {
         if (openAIRealtimeWsRef.current) { try { openAIRealtimeWsRef.current.close(); } catch (_) {} openAIRealtimeWsRef.current = null; }
         if (openAIRealtimeScriptNodeRef.current) { try { openAIRealtimeScriptNodeRef.current.disconnect(); } catch (_) {} openAIRealtimeScriptNodeRef.current = null; }
         if (openAIRealtimeAudioContextRef.current) { openAIRealtimeAudioContextRef.current.close().catch(() => {}); openAIRealtimeAudioContextRef.current = null; }
-        transcriptionModeRef.current = 'assemblyai';
-        console.log('🔄 [OPENAI] Fallback to AssemblyAI');
-        initAssemblyAIRealtimeSpeechRef.current?.();
+        const { isEdge } = detectBrowser();
+        if (isEdge) {
+          // Edge: Deepgram + AssemblyAI already tried — Web Speech is last resort
+          transcriptionModeRef.current = 'web-speech';
+          console.log('🔄 [OPENAI] Edge: Fallback to Web Speech API (last resort)');
+          initWebSpeech();
+          if (recognitionRef.current) {
+            try { recognitionRef.current.start(); } catch (e) { console.warn('⚠️ [EDGE WEB SPEECH FALLBACK]', e); }
+          }
+        } else {
+          transcriptionModeRef.current = 'assemblyai';
+          console.log('🔄 [OPENAI] Chrome: Fallback to AssemblyAI');
+          initAssemblyAIRealtimeSpeechRef.current?.();
+        }
       };
 
       ws.onopen = () => {
@@ -723,7 +748,7 @@ const ConversationalInterview = () => {
             }
           } else if (t === 'error') {
             console.error('❌ [REALTIME] Server error:', data);
-            tryFallbackToAssemblyAI();
+            tryFallbackFromOpenAI();
           }
         } catch (e) {
           console.warn('⚠️ [REALTIME] Parse message error:', e);
@@ -732,12 +757,12 @@ const ConversationalInterview = () => {
 
       ws.onerror = () => {
         console.error('❌ [REALTIME] WebSocket error');
-        toast.error('OpenAI Realtime error — switching to AssemblyAI.');
-        tryFallbackToAssemblyAI();
+        toast.error('OpenAI Realtime error — switching to next provider.');
+        tryFallbackFromOpenAI();
       };
       ws.onclose = (ev) => {
         console.log('🔌 [REALTIME] WebSocket closed');
-        if (ev.code !== 1000 && transcriptionModeRef.current === 'openai') tryFallbackToAssemblyAI();
+        if (ev.code !== 1000 && transcriptionModeRef.current === 'openai') tryFallbackFromOpenAI();
       };
 
       const audioContext = new AudioContext({ sampleRate: 24000 });
@@ -767,12 +792,22 @@ const ConversationalInterview = () => {
       console.log('🎯 [REALTIME] Microphone streaming to Realtime API');
     } catch (error: any) {
       console.error('❌ [REALTIME] Failed to initialize:', error);
-      toast.error('OpenAI Realtime failed — trying AssemblyAI.');
       webSpeechActiveRef.current = true;
-      transcriptionModeRef.current = 'assemblyai';
-      await initAssemblyAIRealtimeSpeechRef.current?.();
+      const { isEdge } = detectBrowser();
+      if (isEdge) {
+        toast.error('OpenAI Realtime failed — falling back to Web Speech.');
+        transcriptionModeRef.current = 'web-speech';
+        initWebSpeech();
+        if (recognitionRef.current) {
+          try { recognitionRef.current.start(); } catch (e) {}
+        }
+      } else {
+        toast.error('OpenAI Realtime failed — trying AssemblyAI.');
+        transcriptionModeRef.current = 'assemblyai';
+        await initAssemblyAIRealtimeSpeechRef.current?.();
+      }
     }
-  }, [cleanTranscript]);
+  }, [cleanTranscript, detectBrowser]);
 
   // AssemblyAI Streaming API (for Chrome) - Token from backend to avoid CORS
   const initAssemblyAIRealtimeSpeech = useCallback(async () => {
@@ -828,9 +863,29 @@ const ConversationalInterview = () => {
         }
       };
 
+      const tryFallbackFromAssemblyAI = () => {
+        if (transcriptionModeRef.current !== 'assemblyai') return;
+        assemblyAICurrentPartialRef.current = '';
+        if (assemblyAIWsRef.current) { try { assemblyAIWsRef.current.close(); } catch (_) {} assemblyAIWsRef.current = null; }
+        if (assemblyAIScriptNodeRef.current) { try { assemblyAIScriptNodeRef.current.disconnect(); } catch (_) {} assemblyAIScriptNodeRef.current = null; }
+        if (assemblyAIAudioContextRef.current) { assemblyAIAudioContextRef.current.close().catch(() => {}); assemblyAIAudioContextRef.current = null; }
+        if (assemblyAIAudioStreamRef.current) { assemblyAIAudioStreamRef.current.getTracks().forEach(t => t.stop()); assemblyAIAudioStreamRef.current = null; }
+        const { isEdge } = detectBrowser();
+        if (isEdge) {
+          transcriptionModeRef.current = 'openai';
+          console.log('🔄 [ASSEMBLYAI] Edge: Fallback to OpenAI Realtime');
+          toast.error('AssemblyAI error — switching to OpenAI.');
+          initOpenAIRealtimeSpeechRef.current?.();
+        }
+        // Chrome: AssemblyAI is the final fallback — no further fallback
+      };
+
       ws.onerror = () => {
         console.error('❌ [ASSEMBLYAI] WebSocket error');
-        toast.error('AssemblyAI transcription connection error.');
+        tryFallbackFromAssemblyAI();
+        if (transcriptionModeRef.current !== 'openai') {
+          toast.error('AssemblyAI transcription connection error.');
+        }
       };
       ws.onclose = () => {
         console.log('🔌 [ASSEMBLYAI] WebSocket closed');
@@ -872,14 +927,19 @@ const ConversationalInterview = () => {
       console.log('🎯 [ASSEMBLYAI] Microphone streaming to AssemblyAI');
     } catch (error: any) {
       console.error('❌ [ASSEMBLYAI] Failed to initialize:', error);
-      toast.error('Failed to start AssemblyAI transcription. Check microphone and API key.');
-      webSpeechActiveRef.current = false;
-      if (assemblyAIWsRef.current) {
-        assemblyAIWsRef.current.close();
-        assemblyAIWsRef.current = null;
+      if (assemblyAIWsRef.current) { try { assemblyAIWsRef.current.close(); } catch (_) {} assemblyAIWsRef.current = null; }
+      const { isEdge } = detectBrowser();
+      if (isEdge) {
+        toast.error('AssemblyAI failed — trying OpenAI Realtime.');
+        webSpeechActiveRef.current = true;
+        transcriptionModeRef.current = 'openai';
+        await initOpenAIRealtimeSpeechRef.current?.();
+      } else {
+        toast.error('Failed to start AssemblyAI transcription. Check microphone and API key.');
+        webSpeechActiveRef.current = false;
       }
     }
-  }, [cleanTranscript]);
+  }, [cleanTranscript, detectBrowser]);
 
   useEffect(() => {
     initOpenAIRealtimeSpeechRef.current = initOpenAIRealtimeSpeech;
@@ -1265,77 +1325,28 @@ const ConversationalInterview = () => {
       return;
     }
 
-    // ✅ EDGE: Use Web Speech API
+    // ✅ EDGE: Deepgram first → AssemblyAI → OpenAI → Web Speech API (last resort)
     if (browser.isEdge) {
-      console.log('🌐 [BROWSER] ✅ Detected Edge - using Web Speech API');
-      transcriptionModeRef.current = 'web-speech';
-      
-      // Ensure Deepgram and OpenAI are not running
-      if (deepgramWsRef.current) {
-        try { deepgramWsRef.current.close(); } catch (e) {}
-        deepgramWsRef.current = null;
-      }
-      if (deepgramScriptNodeRef.current) {
-        try { deepgramScriptNodeRef.current.disconnect(); } catch (_) {}
-        deepgramScriptNodeRef.current = null;
-      }
-      if (deepgramAudioContextRef.current) {
-        deepgramAudioContextRef.current.close().catch(() => {});
-        deepgramAudioContextRef.current = null;
-      }
-      if (openAIRealtimeWsRef.current) {
-        try { openAIRealtimeWsRef.current.close(); } catch (e) {}
-        openAIRealtimeWsRef.current = null;
-      }
-      if (openAIRealtimeAudioContextRef.current) {
-        openAIRealtimeAudioContextRef.current.close().catch(() => {});
-        openAIRealtimeAudioContextRef.current = null;
-      }
+      console.log('🌐 [BROWSER] ✅ Detected Edge - using Deepgram (→ AssemblyAI → OpenAI → Web Speech fallback)');
+      transcriptionModeRef.current = 'deepgram';
+
+      // Tear down any stale instances before starting fresh
+      if (deepgramWsRef.current) { try { deepgramWsRef.current.close(); } catch (e) {} deepgramWsRef.current = null; }
+      if (deepgramScriptNodeRef.current) { try { deepgramScriptNodeRef.current.disconnect(); } catch (_) {} deepgramScriptNodeRef.current = null; }
+      if (deepgramAudioContextRef.current) { deepgramAudioContextRef.current.close().catch(() => {}); deepgramAudioContextRef.current = null; }
+      if (openAIRealtimeWsRef.current) { try { openAIRealtimeWsRef.current.close(); } catch (e) {} openAIRealtimeWsRef.current = null; }
+      if (openAIRealtimeAudioContextRef.current) { openAIRealtimeAudioContextRef.current.close().catch(() => {}); openAIRealtimeAudioContextRef.current = null; }
       openAIRealtimeScriptNodeRef.current = null;
       if (openAIAudioRecorderRef.current) {
-        try {
-          openAIAudioRecorderRef.current.stopRecording();
-          openAIAudioRecorderRef.current = null;
-        } catch (e) {
-          console.warn('⚠️ [EDGE] Cleaned up OpenAI instance');
-        }
+        try { openAIAudioRecorderRef.current.stopRecording(); openAIAudioRecorderRef.current = null; } catch (e) {}
       }
-      if (openAIAudioStreamRef.current) {
-        openAIAudioStreamRef.current.getTracks().forEach(track => track.stop());
-        openAIAudioStreamRef.current = null;
-      }
-      if (assemblyAIWsRef.current) {
-        try { assemblyAIWsRef.current.close(); } catch (e) {}
-        assemblyAIWsRef.current = null;
-      }
-      if (assemblyAIScriptNodeRef.current) {
-        try { assemblyAIScriptNodeRef.current.disconnect(); } catch (_) {}
-        assemblyAIScriptNodeRef.current = null;
-      }
-      if (assemblyAIAudioContextRef.current) {
-        assemblyAIAudioContextRef.current.close().catch(() => {});
-        assemblyAIAudioContextRef.current = null;
-      }
-      if (assemblyAIAudioStreamRef.current) {
-        assemblyAIAudioStreamRef.current.getTracks().forEach(track => track.stop());
-        assemblyAIAudioStreamRef.current = null;
-      }
-      
-      initWebSpeech();
-      if (!recognitionRef.current) {
-        console.error('❌ [EDGE] Web Speech recognition object not created');
-        return;
-      }
-      
-      try {
-        recognitionRef.current.start();
-        console.log('✅ [EDGE] Web Speech API started successfully');
-      } catch (error: any) {
-        if (!error.message?.includes('already started')) {
-          console.error('❌ [EDGE] Failed to start Web Speech:', error);
-          toast.error('Failed to start transcription in Edge browser.');
-        }
-      }
+      if (openAIAudioStreamRef.current) { openAIAudioStreamRef.current.getTracks().forEach(track => track.stop()); openAIAudioStreamRef.current = null; }
+      if (assemblyAIWsRef.current) { try { assemblyAIWsRef.current.close(); } catch (e) {} assemblyAIWsRef.current = null; }
+      if (assemblyAIScriptNodeRef.current) { try { assemblyAIScriptNodeRef.current.disconnect(); } catch (_) {} assemblyAIScriptNodeRef.current = null; }
+      if (assemblyAIAudioContextRef.current) { assemblyAIAudioContextRef.current.close().catch(() => {}); assemblyAIAudioContextRef.current = null; }
+      if (assemblyAIAudioStreamRef.current) { assemblyAIAudioStreamRef.current.getTracks().forEach(track => track.stop()); assemblyAIAudioStreamRef.current = null; }
+
+      await initDeepgramRealtimeSpeech();
       return;
     }
 
