@@ -620,7 +620,7 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
             <CardTitle className="flex items-center justify-between gap-2 text-lg sm:text-xl">
               <div className="flex items-center gap-2">
                 <Grid className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
-                Evaluation Criteria
+                Scoring Criteria
               </div>
               <Button
                 variant="default"

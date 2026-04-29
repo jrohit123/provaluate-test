@@ -421,7 +421,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
               className="h-auto p-3 sm:p-4 flex flex-col items-center space-y-1 sm:space-y-2 text-white bg-[#094D7B] shadow-[0_4px_18px_rgba(9,77,123,0.20)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.26)]"
             >
               <Wrench className="w-5 h-5" />
-              <div className="font-semibold text-xs sm:text-sm text-center">2. Evaluation Criteria</div>
+              <div className="font-semibold text-xs sm:text-sm text-center">2. Scoring Criteria</div>
             </Button>
 
             {/* 3. Upload Resumes */}

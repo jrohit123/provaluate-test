@@ -974,6 +974,41 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
     return text.replace(/\*/g, '');
   };
 
+  const flattenRecommendationForExport = (text: string): string => {
+    if (!text) return 'N/A';
+
+    // Try to parse as JSON
+    try {
+      const looksLikeJson = typeof text === 'string' && /^(\s*\{|\s*\[)/.test(text.trim());
+      if (looksLikeJson) {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const lines: string[] = [];
+          const preferredOrder = ['Classification', 'Rationale', 'Follow-up actions'];
+          const keys = [
+            ...preferredOrder.filter(k => k in parsed),
+            ...Object.keys(parsed).filter(k => !preferredOrder.includes(k))
+          ];
+          keys.forEach(key => {
+            const value = parsed[key];
+            if (Array.isArray(value)) {
+              lines.push(`${key}:`);
+              value.forEach((item: any) => lines.push(`- ${String(item).trim()}`));
+            } else if (value != null) {
+              lines.push(`${key}: ${String(value).trim()}`);
+            }
+          });
+          return lines.join('\n');
+        }
+      }
+    } catch (e) {
+      // Not JSON, fall through
+    }
+
+    // Plain text fallback — just strip asterisks
+    return text.replace(/\*/g, '');
+  };
+
   // Function to format date for export (dd-mmm-yy hh:mm) - preserves UTC time
   const formatDateForExport = (dateString: string) => {
     if (!dateString) return 'N/A';
@@ -1026,7 +1061,7 @@ export const MatchScorecardSection = ({ onCandidateSelect, selectedCandidateId, 
           candidateEmail,
           candidate.overallScore.toString(),
           formatDateForExport(candidate.createdAt || ''),
-          cleanTextForExport(candidate.recommendation || ''),
+          flattenRecommendationForExport(candidate.recommendation || ''),
           cleanTextForExport(candidate.detailedAssessment || '')
         ];
       })

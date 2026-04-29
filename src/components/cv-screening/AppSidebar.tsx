@@ -43,7 +43,7 @@ const cvScreeningItems = [
     description: 'Upload job descriptions and criteria'
   },
   {
-    title: 'Evaluation Criteria',
+    title: 'Scoring Criteria',
     icon: Wrench,
     section: 'evaluation-criteria' as ActiveSection,
     description: 'Set up assessment parameters and criteria'
@@ -402,7 +402,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                 <div className="bg-white/60 backdrop-blur-sm rounded-md p-3 border border-[#094D7B]/15">
                   <div className="flex items-center gap-2 mb-1">
                     <Wrench className="w-3 h-3 text-[#094D7B]" />
-                    <span className="text-xs font-medium text-[#094D7B]">Evaluation Criteria</span>
+                    <span className="text-xs font-medium text-[#094D7B]">Scoring Criteria</span>
                   </div>
                   <div className="text-xs text-[#094D7B] truncate pl-5 flex items-center gap-2">
                     {currentEvaluationCriteria ? (
