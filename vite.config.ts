@@ -34,5 +34,29 @@ export default defineConfig(({ mode }) => {
       // Drop console and debugger in production builds
       drop: mode === 'production' ? ['console', 'debugger'] : [],
     },
+    build: {
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+            'vendor-xlsx': ['xlsx-js-style', 'xlsx'],
+            'vendor-pdf': ['jspdf', 'jspdf-autotable', '@react-pdf/renderer'],
+            'vendor-three': ['three', '@react-three/fiber', '@react-three/drei'],
+            'vendor-ui': [
+              '@radix-ui/react-checkbox',
+              '@radix-ui/react-select',
+              '@radix-ui/react-dialog',
+              '@radix-ui/react-toast',
+              '@radix-ui/react-dropdown-menu',
+              '@radix-ui/react-popover',
+              '@radix-ui/react-tabs',
+              '@radix-ui/react-tooltip',
+            ],
+          },
+        },
+      },
+    },
   };
 });
