@@ -3,7 +3,6 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
-// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const deepgramKey = env.VITE_DEEPGRAM_API_KEY;
@@ -22,8 +21,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
-      mode === 'development' &&
-      componentTagger(),
+      mode === 'development' && componentTagger(),
     ].filter(Boolean),
     resolve: {
       alias: {
@@ -31,17 +29,22 @@ export default defineConfig(({ mode }) => {
       },
     },
     esbuild: {
-      // Drop console and debugger in production builds
       drop: mode === 'production' ? ['console', 'debugger'] : [],
+      legalComments: 'none',
     },
     build: {
+      sourcemap: false,
+      minify: 'esbuild',
+      chunkSizeWarningLimit: 1000,
       rollupOptions: {
         output: {
-          manualChunks: {
-            'three-ecosystem': ['three', '@react-three/fiber', '@react-three/drei'],
-            'pdf-libs': ['pdfjs-dist', 'react-pdf', '@react-pdf/renderer'],
-            'xlsx-libs': ['xlsx', 'xlsx-js-style', 'exceljs'],
-            'pdf-gen': ['jspdf', 'jspdf-autotable'],
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('three') || id.includes('@react-three')) return 'vendor-3d';
+              if (id.includes('pdfjs-dist') || id.includes('jspdf')) return 'vendor-pdf';
+              if (id.includes('xlsx') || id.includes('exceljs')) return 'vendor-excel';
+              return 'vendor';
+            }
           },
         },
       },
