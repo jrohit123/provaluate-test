@@ -40,9 +40,18 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (id.includes('node_modules')) {
-              if (id.includes('three') || id.includes('@react-three')) return 'vendor-3d';
-              if (id.includes('pdfjs-dist') || id.includes('jspdf')) return 'vendor-pdf';
-              if (id.includes('xlsx') || id.includes('exceljs')) return 'vendor-excel';
+              if (id.includes('pdfjs-dist')) return 'vendor-pdfjs';
+              if (id.includes('@react-pdf')) return 'vendor-react-pdf';
+              if (id.includes('jspdf')) return 'vendor-jspdf';
+              if (id.includes('exceljs')) return 'vendor-exceljs';
+              if (id.includes('xlsx')) return 'vendor-xlsx';
+              if (id.includes('@radix-ui')) return 'vendor-radix';
+              if (id.includes('socket.io') || id.includes('recordrtc')) return 'vendor-realtime';
+              if (id.includes('recharts')) return 'vendor-charts';
+              if (id.includes('@tiptap')) return 'vendor-tiptap';
+              if (id.includes('gsap')) return 'vendor-gsap';
+              if (id.includes('react-joyride')) return 'vendor-joyride';
+              if (id.includes('react-hot-toast')) return 'vendor-toast';
               return 'vendor';
             }
           },
