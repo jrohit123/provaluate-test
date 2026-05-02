@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "NODE_OPTIONS=--max-old-space-size=2048 vite build --mode production",
-    "build:testing": "UV_THREADPOOL_SIZE=1 NODE_OPTIONS=--max-old-space-size=2048 vite build --mode testing",
+    "build:testing": "UV_THREADPOOL_SIZE=1 NODE_OPTIONS=--max-old-space-size=1024 vite build --mode testing",
     "build:prod": "NODE_OPTIONS=--max-old-space-size=2048 vite build --mode production",
     "preview": "vite preview"
   },
