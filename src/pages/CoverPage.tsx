@@ -147,6 +147,7 @@ export default function CoverPage() {
     recruiter: null,
     tpo: null,
   });
+  const [activeTab, setActiveTab] = useState<'cv-screening' | 'resume-ingestion' | 'dynamic-interview'>('cv-screening');
 
   const go = (route: string) => {
     navigate(route);
@@ -261,6 +262,80 @@ export default function CoverPage() {
         @media (max-width: 767px) {
           .role-card-1, .role-card-2, .role-card-3 { opacity: 1; animation: none; }
         }
+
+        /* Feature Tabs */
+        .feature-tab {
+          transition: all 0.3s ease;
+          cursor: pointer;
+        }
+        .feature-tab:hover {
+          transform: translateY(-2px);
+        }
+        .feature-tab.active {
+          background: #1a9fd6;
+          color: white;
+          transform: translateY(-4px);
+          box-shadow: 0 8px 40px rgba(10,74,140,0.14);
+        }
+
+        /* Demo Content Container */
+        .demo-content {
+          min-height: 600px;
+          background: white;
+          border-radius: 16px;
+          box-shadow: 0 2px 20px rgba(10,74,140,0.09);
+          overflow: auto;
+        }
+
+        /* Tab Content Animation */
+        .tab-content {
+          animation: fadeIn 0.6s ease;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Mobile responsive adjustments for feature tabs */
+        @media (max-width: 767px) {
+          .demo-content {
+            width: 100vw;          /* ← full viewport width */
+            margin-left: -20px;    /* ← break out of px-5 (20px) parent padding */
+            border-radius: 0;      /* ← no rounded corners at full bleed */
+            overflow: hidden;
+            min-height: 100vh;   /* ← change from fixed to 100vh */
+            max-height: none;    /* ← remove max-height cap */
+          }
+          .feature-tab {
+            font-size: 14px;
+            padding: 12px 16px;
+          }
+          .tab-content {
+            min-height: 100vh;
+            max-height: none;
+          }
+          .tab-content iframe {
+            width: 100vw !important;   /* ← iframe fills full width */
+            height: 100vh !important;      /* ← full viewport */
+            min-height: 100vh !important;
+          }
+        }
+        
+        /* Desktop adjustments for full-screen iframes */
+        @media (min-width: 768px) {
+          .demo-content {
+            min-height: 90vh;
+            max-height: 90vh;
+          }
+          .tab-content {
+            min-height: 90vh;
+            max-height: 90vh;
+          }
+          .tab-content iframe {
+            height: 90vh !important;
+            min-height: 600px !important;
+          }
+        }
       `}</style>
 
       {/* <video
@@ -277,26 +352,40 @@ export default function CoverPage() {
       <div className="pointer-events-none fixed inset-0 z-0 bg-[linear-gradient(145deg,#F6FAFF_0%,#EEF6FF_55%,#FFFFFF_100%)]" />
 
       <div className="cover-panel relative z-10 flex min-h-screen flex-col">
-        <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-8 sm:py-5 lg:px-12 lg:py-6">
-          <div className="flex w-full min-w-0 items-center justify-between gap-3">
+        <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/95 px-2 py-4 backdrop-blur sm:px-4 sm:py-5 lg:px-4 lg:py-6">
+          <div className="flex w-full min-w-0 items-center justify-between gap-3 pl-2 pr-4 sm:px-0 lg:px-8">
             <img
               src="/Logo_Transparent_BG.png"
               alt="ProValuate"
               className="h-12 w-auto shrink-0 sm:h-14 lg:h-16"
             />
-            <a
-              href="https://aitamate.com/contact.html"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 text-right text-sm font-semibold text-[#0d6ea3] no-underline transition-colors hover:text-[#042C53] sm:text-base lg:text-lg"
-            >
-              <span className="sm:hidden">Demo</span>
-              <span className="hidden sm:inline">Request for Demo</span>
-            </a>
+            <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
+              <a
+                href="https://aitamate.com/contact.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 text-right text-sm font-semibold text-[#0d6ea3] no-underline transition-colors hover:text-[#042C53] sm:text-base lg:text-lg"
+              >
+                <span className="sm:hidden">Demo</span>
+                <span className="hidden sm:inline">Request for Demo</span>
+              </a>
+              <button
+                onClick={() => {
+                  const featuresSection = document.getElementById('features-section');
+                  if (featuresSection) {
+                    featuresSection.scrollIntoView({ behavior: 'smooth' });
+                  }
+                }}
+                className="shrink-0 text-right text-sm font-semibold text-[#0d6ea3] no-underline transition-colors hover:text-[#042C53] sm:text-base lg:text-lg"
+              >
+                <span className="sm:hidden">Features</span>
+                <span className="hidden sm:inline">Features</span>
+              </button>
+            </div>
           </div>
         </header>
 
-        <section className="relative flex min-h-[180px] flex-col items-center justify-center px-5 pb-8 pt-10 text-center sm:min-h-[200px] sm:pb-10 sm:pt-14 md:pt-16">
+        <section className="relative flex min-h-[180px] flex-col items-center justify-center px-5 pb-8 pt-10 text-center sm:min-h-[200px] sm:px-4 sm:pb-10 sm:pt-14 md:px-5 md:pt-16 lg:px-6">
           <div className="relative z-10 mx-auto w-full min-w-0 max-w-none">
             <h1 className="hero-line-1 mb-4 px-1 text-center text-lg font-bold leading-tight tracking-[-0.02em] text-[#0a3a5a] min-[360px]:text-xl sm:whitespace-nowrap sm:text-2xl md:text-3xl lg:text-5xl">
               Evidence-based assessment starts here. <span className="text-[#1a9fd6]">ProValuate</span>
@@ -309,12 +398,12 @@ export default function CoverPage() {
           </div>
         </section>
 
-        <section className="flex flex-1 flex-col items-center px-5 pb-14 pt-8 sm:pb-20 sm:pt-10">
+        <section className="flex flex-1 flex-col items-center px-5 pb-14 pt-8 sm:px-4 sm:pb-20 sm:pt-10 md:px-5 lg:px-6">
           <p className="mb-8 text-base font-semibold tracking-wide text-[#1a9fd6] sm:text-lg">
             CONTINUE AS
           </p>
 
-          <div className="flex flex-col md:flex-row w-full max-w-6xl gap-4 md:gap-5 cards-container">
+          <div className="flex flex-col md:flex-row w-full max-w-7xl gap-4 md:gap-5 cards-container">
             {roles.map((role, i) => (
               <div
                 key={role.id}
@@ -391,6 +480,90 @@ export default function CoverPage() {
                 </button>
               </div>
             ))}
+          </div>
+
+          {/* Feature Tabs Section */}
+          <div id="features-section" className="mt-16 w-full max-w-7xl -mx-5 sm:-mx-4 md:-mx-5 lg:-mx-6 px-0 sm:px-0">
+            <h2 className="text-center text-2xl font-bold text-[#0a3a5a] mb-8">Explore Our Features</h2>
+            
+            {/* Tab Navigation */}
+            <div className="flex flex-wrap justify-center gap-4 mb-8">
+              <div 
+                className={`feature-tab px-6 py-3 rounded-xl bg-white border-2 font-semibold transition-all ${
+                  activeTab === 'cv-screening' 
+                    ? 'border-[#1a9fd6] text-white active' 
+                    : 'border-gray-200 text-gray-600'
+                }`}
+                onClick={() => setActiveTab('cv-screening')}
+              >
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                  </svg>
+                  CV SCREENING
+                </div>
+              </div>
+              <div 
+                className={`feature-tab px-6 py-3 rounded-xl bg-white border-2 font-semibold transition-all ${
+                  activeTab === 'resume-ingestion' 
+                    ? 'border-[#1a9fd6] text-white active' 
+                    : 'border-gray-200 text-gray-600'
+                }`}
+                onClick={() => setActiveTab('resume-ingestion')}
+              >
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+                  </svg>
+                  RESUME INGESTION
+                </div>
+              </div>
+              <div 
+                className={`feature-tab px-6 py-3 rounded-xl bg-white border-2 font-semibold transition-all ${
+                  activeTab === 'dynamic-interview' 
+                    ? 'border-[#1a9fd6] text-white active' 
+                    : 'border-gray-200 text-gray-600'
+                }`}
+                onClick={() => setActiveTab('dynamic-interview')}
+              >
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                  </svg>
+                  DYNAMIC INTERVIEW
+                </div>
+              </div>
+            </div>
+
+            {/* Demo Content Container */}
+            <div className="demo-content">
+              <div className="tab-content w-full h-full overflow-visible">
+                {activeTab === 'cv-screening' && (
+                  <iframe 
+                    src="CV Screening.html" 
+                    className="w-full h-full border-0 rounded-lg"
+                    style={{ height: '90vh', minHeight: '600px' }}
+                    title="CV Screening Demo"
+                  />
+                )}
+                {activeTab === 'resume-ingestion' && (
+                  <iframe 
+                    src="provaluate-ingestion-hub.html" 
+                    className="w-full h-full border-0 rounded-lg"
+                    style={{ height: '90vh', minHeight: '600px' }}
+                    title="Resume Ingestion Demo"
+                  />
+                )}
+                {activeTab === 'dynamic-interview' && (
+                  <iframe 
+                    src="Interview Session.html" 
+                    className="w-full h-full border-0 rounded-lg"
+                    style={{ height: '90vh', minHeight: '600px' }}
+                    title="Dynamic Interview Demo"
+                  />
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="mt-8 pt-2">

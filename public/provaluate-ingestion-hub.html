@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProValuate — Resume Ingestion Hub</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --pv:       #0a4a8c;
+  --pv2:      #1a7fd4;
+  --pv3:      #3fa0f0;
+  --bg:       #f0f5fc;
+  --bg2:      #e4edf9;
+  --card:     #ffffff;
+  --t1:       #0d1f38;
+  --t2:       #4a6080;
+  --t3:       #8fa4be;
+  --border:   rgba(10,74,140,0.12);
+  --border2:  rgba(10,74,140,0.22);
+  --shadow:   0 2px 20px rgba(10,74,140,0.09);
+  --shadow2:  0 8px 40px rgba(10,74,140,0.14);
+  --gm:       #EA4335;
+  --ol:       #0078D4;
+  --zo:       #E42527;
+  --li:       #0077B5;
+  --ok:       #22c55e;
+  --warn:     #f59e0b;
+}
+
+html, body {
+  width: 100%; height: 100vh;
+  background: var(--bg);
+  font-family: 'DM Sans', sans-serif;
+  color: var(--t1);
+  overflow: hidden;
+}
+
+/* ── PAGE WRAPPER ── */
+.page {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 0 0px;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(107,114,128,0.08) 0%, transparent 60%),
+    linear-gradient(180deg, #f9fafb 0%, #f3f4f6 50%, #e5e7eb 100%);
+}
+
+/* ── NAVBAR ── */
+.nav {
+  width: 100%;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 0 40px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(12px);
+  position: sticky; top: 0; z-index: 100;
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 16px; font-weight: 700; color: var(--pv);
+  letter-spacing: -0.01em;
+}
+.nav-logo-icon {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, var(--pv) 0%, var(--pv2) 100%);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-size: 13px; font-weight: 800;
+}
+.nav-badge {
+  margin-left: 12px;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--pv2);
+  background: rgba(26,127,212,0.1);
+  border: 1px solid rgba(26,127,212,0.2);
+  border-radius: 100px;
+  padding: 2px 10px;
+}
+
+/* ── HEADER ── */
+.header {
+  text-align: center;
+  padding: 36px 24px 10px;
+}
+.header-eyebrow {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--pv2);
+  margin-bottom: 14px;
+}
+.header-h1 {
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 700;
+  color: var(--pv);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  margin-bottom: 16px;
+}
+.header-h1 span {
+  background: linear-gradient(135deg, var(--pv) 0%, var(--pv3) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.header-sub {
+  font-size: 15px; line-height: 1.65;
+  color: var(--t2);
+  font-weight: 400;
+}
+
+/* ── STATS ROW ── */
+.stats-row {
+  display: flex; gap: 0;
+  margin: 36px 0 0;
+  border: 1px solid var(--border2);
+  border-radius: 14px;
+  background: var(--card);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.stat-item {
+  flex: 1;
+  padding: 18px 28px;
+  text-align: center;
+  border-right: 1px solid var(--border);
+}
+.stat-item:last-child { border-right: none; }
+.stat-num {
+  font-size: 26px; font-weight: 700;
+  color: var(--pv); letter-spacing: -0.02em;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.stat-label {
+  font-size: 11px; color: var(--t3);
+  font-weight: 500;
+}
+
+/* ── HUB SECTION ── */
+.hub-section {
+  width: 100%;
+  margin: 28px 0 0;
+  padding: 0 16px 0 16px;
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(120px, 1fr) minmax(280px, 560px);
+  gap: 0;
+  align-items: center;
+  position: relative;
+  min-height: 520px;
+  align-self: flex-start;
+}
+
+/* ── SOURCE LIST (LEFT) ── */
+.source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  z-index: 2;
+  margin-left: 0;
+  margin-right: -10px;
+  min-width: 0;
+}
+
+.source-card {
+  background: var(--card);
+  border: 1px solid var(--border2);
+  border-radius: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+}
+.source-card:hover { transform: translateX(3px); box-shadow: var(--shadow2); }
+.source-card.active { border-color: rgba(26,127,212,0.35); box-shadow: 0 0 0 3px rgba(26,127,212,0.08), var(--shadow2); }
+
+.source-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 4px;
+}
+.source-icon {
+  width: 34px; height: 34px;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.source-icon.portal { background: rgba(10,74,140,0.1); }
+.source-icon.mail   { background: rgba(234,67,53,0.1); }
+.source-icon.li     { background: rgba(0,119,181,0.1); }
+
+.source-name {
+  font-size: 13px; font-weight: 600;
+  color: var(--pv);
+}
+.source-desc {
+  font-size: 11px; color: #000000;
+  margin-left: 44px;
+  line-height: 1.4;
+}
+.source-sub-logos {
+  display: flex; gap: 6px;
+  margin-left: 44px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.sub-logo-pill {
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px 8px;
+  border-radius: 100px;
+  border: 1px solid var(--border2);
+  background: var(--bg);
+  font-size: 10px; font-weight: 600;
+  color: var(--t2);
+}
+.sub-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+}
+
+.source-count {
+  position: absolute;
+  top: 12px; right: 14px;
+  font-size: 10px; font-weight: 600;
+  color: var(--pv2);
+  background: rgba(26,127,212,0.1);
+  border: 1px solid rgba(26,127,212,0.2);
+  border-radius: 100px;
+  padding: 2px 8px;
+}
+.source-logos {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  margin-left: 44px;
+}
+.client-logo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+/* ── SVG CANVAS (CENTER) ── */
+.svg-canvas {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 520px;
+  min-width: 0;
+}
+.svg-canvas svg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  overflow: visible;
+}
+
+/* ── HUB NODE (CENTER) ── */
+.hub-node {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.hub-rings {
+  position: absolute;
+  width: 130px; height: 130px;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.hub-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(26,127,212,0.15);
+  animation: ringPulse 2.8s ease-in-out infinite;
+}
+.hub-ring:nth-child(1) { width: 90px; height: 90px; top: 20px; left: 20px; animation-delay: 0s; }
+.hub-ring:nth-child(2) { width: 115px; height: 115px; top: 7px; left: 7px; animation-delay: 0.4s; border-color: rgba(26,127,212,0.09); }
+.hub-ring:nth-child(3) { width: 140px; height: 140px; top: -5px; left: -5px; animation-delay: 0.8s; border-color: rgba(26,127,212,0.05); }
+
+@keyframes ringPulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.04); }
+}
+
+.hub-circle {
+  width: 76px; height: 76px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--pv) 0%, var(--pv2) 100%);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 6px rgba(26,127,212,0.15), 0 8px 32px rgba(10,74,140,0.3);
+  position: relative;
+  z-index: 2;
+}
+.hub-pv {
+  font-size: 22px; font-weight: 800;
+  color: white;
+  letter-spacing: -0.04em;
+}
+.hub-label {
+  font-size: 11px; font-weight: 600;
+  color: var(--pv);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+  margin-top: 10px;
+}
+.hub-sublabel {
+  font-size: 10px; color: var(--t3);
+  text-align: center;
+}
+
+/* ── SCORECARD (RIGHT) ── */
+.scorecard-wrap {
+  position: relative;
+  z-index: 2;
+  margin-left: -10px;
+  min-width: 0;
+}
+.scorecard {
+  background: var(--card);
+  border: 1px solid var(--border2);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow2);
+  font-size: 11px;
+  width: 100%;
+}
+
+.sc-header {
+  display: flex; align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+}
+.sc-avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--pv) 0%, var(--pv2) 100%);
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-size: 12px; font-weight: 700;
+  flex-shrink: 0;
+}
+.sc-name { font-size: 13px; font-weight: 700; color: var(--t1); }
+.sc-role { font-size: 10px; color: var(--t3); margin-top: 1px; }
+.sc-score-badge {
+  margin-left: auto;
+  text-align: right;
+}
+.sc-score-num {
+  font-size: 26px; font-weight: 800;
+  color: var(--pv);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.sc-score-label { font-size: 9px; color: var(--t3); }
+.sc-rec-pill {
+  background: rgba(245,158,11,0.12);
+  border: 1px solid rgba(245,158,11,0.3);
+  color: #b45309;
+  font-size: 9px; font-weight: 700;
+  border-radius: 100px;
+  padding: 3px 8px;
+  margin-bottom: 4px;
+  white-space: nowrap;
+}
+
+/* Criteria bars */
+.sc-bars {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sc-bar-top {
+  display: flex; justify-content: space-between;
+  margin-bottom: 4px;
+}
+.sc-bar-name { font-size: 9px; font-weight: 500; color: var(--t1); }
+.sc-bar-meta { font-size: 8px; color: var(--t3); }
+.sc-bar-track {
+  height: 5px;
+  background: var(--bg2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.sc-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--pv) 0%, var(--pv3) 100%);
+  transition: width 1s ease;
+}
+.sc-bar-fill.low {
+  background: linear-gradient(90deg, #ef4444 0%, #f87171 100%);
+  width: 12% !important;
+}
+.sc-bar-fill.mid {
+  background: linear-gradient(90deg, var(--warn) 0%, #fbbf24 100%);
+}
+
+/* Strengths / Shortcomings */
+.sc-sections {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 10px;
+}
+.sc-section-title {
+  font-size: 10px; font-weight: 700;
+  color: #000000;
+  margin-bottom: 4px;
+}
+.sc-bullet {
+  display: flex; align-items: flex-start; gap: 5px;
+  font-size: 8.5px; color: #000000;
+  line-height: 1.3;
+  margin-bottom: 2px;
+}
+.sc-bullet::before {
+  content: '—';
+  color: var(--t3);
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
+/* Recommendation */
+.sc-recommendation {
+  padding: 10px 14px;
+  background: rgba(10,74,140,0.03);
+}
+.sc-rec-title {
+  font-size: 10px; font-weight: 700;
+  color: var(--t1);
+  margin-bottom: 5px;
+}
+.sc-rec-row {
+  display: flex; gap: 4px;
+  align-items: flex-start;
+  font-size: 9.5px;
+  color: var(--t2);
+  line-height: 1.4;
+  margin-bottom: 2px;
+}
+.sc-rec-key {
+  font-weight: 600; color: var(--t1);
+  flex-shrink: 0;
+}
+
+/* Powered badge */
+.sc-powered {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  background: rgba(26,127,212,0.05);
+  border-top: 1px solid var(--border);
+  font-size: 9px; color: var(--t3);
+}
+.sc-ai-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 5px rgba(34,197,94,0.6);
+  animation: blink 1.6s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ── PATHS ── */
+.conn-path {
+  fill: none;
+  stroke: url(#lineGrad);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+  opacity: 0.4;
+  animation: dashFlow 2s linear infinite;
+}
+@keyframes dashFlow { to { stroke-dashoffset: -20; } }
+
+/* animated pulse dots on paths */
+.pulse-dot {
+  r: 3.5;
+  fill: var(--pv2);
+  opacity: 0;
+  animation: pulseDot 2.4s ease-in-out infinite;
+}
+
+/* ── BOTTOM FEATURES ── */
+.features {
+  width: 100%;
+  max-width: 1140px;
+  margin: 48px auto 0;
+  padding: 0 24px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.feature-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 20px;
+  transition: box-shadow 0.2s;
+}
+.feature-card:hover { box-shadow: var(--shadow2); }
+.feature-icon {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  background: rgba(26,127,212,0.08);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  margin-bottom: 12px;
+}
+.feature-name {
+  font-size: 14px; font-weight: 700;
+  color: #3498db;
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+.feature-desc {
+  font-size: 11px; color: #000000;
+  line-height: 1.4;
+}
+
+/* ── ANIMINS ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.ani-1 { animation: fadeUp 0.6s 0.1s ease both; }
+.ani-2 { animation: fadeUp 0.6s 0.25s ease both; }
+.ani-3 { animation: fadeUp 0.6s 0.4s ease both; }
+.ani-4 { animation: fadeUp 0.6s 0.5s ease both; }
+.ani-5 { animation: fadeUp 0.6s 0.65s ease both; }
+.sc-bar-fill { animation: barGrow 1.2s ease both; }
+@keyframes barGrow {
+  from { width: 0 !important; }
+}
+
+
+.bottom-left-image{
+  position:absolute;
+  bottom:20px;
+  right:20px;
+  width:clamp(80px,8vw,120px);
+  height:auto;
+  opacity:0.8;
+  z-index:10;
+  pointer-events:none;
+}
+
+/* Floating card */
+.float-card {
+  position: absolute;
+  background: var(--card);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 8px 12px;
+  box-shadow: var(--shadow);
+  font-size: 10px;
+  color: var(--t2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  animation: floatBob 3s ease-in-out infinite;
+  z-index: 5;
+  white-space: nowrap;
+}
+.float-card .dot { width:7px;height:7px;border-radius:50%;background:var(--ok);animation: blink 1.4s infinite; }
+@keyframes floatBob {
+  0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)}
+}
+
+/* ── PUT THIS AT THE TOP LEVEL, outside any @media block ── */
+@keyframes vertLoop {
+  0%   { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+
+/* ═══════════════════════════════════════
+   MOBILE-ONLY OVERRIDES  (≤ 768px)
+═══════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Lock the outer page — no more body scroll */
+  html, body {
+    overflow: hidden !important;
+    height: 100vh !important;
+  }
+
+  .page {
+    height: 100vh;
+    overflow: hidden;
+    padding-bottom: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Compress header */
+  .header {
+    padding: 16px 16px 8px;
+    flex-shrink: 0;
+  }
+  .header-h1 { font-size: 20px; margin-bottom: 8px; }
+  .header-sub { font-size: 12px; line-height: 1.4; }
+
+  /* Hub section fills remaining space */
+  .hub-section {
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 16px;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+    gap: 0;
+    margin-top: 0;
+  }
+
+  /* Make scorecard-wrap fill all remaining space */
+  .scorecard-wrap {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .scorecard {
+    height: 100%;
+    overflow-y: auto;
+  }
+
+  /* Marquee viewport — tighter */
+  .source-list {
+    width: 100%;
+    height: 160px;
+    flex-shrink: 0;
+    overflow: hidden;
+    position: relative;
+    margin-right: 0;
+    display: block !important;
+    animation: none;
+    mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
+  }
+
+  .marquee-track {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: vertLoop 4s linear infinite;
+  }
+  .marquee-track:hover { animation-play-state: paused; }
+
+  .source-list .source-desc,
+  .source-list .source-sub-logos { display: none !important; }
+  
+  /* Hide all logos except email logos */
+  .source-list .source-logos:not(.email-logos) { display: none !important; }
+  
+  /* Show email logos beside the text */
+  .source-list .email-logos {
+    display: flex !important;
+    gap: 4px;
+    margin-left: 8px;
+    align-items: center;
+  }
+  
+  .source-list .email-logos .client-logo {
+    width: 16px;
+    height: 16px;
+  }
+  
+  /* Adjust header to accommodate logos */
+  .source-list .source-header {
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* SVG canvas — compact */
+  .svg-canvas {
+    width: 100% !important;
+    height: 160px !important;
+    flex-shrink: 0;
+    position: relative !important;
+    display: block !important;
+  }
+
+  /* Scorecard — fills remaining space, scrolls INTERNALLY */
+  .scorecard-wrap {
+    width: 100%;
+    margin-left: 0;
+    flex: 1;
+    min-height: 0;       /* critical — lets flex child shrink */
+    overflow: hidden;
+    border-radius: 16px;
+  }
+
+  .scorecard {
+    height: 100%;
+    overflow-y: auto;    /* internal scroll lives here */
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Scorecard sections stack vertically */
+  .sc-sections > div {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-template-columns: unset !important;
+  }
+
+  .features { grid-template-columns: 1fr !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  
+  <!-- HEADER -->
+  <div class="header">
+    <h1 class="header-h1 ani-2">Every resume, every source, one intelligent pipeline.</h1>
+    <p class="header-sub ani-3">ProValuate connects to your Career Portal, email clients, and LinkedIn to automatically collect, parse, and assess CVs — delivering a rich scorecard for every candidate.</p>
+
+  </div>
+
+  <!-- HUB SECTION -->
+  <div class="hub-section ani-5">
+
+    <!-- LEFT: SOURCE CARDS -->
+    <div class="source-list">
+
+      <!-- Career Portal -->
+      <div class="source-card active" id="src0">
+        <div class="source-header">
+          <div class="source-icon portal">🌐</div>
+          <div class="source-name">Career Portal</div>
+        </div>
+        <div class="source-desc">Create your career portal provaluate.aitamate.com/careers to get candidate profiles assessed</div>
+      </div>
+
+      <!-- Mail -->
+      <div class="source-card" id="src1">
+        <div class="source-header">
+          <div class="source-icon mail">✉️</div>
+          <div class="source-name">Email Inbox</div>
+          <div class="source-logos email-logos">
+            <div>
+              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Gmail_icon_%282020%29.svg/3840px-Gmail_icon_%282020%29.svg.png" alt="Gmail" class="client-logo">
+            </div>
+            <div>
+              <img src="https://download.logo.wine/logo/Microsoft_Outlook/Microsoft_Outlook-Logo.wine.png" alt="Outlook" class="client-logo">
+            </div>
+            <div>
+              <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQndyuiN9PIKxmRqWtZ35r9Un_Sv9kRTc_7cA&s" alt="Zoho" class="client-logo">
+            </div>
+          </div>
+        </div>
+        <div class="source-desc">We support cv attachments direct ingestion through our plugins that support services like Gmail , Outlook , Zoho</div>
+      </div>
+
+      <!-- LinkedIn -->
+      <div class="source-card" id="src2">
+        <div class="source-header">
+          <div class="source-icon li">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/LinkedIn_icon.svg/3840px-LinkedIn_icon.svg.png" alt="LinkedIn" style="width: 20px; height: 20px; object-fit: contain;">
+          </div>
+          <div class="source-name">LinkedIn</div>
+        </div>
+        <div class="source-desc">Directly assess profiles like https://www.linkedin.com/in/craig-bruder89 with our plugin</div>
+      </div>
+
+    </div>
+
+    <!-- CENTER: SVG + HUB -->
+    <div class="svg-canvas" style="position:relative">
+
+
+      <!-- SVG Lines -->
+      <svg viewBox="0 0 500 520" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#1a7fd4" stop-opacity="0.2"/>
+            <stop offset="50%" stop-color="#1a7fd4" stop-opacity="0.7"/>
+            <stop offset="100%" stop-color="#3fa0f0" stop-opacity="0.3"/>
+          </linearGradient>
+          <linearGradient id="lineGradR" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#3fa0f0" stop-opacity="0.3"/>
+            <stop offset="50%" stop-color="#1a7fd4" stop-opacity="0.7"/>
+            <stop offset="100%" stop-color="#1a7fd4" stop-opacity="0.2"/>
+          </linearGradient>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+            <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- Left connection lines: source cards → hub -->
+        <!-- src0 (top): y≈105, hub center y=260 -->
+        <path class="conn-path" d="M 10 105 C 100 105, 120 260, 220 260" style="animation-delay:0s"/>
+        <!-- src1 (mid): y≈260 -->
+        <path class="conn-path" d="M 10 260 L 220 260" style="animation-delay:0.4s; stroke: rgba(26,127,212,0.55); stroke-dasharray: 6 4;"/>
+        <!-- src2 (bot): y≈415 -->
+        <path class="conn-path" d="M 10 415 C 100 415, 120 260, 220 260" style="animation-delay:0.8s"/>
+
+        <!-- Right connection line: hub → scorecard -->
+        <path class="conn-path" d="M 280 260 L 490 260" style="animation-delay:0.2s; stroke: #1a7fd4;"/>
+
+        <!-- Animated pulse dots on left lines -->
+        <circle r="4" fill="#1a7fd4" filter="url(#glow)" opacity="0">
+          <animate attributeName="opacity" from="0" to="0.85" begin="0s" dur="0.001s" fill="freeze"/>
+          <animateMotion dur="2.2s" repeatCount="indefinite" begin="0s">
+            <mpath href="#path0"/>
+          </animateMotion>
+        </circle>
+        <path id="path0" d="M 10 105 C 100 105, 120 260, 220 260" fill="none"/>
+
+        <circle r="4" fill="#1a7fd4" filter="url(#glow)" opacity="0">
+          <animate attributeName="opacity" from="0" to="0.85" begin="0.6s" dur="0.001s" fill="freeze"/>
+          <animateMotion dur="2.2s" repeatCount="indefinite" begin="0.6s">
+            <mpath href="#path1"/>
+          </animateMotion>
+        </circle>
+        <path id="path1" d="M 10 260 L 220 260" fill="none"/>
+
+        <circle r="4" fill="#1a7fd4" filter="url(#glow)" opacity="0">
+          <animate attributeName="opacity" from="0" to="0.85" begin="1.1s" dur="0.001s" fill="freeze"/>
+          <animateMotion dur="2.2s" repeatCount="indefinite" begin="1.1s">
+            <mpath href="#path2"/>
+          </animateMotion>
+        </circle>
+        <path id="path2" d="M 10 415 C 100 415, 120 260, 220 260" fill="none"/>
+
+        <!-- Pulse dot on right line -->
+        <circle r="4" fill="#3fa0f0" filter="url(#glow)" opacity="0">
+          <animate attributeName="opacity" from="0" to="0.85" begin="0.3s" dur="0.001s" fill="freeze"/>
+          <animateMotion dur="1.8s" repeatCount="indefinite" begin="0.3s">
+            <mpath href="#path3"/>
+          </animateMotion>
+        </circle>
+        <path id="path3" d="M 280 260 L 490 260" fill="none"/>
+
+              </svg>
+
+      <!-- Hub label -->
+      <div style="
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border-radius: 22px;
+  padding: 14px;
+  box-shadow: 0 2px 16px rgba(10,74,140,0.10);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+">
+  <img src="https://i.ibb.co/67B51F8v/favicon.png" alt="favicon" style="width:90px; height:auto; display:block;">
+</div>
+
+    </div>
+
+    <!-- RIGHT: SCORECARD -->
+    <div class="scorecard-wrap">
+      <div class="scorecard">
+
+        <!-- Header -->
+        <div class="sc-header">
+          <div class="sc-avatar">S</div>
+          <div>
+            <div class="sc-name">Soham Amin</div>
+            <div class="sc-role">Overall Match Assessment</div>
+          </div>
+          <div class="sc-score-badge">
+            <div class="sc-rec-pill">Review Further</div>
+            <div class="sc-score-num">53%</div>
+            <div class="sc-score-label">Overall Score</div>
+          </div>
+        </div>
+
+        <!-- Criteria Bars -->
+        <div class="sc-bars">
+          <div class="sc-bar-row">
+            <div class="sc-bar-top">
+              <span class="sc-bar-name">Machine Learning & Modeling Expertise</span>
+              <span class="sc-bar-meta">7 · Wt 30%</span>
+            </div>
+            <div class="sc-bar-track"><div class="sc-bar-fill" style="width:70%"></div></div>
+          </div>
+          <div class="sc-bar-row">
+            <div class="sc-bar-top">
+              <span class="sc-bar-name">Applied ML Industry Experience</span>
+              <span class="sc-bar-meta">1.2 · Wt 25%</span>
+            </div>
+            <div class="sc-bar-track"><div class="sc-bar-fill low"></div></div>
+          </div>
+          <div class="sc-bar-row">
+            <div class="sc-bar-top">
+              <span class="sc-bar-name">Mathematics, Statistics & CS Foundation</span>
+              <span class="sc-bar-meta">8.8 · Wt 15%</span>
+            </div>
+            <div class="sc-bar-track"><div class="sc-bar-fill" style="width:88%"></div></div>
+          </div>
+          <div class="sc-bar-row">
+            <div class="sc-bar-top">
+              <span class="sc-bar-name">ML Communication & Collaboration Skills</span>
+              <span class="sc-bar-meta">7.3 · Wt 20%</span>
+            </div>
+            <div class="sc-bar-track"><div class="sc-bar-fill" style="width:73%"></div></div>
+          </div>
+          <div class="sc-bar-row">
+            <div class="sc-bar-top">
+              <span class="sc-bar-name">Career Stability & Role Continuity</span>
+              <span class="sc-bar-meta">1.1 · Wt 10%</span>
+            </div>
+            <div class="sc-bar-track"><div class="sc-bar-fill low"></div></div>
+          </div>
+        </div>
+
+        <!-- Strengths + Shortcomings + Clarifications -->
+        <div class="sc-sections">
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+            <div>
+              <div class="sc-section-title" style="color: #34C759;">Strengths</div>
+              <div class="sc-bullet">Strong academic foundation with a Bachelor of Engineering in Artificial Intelligence and Data Science.</div>
+              <div class="sc-bullet">Proficiency in foundational technical skills including Python, ML, AI, pandas, NumPy, Matplotlib, Plotly, and Seaborn.</div>
+              <div class="sc-bullet">Clear understanding and listing of critical functional skills such as data pipeline development, feature engineering, data management, and automated reporting.</div>
+              <div class="sc-bullet">Possesses valuable soft skills like a problem-solving mindset and a balance between practical coding and scientific thinking.</div>
+              <div class="sc-bullet">City match with job requirements (Mumbai).</div>
+            </div>
+            <div>
+              <div class="sc-section-title" style="color: #6B7280;">Clarifications</div>
+              <div class="sc-bullet">The 'Coordinator' role's relevance to ML or data pipeline development is unclear without further details.</div>
+              <div class="sc-bullet">While functional skills like 'Data pipeline development' are listed, the professional context or depth of this experience is not evident from the job history.</div>
+              <div class="sc-bullet">Specific experience with advanced ML frameworks (scikit-learn, TensorFlow, PyTorch) or detailed algorithm application is not explicitly mentioned.</div>
+            </div>
+            <div>
+              <div class="sc-section-title" style="color: #FF3B3F;">Shortcomings</div>
+              <div class="sc-bullet">Lack of professional applied ML industry experience, particularly in production environments or end-to-end ML pipelines.</div>
+              <div class="sc-bullet">Limited job history (one 7-month coordinator role) indicates minimal career stability as per the parameter definition.</div>
+              <div class="sc-bullet">No direct evidence of experience with ML model deployment, monitoring, or assessing business impact.</div>
+            </div>
+          </div>
+          <div style="margin-top: 16px;">
+            <div class="sc-section-title" style="color: #2196F3;">Summary</div>
+            <div class="sc-bullet">Soham Amin presents as a promising candidate with a solid academic background in AI and Data Science and a strong set of foundational technical and functional skills relevant to ML engineering. However, the primary gap lies in the absence of significant professional applied ML industry experience, especially regarding production systems and model lifecycle management. While the technical readiness is high for an entry-level role, a deeper dive into their academic projects is necessary to validate practical application.</div>
+          </div>
+        </div>
+
+
+        
+      </div>
+    </div>
+
+  </div>
+
+  
+</div>
+
+<script>
+// Interactive source card hover — highlight active card
+const cards = document.querySelectorAll('.source-card');
+cards.forEach((card, i) => {
+  card.addEventListener('mouseenter', () => {
+    cards.forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+  });
+});
+
+// Stagger the bar animations on load
+document.querySelectorAll('.sc-bar-fill').forEach((el, i) => {
+  el.style.animationDelay = `${0.6 + i * 0.12}s`;
+});
+
+(function () {
+  if (window.innerWidth > 768) return;
+
+  if (window.innerWidth <= 768) {
+  const sourceList = document.querySelector('.source-list');
+  const originalCards = Array.from(sourceList.querySelectorAll('.source-card'));
+
+  // Create inner moving track
+  const track = document.createElement('div');
+  track.className = 'marquee-track';
+
+  // Move originals into track
+  originalCards.forEach(card => track.appendChild(card));
+
+  // Append clones (makes the seamless 50% loop work)
+  originalCards.forEach(card => {
+    const clone = card.cloneNode(true);
+    clone.classList.remove('active');
+    track.appendChild(clone);
+  });
+
+  sourceList.appendChild(track);
+}
+
+  /* ── 2. VERTICAL SVG — reuse existing paths, tighter spread ── */
+  const svgCanvas = document.querySelector('.svg-canvas');
+  const svg       = svgCanvas.querySelector('svg');
+  const hubDiv    = svgCanvas.querySelector('div[style]');
+
+  // Tighter viewBox for mobile (narrower branch spread)
+  // Hub at (160, 120), canvas 320×240
+  svg.setAttribute('viewBox', '0 0 320 240');
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+  // Three converging branches + one output line
+  // Spread only 70px either side of center → feel compact on phone
+  const mobilePaths = [
+    'M 90 0 C 90 60, 160 60, 160 120',   // left card → hub
+    'M 160 0 L 160 120',                   // centre card → hub (straight)
+    'M 230 0 C 230 60, 160 60, 160 120',  // right card → hub
+    'M 160 120 L 160 240',                 // hub → scorecard
+  ];
+
+  // Update dashed connector paths
+  svg.querySelectorAll('.conn-path').forEach((p, i) => {
+    if (mobilePaths[i]) p.setAttribute('d', mobilePaths[i]);
+  });
+
+  // Update hidden mpath elements (used by animateMotion pulse dots)
+  svg.querySelectorAll('path[id^="path"]').forEach((p, i) => {
+    if (mobilePaths[i]) p.setAttribute('d', mobilePaths[i]);
+  });
+
+  // Rotate gradients from horizontal → vertical
+  ['#lineGrad', '#lineGradR'].forEach(id => {
+    const g = svg.querySelector(id);
+    if (!g) return;
+    g.setAttribute('x1', '0'); g.setAttribute('y1', '0');
+    g.setAttribute('x2', '0'); g.setAttribute('y2', '1');
+  });
+
+  // Keep hub div centered — sits at y=120 in a 240px tall canvas = 50%
+  Object.assign(hubDiv.style, {
+    position:  'absolute',
+    top:       '50%',
+    left:      '50%',
+    transform: 'translate(-50%, -50%)',
+  });
+
+})();
+</script>
+
+</body>
+</html>

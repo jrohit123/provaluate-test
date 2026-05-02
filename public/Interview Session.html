@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Provaluate Interview Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Blinking cursor effect for typing animation */
+        .cursor::after {
+            content: '|';
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+    </style>
+</head>
+<body class="bg-white h-screen flex flex-col m-0 p-0 font-sans overflow-hidden">
+
+    <header class="w-full bg-sky-700 p-4 flex justify-between items-center text-white z-10 shrink-0">
+        <div>
+            <h1 class="text-xl font-semibold">Provaluate</h1>
+            <p class="text-sm text-sky-200">Smart Interview Assessment</p>
+        </div>
+    </header>
+
+    <main class="w-full flex-1 flex flex-col p-4 sm:p-6 gap-4 overflow-y-auto bg-white">
+        
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 shrink-0">
+            
+            <div class="lg:col-span-2 bg-sky-50 rounded-xl border border-sky-100 p-4 h-80 flex flex-col justify-center items-center text-center relative">
+                <div id="ai-status" class="text-sky-600 text-sm font-medium absolute top-4 hidden">AI is speaking...</div>
+                <p id="question-text" class="text-gray-800 font-medium text-lg px-2"></p>
+            </div>
+
+            <div class="lg:col-span-3 bg-black rounded-xl overflow-hidden h-80 relative shadow-inner">
+                <img src="https://t4.ftcdn.net/jpg/03/64/21/11/360_F_364211147_1qgLVxv1Tcq0Ohz3FawUfrtONzz8nq3e.jpg" alt="Candidate Feed" class="w-full h-full object-cover object-[50%_25%] opacity-90">
+                
+                <div id="recording-overlay" class="absolute top-4 left-4 flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-full hidden transition-opacity">
+                    <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                    <span class="text-white text-xs font-medium tracking-wide">REC</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="w-full relative flex-1 min-h-[160px]">
+            <textarea id="transcript-box" readonly placeholder="Your transcribed answer will appear here once recording starts..." 
+                class="w-full h-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-gray-800 text-lg resize-none focus:outline-none transition-all"></textarea>
+        </div>
+
+        <div class="flex justify-center items-center gap-4 py-4 border-t border-gray-100 shrink-0">
+            <button id="record-btn" disabled class="flex items-center gap-2 bg-[#1e5da8] text-white px-6 py-3 rounded-xl font-medium transition-colors shadow-sm cursor-default">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+                <span id="record-text">Auto Record</span>
+            </button>
+            <button id="submit-btn" disabled class="flex items-center gap-2 bg-gray-300 text-gray-500 px-6 py-3 rounded-xl font-medium transition-colors cursor-default">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                <span id="submit-text">Auto Submit</span>
+            </button>
+        </div>
+    </main>
+
+    <script>
+        // Simulated interview flow data
+        const interviewData = [
+            {
+                q: "Welcome to your frontend engineering interview. To start, can you explain the core differences between React context and state management libraries like Redux?",
+                a: "Sure. React Context is great for passing data deeply through the component tree without prop drilling, like themes or auth state. Redux is better suited for complex, frequently updating global state because it offers middleware, time-travel debugging, and prevents unnecessary re-renders more predictably."
+            },
+            {
+                q: "That makes sense. Based on your mention of unnecessary re-renders, what strategies do you use to optimize performance in a large React application?",
+                a: "I usually start by memoizing components using React.memo. For functions and values passed as props, I use useCallback and useMemo. I also implement code splitting using React.lazy and Suspense to reduce the initial bundle size."
+            },
+            {
+                q: "Excellent. Thank you for your time today. Your interview is now complete.",
+                a: ""
+            }
+        ];
+
+        const ui = {
+            questionText: document.getElementById('question-text'),
+            aiStatus: document.getElementById('ai-status'),
+            transcript: document.getElementById('transcript-box'),
+            recordBtn: document.getElementById('record-btn'),
+            recordText: document.getElementById('record-text'),
+            submitBtn: document.getElementById('submit-btn'),
+            submitText: document.getElementById('submit-text'),
+            recordingOverlay: document.getElementById('recording-overlay')
+        };
+
+        // --- Helper: Typewriter Effect ---
+        async function typeText(element, text, speed = 40, isInput = false) {
+            element.innerHTML = '';
+            if(!isInput) element.classList.add('cursor');
+            
+            for (let i = 0; i < text.length; i++) {
+                if(isInput) {
+                    element.value += text.charAt(i);
+                } else {
+                    element.innerHTML += text.charAt(i);
+                }
+                if(isInput) element.scrollTop = element.scrollHeight;
+                
+                await new Promise(r => setTimeout(r, speed));
+            }
+            if(!isInput) element.classList.remove('cursor');
+        }
+
+        // --- Core Automation Flow (Infinite Loop) ---
+        async function runAutomatedInterview() {
+            while (true) {
+                // Reset UI for a fresh loop
+                ui.transcript.value = '';
+                ui.questionText.innerHTML = '';
+                ui.recordBtn.classList.remove('hidden');
+                ui.submitBtn.classList.remove('hidden');
+                
+                // Small delay before starting the flow
+                await new Promise(r => setTimeout(r, 1000));
+
+                for (let i = 0; i < interviewData.length; i++) {
+                    // 1. AI Speaks the Question
+                    ui.aiStatus.classList.remove('hidden');
+                    await typeText(ui.questionText, interviewData[i].q, 35);
+                    ui.aiStatus.classList.add('hidden');
+
+                    // If it's the final wrap-up statement
+                    if (i === interviewData.length - 1) {
+                        ui.recordBtn.classList.add('hidden');
+                        ui.submitBtn.classList.add('hidden');
+                        
+                        // Wait 4 seconds for the user to read the completion message
+                        await new Promise(r => setTimeout(r, 4000));
+                        
+                        // Break out of the FOR loop to restart the WHILE loop
+                        break; 
+                    }
+
+                    // Wait a moment before auto-recording
+                    await new Promise(r => setTimeout(r, 1500));
+
+                    // 2. Auto-Record Starts
+                    ui.recordBtn.classList.replace('bg-[#1e5da8]', 'bg-red-600');
+                    ui.recordText.innerHTML = "Recording...";
+                    ui.recordingOverlay.classList.remove('hidden');
+                    ui.transcript.value = '';
+
+                    // Transcribe the answer
+                    await typeText(ui.transcript, interviewData[i].a, 40, true);
+
+                    // Auto-Record Ends
+                    ui.recordingOverlay.classList.add('hidden');
+                    ui.recordBtn.classList.replace('bg-red-600', 'bg-gray-400');
+                    ui.recordText.innerHTML = "Finished Speaking";
+
+                    // Wait a moment before auto-submitting
+                    await new Promise(r => setTimeout(r, 1000));
+
+                    // 3. Auto-Submit Answer
+                    ui.submitBtn.classList.replace('bg-gray-300', 'bg-[#1e5da8]');
+                    ui.submitBtn.classList.replace('text-gray-500', 'text-white');
+                    ui.submitText.innerHTML = "Submitting...";
+                    
+                    ui.questionText.innerHTML = '<span class="animate-pulse">Analyzing response & generating next question...</span>';
+                    ui.transcript.value = '';
+
+                    // Simulate backend processing delay
+                    await new Promise(r => setTimeout(r, 2000));
+
+                    // Reset UI for the next iteration
+                    ui.submitBtn.classList.replace('bg-[#1e5da8]', 'bg-gray-300');
+                    ui.submitBtn.classList.replace('text-white', 'text-gray-500');
+                    ui.submitText.innerHTML = "Auto Submit";
+                    
+                    ui.recordBtn.classList.replace('bg-gray-400', 'bg-[#1e5da8]');
+                    ui.recordText.innerHTML = "Auto Record";
+                }
+            }
+        }
+
+        // Start the infinite loop when the page loads
+        window.onload = runAutomatedInterview;
+    </script>
+</body>
+</html>
