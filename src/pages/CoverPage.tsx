@@ -540,7 +540,7 @@ export default function CoverPage() {
               <div className="tab-content w-full h-full overflow-visible">
                 {activeTab === 'cv-screening' && (
                   <iframe 
-                    src="/CV Screening.html" 
+                    src="/cv-screening.html" 
                     className="w-full h-full border-0 rounded-lg"
                     style={{ height: '90vh', minHeight: '600px' }}
                     title="CV Screening Demo"
@@ -556,7 +556,7 @@ export default function CoverPage() {
                 )}
                 {activeTab === 'dynamic-interview' && (
                   <iframe 
-                    src="/Interview Session.html" 
+                    src="/interview-session.html" 
                     className="w-full h-full border-0 rounded-lg"
                     style={{ height: '90vh', minHeight: '600px' }}
                     title="Dynamic Interview Demo"
