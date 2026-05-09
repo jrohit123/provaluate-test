@@ -892,19 +892,47 @@ const FinalResults = () => {
       
       if (response.ok) {
         const data = await response.json();
+        console.log('📊 Final results data loaded:', data);
+        console.log('📊 Interview data:', data.interview);
+        console.log('📊 Interview type from API:', data.interview?.interview_type);
+        console.log('📊 Competencies:', data.parameters?.length);
+        console.log('📊 Raw answers from API:', data.answers?.length);
         
         // Try to get competency scores data directly to extract real feedback
         let realFeedbackData = null;
         try {
+          console.log('🔍 Attempting to fetch competency scores data...');
+          console.log('🔍 Data structure keys:', Object.keys(data));
+          console.log('🔍 Custom competencies:', data.custom_parameters);
+          console.log('🔍 Standard competencies:', data.standard_parameters);
+          console.log('🔍 Competencies array:', data.parameters);
           
           // Check if competencies array contains the detailed data
           if (data.parameters && data.parameters.length > 0) {
+            console.log('🔍 First competency structure:', data.parameters[0]);
+            if (data.parameters[0].questions && data.parameters[0].questions.length > 0) {
+              console.log('🔍 First question structure:', data.parameters[0].questions[0]);
+            }
           }
           
                   // Use the real data from the API response
+        console.log('📊 Using real data from API response');
+        console.log('📊 Answers with video URLs:', data.answers?.map(a => ({ 
+          question_order: a.question_order, 
+          video_url: a.question_video_url 
+        })));
         
+        // Log video URLs for debugging
+        if (data.answers) {
+          data.answers.forEach((answer, index) => {
+            if (answer.question_video_url) {
+              console.log(`🎥 Answer ${index + 1} (Q${answer.question_order + 1}) has video: ${answer.question_video_url}`);
+            }
+          });
+        }
           
         } catch (paramError) {
+          console.log('⚠️ Could not load competency scores data:', paramError);
         }
         
         // Extract questions and answers from competencies with proper ordering
@@ -914,9 +942,14 @@ const FinalResults = () => {
         
         // First, check if we have questions and answers arrays from the API
         if (data.questions && data.questions.length > 0 && data.answers && data.answers.length > 0) {
+          console.log('✅ Using questions and answers arrays from API');
+          console.log('📊 Number of questions from API:', data.questions.length);
+          console.log('📊 Number of answers from API:', data.answers.length);
           
           // Use the questions array for question text and answers array for feedback
           data.questions.forEach((question, index) => {
+            console.log(`🔍 Question ${index} data:`, question);
+            console.log(`🔍 Question ${index} text:`, question.question_text);
             
             extractedQuestions.push({
               question_order: question.question_order,
@@ -927,6 +960,8 @@ const FinalResults = () => {
           });
           
           data.answers.forEach((answer, index) => {
+            console.log(`🔍 Answer ${index} data:`, answer);
+            console.log(`🎥 Answer ${index} video URL:`, answer.question_video_url);
             
             extractedAnswers.push({
               question_order: answer.question_order,
@@ -943,8 +978,12 @@ const FinalResults = () => {
             });
           });
           
+          console.log('🎯 Using real feedback from answers array');
+          console.log('📊 Sample real feedback:', extractedAnswers[0]?.feedback?.substring(0, 100) + '...');
+          console.log('🎥 Videos in extracted answers:', extractedAnswers.filter(a => a.question_video_url).length);
         } else if (data.answers && data.answers.length > 0) {
           // Fallback: if we only have answers array, try to extract question text from questions table
+          console.log('⚠️ No questions array from API, trying to fetch from questions table...');
           
           // For structured interviews or when questions array is missing, fetch from questions table
           try {
@@ -952,6 +991,7 @@ const FinalResults = () => {
             if (questionsResponse.ok) {
               const questionsData = await questionsResponse.json();
               if (questionsData.questions && Array.isArray(questionsData.questions) && questionsData.questions.length > 0) {
+                console.log('✅ Fetched questions from questions table:', questionsData.questions.length);
                 
                 // Match questions with answers by question_order
                 data.answers.forEach((answer) => {
@@ -985,6 +1025,7 @@ const FinalResults = () => {
                 });
               } else {
                 // Fallback to answer data only
+                console.log('⚠️ No questions found in questions table, using answer data');
                 data.answers.forEach((answer, index) => {
                   const questionText = answer.question_text || `Question ${(answer.question_order || 0) + 1}`;
                   
@@ -1014,6 +1055,7 @@ const FinalResults = () => {
               throw new Error('Failed to fetch questions');
             }
           } catch (error) {
+            console.error('Error fetching questions from API:', error);
             // Fallback: use answer data only
             data.answers.forEach((answer, index) => {
               const questionText = answer.question_text || `Question ${(answer.question_order || 0) + 1}`;
@@ -1041,8 +1083,10 @@ const FinalResults = () => {
             });
           }
         } else {
+          console.log('⚠️ No questions or answers arrays from API, extracting from competencies data...');
           
           if (data.parameters && data.parameters.length > 0) {
+            console.log('🔍 Extracting from competencies data...');
             
             data.parameters.forEach((param, paramIndex) => {
               if (param.questions && Array.isArray(param.questions)) {
@@ -1061,6 +1105,7 @@ const FinalResults = () => {
                     const individualScores = realFeedbackData[param.key].individual_question_scores;
                     if (individualScores && individualScores[qIndex]) {
                       realFeedback = individualScores[qIndex].feedback;
+                      console.log(`🎯 Found real feedback for ${param.key} question ${qIndex}:`, realFeedback.substring(0, 100) + '...');
                     }
                   }
                   
@@ -1226,13 +1271,25 @@ const FinalResults = () => {
            parameters: competenciesObject
          };
          
+         console.log('📊 Extracted questions:', extractedQuestions.length);
+         console.log('📊 Extracted answers:', extractedAnswers.length);
+         console.log('📊 Sample answer feedback:', extractedAnswers[0]?.feedback?.substring(0, 100) + '...');
+         console.log('📊 Competencies object:', competenciesObject);
+         console.log('📊 Competencies keys:', Object.keys(competenciesObject));
          
+         // Debug duration data
+         console.log('🔍 Interview data:', data.interview);
+         console.log('🔍 Duration minutes from API:', data.interview?.duration_minutes);
+         console.log('🔍 Session duration from API:', data.interview?.session_duration);
+         console.log('🔍 Started at:', data.interview?.started_at);
+         console.log('🔍 Completed at:', data.interview?.completed_at);
          
          setReportData(processedData);
       } else {
         throw new Error('Failed to load final results');
       }
     } catch (error) {
+      console.error('Error loading final results:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to load final results', { id: 'load-results-error' });
     } finally {
       setLoading(false);
