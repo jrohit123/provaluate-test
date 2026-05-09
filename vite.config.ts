@@ -33,25 +33,26 @@ export default defineConfig(({ mode }) => {
       legalComments: 'none',
     },
     build: {
+      target: 'esnext',
       sourcemap: false,
-      minify: 'esbuild',
+      minify: false,
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
+        maxParallelFileOps: 1,
         output: {
           manualChunks(id) {
             if (id.includes('node_modules')) {
               if (id.includes('pdfjs-dist')) return 'vendor-pdfjs';
               if (id.includes('@react-pdf')) return 'vendor-react-pdf';
-              if (id.includes('jspdf')) return 'vendor-jspdf';
-              if (id.includes('exceljs')) return 'vendor-exceljs';
-              if (id.includes('xlsx')) return 'vendor-xlsx';
+              if (id.includes('jspdf') || id.includes('exceljs') || id.includes('xlsx')) return 'vendor-documents';
               if (id.includes('@radix-ui')) return 'vendor-radix';
               if (id.includes('socket.io') || id.includes('recordrtc')) return 'vendor-realtime';
               if (id.includes('recharts')) return 'vendor-charts';
               if (id.includes('@tiptap')) return 'vendor-tiptap';
-              if (id.includes('gsap')) return 'vendor-gsap';
-              if (id.includes('react-joyride')) return 'vendor-joyride';
-              if (id.includes('react-hot-toast')) return 'vendor-toast';
+              if (id.includes('gsap') || id.includes('react-joyride')) return 'vendor-animation';
+              if (id.includes('lucide-react')) return 'vendor-icons';
+              if (id.includes('@supabase')) return 'vendor-supabase';
+              if (id.includes('@tanstack')) return 'vendor-query';
               return 'vendor';
             }
           },
