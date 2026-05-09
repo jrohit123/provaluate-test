@@ -892,47 +892,19 @@ const FinalResults = () => {
       
       if (response.ok) {
         const data = await response.json();
-        console.log('📊 Final results data loaded:', data);
-        console.log('📊 Interview data:', data.interview);
-        console.log('📊 Interview type from API:', data.interview?.interview_type);
-        console.log('📊 Competencies:', data.parameters?.length);
-        console.log('📊 Raw answers from API:', data.answers?.length);
         
         // Try to get competency scores data directly to extract real feedback
         let realFeedbackData = null;
         try {
-          console.log('🔍 Attempting to fetch competency scores data...');
-          console.log('🔍 Data structure keys:', Object.keys(data));
-          console.log('🔍 Custom competencies:', data.custom_parameters);
-          console.log('🔍 Standard competencies:', data.standard_parameters);
-          console.log('🔍 Competencies array:', data.parameters);
           
           // Check if competencies array contains the detailed data
           if (data.parameters && data.parameters.length > 0) {
-            console.log('🔍 First competency structure:', data.parameters[0]);
-            if (data.parameters[0].questions && data.parameters[0].questions.length > 0) {
-              console.log('🔍 First question structure:', data.parameters[0].questions[0]);
-            }
           }
           
                   // Use the real data from the API response
-        console.log('📊 Using real data from API response');
-        console.log('📊 Answers with video URLs:', data.answers?.map(a => ({ 
-          question_order: a.question_order, 
-          video_url: a.question_video_url 
-        })));
         
-        // Log video URLs for debugging
-        if (data.answers) {
-          data.answers.forEach((answer, index) => {
-            if (answer.question_video_url) {
-              console.log(`🎥 Answer ${index + 1} (Q${answer.question_order + 1}) has video: ${answer.question_video_url}`);
-            }
-          });
-        }
           
         } catch (paramError) {
-          console.log('⚠️ Could not load competency scores data:', paramError);
         }
         
         // Extract questions and answers from competencies with proper ordering
@@ -942,14 +914,9 @@ const FinalResults = () => {
         
         // First, check if we have questions and answers arrays from the API
         if (data.questions && data.questions.length > 0 && data.answers && data.answers.length > 0) {
-          console.log('✅ Using questions and answers arrays from API');
-          console.log('📊 Number of questions from API:', data.questions.length);
-          console.log('📊 Number of answers from API:', data.answers.length);
           
           // Use the questions array for question text and answers array for feedback
           data.questions.forEach((question, index) => {
-            console.log(`🔍 Question ${index} data:`, question);
-            console.log(`🔍 Question ${index} text:`, question.question_text);
             
             extractedQuestions.push({
               question_order: question.question_order,
@@ -960,8 +927,6 @@ const FinalResults = () => {
           });
           
           data.answers.forEach((answer, index) => {
-            console.log(`🔍 Answer ${index} data:`, answer);
-            console.log(`🎥 Answer ${index} video URL:`, answer.question_video_url);
             
             extractedAnswers.push({
               question_order: answer.question_order,
@@ -978,12 +943,8 @@ const FinalResults = () => {
             });
           });
           
-          console.log('🎯 Using real feedback from answers array');
-          console.log('📊 Sample real feedback:', extractedAnswers[0]?.feedback?.substring(0, 100) + '...');
-          console.log('🎥 Videos in extracted answers:', extractedAnswers.filter(a => a.question_video_url).length);
         } else if (data.answers && data.answers.length > 0) {
           // Fallback: if we only have answers array, try to extract question text from questions table
-          console.log('⚠️ No questions array from API, trying to fetch from questions table...');
           
           // For structured interviews or when questions array is missing, fetch from questions table
           try {
@@ -991,7 +952,6 @@ const FinalResults = () => {
             if (questionsResponse.ok) {
               const questionsData = await questionsResponse.json();
               if (questionsData.questions && Array.isArray(questionsData.questions) && questionsData.questions.length > 0) {
-                console.log('✅ Fetched questions from questions table:', questionsData.questions.length);
                 
                 // Match questions with answers by question_order
                 data.answers.forEach((answer) => {
@@ -1025,7 +985,6 @@ const FinalResults = () => {
                 });
               } else {
                 // Fallback to answer data only
-                console.log('⚠️ No questions found in questions table, using answer data');
                 data.answers.forEach((answer, index) => {
                   const questionText = answer.question_text || `Question ${(answer.question_order || 0) + 1}`;
                   
@@ -1055,7 +1014,6 @@ const FinalResults = () => {
               throw new Error('Failed to fetch questions');
             }
           } catch (error) {
-            console.error('Error fetching questions from API:', error);
             // Fallback: use answer data only
             data.answers.forEach((answer, index) => {
               const questionText = answer.question_text || `Question ${(answer.question_order || 0) + 1}`;
@@ -1083,10 +1041,8 @@ const FinalResults = () => {
             });
           }
         } else {
-          console.log('⚠️ No questions or answers arrays from API, extracting from competencies data...');
           
           if (data.parameters && data.parameters.length > 0) {
-            console.log('🔍 Extracting from competencies data...');
             
             data.parameters.forEach((param, paramIndex) => {
               if (param.questions && Array.isArray(param.questions)) {
@@ -1105,7 +1061,6 @@ const FinalResults = () => {
                     const individualScores = realFeedbackData[param.key].individual_question_scores;
                     if (individualScores && individualScores[qIndex]) {
                       realFeedback = individualScores[qIndex].feedback;
-                      console.log(`🎯 Found real feedback for ${param.key} question ${qIndex}:`, realFeedback.substring(0, 100) + '...');
                     }
                   }
                   
@@ -1271,25 +1226,13 @@ const FinalResults = () => {
            parameters: competenciesObject
          };
          
-         console.log('📊 Extracted questions:', extractedQuestions.length);
-         console.log('📊 Extracted answers:', extractedAnswers.length);
-         console.log('📊 Sample answer feedback:', extractedAnswers[0]?.feedback?.substring(0, 100) + '...');
-         console.log('📊 Competencies object:', competenciesObject);
-         console.log('📊 Competencies keys:', Object.keys(competenciesObject));
          
-         // Debug duration data
-         console.log('🔍 Interview data:', data.interview);
-         console.log('🔍 Duration minutes from API:', data.interview?.duration_minutes);
-         console.log('🔍 Session duration from API:', data.interview?.session_duration);
-         console.log('🔍 Started at:', data.interview?.started_at);
-         console.log('🔍 Completed at:', data.interview?.completed_at);
          
          setReportData(processedData);
       } else {
         throw new Error('Failed to load final results');
       }
     } catch (error) {
-      console.error('Error loading final results:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to load final results', { id: 'load-results-error' });
     } finally {
       setLoading(false);
@@ -1317,338 +1260,7 @@ const FinalResults = () => {
 
 
 
-  const downloadReport = () => {
-    if (!reportData) return;
 
-    try {
-      // Create comprehensive report content
-      let reportContent = `INTERVIEW ASSESSMENT REPORT\n`;
-      reportContent += `================================\n\n`;
-      
-      // Interview details
-      reportContent += `CANDIDATE: ${reportData.interview?.candidate_name || 'N/A'}\n`;
-      reportContent += `POSITION: ${reportData.interview?.position || 'N/A'}\n`;
-      // Remove Interview Type from text report - not needed
-      reportContent += `OVERALL SCORE: ${formatOverallScore(resolveDisplayInterviewScore(
-        reportData.interview,
-        Array.isArray(reportData.parameters)
-          ? reportData.parameters.length
-          : reportData.parameters
-            ? Object.keys(reportData.parameters).length
-            : 0
-      ))}/10\n`;
-      reportContent += `TOTAL QUESTIONS: ${reportData.questions?.length || 0}\n`;
-      reportContent += `ASSESSMENT DATE: ${formatOrdinalDate(reportData.interview?.created_at)}\n`;
-      reportContent += `REPORT GENERATED: ${formatOrdinalDate(new Date())}\n\n`;
-      
-      // Competency scores summary
-      if (reportData.parameters && reportData.parameters.length > 0) {
-        reportContent += `COMPETENCY SCORES SUMMARY:\n`;
-        reportContent += `========================\n`;
-        reportData.parameters.forEach((param, index) => {
-          reportContent += `${index + 1}. ${param.name || param.parameter_name || 'Unknown Competency'}\n`;
-          reportContent += `   Score: ${param.score || param.averageScore || 'N/A'}/10\n`;
-          if (param.weight) reportContent += `   Weight: ${param.weight}%\n`;
-          reportContent += `\n`;
-        });
-        reportContent += `\n`;
-      }
-      
-      // Detailed assessment with all URLs
-      reportContent += `DETAILED ASSESSMENT:\n`;
-      reportContent += `===================\n\n`;
-      
-      if (reportData.questions && reportData.answers) {
-        reportData.questions.forEach((question, index) => {
-          const answer = reportData.answers.find(a => a.question_order === index);
-          if (answer) {
-            reportContent += `QUESTION ${index + 1}:\n`;
-            reportContent += `==================\n`;
-            reportContent += `Question Text: ${question.question_text}\n`;
-            reportContent += `Competency: ${question.parameter_name || question.parameter_key || 'N/A'}\n`;
-            reportContent += `Question Order: ${question.question_order + 1}\n\n`;
-            
-            reportContent += `CANDIDATE'S ANSWER:\n`;
-            reportContent += `Transcript: ${answer.transcript || 'No transcript available'}\n`;
-            reportContent += `Score: ${answer.score}/10\n`;
-            reportContent += `Competency score: ${answer.parameter_score || 'N/A'}/10\n\n`;
-            
-            reportContent += `AI FEEDBACK:\n`;
-            reportContent += `${answer.feedback || 'No feedback available'}\n\n`;
-            
-            // Media URLs
-            reportContent += `MEDIA FILES:\n`;
-            if (answer.audio_url) {
-              reportContent += `Audio Recording: ${answer.audio_url}\n`;
-            } else {
-              reportContent += `Audio Recording: Not available\n`;
-            }
-            
-            if (answer.question_video_url) {
-              reportContent += `Video Recording: ${answer.question_video_url}\n`;
-            } else {
-              reportContent += `Video Recording: Not available\n`;
-            }
-            
-            reportContent += `\n`;
-            reportContent += `----------------------------------------\n\n`;
-          }
-        });
-      }
-      
-      // Footer
-      reportContent += `\nREPORT FOOTER:\n`;
-      reportContent += `==============\n`;
-      reportContent += `This report contains the complete assessment details including:\n`;
-      reportContent += `- All questions asked during the interview\n`;
-      reportContent += `- Candidate's verbal responses (transcripts)\n`;
-      reportContent += `- Individual question scores and competency scores\n`;
-      reportContent += `- AI-generated feedback for each answer\n`;
-      reportContent += `- Direct links to audio and video recordings\n`;
-      reportContent += `- Competency-wise performance breakdown\n\n`;
-      reportContent += `Generated by AI Interview System\n`;
-      reportContent += `Report ID: ${interviewId}\n`;
-      
-      // Create and download file
-      const blob = new Blob([reportContent], { type: 'text/plain' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Interview_Report_${reportData.interview?.candidate_name || 'Candidate'}_${new Date().toISOString().split('T')[0]}.txt`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      
-      toast.success('Comprehensive report downloaded successfully!', { id: 'report-download-success' });
-    } catch (error) {
-      console.error('Error downloading report:', error);
-      toast.error('Failed to download report', { id: 'report-download-error' });
-    }
-  };
-
-  // Download as PDF function
-  const downloadPDF = async () => {
-    if (!reportData) return;
-
-    try {
-      // Dynamically import jsPDF to avoid bundle size issues
-      const { jsPDF } = await import('jspdf');
-      const doc = new jsPDF();
-      
-      // Set document properties
-      doc.setProperties({
-        title: `Interview Report - ${reportData.interview?.candidate_name || 'Candidate'}`,
-        subject: 'Interview Assessment Report',
-        author: 'AI Interview System',
-        creator: 'AI Interview System'
-      });
-
-      // Professional header with background
-      doc.setFillColor(41, 128, 185); // Blue background
-      doc.rect(0, 0, 210, 30, 'F');
-      
-      // Title in white
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(24);
-      doc.setFont('helvetica', 'bold');
-      doc.text('INTERVIEW ASSESSMENT REPORT', 105, 18, { align: 'center' });
-      
-      // Subtitle
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'normal');
-      doc.text('Professional Evaluation & Analysis', 105, 28, { align: 'center' });
-      
-      // Reset text color
-      doc.setTextColor(0, 0, 0);
-      
-      let yPosition = 45;
-      
-      // Interview details section with box
-      doc.setFillColor(236, 240, 241); // Light gray background
-      doc.rect(10, yPosition - 5, 190, 35, 'F');
-      doc.setDrawColor(189, 195, 199);
-      doc.setLineWidth(0.5);
-      doc.rect(10, yPosition - 5, 190, 35);
-      
-      doc.setFontSize(16);
-      doc.setFont('helvetica', 'bold');
-      doc.text('INTERVIEW DETAILS', 15, yPosition);
-      yPosition += 12;
-      
-      // Two-column layout for details
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'normal');
-      
-      // Left column
-      doc.text(`Candidate: ${reportData.interview?.candidate_name || 'N/A'}`, 15, yPosition);
-      doc.text(`Position: ${reportData.interview?.position || 'N/A'}`, 15, yPosition + 8);
-      doc.text(`Interview Type: ${reportData.interview?.interview_type || 'N/A'}`, 15, yPosition + 16);
-      
-      // Right column
-      doc.text(`Overall Score: ${formatOverallScore(resolveDisplayInterviewScore(
-        reportData.interview,
-        Array.isArray(reportData.parameters)
-          ? reportData.parameters.length
-          : reportData.parameters
-            ? Object.keys(reportData.parameters).length
-            : 0
-      ))}/10`, 110, yPosition);
-      doc.text(`Total Questions: ${reportData.questions?.length || 0}`, 110, yPosition + 8);
-      doc.text(`Date: ${formatOrdinalDate(reportData.interview?.created_at)}`, 110, yPosition + 16);
-      
-      yPosition += 45;
-      
-      // Detailed assessment section
-      if (reportData.questions && reportData.answers) {
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.text('DETAILED ASSESSMENT', 15, yPosition);
-        yPosition += 15;
-        
-        reportData.questions.forEach((question, index) => {
-          const answer = reportData.answers.find(a => a.question_order === index);
-          if (answer) {
-            // Check if we need a new page
-            if (yPosition > 250) {
-              doc.addPage();
-              yPosition = 20;
-            }
-            
-            // Question box
-            doc.setFillColor(248, 249, 250);
-            doc.rect(10, yPosition - 5, 190, 80, 'F');
-            doc.setDrawColor(189, 195, 199);
-            doc.rect(10, yPosition - 5, 190, 80);
-            
-            // Question header with icon
-            doc.setFontSize(14);
-            doc.setFont('helvetica', 'bold');
-            const qOrdRaw = question?.question_order ?? index;
-            const qOrdDisplay = Number.isFinite(Number(qOrdRaw)) ? Number(qOrdRaw) + 1 : index + 1;
-            doc.text(`Question [Q${qOrdDisplay}]`, 15, yPosition);
-            yPosition += 10;
-            
-            // Question text
-            doc.setFontSize(11);
-            doc.setFont('helvetica', 'normal');
-            const questionText = doc.splitTextToSize(question.question_text, 180);
-            questionText.forEach(line => {
-              if (yPosition > 250) {
-                doc.addPage();
-                yPosition = 20;
-              }
-              doc.text(line, 15, yPosition);
-              yPosition += 5;
-            });
-            yPosition += 8;
-            
-            // Answer section
-            doc.setFont('helvetica', 'bold');
-            doc.text('Answer:', 15, yPosition);
-            yPosition += 6;
-            doc.setFont('helvetica', 'normal');
-            
-            const transcript = answer.transcript || 'No transcript available';
-            const transcriptLines = doc.splitTextToSize(transcript, 180);
-            transcriptLines.forEach(line => {
-              if (yPosition > 250) {
-                doc.addPage();
-                yPosition = 20;
-              }
-              doc.text(line, 15, yPosition);
-              yPosition += 5;
-            });
-            yPosition += 8;
-            
-            // Score with color coding
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(12);
-            
-            // Score background based on performance
-            let scoreColor;
-            if (answer.score >= 8) scoreColor = [46, 204, 113]; // Green
-            else if (answer.score >= 6) scoreColor = [241, 196, 15]; // Yellow
-            else scoreColor = [231, 76, 60]; // Red
-            
-            doc.setFillColor(scoreColor[0], scoreColor[1], scoreColor[2]);
-            doc.rect(15, yPosition - 3, 40, 8, 'F');
-            doc.setTextColor(255, 255, 255);
-            doc.text(`Score: ${answer.score}/10`, 17, yPosition);
-            doc.setTextColor(0, 0, 0);
-            
-            yPosition += 12;
-            
-            // AI Feedback
-            if (answer.feedback) {
-              doc.setFont('helvetica', 'bold');
-              doc.text('AI Feedback:', 15, yPosition);
-              yPosition += 6;
-              doc.setFont('helvetica', 'normal');
-              doc.setFontSize(10);
-              
-              const feedbackLines = doc.splitTextToSize(answer.feedback, 180);
-              feedbackLines.forEach(line => {
-                if (yPosition > 250) {
-                  doc.addPage();
-                  yPosition = 20;
-                }
-                doc.text(line, 15, yPosition);
-                yPosition += 5;
-              });
-              yPosition += 8;
-            }
-            
-            // Media files section
-            doc.setFont('helvetica', 'bold');
-            doc.text('Media Files:', 15, yPosition);
-            yPosition += 6;
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
-            
-            if (answer.audio_url) {
-              doc.text('Audio:', 15, yPosition);
-              doc.text(answer.audio_url, 25, yPosition);
-              yPosition += 5;
-            }
-            
-            if (answer.question_video_url) {
-              doc.text('Video:', 15, yPosition);
-              doc.text(answer.question_video_url, 25, yPosition);
-              yPosition += 5;
-            }
-            
-            yPosition += 15;
-          }
-        });
-      }
-      
-      // Professional footer
-      if (yPosition > 250) {
-        doc.addPage();
-        yPosition = 20;
-      }
-      
-      // Footer box
-      doc.setFillColor(52, 73, 94);
-      doc.rect(0, yPosition, 210, 30, 'F');
-      
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'italic');
-      doc.text("Don't just evaluate, ProValuate.", 105, yPosition + 10, { align: 'center' });
-      doc.text(`Report ID: ${interviewId} | ${formatOrdinalDate(reportData.interview?.created_at)}`, 105, yPosition + 20, { align: 'center' });
-      
-      // Save the PDF
-      const filename = `Interview_Report_${reportData.interview?.candidate_name || 'Candidate'}_${new Date().toISOString().split('T')[0]}.pdf`;
-      doc.save(filename);
-      
-      toast.success('Professional PDF report downloaded successfully!', { id: 'pdf-download-success' });
-    } catch (error) {
-      console.error('Error downloading PDF:', error);
-      toast.error('Failed to download PDF. Please try again.', { id: 'pdf-download-error' });
-    }
-  };
 
   const shareReport = () => {
     const url = window.location.href;

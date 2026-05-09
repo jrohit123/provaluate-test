@@ -37,6 +37,7 @@ export default defineConfig(({ mode }) => {
       minify: 'esbuild',
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
+        maxParallelFileOps: 2,
         output: {
           manualChunks(id) {
             if (id.includes('node_modules')) {
