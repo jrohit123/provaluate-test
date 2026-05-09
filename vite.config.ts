@@ -37,11 +37,16 @@ export default defineConfig(({ mode }) => {
       sourcemap: false,
       minify: false,
       chunkSizeWarningLimit: 1000,
+      // Additional memory optimization settings
+      assetsInlineLimit: 4096,
+      cssCodeSplit: true,
       rollupOptions: {
         maxParallelFileOps: 1,
         output: {
           manualChunks(id) {
             if (id.includes('node_modules')) {
+              // React and ReactDOM must be in their own chunk to prevent internal API conflicts
+              if (id.includes('react/') && (id.includes('react-dom') || id.includes('react/') && !id.includes('@'))) return 'vendor-react';
               if (id.includes('pdfjs-dist')) return 'vendor-pdfjs';
               if (id.includes('@react-pdf')) return 'vendor-react-pdf';
               if (id.includes('jspdf') || id.includes('exceljs') || id.includes('xlsx')) return 'vendor-documents';
