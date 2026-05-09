@@ -47,12 +47,21 @@ export default defineConfig(({ mode }) => {
               if (id.includes('exceljs')) return 'vendor-exceljs';
               if (id.includes('xlsx')) return 'vendor-xlsx';
               if (id.includes('@radix-ui')) return 'vendor-radix';
-              if (id.includes('socket.io') || id.includes('recordrtc')) return 'vendor-realtime';
+              if (id.includes('socket.io')) return 'vendor-socketio';
+              if (id.includes('recordrtc')) return 'vendor-recordrtc';
               if (id.includes('recharts')) return 'vendor-charts';
               if (id.includes('@tiptap')) return 'vendor-tiptap';
               if (id.includes('gsap')) return 'vendor-gsap';
               if (id.includes('react-joyride')) return 'vendor-joyride';
               if (id.includes('react-hot-toast')) return 'vendor-toast';
+              if (id.includes('react-router-dom')) return 'vendor-router';
+              if (id.includes('react-dom')) return 'vendor-react-dom';
+              if (id.includes('react-hook-form')) return 'vendor-forms';
+              if (id.includes('zod')) return 'vendor-zod';
+              if (id.includes('date-fns')) return 'vendor-dates';
+              if (id.includes('lucide-react')) return 'vendor-icons';
+              if (id.includes('@supabase')) return 'vendor-supabase';
+              if (id.includes('@tanstack')) return 'vendor-query';
               return 'vendor';
             }
           },
