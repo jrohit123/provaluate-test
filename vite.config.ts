@@ -50,8 +50,7 @@ export default defineConfig(({ mode }) => {
               if (id.includes('recharts')) return 'vendor-charts';
               if (id.includes('@tiptap')) return 'vendor-tiptap';
               if (id.includes('gsap') || id.includes('react-joyride')) return 'vendor-animation';
-              if (id.includes('/react-dom/') || id.includes('/react/') || id.includes('react-router-dom')) return 'vendor-react';
-              if (id.includes('react-hook-form') || id.includes('zod') || id.includes('@hookform')) return 'vendor-forms';
+                            if (id.includes('react-hook-form') || id.includes('zod') || id.includes('@hookform')) return 'vendor-forms';
               if (id.includes('lucide-react')) return 'vendor-icons';
               if (id.includes('@supabase')) return 'vendor-supabase';
               if (id.includes('@tanstack')) return 'vendor-query';
