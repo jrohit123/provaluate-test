@@ -42,26 +42,6 @@ export default defineConfig(({ mode }) => {
       cssCodeSplit: true,
       rollupOptions: {
         maxParallelFileOps: 1,
-        output: {
-          manualChunks(id) {
-            if (id.includes('node_modules')) {
-              // React and ReactDOM must be in their own chunk to prevent internal API conflicts
-              if (id.includes('react/') && (id.includes('react-dom') || id.includes('react/') && !id.includes('@'))) return 'vendor-react';
-              if (id.includes('pdfjs-dist')) return 'vendor-pdfjs';
-              if (id.includes('@react-pdf')) return 'vendor-react-pdf';
-              if (id.includes('jspdf') || id.includes('exceljs') || id.includes('xlsx')) return 'vendor-documents';
-              if (id.includes('@radix-ui')) return 'vendor-radix';
-              if (id.includes('socket.io') || id.includes('recordrtc')) return 'vendor-realtime';
-              if (id.includes('recharts')) return 'vendor-charts';
-              if (id.includes('@tiptap')) return 'vendor-tiptap';
-              if (id.includes('gsap') || id.includes('react-joyride')) return 'vendor-animation';
-              if (id.includes('lucide-react')) return 'vendor-icons';
-              if (id.includes('@supabase')) return 'vendor-supabase';
-              if (id.includes('@tanstack')) return 'vendor-query';
-              return 'vendor';
-            }
-          },
-        },
       },
     },
   };
