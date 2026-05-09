@@ -336,7 +336,9 @@ const TpoLogin = () => {
           <div className="order-1 md:order-none relative flex flex-col bg-[linear-gradient(145deg,#F6FAFF_0%,#EEF6FF_55%,#FFFFFF_100%)] p-6 sm:p-8 lg:p-12">
             <header className="relative z-50 -mx-6 -mt-6 mb-6 border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:-mx-8 sm:-mt-8 sm:px-8 sm:py-5 lg:-mx-12 lg:-mt-12 lg:px-12 lg:py-6">
               <div className="flex items-center justify-between gap-3 sm:gap-4">
-                <img src="/Logo_Transparent_BG.png" alt="ProValuate" className="h-12 w-auto sm:h-14 lg:h-16" />
+                <Link to="/">
+                  <img src="/Logo_Transparent_BG.png" alt="ProValuate" className="h-12 w-auto sm:h-14 lg:h-16 cursor-pointer hover:opacity-80 transition-opacity" />
+                </Link>
 
                 <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
                   <SheetTrigger asChild>

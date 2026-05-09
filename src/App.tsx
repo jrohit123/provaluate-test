@@ -41,6 +41,7 @@ import ConversationalInterview from "./components/ai-interview/ConversationalInt
 import CandidateCompletion from "./components/ai-interview/CandidateCompletion";
 import CompanyCareerPage from "./pages/CompanyCareerPage";
 import CompanyCareerJobPage from "./pages/CompanyCareerJobPage";
+import CustomersPage from "./pages/CustomersPage";
 
 import { supabase } from "@/integrations/supabase/client";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -396,6 +397,9 @@ const App = () => {
             {/* Public career page - no auth */}
             <Route path="/careers/:companySlug/job/:jdId" element={<CompanyCareerJobPage />} />
             <Route path="/careers/:companySlug" element={<CompanyCareerPage />} />
+            
+            {/* Customer Stories page - no auth */}
+            <Route path="/customers" element={<CustomersPage />} />
             
             {/* Landing: choose recruiter / candidate / TPO sign-in */}
             <Route path="/" element={<CoverPage />} />

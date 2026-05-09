@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Provaluate AI - Live Workflow</title>
+    <title>AI CV Screening</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
     <script>
         tailwind.config = {
             theme: {
@@ -17,50 +17,123 @@
                         mono: ['"DM Mono"', 'monospace'],
                     },
                     colors: {
-                        primary: {
-                            light: '#e6f1fb',
-                            DEFAULT: '#094D7B',
-                            dark: '#06385a'
-                        },
-                        accent: {
-                            light: '#EAF3DE',
-                            DEFAULT: '#3B6D11',
-                        },
-                        warning: {
-                            light: '#FAEEDA',
-                            DEFAULT: '#BA7517',
-                        },
-                        danger: {
-                            light: '#FCEBEB',
-                            DEFAULT: '#A32D2D',
-                        }
+                        primary: { light: '#e6f1fb', DEFAULT: '#094D7B', dark: '#06385a' },
+                        accent:  { light: '#EAF3DE', DEFAULT: '#3B6D11' },
+                        warning: { light: '#FAEEDA', DEFAULT: '#BA7517' },
+                        danger:  { light: '#FCEBEB', DEFAULT: '#A32D2D' }
                     }
                 }
             }
         }
     </script>
+
     <style>
-        body { background: #F0F4F8; overflow: auto; margin: 0; padding: 0; } 
-        
-        /* Step Nav Transitions */
-        .step-tab { transition: all 0.2s ease; }
-        .step-num { transition: all 0.3s ease; }
-        
-        /* Animations */
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+        body { font-family: 'DM Sans', sans-serif; background: #0D1B2A; }
+
+        /* ── Core Layout ─────────────────────────────────────── */
+        #layout { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
+
+        /* ── Sidebar ─────────────────────────────────────────── */
+        #sidebar {
+            width: 300px;
+            min-width: 260px;
+            background: #0D1B2A;
+            display: flex;
+            flex-direction: column;
+            padding: 22px 18px 20px;
+            flex-shrink: 0;
+            overflow: hidden;
+            position: relative;
+        }
+        /* subtle grid texture */
+        #sidebar::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 22px 22px;
+            pointer-events: none;
+        }
+
+        /* ── Demo Area ───────────────────────────────────────── */
+        #demoArea {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: #F0F4F8;
+            transition: opacity 0.2s ease;
+        }
+
+        /* ── Step Tabs ───────────────────────────────────────── */
+        .step-tab {
+            display: flex; align-items: flex-start; gap: 11px;
+            padding: 10px 11px; border-radius: 10px;
+            cursor: pointer; transition: all 0.2s ease;
+            border: none; background: transparent; text-align: left; width: 100%;
+            position: relative;
+        }
+        .step-tab:hover { background: rgba(255,255,255,0.04); }
+        .step-tab.active { background: rgba(9,77,123,0.22); }
+        .step-tab.active::before {
+            content: '';
+            position: absolute; left: 0; top: 20%; bottom: 20%;
+            width: 3px; border-radius: 0 2px 2px 0;
+            background: #4A9FD5;
+        }
+        .step-num {
+            width: 22px; height: 22px; border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.18);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.28);
+            flex-shrink: 0; margin-top: 1px; transition: all 0.25s ease;
+        }
+        .step-tab.active .step-num {
+            background: #094D7B; border-color: #4A9FD5; color: white;
+        }
+        .step-label {
+            font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.3);
+            line-height: 1.3; transition: color 0.2s;
+        }
+        .step-tab.active .step-label { color: white; }
+        .step-tagline {
+            font-size: 10px; color: rgba(255,255,255,0.2);
+            margin-top: 2px; line-height: 1.45; transition: color 0.2s;
+        }
+        .step-tab.active .step-tagline { color: rgba(255,255,255,0.48); }
+
+        /* ── Benefits ────────────────────────────────────────── */
+        .benefit-item {
+            display: flex; flex-direction: column;
+            padding: 10px 12px; border-radius: 8px;
+            background: rgba(255,255,255,0.03);
+            animation: fadeUp 0.35s ease both;
+        }
+        .benefit-item:nth-child(2) { animation-delay: 0.07s; }
+        .benefit-item:nth-child(3) { animation-delay: 0.14s; }
+        .benefit-icon { color: #5BA9D6; flex-shrink: 0; margin-top: 1px; }
+        .benefit-title { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.82); line-height: 1.35; }
+        .benefit-desc  { font-size: 11.5px; color: rgba(255,255,255,0.82); margin-top: 2px; line-height: 1.55; }
+
+        .sidebar-divider { height: 1px; background: rgba(255,255,255,0.07); margin: 14px 0; }
+
+        /* ── Animations ──────────────────────────────────────── */
         @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+            from { opacity: 0; transform: translateY(9px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
         @keyframes pulse-opacity {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
+            0%, 100% { opacity: 1; } 50% { opacity: 0.35; }
         }
         @keyframes shimmer {
-            from { transform: translateX(-100%); }
-            to { transform: translateX(200%); }
+            from { transform: translateX(-100%); } to { transform: translateX(200%); }
         }
-        @keyframes spin-slow {
-            to { transform: rotate(360deg); }
+        @keyframes spin-slow { to { transform: rotate(360deg); } }
+        @keyframes scanPulse {
+            0%, 100% { background: rgba(9,77,123,0.10); }
+            50%       { background: rgba(9,77,123,0.22); }
         }
 
         .animate-fade-up { animation: fadeUp 0.4s ease forwards; }
@@ -78,865 +151,719 @@
             animation: spin-slow 0.7s linear infinite;
         }
 
-        /* JD Scanner */
-        .raw-line { padding: 1px 0; border-radius: 2px; transition: background 0.15s; display: block; }
-        .raw-line.scanning { background: rgba(9,77,123,0.12); color: #094D7B; }
-
-        /* Resolved Cards */
+        /* ── Demo Components ─────────────────────────────────── */
         .resolved-attr {
             opacity: 0; transform: translateY(8px);
             transition: opacity 0.4s ease, transform 0.4s ease;
         }
         .resolved-attr.visible { opacity: 1; transform: translateY(0); }
-        
-        /* Mini Progress Bars */
-        .auto-fill { transition: width linear; }
+
         .score-fill { transition: width 1s ease 0.2s; }
 
-        /* Candidate Cards */
         .candidate-card {
-            opacity: 0; transform: translateY(10px);
-            transition: all 0.25s ease;
+            opacity: 0; transform: translateY(10px); transition: all 0.25s ease;
         }
         .candidate-card.visible { opacity: 1; transform: translateY(0); }
         .candidate-card:hover { transform: translateY(-2px); border-color: #094D7B; }
 
-        /* Modal */
-        .modal-overlay {
-            opacity: 0; pointer-events: none; transition: opacity 0.25s;
-        }
+        /* ── Modal ───────────────────────────────────────────── */
+        .modal-overlay { opacity: 0; pointer-events: none; transition: opacity 0.25s; }
         .modal-overlay.open { opacity: 1; pointer-events: all; }
-        .modal-content {
-            transform: translateY(16px) scale(0.98); transition: transform 0.3s ease;
-        }
+        .modal-content { transform: translateY(16px) scale(0.98); transition: transform 0.3s ease; }
         .modal-overlay.open .modal-content { transform: translateY(0) scale(1); }
 
-        /* App Fade */
-        #app-container { transition: opacity 0.2s ease; }
-
-        /* Custom Scrollbar */
+        /* ── Scrollbars ──────────────────────────────────────── */
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        /* ===== MOBILE RESPONSIVE ===== */
+        /* ── Step sections ───────────────────────────────────── */
+        .step-section { flex-direction: column; flex: 1; min-height: 0; }
+
+
+        /* ════════════════════════════════════════════════════════
+           MOBILE  (≤767px)
+        ════════════════════════════════════════════════════════ */
         @media (max-width: 767px) {
-            body { overflow: auto !important; }
-            #app-container { overflow: auto !important; height: auto; }
-            .step-section { height: auto !important; flex: none !important; overflow: auto; }
+            #layout { flex-direction: column; }
 
-            /* Step 1: each panel fills full screen, shown one at a time */
-            #step1Grid { display: flex !important; flex-direction: column; flex: 1; min-height: 0; }
-            #rawPanel  { flex: 1; min-height: 0; border-right: none !important; border-bottom: 1px solid #e5e7eb; }
-            #resolvedPanel { flex: 1; min-height: 0; }
+            #sidebar {
+                width: 100%; min-width: unset;
+                padding: 11px 14px 10px;
+                flex-shrink: 0;
+            }
 
-            /* Step 2: table adapts to mobile width */
-            #step2TableWrap { overflow-x: visible; }
-            #step2TableWrap table { min-width: auto; }
-            #step1Footer { display: none !important; }
+            /* Mobile top row: step title only */
+            .mobile-top-row {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 10px;
+                padding: 0;
+            }
 
-            /* Step 3: each panel fills full screen, shown one at a time */
-            #step3Grid { display: flex !important; flex-direction: column; flex: 1; min-height: 0; }
-            #uploadPanel    { flex: 1; min-height: 0; border-right: none !important; border-bottom: 1px solid #e5e7eb; }
-            #step3RightPanel { flex: 1; min-height: 0; }
+            /* Mobile: step title + benefits below pills */
+            #mobileBenefitsRow {
+                display: flex; flex-direction: column;
+                gap: 3px; margin-top: 0;
+            }
+            #mobileStepTitle {
+                font-size: 12px; font-weight: 700; color: white;
+                margin-bottom: 0;
+            }
+            .mobile-benefit {
+                display: flex; align-items: center; gap: 6px;
+            }
+            .mobile-benefit-icon { color: #5BA9D6; flex-shrink: 0; }
+            .mobile-benefit-text { font-size: 10.5px; color: rgba(255,255,255,0.82); font-weight: 700; }
 
-            /* Mobile visibility utility */
+            /* Desktop-only benefit panels hidden on mobile */
+            #benefitsDesktop { display: none !important; }
+            .sidebar-divider { margin: 7px 0; }
+
+            /* Demo area fills remaining height */
+            #demoArea { flex: 1; min-height: 0; overflow: hidden; }
+
+            /* Step 3: hide upload panel on mobile scorecard view */
             .mobile-hidden { display: none !important; }
             
-            /* ADD this — the scorecard panel should scroll, not clip */
-            #scorecardPanel {
+            /* Step 2: Mobile layout with scrollable criteria and fixed bottom */
+            #step2TableWrap {
                 overflow-y: auto !important;
-                height: auto !important;
-                min-height: 0;
-                max-height: none !important;
+                overflow-x: hidden !important;
+                flex: 1 !important;
             }
-            #step3RightPanel {
-                height: auto !important;
-                overflow-y: auto !important;
+            #step2TableWrap table {
+                min-width: 100% !important;
+                width: 100% !important;
             }
+        }
+
+        /* ════════════════════════════════════════════════════════
+           DESKTOP (≥768px): hide mobile-specific elements
+        ════════════════════════════════════════════════════════ */
+        @media (min-width: 768px) {
+            .mobile-top-row { display: none; }
+            #mobileBenefitsRow { display: none !important; }
+            #mobileStepTitle { display: none; }
+            .benefit-title { font-size: 19px; }
+            .benefit-desc { font-size: 13px; }
         }
     </style>
 </head>
-<body class="text-slate-800 flex flex-col h-screen w-screen bg-white">
+<body>
 
-    <!-- Main Workspace (Strictly edge-to-edge, no headers, no padding) -->
-    <main id="app-container" class="w-full h-full flex flex-col min-h-0 overflow-hidden relative opacity-100 p-0 m-0">
+<div id="layout">
 
-        <!-- ================= STEP 1: JD Processing ================= -->
-        <section class="step-section flex-col flex-1 min-h-0 animate-fade-up hidden p-0 m-0" id="step1">
-            <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-0 min-h-0" id="step1Grid">
-                <!-- Raw JD -->
-                <div id="rawPanel" class="bg-white border-r border-gray-200 flex flex-col md:h-full rounded-none">
-                    <div class="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 shrink-0">
-                        <div class="text-[12px] font-semibold text-primary flex items-center gap-2">
-                            <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Raw Job Description
-                        </div>
-                    </div>
-                    <div id="rawScrollContainer" class="p-4 relative overflow-y-auto flex-1 font-mono text-[11px] leading-[1.8] text-gray-700 scroll-smooth">
-                        <div id="rawText"></div>
-                    </div>
-                </div>
+    <!-- ═══════════════════════════════════════════════════════════
+         SIDEBAR
+    ═══════════════════════════════════════════════════════════ -->
+    <aside id="sidebar">
 
-                <!-- Resolved Attributes -->
-                <div id="resolvedPanel" class="bg-white flex flex-col md:h-full rounded-none">
-                    <div class="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 shrink-0">
-                        <div class="text-[12px] font-semibold text-primary flex items-center gap-2">
-                            <i data-lucide="list-checks" class="w-3.5 h-3.5"></i> Resolved Attributes
-                        </div>
-                    </div>
-                    <div class="p-4 overflow-y-auto flex-1 bg-gray-50/30">
-                        <div class="flex flex-col gap-2.5" id="resolvedList"></div>
-                    </div>
-                </div>
+        <!-- ── Brand ── -->
+        <div class="mobile-top-row">
+            <!-- Mobile step title only -->
+        </div>
+
+        <!-- Desktop benefits -->
+        <div id="benefitsDesktop" style="display:flex;flex-direction:column;gap:8px;flex:1;overflow:hidden">
+            <!-- JS-populated -->
+        </div>
+
+        <!-- Mobile: step title + compact benefits -->
+        <div id="mobileBenefitsRow">
+            <div id="mobileStepTitle">Resolve JD</div>
+            <div id="mobileBenefitsList" style="display:flex;flex-direction:column;gap:3px">
+                <!-- JS-populated -->
             </div>
+        </div>
 
-            <!-- Footer for Green Message -->
-            <div class="hidden md:flex h-[52px] bg-white border-t border-gray-100 items-center px-4 shrink-0" id="step1Footer">
+    </aside>
+
+
+    <!-- ═══════════════════════════════════════════════════════════
+         DEMO AREA
+    ═══════════════════════════════════════════════════════════ -->
+    <main id="demoArea">
+
+        <!-- ═══ STEP 1 : Resolve JD ═══════════════════════════ -->
+        <section class="step-section animate-fade-up hidden" id="step1">
+            <div class="bg-white flex flex-col flex-1 min-h-0">
+                <!-- Header -->
+                <div class="px-4 py-2.5 border-b border-gray-100 flex justify-between items-center bg-gray-50/60 shrink-0">
+                    <div class="text-[12px] font-semibold text-primary flex items-center gap-2">
+                        <i data-lucide="list-checks" class="w-3.5 h-3.5"></i>
+                        Resolved Attributes
+                    </div>
+                    <div class="flex items-center gap-2 text-[11px]" id="scanStatus">
+                        <span class="text-primary/70 font-medium">Scanning JD…</span>
+                    </div>
+                </div>
+                <!-- Scan progress bar -->
+                <div class="h-0.5 bg-gray-100 shrink-0 overflow-hidden">
+                    <div id="scanBar" class="h-full bg-primary" style="width:0"></div>
+                </div>
+                <!-- Resolved list -->
+                <div class="p-4 overflow-y-auto flex-1 bg-gray-50/30">
+                    <div class="flex flex-col gap-2.5" id="resolvedList"></div>
+                </div>
             </div>
         </section>
 
-        <!-- ================= STEP 2: Criteria Generation ================= -->
-        <section class="step-section flex-col flex-1 min-h-0 animate-fade-up hidden p-0 m-0" id="step2">
-            <div class="bg-white flex flex-col flex-1 min-h-0 h-full rounded-none">
-                <div class="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 shrink-0">
+
+        <!-- ═══ STEP 2 : Set Criteria ══════════════════════════ -->
+        <section class="step-section animate-fade-up hidden" id="step2">
+            <div class="bg-white flex flex-col flex-1 min-h-0 h-full">
+                <div class="px-4 py-2.5 border-b border-gray-100 flex justify-between items-center bg-gray-50/60 shrink-0">
                     <div class="text-[12px] font-semibold text-primary flex items-center gap-2">
-                        <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Senior ML Engineer — AI Criteria
+                        <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+                        Senior ML Engineer — AI Criteria
                     </div>
-                    <div class="flex items-center gap-3">
-                        <button class="flex items-center gap-1.5 border border-primary bg-primary-light text-primary px-2.5 py-0.5 rounded-full text-[10.5px] font-medium" id="genBtn">
-                            <i data-lucide="sparkles" class="w-3 h-3"></i> Generate from JD
-                        </button>
-                    </div>
+                    <button class="flex items-center gap-1.5 border border-primary bg-primary-light text-primary px-2.5 py-0.5 rounded-full text-[10.5px] font-medium" id="genBtn">
+                        <i data-lucide="sparkles" class="w-3 h-3"></i> Generate from JD
+                    </button>
                 </div>
-                
-                <!-- Table & Weightage Area -->
+
                 <div id="step2TableWrap" class="flex-1 overflow-y-auto overflow-x-auto flex flex-col bg-white">
-                    <table class="w-full text-left border-collapse">
+                    <table class="w-full text-left border-collapse" style="min-width:420px">
                         <thead class="sticky top-0 bg-primary-light/95 backdrop-blur z-10 border-b border-gray-200">
                             <tr class="text-[10.5px] font-semibold text-primary uppercase tracking-wide">
-                                <th class="py-2.5 px-4 w-[28%]">Parameter to Assess</th>
-                                <th class="py-2.5 px-4 w-[12%] text-center">Weightage</th>
+                                <th class="py-2.5 px-4 w-[34%]">Parameter to Assess</th>
+                                <th class="py-2.5 px-4 w-[13%] text-center">Weightage</th>
                                 <th class="py-2.5 px-4">How to Assess (Prompt to AI)</th>
                             </tr>
                         </thead>
                         <tbody id="criteriaBody" class="divide-y divide-gray-100"></tbody>
                     </table>
-                    
-                    <!-- Total Weightage explicitly right under the table -->
-                    <div class="px-4 py-3 border-t border-gray-100 flex justify-end bg-gray-50/50 mt-auto shrink-0">
+                    <div class="px-4 py-3 border-t border-gray-100 flex justify-end bg-gray-50/50 shrink-0">
                         <span class="text-[11.5px] text-gray-500">Total Weightage: <strong class="text-primary text-[13px]" id="totalWeight">0%</strong></span>
                     </div>
                 </div>
 
-                <!-- Footer (Reserved entirely for Save Button / Green Message) -->
-                <div class="h-[52px] bg-white border-t border-gray-100 flex items-center justify-end px-4 shrink-0">
+                <div class="h-[50px] bg-white border-t border-gray-100 flex items-center justify-end px-4 shrink-0">
                     <button id="saveBtn" class="px-4 py-1.5 bg-primary text-white rounded-md font-semibold text-[12px] flex items-center gap-1.5 opacity-50 transition-all" disabled>
                         <i data-lucide="save" class="w-3.5 h-3.5"></i> Save Criteria
                     </button>
-
                 </div>
             </div>
         </section>
 
-        <!-- ================= STEP 3: Resume Upload ================= -->
-        <section class="step-section flex-col flex-1 min-h-0 animate-fade-up hidden p-0 m-0" id="step3">
-            <div class="grid grid-cols-12 gap-0 flex-1 min-h-0 md:h-full" id="step3Grid">
+
+        <!-- ═══ STEP 3 : Assess CVs ════════════════════════════ -->
+        <section class="step-section animate-fade-up hidden" id="step3">
+            <div class="grid grid-cols-12 gap-0 flex-1 min-h-0 h-full" id="step3Grid" style="display:grid">
+
                 <!-- Left: Upload Panel -->
                 <div id="uploadPanel" class="col-span-12 md:col-span-4 flex flex-col border-r border-gray-200 bg-white">
-                    
-                    <!-- Session Setup -->
                     <div class="p-4 shrink-0 border-b border-gray-100">
-                        <h3 class="text-[12px] font-semibold text-primary mb-3 pb-1.5">Session Setup</h3>
+                        <h3 class="text-[12px] font-semibold text-primary mb-3">Session Setup</h3>
                         <div class="space-y-3">
                             <div>
                                 <label class="text-[10px] font-medium text-gray-400 block mb-1">Job Description</label>
-                                <div class="border border-gray-200 rounded-md p-2 text-[12px] text-gray-400 flex justify-between items-center transition-all bg-white" id="jdSelect">
-                                    <span id="jdSelectText" class="truncate">Select job description...</span>
+                                <div class="border border-gray-200 rounded-md p-2 text-[12px] text-gray-400 flex justify-between items-center bg-white" id="jdSelect">
+                                    <span id="jdSelectText" class="truncate">Select job description…</span>
                                     <i data-lucide="chevron-down" class="w-3.5 h-3.5 opacity-40 shrink-0"></i>
                                 </div>
                             </div>
                             <div>
-                                <label class="text-[10px] font-medium text-gray-400 block mb-1">Evaluation Criteria</label>
-                                <div class="border border-gray-200 rounded-md p-2 text-[12px] text-gray-400 flex justify-between items-center transition-all bg-white" id="criteriaSelect">
-                                    <span id="criteriaSelectText" class="truncate">Select criteria...</span>
+                                <label class="text-[10px] font-medium text-gray-400 block mb-1">Scoring Criteria</label>
+                                <div class="border border-gray-200 rounded-md p-2 text-[12px] text-gray-400 flex justify-between items-center bg-white" id="criteriaSelect">
+                                    <span id="criteriaSelectText" class="truncate">Select criteria…</span>
                                     <i data-lucide="chevron-down" class="w-3.5 h-3.5 opacity-40 shrink-0"></i>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Upload Box -->
                     <div class="flex flex-col flex-1 min-h-0">
                         <div class="px-4 py-2.5 border-b border-gray-100 flex justify-between items-center shrink-0 bg-gray-50/50">
                             <h3 class="text-[12px] font-semibold text-primary">Upload CVs</h3>
                         </div>
                         <div class="p-4 flex-1 flex flex-col min-h-0">
-                            <div class="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center transition-all bg-gray-50 flex flex-col items-center justify-center mb-3 shrink-0" id="uploadZone">
+                            <div class="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center bg-gray-50 flex flex-col items-center justify-center mb-3 shrink-0" id="uploadZone">
                                 <i data-lucide="upload-cloud" class="w-6 h-6 text-gray-300 mb-1.5"></i>
                                 <div class="text-[12px] text-gray-400">Drop CVs here or click</div>
                             </div>
-
-                            <div class="flex flex-col gap-1.5 mb-4 min-h-[80px] md:flex-1 overflow-y-auto pr-1" id="fileList"></div>
-
+                            <div class="flex flex-col gap-1.5 mb-4 min-h-[70px] md:flex-1 overflow-y-auto pr-1" id="fileList"></div>
                             <button class="w-full bg-primary text-white py-2.5 rounded-md font-semibold text-[13px] flex items-center justify-center gap-2 relative overflow-hidden transition-all opacity-50 shrink-0" id="provaluateBtn" disabled>
-                                <i data-lucide="play-circle" class="w-4 h-4"></i> Pro-Valuate
+                                <i data-lucide="play-circle" class="w-4 h-4"></i> Analyze
                                 <div class="btn-shimmer" id="btnShimmer"></div>
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Right: Candidate Pool / Scorecard -->
-                <div id="step3RightPanel" class="col-span-12 md:col-span-8 bg-gray-50/30 flex flex-col min-h-0 relative md:h-full">
-
-                    <!-- Pool View -->
+                <!-- Right: Candidate Pool + Scorecard -->
+                <div id="step3RightPanel" class="col-span-12 md:col-span-8 bg-gray-50/30 flex flex-col min-h-0 relative h-full">
                     <div id="poolView" class="flex flex-col flex-1 min-h-0 p-4 md:p-5">
                         <div class="flex-1 overflow-y-auto pr-2 grid grid-cols-2 gap-3 pb-2 content-start mt-2" id="candidatePool"></div>
                     </div>
-
-                    <!-- Inline Scorecard (hidden initially) -->
                     <div id="scorecardPanel" class="hidden flex-col flex-1 md:h-full overflow-hidden animate-fade-up"></div>
-
                 </div>
             </div>
         </section>
 
     </main>
+</div>
 
-    <!-- Modal Overlay -->
-    <div class="modal-overlay fixed inset-0 bg-slate-900/50 z-[100] flex items-center justify-center p-4 md:p-6 backdrop-blur-sm" id="modalOverlay" onclick="closeModal(event)">
-        <div class="modal-content bg-white w-full max-w-5xl rounded-2xl shadow-2xl flex flex-col overflow-hidden" style="max-height: 85vh;" id="modal">
-            <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-start shrink-0 bg-gray-50/80" id="modalHeader"></div>
-            <div class="p-5 overflow-y-auto flex-1 bg-white" id="modalBody"></div>
-        </div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODAL
+═══════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay fixed inset-0 bg-slate-900/50 z-[100] flex items-center justify-center p-4 md:p-6 backdrop-blur-sm" id="modalOverlay" onclick="closeModal(event)">
+    <div class="modal-content bg-white w-full max-w-5xl rounded-2xl shadow-2xl flex flex-col overflow-hidden" style="max-height:85vh" id="modal">
+        <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-start shrink-0 bg-gray-50/80" id="modalHeader"></div>
+        <div class="p-5 overflow-y-auto flex-1 bg-white" id="modalBody"></div>
     </div>
+</div>
 
-    <script>
-        // Utility for robust delays in async functions
-        const delay = ms => new Promise(res => setTimeout(res, ms));
-        const isMobile = () => window.innerWidth < 768;
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCRIPT
+═══════════════════════════════════════════════════════════════ -->
+<script>
+    const delay  = ms => new Promise(res => setTimeout(res, ms));
+    const isMobile = () => window.innerWidth < 768;
+
+    lucide.createIcons();
+
+    /* ── Benefits Content ──────────────────────────────────── */
+    const STEP_META = {
+        1: {
+            name: 'Resolve JD',
+            benefits: [
+                { icon: 'file-search',  title: 'Consistency', desc: 'Every assessor, human or AI, works from the exact same structured benchmark — no subjective interpretation.', mobileDesc: 'One benchmark. Every assessor. No drift.' },
+                { icon: 'layers',       title: 'Clarity', desc: 'Mandatory and preferred requirements are explicitly separated, so candidates are never penalised for missing a wish-list item.', mobileDesc: 'Mandatory vs. nice-to-have, explicitly separated.' },
+                { icon: 'equal',        title: 'Reliability', desc: 'A saved, resolved JD anchors every assessment to a fixed context, eliminating the drift that plagues generic AI tools.', mobileDesc: 'Fixed context. No AI hallucination.' },
+                { icon: 'zap',          title: 'Efficiency', desc: 'Resolve once, assess hundreds — every CV evaluated against the same structured JD with no re-processing or extra cost.', mobileDesc: 'Resolve once. Assess hundreds.' },
+                { icon: 'shield-check', title: 'Auditability', desc: 'A documented record of exactly what the role required at assessment time, critical for compliance and audit trails.', mobileDesc: 'A documented record for every hiring decision.' }
+            ]
+        },
+        2: {
+            name: 'Set Criteria',
+            benefits: [
+                { icon: 'target',       title: 'Precision', desc: 'Define the exact parameters — technical depth, domain experience, leadership — that determine success in this specific role.', mobileDesc: 'Define exactly what good looks like for this role.' },
+                { icon: 'sliders',      title: 'Business alignment', desc: 'Weighted criteria ensure the final score mirrors your actual hiring priorities, not an arbitrary average.', mobileDesc: 'Scores reflect your priorities, not averages.' },
+                { icon: 'sparkles',     title: 'Speed', desc: 'ProValuate analyses your resolved JD and auto-suggests a criteria framework with parameters and weightages, ready to edit and save.', mobileDesc: 'AI suggests your criteria framework instantly.' },
+                { icon: 'save',         title: 'Reusability', desc: 'Save criteria sets by role type and reuse them across every hiring cycle — built once, applied every time.', mobileDesc: 'Built once, applied every hiring cycle.' },
+                { icon: 'scale',        title: 'Fairness', desc: 'Every candidate scored against the same explicit criteria makes decisions explainable and bias structurally reduced.', mobileDesc: 'Same criteria, every candidate. Bias removed by design.' }
+            ]
+        },
+        3: {
+            name: 'Assess CVs',
+            benefits: [
+                { icon: 'file-check',   title: 'Depth', desc: 'Every score is backed by specific CV evidence, so recruiters see exactly why a candidate rated 7.5 on technical skills — no black-box numbers.', mobileDesc: 'Every score has evidence behind it. No black boxes.' },
+                { icon: 'users',        title: 'Scale', desc: 'ProValuate applies the same rigour to the hundredth CV as the first, eliminating the fatigue and drift of manual screening at volume.', mobileDesc: 'Same rigour on CV 100 as CV 1.' },
+                { icon: 'arrow-right',  title: 'Actionability', desc: 'Every assessment concludes with a clear Interview / Review / Reject recommendation, supported by rationale and specific follow-up actions.', mobileDesc: 'Interview / Review / Reject. Clear next step, always.' },
+                { icon: 'repeat',       title: 'Repeatability', desc: 'With a fixed JD and saved criteria, the same candidate assessed twice always receives the same score.', mobileDesc: 'Same candidate, same score. Every time.' },
+                { icon: 'brain',        title: 'Insight', desc: 'Each assessment surfaces strengths, ambiguous areas, and explicit weaknesses — giving interviewers a focused agenda before the first conversation.', mobileDesc: 'Strengths, gaps, and risks surfaced before the first call.' }
+            ]
+        }
+    };
+
+    /* ── App Data ──────────────────────────────────────────── */
+    const RESOLVED_ATTRS = [
+        { key: 'Role Details',              icon: 'briefcase',      content: `<span class="inline-block bg-white border border-gray-200 px-2 py-0.5 rounded text-[10px] text-gray-700 mr-1 mb-1 shadow-sm">Senior Machine Learning Engineer</span><span class="inline-block bg-white border border-gray-200 px-2 py-0.5 rounded text-[10px] text-gray-700 mr-1 mb-1 shadow-sm">Full time</span>` },
+        { key: 'Location',                  icon: 'map-pin',        content: `<span class="inline-block bg-white border border-gray-200 px-2 py-0.5 rounded text-[10px] text-gray-700 mr-1 mb-1 shadow-sm">San Francisco, CA (Hybrid)</span>` },
+        { key: 'Job History',               icon: 'clock',          content: `<span class="inline-block bg-white border border-gray-200 px-2 py-0.5 rounded text-[10px] text-gray-700 mr-1 mb-1 shadow-sm">4+ years experience in applied ML and MLOps</span>` },
+        { key: 'Technical Skills',          icon: 'code',           content: ['Python','PyTorch','CUDA','TensorRT','ONNX','AWS/GCP','Docker','Kubernetes'].map(s=>`<span class="inline-block bg-primary-light border border-primary/20 text-primary px-2 py-0.5 rounded text-[10px] mr-1 mb-1">${s}</span>`).join('') },
+        { key: 'Functional Skills',         icon: 'wrench',         content: ['Model Development','Data Pipeline Architecture','Production Scaling','Drift Detection','NLP','Computer Vision'].map(s=>`<span class="inline-block bg-accent-light border border-accent/20 text-accent px-2 py-0.5 rounded text-[10px] mr-1 mb-1">${s}</span>`).join('') },
+        { key: 'Soft Skills',               icon: 'brain',          content: ['Cross-functional Collaboration','Excellent communication','Explain complex ML'].map(s=>`<span class="inline-block bg-white border border-gray-200 text-gray-700 px-2 py-0.5 rounded text-[10px] mr-1 mb-1 shadow-sm">${s}</span>`).join('') },
+        { key: 'Educational Qualification', icon: 'graduation-cap', content: `<span class="inline-block bg-accent-light border border-accent/20 text-accent px-2 py-0.5 rounded text-[10px] mr-1 mb-1">Master's or Ph.D. in Computer Science or AI</span>` }
+    ];
+
+    const CRITERIA_DATA = [
+        { param: 'Deep Learning & Modeling Expertise', weight: 35, note: "Evaluate hands-on experience with PyTorch, CUDA, NLP, and Computer Vision models." },
+        { param: 'MLOps & Production Scaling',         weight: 25, note: "Assess ability to deploy models using TensorRT, ONNX, Kubernetes, and cloud platforms." },
+        { param: 'Data Engineering & Pipelines',       weight: 15, note: "Review experience building scalable Python pipelines for large datasets." },
+        { param: 'Education & Theoretical Foundation', weight: 10, note: "Verify Master's/Ph.D. credentials and statistical knowledge." },
+        { param: 'Communication & Collaboration',      weight: 15, note: "Analyze ability to work with medical teams and explain ML decisions." }
+    ];
+
+    const CANDIDATES = [
+        {
+            id:'aisha', name:'Aisha Patel', email:'aisha.patel@email.com', city:'San Francisco, CA',
+            file:'Aisha_Patel_CV.pdf', finalScore:92.5, rec:'To Be Interviewed',
+            avatarBg:'#EAF3DE', avatarColor:'#3B6D11',
+            scores:[
+                { param:'DL & Modeling Expertise', weight:35, score:9.5, rating:3.32, evidence:'5 years deploying PyTorch vision models. Strong CUDA background.' },
+                { param:'MLOps & Scaling',          weight:25, score:9.0, rating:2.25, evidence:'Led K8s migration for ML inference at previous startup. Expert in TensorRT.' },
+                { param:'Data Engineering',         weight:15, score:8.5, rating:1.27, evidence:'Built petabyte-scale ingestion pipelines using AWS and Python.' },
+                { param:'Education',                weight:10, score:10.0,rating:1.0,  evidence:'Ph.D. in Computer Science from Stanford University.' },
+                { param:'Communication',            weight:15, score:9.0, rating:1.35, evidence:'Mentored junior engineers and co-authored 3 papers.' }
+            ],
+            strengths:  ['Exceptional academic background (Ph.D.)','Extensive PyTorch and CUDA experience','Proven track record in MLOps and Kubernetes'],
+            ambiguous:  ['Specific experience with medical imaging data is not explicitly detailed'],
+            weaknesses: ['None identified based on the provided resume'],
+            summary:'Aisha is a top-tier candidate perfectly aligned with the role requirements. She brings deep technical expertise in PyTorch and MLOps, coupled with a strong academic foundation.',
+            followup:   ['Discuss specific scale of previous K8s deployments','Evaluate knowledge of medical compliance (HIPAA) in ML pipelines']
+        },
+        {
+            id:'marcus', name:'Marcus Johnson', email:'mjohnson99@email.com', city:'Austin, TX',
+            file:'M_Johnson_Resume.pdf', finalScore:74.0, rec:'Review further',
+            avatarBg:'#e6f1fb', avatarColor:'#094D7B',
+            scores:[
+                { param:'DL & Modeling Expertise', weight:35, score:8.0, rating:2.8,  evidence:'Strong NLP background, built several LLM orchestrations.' },
+                { param:'MLOps & Scaling',          weight:25, score:6.5, rating:1.62, evidence:'Familiar with Docker and AWS, but limited Kubernetes experience.' },
+                { param:'Data Engineering',         weight:15, score:7.5, rating:1.12, evidence:'Good Python data wrangling skills, primarily with Pandas/Spark.' },
+                { param:'Education',                weight:10, score:8.0, rating:0.8,  evidence:'MS in Data Science. Meets requirement.' },
+                { param:'Communication',            weight:15, score:7.0, rating:1.05, evidence:'Managed offshore data labeling teams.' }
+            ],
+            strengths:  ['Strong NLP model development experience','Meets educational requirements (MS)','Good baseline cloud knowledge'],
+            ambiguous:  ['Depth of knowledge in Computer Vision is unclear'],
+            weaknesses: ['Lacks hands-on Kubernetes and TensorRT experience','Under 4 years of total experience (currently at 3 years)'],
+            summary:'Marcus shows strong potential in NLP and general ML engineering, but lacks the specific high-performance computing (CUDA/TensorRT) and K8s experience requested.',
+            followup:   ['Probe computer vision fundamentals','Assess willingness/ability to ramp up on Kubernetes quickly']
+        },
+        {
+            id:'elena', name:'Elena Rodriguez', email:'erodriguez.dev@email.com', city:'Seattle, WA',
+            file:'Elena_ML_Dev.pdf', finalScore:45.2, rec:'Rejected',
+            avatarBg:'#FCEBEB', avatarColor:'#A32D2D',
+            scores:[
+                { param:'DL & Modeling Expertise', weight:35, score:5.0, rating:1.75, evidence:'Mostly traditional ML (scikit-learn). Limited deep learning exposure.' },
+                { param:'MLOps & Scaling',          weight:25, score:3.0, rating:0.75, evidence:'No production deployment experience listed. Notebook-heavy workflow.' },
+                { param:'Data Engineering',         weight:15, score:6.0, rating:0.9,  evidence:'Basic SQL and Python scripting.' },
+                { param:'Education',                weight:10, score:6.0, rating:0.6,  evidence:'B.S. in Software Engineering. (Master/PhD preferred/required).' },
+                { param:'Communication',            weight:15, score:6.0, rating:0.9,  evidence:'Worked as a solo developer; limited cross-functional evidence.' }
+            ],
+            strengths:  ['Solid traditional machine learning background','Proficient in Python and SQL'],
+            ambiguous:  ['Career goals regarding deep learning vs data analytics'],
+            weaknesses: ['Does not meet educational requirement (B.S. only)','Lacks deep learning, PyTorch, and CUDA skills','No MLOps or cloud deployment experience'],
+            summary:'Elena is a competent data scientist/analyst but does not possess the advanced deep learning and production engineering skills required for this Senior ML role.',
+            followup:   ['Send standard rejection email','Keep on file for future Junior Data Analyst roles']
+        }
+    ];
+
+    const FILES = [{name:'Aisha_Patel_CV.pdf'},{name:'M_Johnson_Resume.pdf'},{name:'Elena_ML_Dev.pdf'}];
+
+    let currentStep = 1;
+
+    /* ── Sidebar Sync ──────────────────────────────────────── */
+    function updateSidebar(n) {
+        const meta = STEP_META[n];
+
+        // Desktop benefits
+        const desktopEl = document.getElementById('benefitsDesktop');
+        desktopEl.innerHTML = meta.benefits.map(b => `
+            <div class="benefit-item">
+                <div>
+                    <div class="benefit-title">${b.title}</div>
+                    <div class="benefit-desc">${b.desc}</div>
+                </div>
+            </div>
+        `).join('');
+
+        // Mobile: benefits only (no step name)
+        const titleEl = document.getElementById('mobileStepTitle');
+        if (titleEl) titleEl.textContent = ''; // Empty - no step name
+
+        const mobileList = document.getElementById('mobileBenefitsList');
+        if (mobileList) {
+            mobileList.innerHTML = meta.benefits.slice(0, 2).map(b => `
+                <div class="mobile-benefit">
+                    <span class="mobile-benefit-text">${b.title} — ${b.mobileDesc}</span>
+                </div>
+            `).join('');
+        }
 
         lucide.createIcons();
+    }
 
-        // --- DATA DEFINITIONS ---
+    /* ── Show Step ─────────────────────────────────────────── */
+    function showStep(n) {
+        currentStep = n;
+        document.querySelectorAll('.step-section').forEach((s, i) => {
+            const active = (i + 1 === n);
+            s.classList.toggle('hidden', !active);
+            s.classList.toggle('flex', active);
+        });
+        updateSidebar(n);
+        lucide.createIcons();
+    }
 
-        const RAW_JD = `Senior Machine Learning Engineer
-TechNova AI Systems · Full time
-San Francisco, CA, USA (Hybrid)
+    /* ── DOM Reset ─────────────────────────────────────────── */
+    function resetDOMState() {
+        // Step 1
+        document.getElementById('resolvedList').innerHTML = '';
+        const scanBar = document.getElementById('scanBar');
+        scanBar.style.transition = 'none';
+        scanBar.style.width = '0';
+        document.getElementById('scanStatus').innerHTML = `
+            <span class="text-primary/70 font-medium">Scanning JD…</span>
+        `;
 
-About TechNova AI
-We are a leading artificial intelligence company building next-generation LLM orchestration tools and computer vision pipelines for the healthcare sector. Our mission is to accelerate medical diagnostics using cutting-edge deep learning frameworks.
+        // Step 2
+        document.getElementById('criteriaBody').innerHTML = '';
+        document.getElementById('totalWeight').textContent = '0%';
+        const saveBtn = document.getElementById('saveBtn');
+        saveBtn.disabled = true;
+        saveBtn.classList.remove('hidden');
+        saveBtn.className = 'px-4 py-1.5 bg-primary text-white rounded-md font-semibold text-[12px] flex items-center gap-1.5 opacity-50 transition-all';
+        saveBtn.innerHTML = '<i data-lucide="save" class="w-3.5 h-3.5"></i> Save Criteria';
 
-Responsibilities:
-1. Model Development — Design, train, and deploy advanced deep learning models for image segmentation and NLP.
-2. Data Pipeline Architecture — Build scalable Python-based data ingestion pipelines capable of handling terabytes of medical imaging data.
-3. Production Scaling — Optimize ML models for low-latency inference using TensorRT, ONNX, and Kubernetes.
-4. Cross-functional Collaboration — Work closely with medical professionals and backend engineering teams to ensure model safety and compliance.
-5. Continuous Monitoring — Implement drift detection and automated retraining workflows.
+        // Step 3 — upload
+        document.getElementById('fileList').innerHTML = '';
+        document.getElementById('candidatePool').innerHTML = '';
+        const sp = document.getElementById('scorecardPanel');
+        sp.classList.add('hidden'); sp.classList.remove('flex'); sp.innerHTML = '';
+        document.getElementById('poolView').classList.remove('hidden');
 
-Qualifications & Experience:
-1. 4+ years of industry experience in applied machine learning and MLOps.
-2. Master's or Ph.D. in Computer Science, AI, or related field.
-3. Expert-level proficiency in Python, PyTorch, and CUDA.
-4. Hands-on experience with cloud platforms (AWS/GCP) and containerization (Docker/K8s).
-5. Strong theoretical foundation in deep learning, probability, and statistics.
-6. Excellent communication skills to explain complex ML concepts to non-technical stakeholders.`.split('\n');
+        // restore selects
+        const jdSel = document.getElementById('jdSelect');
+        jdSel.className = 'border border-gray-200 rounded-md p-2 text-[12px] text-gray-400 flex justify-between items-center transition-all bg-white';
+        document.getElementById('jdSelectText').textContent = 'Select job description…';
+        const critSel = document.getElementById('criteriaSelect');
+        critSel.className = 'border border-gray-200 rounded-md p-2 text-[12px] text-gray-400 flex justify-between items-center transition-all bg-white';
+        document.getElementById('criteriaSelectText').textContent = 'Select criteria…';
 
-        const RESOLVED_ATTRS = [
-            { key: 'Role Details', icon: 'briefcase', content: `<span class="inline-block bg-white border border-gray-200 px-2 py-0.5 rounded text-[10px] text-gray-700 mr-1 mb-1 shadow-sm">Senior Machine Learning Engineer</span> <span class="inline-block bg-white border border-gray-200 px-2 py-0.5 rounded text-[10px] text-gray-700 mr-1 mb-1 shadow-sm">Full time</span>` },
-            { key: 'Location', icon: 'map-pin', content: `<span class="inline-block bg-white border border-gray-200 px-2 py-0.5 rounded text-[10px] text-gray-700 mr-1 mb-1 shadow-sm">San Francisco, CA (Hybrid)</span>` },
-            { key: 'Job History', icon: 'clock', content: `<span class="inline-block bg-white border border-gray-200 px-2 py-0.5 rounded text-[10px] text-gray-700 mr-1 mb-1 shadow-sm">4+ years experience in applied ML and MLOps</span>` },
-            { key: 'Technical Skills', icon: 'code', content: ['Python', 'PyTorch', 'CUDA', 'TensorRT', 'ONNX', 'AWS/GCP', 'Docker', 'Kubernetes'].map(s => `<span class="inline-block bg-primary-light border border-primary/20 text-primary px-2 py-0.5 rounded text-[10px] mr-1 mb-1">${s}</span>`).join('') },
-            { key: 'Functional Skills', icon: 'wrench', content: ['Model Development', 'Data Pipeline Architecture', 'Production Scaling', 'Drift Detection', 'NLP', 'Computer Vision'].map(s => `<span class="inline-block bg-accent-light border border-accent/20 text-accent px-2 py-0.5 rounded text-[10px] mr-1 mb-1">${s}</span>`).join('') },
-            { key: 'Soft Skills', icon: 'brain', content: ['Cross-functional Collaboration', 'Excellent communication', 'Explain complex ML'].map(s => `<span class="inline-block bg-white border border-gray-200 text-gray-700 px-2 py-0.5 rounded text-[10px] mr-1 mb-1 shadow-sm">${s}</span>`).join('') },
-            { key: 'Educational Qualification', icon: 'graduation-cap', content: `<span class="inline-block bg-accent-light border border-accent/20 text-accent px-2 py-0.5 rounded text-[10px] mr-1 mb-1">Master's or Ph.D. in Computer Science or AI</span>` }
-        ];
+        const zone = document.getElementById('uploadZone');
+        zone.className = 'border-2 border-dashed border-gray-200 rounded-lg p-4 text-center bg-gray-50 flex flex-col items-center justify-center mb-3 shrink-0';
+        zone.innerHTML = '<i data-lucide="upload-cloud" class="w-6 h-6 text-gray-300 mb-1.5"></i><div class="text-[12px] text-gray-400">Drop CVs here or click</div>';
 
-        const CRITERIA_DATA = [
-            { param: 'Deep Learning & Modeling Expertise', weight: 35, note: "Evaluate hands-on experience with PyTorch, CUDA, NLP, and Computer Vision models." },
-            { param: 'MLOps & Production Scaling', weight: 25, note: "Assess ability to deploy models using TensorRT, ONNX, Kubernetes, and cloud platforms." },
-            { param: 'Data Engineering & Pipelines', weight: 15, note: "Review experience building scalable Python pipelines for large datasets." },
-            { param: 'Education & Theoretical Foundation', weight: 10, note: "Verify Master's/Ph.D. credentials and statistical knowledge." },
-            { param: 'Communication & Collaboration', weight: 15, note: "Analyze ability to work with medical teams and explain ML decisions." }
-        ];
+        const proBtn = document.getElementById('provaluateBtn');
+        proBtn.className = 'w-full bg-primary text-white py-2.5 rounded-md font-semibold text-[13px] flex items-center justify-center gap-2 relative overflow-hidden transition-all opacity-50 shrink-0';
+        proBtn.innerHTML = '<i data-lucide="play-circle" class="w-4 h-4"></i> Analyze<div class="btn-shimmer" id="btnShimmer"></div>';
+        proBtn.disabled = true;
 
-        const CANDIDATES = [
-            {
-                id: 'aisha', name: 'Aisha Patel', email: 'aisha.patel@email.com', city: 'San Francisco, CA', file: 'Aisha_Patel_CV.pdf', finalScore: 92.5, rec: 'To Be Interviewed', avatarBg: '#EAF3DE', avatarColor: '#3B6D11',
-                scores: [
-                    { param: 'DL & Modeling Expertise', weight: 35, score: 9.5, rating: 3.32, evidence: '5 years deploying PyTorch vision models. Strong CUDA background.' },
-                    { param: 'MLOps & Scaling', weight: 25, score: 9.0, rating: 2.25, evidence: 'Led K8s migration for ML inference at previous startup. Expert in TensorRT.' },
-                    { param: 'Data Engineering', weight: 15, score: 8.5, rating: 1.27, evidence: 'Built petabyte-scale ingestion pipelines using AWS and Python.' },
-                    { param: 'Education', weight: 10, score: 10.0, rating: 1.0, evidence: 'Ph.D. in Computer Science from Stanford University.' },
-                    { param: 'Communication', weight: 15, score: 9.0, rating: 1.35, evidence: 'Mentored junior engineers and co-authored 3 papers.' }
-                ],
-                strengths: ['Exceptional academic background (Ph.D.)', 'Extensive PyTorch and CUDA experience', 'Proven track record in MLOps and Kubernetes'],
-                ambiguous: ['Specific experience with medical imaging data is not explicitly detailed'],
-                weaknesses: ['None identified based on the provided resume'],
-                summary: 'Aisha is a top-tier candidate perfectly aligned with the role requirements. She brings deep technical expertise in PyTorch and MLOps, coupled with a strong academic foundation.',
-                rationale: 'Candidate exceeds the minimum 4 years of experience and possesses all mandatory technical skills (PyTorch, K8s, AWS). Highly recommended for technical interview.',
-                followup: ['Discuss specific scale of previous K8s deployments', 'Evaluate knowledge of medical compliance (HIPAA) in ML pipelines']
-            },
-            {
-                id: 'marcus', name: 'Marcus Johnson', email: 'mjohnson99@email.com', city: 'Austin, TX', file: 'M_Johnson_Resume.pdf', finalScore: 74.0, rec: 'Review further', avatarBg: '#e6f1fb', avatarColor: '#094D7B',
-                scores: [
-                    { param: 'DL & Modeling Expertise', weight: 35, score: 8.0, rating: 2.8, evidence: 'Strong NLP background, built several LLM orchestrations.' },
-                    { param: 'MLOps & Scaling', weight: 25, score: 6.5, rating: 1.62, evidence: 'Familiar with Docker and AWS, but limited Kubernetes experience.' },
-                    { param: 'Data Engineering', weight: 15, score: 7.5, rating: 1.12, evidence: 'Good Python data wrangling skills, primarily with Pandas/Spark.' },
-                    { param: 'Education', weight: 10, score: 8.0, rating: 0.8, evidence: 'MS in Data Science. Meets requirement.' },
-                    { param: 'Communication', weight: 15, score: 7.0, rating: 1.05, evidence: 'Managed offshore data labeling teams.' }
-                ],
-                strengths: ['Strong NLP model development experience', 'Meets educational requirements (MS)', 'Good baseline cloud knowledge'],
-                ambiguous: ['Depth of knowledge in Computer Vision is unclear'],
-                weaknesses: ['Lacks hands-on Kubernetes and TensorRT experience', 'Under 4 years of total experience (currently at 3 years)'],
-                summary: 'Marcus shows strong potential in NLP and general ML engineering, but lacks the specific high-performance computing (CUDA/TensorRT) and K8s experience requested.',
-                rationale: 'Candidate has a good foundation but falls slightly short on the seniority and specific MLOps tooling requirements. Worth a screening call to gauge adaptability.',
-                followup: ['Probe computer vision fundamentals', 'Assess willingness/ability to ramp up on Kubernetes quickly']
-            },
-            {
-                id: 'elena', name: 'Elena Rodriguez', email: 'erodriguez.dev@email.com', city: 'Seattle, WA', file: 'Elena_ML_Dev.pdf', finalScore: 45.2, rec: 'Rejected', avatarBg: '#FCEBEB', avatarColor: '#A32D2D',
-                scores: [
-                    { param: 'DL & Modeling Expertise', weight: 35, score: 5.0, rating: 1.75, evidence: 'Mostly traditional ML (scikit-learn). Limited deep learning exposure.' },
-                    { param: 'MLOps & Scaling', weight: 25, score: 3.0, rating: 0.75, evidence: 'No production deployment experience listed. Notebook-heavy workflow.' },
-                    { param: 'Data Engineering', weight: 15, score: 6.0, rating: 0.9, evidence: 'Basic SQL and Python scripting.' },
-                    { param: 'Education', weight: 10, score: 6.0, rating: 0.6, evidence: 'B.S. in Software Engineering. (Master/PhD preferred/required).' },
-                    { param: 'Communication', weight: 15, score: 6.0, rating: 0.9, evidence: 'Worked as a solo developer; limited cross-functional evidence.' }
-                ],
-                strengths: ['Solid traditional machine learning background', 'Proficient in Python and SQL'],
-                ambiguous: ['Career goals regarding deep learning vs data analytics'],
-                weaknesses: ['Does not meet educational requirement (B.S. only)', 'Lacks deep learning, PyTorch, and CUDA skills', 'No MLOps or cloud deployment experience'],
-                summary: 'Elena is a competent data scientist/analyst but does not possess the advanced deep learning and production engineering skills required for this Senior ML role.',
-                rationale: 'Candidate profile is aligned with a junior data science role rather than a Senior ML Engineer. Critical technical gaps in PyTorch, MLOps, and deep learning.',
-                followup: ['Send standard rejection email', 'Keep on file for future Junior Data Analyst roles']
-            }
-        ];
+        // Mobile: restore panel visibility
+        document.getElementById('uploadPanel').classList.remove('mobile-hidden');
 
-        const FILES = [{name: 'Aisha_Patel_CV.pdf'}, {name: 'M_Johnson_Resume.pdf'}, {name: 'Elena_ML_Dev.pdf'}];
+        currentStep = 1;
+        lucide.createIcons();
+    }
 
-        // System State
-        let currentStep = 1;
+    /* ═══════════════════════════════════════════════════════════
+       STEP 1 — Resolve JD  (simplified: no raw JD panel)
+    ═══════════════════════════════════════════════════════════ */
+    async function executeStep1() {
+        showStep(1);
 
-        function showStep(n) {
-            currentStep = n;
-            document.querySelectorAll('.step-section').forEach((s, i) => {
-                s.classList.toggle('hidden', i + 1 !== n);
-                s.classList.toggle('flex', i + 1 === n);
-            });
-            lucide.createIcons();
-        }
+        // Animate scan progress bar
+        await delay(120);
+        const scanBar = document.getElementById('scanBar');
+        scanBar.style.transition = 'width 3.6s linear';
+        scanBar.style.width = '100%';
 
-        // --- CORE ASYNC EXECUTION SEQUENCES ---
+        await delay(3700);
 
-        async function executeStep1() {
-            showStep(1);
-            const rawContainer = document.getElementById('rawText');
-            const scrollContainer = document.getElementById('rawScrollContainer');
+        // Mark done
+        document.getElementById('scanStatus').innerHTML = `
+            <i data-lucide="check-circle" class="w-3.5 h-3.5 text-accent"></i>
+            <span class="text-accent font-semibold">7 attributes extracted</span>
+        `;
+        lucide.createIcons();
 
-            // Mobile: start with resolved panel hidden
-            if (isMobile()) {
-                document.getElementById('resolvedPanel').classList.add('mobile-hidden');
-            }
-
-            RAW_JD.forEach((line, i) => {
-                const span = document.createElement('span');
-                span.className = 'raw-line';
-                span.id = `line-${i}`;
-                span.textContent = line || '\u00A0';
-                rawContainer.appendChild(span);
-            });
-
-            await delay(400);
-
-            // Scan Text & Auto Pan Camera (Using background highlight ONLY, no bar)
-            for (let i = 0; i < RAW_JD.length; i++) {
-                if (i > 0) {
-                    const prev = document.getElementById(`line-${i - 1}`);
-                    if (prev) prev.classList.remove('scanning');
-                }
-                const currentLine = document.getElementById(`line-${i}`);
-                if (currentLine) {
-                    currentLine.classList.add('scanning');
-                    // Pan container smoothly to keep scan near vertical center
-                    scrollContainer.scrollTop = currentLine.offsetTop - (scrollContainer.clientHeight / 2) + 20;
-                }
-                await delay(60); 
-            }
-            
-            // Mobile: swap from Raw JD panel to Resolved panel
-            if (isMobile()) {
-                await delay(300);
-                document.getElementById('rawPanel').classList.add('mobile-hidden');
-                document.getElementById('resolvedPanel').classList.remove('mobile-hidden');
-            }
-
-            // Resolve Attributes
-            const list = document.getElementById('resolvedList');
-            for (let i = 0; i < RESOLVED_ATTRS.length; i++) {
-                await delay(600);
-                const attr = RESOLVED_ATTRS[i];
-                const div = document.createElement('div');
-                div.className = 'resolved-attr bg-white border border-gray-200 rounded-lg overflow-hidden shrink-0 visible';
-                div.innerHTML = `
-                    <div class="px-2.5 py-1.5 bg-primary-light/50 text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
-                        <i data-lucide="${attr.icon}" class="w-3 h-3"></i> ${attr.key}
-                    </div>
-                    <div class="px-2.5 py-2 font-mono text-[11px] text-gray-700 leading-relaxed">${attr.content}</div>
-                `;
-                list.appendChild(div);
-                lucide.createIcons();
-                list.parentElement.scrollTop = list.parentElement.scrollHeight;
-            }
-
-            await delay(400);
-            
-            await delay(500);
-            executeStep2();
-        }
-
-        async function executeStep2() {
-            showStep(2);
-            const tbody = document.getElementById('criteriaBody');
-            let totalW = 0;
-
-            for (let i = 0; i < CRITERIA_DATA.length; i++) {
-                await delay(350);
-                const c = CRITERIA_DATA[i];
-                const tr = document.createElement('tr');
-                tr.className = 'animate-fade-up bg-white hover:bg-gray-50/50 transition-colors';
-                tr.innerHTML = `
-                    <td class="py-2.5 px-4 border-b border-gray-100 text-[11.5px] font-semibold text-gray-800">${c.param}</td>
-                    <td class="py-2.5 px-4 border-b border-gray-100 text-center"><span class="inline-block bg-primary-light text-primary font-bold text-[11px] px-2 py-0.5 rounded-full">${c.weight}%</span></td>
-                    <td class="py-2.5 px-4 border-b border-gray-100 text-[10.5px] text-gray-500 leading-relaxed">${c.note}</td>
-                `;
-                tbody.appendChild(tr);
-                totalW += c.weight;
-                document.getElementById('totalWeight').textContent = totalW + '%';
-            }
-
-            await delay(800);
-            
-            const saveBtn = document.getElementById('saveBtn');
-            saveBtn.innerHTML = '<div class="spinner border-t-white border-2"></div> Saving...';
-
-            await delay(800);
-            
-            saveBtn.classList.add('hidden');
-
-            await delay(500);
-            executeStep3();
-        }
-
-        async function executeStep3() {
-            showStep(3);
-
-            await delay(300);
-            const jdSelect = document.getElementById('jdSelect');
-            jdSelect.classList.remove('border-gray-200');
-            jdSelect.classList.add('border-primary', 'bg-primary-light/30', 'text-primary');
-            document.getElementById('jdSelectText').textContent = 'Senior ML Engineer — TechNova AI';
-
-            await delay(400);
-            const critSelect = document.getElementById('criteriaSelect');
-            critSelect.classList.remove('border-gray-200');
-            critSelect.classList.add('border-primary', 'bg-primary-light/30', 'text-primary');
-            document.getElementById('criteriaSelectText').textContent = 'Senior ML Engineer — AI Criteria';
-
-            await delay(500);
-            const zone = document.getElementById('uploadZone');
-            zone.classList.remove('border-gray-200', 'bg-gray-50');
-            zone.classList.add('border-primary', 'bg-primary-light/30');
-            zone.innerHTML = `
-                <i data-lucide="check-circle" class="w-5 h-5 text-primary mb-1.5"></i>
-                <div class="text-[11.5px] text-primary font-semibold">3 files dropped</div>
-            `;
-            lucide.createIcons();
-
-            const list = document.getElementById('fileList');
-            for (let i = 0; i < FILES.length; i++) {
-                await delay(450);
-                const item = document.createElement('div');
-                item.className = 'flex items-center gap-2.5 p-2 border border-gray-200 rounded-lg bg-white opacity-0 transform -translate-x-2 transition-all duration-300 shrink-0';
-                item.innerHTML = `
-                    <i data-lucide="file-text" class="w-3.5 h-3.5 text-gray-400 shrink-0"></i>
-                    <span class="text-[11px] font-medium text-gray-700 truncate flex-1">${FILES[i].name}</span>
-                    <div class="w-10 h-1 bg-gray-100 rounded-full overflow-hidden shrink-0"><div class="h-full bg-primary w-0 transition-all duration-1000" id="prog-${i}"></div></div>
-                `;
-                list.appendChild(item);
-                lucide.createIcons();
-                
-                requestAnimationFrame(() => {
-                    item.classList.remove('opacity-0', '-translate-x-2');
-                    setTimeout(() => {
-                        const bar = document.getElementById(`prog-${i}`);
-                        if(bar) bar.style.width = '100%';
-                    }, 100);
-                });
-            }
-
-            await delay(1000);
-            
-            const btn = document.getElementById('provaluateBtn');
-            btn.disabled = false;
-            btn.classList.remove('opacity-50');
-            btn.classList.add('shadow-md');
-            
-            await delay(600);
-            await executeProvaluation();
-        }
-
-        async function executeProvaluation() {
-            const btn = document.getElementById('provaluateBtn');
-            btn.innerHTML = `<div class="spinner"></div> Pro-Valuating... <div class="btn-shimmer running"></div>`;
-            btn.classList.remove('bg-primary');
-            btn.classList.add('bg-blue-600');
-            btn.disabled = true;
-
-            await delay(2000);
-
-            btn.classList.remove('bg-blue-600');
-            btn.classList.add('bg-accent');
-            btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> Analysis Complete`;
-            lucide.createIcons();
-
-            await delay(800);
-            await showInlineScorecard(CANDIDATES[0]);
-        }
-
-        async function showInlineScorecard(c) {
-            const poolView = document.getElementById('poolView');
-            const panel = document.getElementById('scorecardPanel');
-            const style = getRecStyle(c.rec);
-            const score = Math.round(c.finalScore);
-            const initials = c.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-
-            if (isMobile()) {
-                document.getElementById('uploadPanel').classList.add('mobile-hidden');
-            }
-            poolView.classList.add('hidden');
-
-            panel.innerHTML = `
-                <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-start shrink-0 bg-white">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-[14px] shrink-0" style="background:${c.avatarBg};color:${c.avatarColor}">${initials}</div>
-                        <div>
-                            <h3 class="text-[16px] font-bold text-gray-900">${c.name}</h3>
-                            <div class="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5">
-                                <i data-lucide="map-pin" class="w-3 h-3"></i> ${c.city} &bull;
-                                <i data-lucide="mail" class="w-3 h-3"></i> ${c.email}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="text-right">
-                        <div class="text-[24px] font-bold text-primary leading-none">${score}%</div>
-                        <div class="${style.bg} ${style.text} px-2.5 py-0.5 rounded-full text-[10px] font-bold mt-1.5 inline-block">${c.rec}</div>
-                    </div>
+        // Populate resolved attributes
+        const list = document.getElementById('resolvedList');
+        for (let i = 0; i < RESOLVED_ATTRS.length; i++) {
+            await delay(480);
+            const attr = RESOLVED_ATTRS[i];
+            const div = document.createElement('div');
+            div.className = 'resolved-attr bg-white border border-gray-200 rounded-lg overflow-hidden shrink-0 visible';
+            div.innerHTML = `
+                <div class="px-2.5 py-1.5 bg-primary-light/50 text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                    <i data-lucide="${attr.icon}" class="w-3 h-3"></i> ${attr.key}
                 </div>
-                <div class="p-5 overflow-y-auto flex-1 bg-white">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="flex flex-col gap-4">
-                            <h4 class="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1 border-b border-gray-100 pb-1.5">Criteria Scoring</h4>
-                            <div class="space-y-4">
-                                ${c.scores.map(s => `
-                                    <div>
-                                        <div class="flex justify-between items-end mb-1">
-                                            <span class="text-[11.5px] font-semibold text-gray-800">${s.param}</span>
-                                            <div class="flex items-center gap-1.5 text-[10px]">
-                                                <span class="text-gray-400">W: ${s.weight}%</span>
-                                                <span class="font-bold text-primary">${s.score.toFixed(1)}/10</span>
-                                            </div>
-                                        </div>
-                                        <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
-                                            <div class="h-full bg-primary rounded-full" style="width:${s.score * 10}%"></div>
-                                        </div>
-                                        <p class="text-[10px] text-gray-500 leading-relaxed">${s.evidence}</p>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                        <div class="flex flex-col gap-3">
-                            <h4 class="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1 border-b border-gray-100 pb-1.5">AI Assessment</h4>
-                            <div class="bg-accent-light border-l-4 border-accent p-2.5 rounded-r-lg">
-                                <div class="text-[10px] font-bold text-accent uppercase tracking-wide mb-1">Strengths</div>
-                                <ul class="text-[11px] text-gray-800 space-y-0.5 list-disc list-inside">
-                                    ${c.strengths.map(s => `<li>${s}</li>`).join('')}
-                                </ul>
-                            </div>
-                            ${c.ambiguous.length ? `
-                            <div class="bg-warning-light border-l-4 border-warning p-2.5 rounded-r-lg">
-                                <div class="text-[10px] font-bold text-warning uppercase tracking-wide mb-1">Needs Clarification</div>
-                                <ul class="text-[11px] text-gray-800 space-y-0.5 list-disc list-inside">
-                                    ${c.ambiguous.map(s => `<li>${s}</li>`).join('')}
-                                </ul>
-                            </div>` : ''}
-                            <div class="bg-danger-light border-l-4 border-danger p-2.5 rounded-r-lg">
-                                <div class="text-[10px] font-bold text-danger uppercase tracking-wide mb-1">Shortcomings</div>
-                                <ul class="text-[11px] text-gray-800 space-y-0.5 list-disc list-inside">
-                                    ${c.weaknesses.map(s => `<li>${s}</li>`).join('')}
-                                </ul>
-                            </div>
-                            <p class="text-[11.5px] text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg border border-gray-100">
-                                <strong>Summary:</strong> ${c.summary}
-                            </p>
-                            <div>
-                                <h4 class="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2 border-b border-gray-100 pb-1.5">Follow-up Actions</h4>
-                                <div class="space-y-1.5">
-                                    ${c.followup.map(f => `
-                                        <div class="flex items-start gap-1.5 text-[11px] text-gray-700">
-                                            <i data-lucide="arrow-right-circle" class="w-3 h-3 text-primary shrink-0 mt-0.5"></i>
-                                            <span>${f}</span>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <div class="px-2.5 py-2 font-mono text-[11px] text-gray-700 leading-relaxed">${attr.content}</div>
             `;
-
-            panel.classList.remove('hidden');
-            panel.classList.add('flex');
+            list.appendChild(div);
             lucide.createIcons();
+            list.parentElement.scrollTop = list.parentElement.scrollHeight;
+        }
 
+        await delay(900);
+        executeStep2();
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       STEP 2 — Set Criteria
+    ═══════════════════════════════════════════════════════════ */
+    async function executeStep2() {
+        showStep(2);
+        const tbody = document.getElementById('criteriaBody');
+        let totalW = 0;
+
+        for (let i = 0; i < CRITERIA_DATA.length; i++) {
+            await delay(350);
+            const c = CRITERIA_DATA[i];
+            const tr = document.createElement('tr');
+            tr.className = 'animate-fade-up bg-white hover:bg-gray-50/50 transition-colors';
+            tr.innerHTML = `
+                <td class="py-2.5 px-4 border-b border-gray-100 text-[11.5px] font-semibold text-gray-800">${c.param}</td>
+                <td class="py-2.5 px-4 border-b border-gray-100 text-center"><span class="inline-block bg-primary-light text-primary font-bold text-[11px] px-2 py-0.5 rounded-full">${c.weight}%</span></td>
+                <td class="py-2.5 px-4 border-b border-gray-100 text-[10.5px] text-gray-500 leading-relaxed">${c.note}</td>
+            `;
+            tbody.appendChild(tr);
+            totalW += c.weight;
+            document.getElementById('totalWeight').textContent = totalW + '%';
+            
+            // Auto-scroll on mobile
             if (isMobile()) {
-                const scrollBody = panel.querySelector('.overflow-y-auto');
+                const scrollBody = document.getElementById('step2TableWrap');
                 if (scrollBody) {
-                    const scrollDuration = 3200;
-                    const start = performance.now();
-                    const tick = (now) => {
-                        const progress = Math.min((now - start) / scrollDuration, 1);
-                        scrollBody.scrollTop = progress * (scrollBody.scrollHeight - scrollBody.clientHeight);
-                        if (progress < 1) requestAnimationFrame(tick);
-                    };
-                    requestAnimationFrame(tick);
+                    scrollBody.scrollTop = scrollBody.scrollHeight;
                 }
             }
-
-            await delay(3500);
-            await resetAndLoopDemo();
         }
 
-        // --- AUTOMATED ITERATIVE MODAL DEMO & INSTANT LOOP ---
-        async function runModalDemonstration() {
-            for (let i = 0; i < CANDIDATES.length; i++) {
-                await delay(800);
-                openModal(CANDIDATES[i]);
-                await delay(3200);
-                closeModal(null, true);
-            }
-            
-            // Wait strictly enough time for the modal's close transition to finish
-            await delay(300); 
-            
-            // Instantly start loop
-            await resetAndLoopDemo();
-        }
+        await delay(800);
+        const saveBtn = document.getElementById('saveBtn');
+        saveBtn.classList.remove('opacity-50');
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<div class="spinner border-t-white border-2"></div> Saving…';
 
-        async function resetAndLoopDemo() {
-            const app = document.getElementById('app-container');
-            
-            // Quick 0.2s cross-fade to hide the reset pop
-            app.style.opacity = '0';
-            await delay(200);
-            
-            // --- Hard Reset DOM to strictly initial condition ---
-            
-            // Step 1
-            document.getElementById('rawText').innerHTML = '';
-            document.getElementById('rawScrollContainer').scrollTop = 0;
-            document.getElementById('resolvedList').innerHTML = '';
+        await delay(900);
+        saveBtn.classList.add('hidden');
 
-            // Step 2
-            document.getElementById('criteriaBody').innerHTML = '';
-            document.getElementById('totalWeight').textContent = '0%';
-            
-            const saveBtn = document.getElementById('saveBtn');
-            saveBtn.disabled = true;
-            saveBtn.classList.remove('hidden');
-            saveBtn.className = 'px-4 py-1.5 bg-primary text-white rounded-md font-semibold text-[12px] flex items-center gap-1.5 opacity-50 transition-all';
-            saveBtn.innerHTML = '<i data-lucide="save" class="w-3.5 h-3.5"></i> Save Criteria';
+        await delay(400);
+        executeStep3();
+    }
 
-            // Step 3
-            document.getElementById('fileList').innerHTML = '';
-            document.getElementById('candidatePool').innerHTML = '';
-            
-            // Reset scorecard panel
-            document.getElementById('scorecardPanel').classList.add('hidden');
-            document.getElementById('scorecardPanel').classList.remove('flex');
-            document.getElementById('scorecardPanel').innerHTML = '';
-            document.getElementById('poolView').classList.remove('hidden');
+    /* ═══════════════════════════════════════════════════════════
+       STEP 3 — Assess CVs
+    ═══════════════════════════════════════════════════════════ */
+    async function executeStep3() {
+        showStep(3);
 
-            // Reset mobile panel visibility
-            if (isMobile()) {
-                document.getElementById('rawPanel').classList.remove('mobile-hidden');
-                document.getElementById('resolvedPanel').classList.add('mobile-hidden');
-                document.getElementById('uploadPanel').classList.remove('mobile-hidden');
-            }
-            
-            document.getElementById('jdSelect').className = 'border border-gray-200 rounded-md p-2 text-[12px] text-gray-400 flex justify-between items-center transition-all bg-white';
-            document.getElementById('jdSelectText').textContent = 'Select job description...';
-            
-            document.getElementById('criteriaSelect').className = 'border border-gray-200 rounded-md p-2 text-[12px] text-gray-400 flex justify-between items-center transition-all bg-white';
-            document.getElementById('criteriaSelectText').textContent = 'Select criteria...';
-            
-            const uploadZone = document.getElementById('uploadZone');
-            uploadZone.className = 'border-2 border-dashed border-gray-200 rounded-lg p-4 text-center transition-all bg-gray-50 flex flex-col items-center justify-center mb-3 shrink-0';
-            uploadZone.innerHTML = '<i data-lucide="upload-cloud" class="w-6 h-6 text-gray-300 mb-1.5"></i><div class="text-[12px] text-gray-400">Drop CVs here or click</div>';
-            
-            const proBtn = document.getElementById('provaluateBtn');
-            proBtn.className = 'w-full bg-primary text-white py-2.5 rounded-md font-semibold text-[13px] flex items-center justify-center gap-2 relative overflow-hidden transition-all opacity-50 shrink-0';
-            proBtn.innerHTML = '<i data-lucide="play-circle" class="w-4 h-4"></i> Pro-Valuate<div class="btn-shimmer" id="btnShimmer"></div>';
+        await delay(300);
+        const jdSel = document.getElementById('jdSelect');
+        jdSel.classList.remove('border-gray-200');
+        jdSel.classList.add('border-primary','bg-primary-light/30','text-primary');
+        document.getElementById('jdSelectText').textContent = 'Senior ML Engineer — TechNova AI';
 
-            // Reset State variables
-            currentStep = 1;
+        await delay(400);
+        const critSel = document.getElementById('criteriaSelect');
+        critSel.classList.remove('border-gray-200');
+        critSel.classList.add('border-primary','bg-primary-light/30','text-primary');
+        document.getElementById('criteriaSelectText').textContent = 'Senior ML Engineer — AI Criteria';
 
-            // Immediately present Step 1 and Re-render Icons
-            showStep(1);
-            lucide.createIcons();
-            
-            // Fade App Back In
-            app.style.opacity = '1';
+        await delay(500);
+        const zone = document.getElementById('uploadZone');
+        zone.classList.remove('border-gray-200','bg-gray-50');
+        zone.classList.add('border-primary','bg-primary-light/30');
+        zone.innerHTML = `
+            <i data-lucide="check-circle" class="w-5 h-5 text-primary mb-1.5"></i>
+            <div class="text-[11.5px] text-primary font-semibold">3 files dropped</div>
+        `;
+        lucide.createIcons();
 
-            // Immediately restart sequence
-            await delay(100);
-            executeStep1();
-        }
-
-        // --- UI RENDER HELPERS ---
-
-        function getRecStyle(rec) {
-            if (rec === 'To Be Interviewed') return { bg: 'bg-accent-light', text: 'text-accent' };
-            if (rec === 'Rejected') return { bg: 'bg-danger-light', text: 'text-danger' };
-            return { bg: 'bg-warning-light', text: 'text-warning' };
-        }
-
-        function addCandidateCard(c, i) {
-            const pool = document.getElementById('candidatePool');
-            const style = getRecStyle(c.rec);
-            const score = Math.round(c.finalScore);
-            const initials = c.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-
-            const card = document.createElement('div');
-            card.className = 'candidate-card bg-white border border-gray-200 rounded-xl p-3 cursor-pointer shadow-sm flex flex-col gap-2 shrink-0';
-            card.onclick = () => openModal(c);
-            
-            card.innerHTML = `
-                <div class="flex items-start justify-between">
-                    <div class="flex items-center gap-2.5">
-                        <div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0" style="background:${c.avatarBg};color:${c.avatarColor}">${initials}</div>
-                        <div class="min-w-0">
-                            <div class="font-semibold text-[12.5px] text-gray-900 leading-tight truncate">${c.name}</div>
-                            <div class="text-[10px] text-gray-400 mt-0.5 truncate w-24">${c.file}</div>
-                        </div>
-                    </div>
-                    <div class="text-right shrink-0 pl-2">
-                        <div class="text-[16px] font-bold text-primary leading-none">${score}%</div>
-                        <div class="${style.bg} ${style.text} px-2 py-0.5 rounded-full text-[9px] font-semibold mt-1 inline-block">${c.rec}</div>
-                    </div>
-                </div>
-                <div class="flex flex-col gap-1 mt-0.5 border-t border-gray-100 pt-2">
-                    ${c.scores.slice(0,3).map(s => `
-                        <div class="flex items-center gap-1.5">
-                            <span class="text-[9px] text-gray-400 w-[70px] truncate" title="${s.param}">${s.param}</span>
-                            <div class="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden"><div class="h-full bg-primary score-fill w-0" data-score="${s.score}"></div></div>
-                        </div>
-                    `).join('')}
-                </div>
+        const fList = document.getElementById('fileList');
+        for (let i = 0; i < FILES.length; i++) {
+            await delay(420);
+            const item = document.createElement('div');
+            item.className = 'flex items-center gap-2.5 p-2 border border-gray-200 rounded-lg bg-white opacity-0 transition-all duration-300 shrink-0';
+            item.style.transform = 'translateX(-8px)';
+            item.innerHTML = `
+                <i data-lucide="file-text" class="w-3.5 h-3.5 text-gray-400 shrink-0"></i>
+                <span class="text-[11px] font-medium text-gray-700 truncate flex-1">${FILES[i].name}</span>
+                <div class="w-10 h-1 bg-gray-100 rounded-full overflow-hidden shrink-0"><div class="h-full bg-primary w-0 transition-all duration-1000" id="prog-${i}"></div></div>
             `;
-            pool.appendChild(card);
-            
+            fList.appendChild(item);
+            lucide.createIcons();
             requestAnimationFrame(() => {
-                card.classList.add('visible');
-                setTimeout(() => {
-                    const bars = card.querySelectorAll('.score-fill');
-                    for(let b of bars) { b.style.width = `${b.getAttribute('data-score') * 10}%`; }
-                }, 100);
+                item.style.opacity = '1'; item.style.transform = 'translateX(0)';
+                setTimeout(() => { const b = document.getElementById(`prog-${i}`); if(b) b.style.width='100%'; }, 100);
             });
         }
 
-        function openModal(c) {
-            const overlay = document.getElementById('modalOverlay');
-            const header = document.getElementById('modalHeader');
-            const body = document.getElementById('modalBody');
-            const style = getRecStyle(c.rec);
-            const score = Math.round(c.finalScore);
-            const initials = c.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+        await delay(1000);
+        const btn = document.getElementById('provaluateBtn');
+        btn.disabled = false;
+        btn.classList.remove('opacity-50');
+        btn.classList.add('shadow-md');
 
-            header.innerHTML = `
+        await delay(600);
+        await executeProvaluation();
+    }
+
+    async function executeProvaluation() {
+        const btn = document.getElementById('provaluateBtn');
+        btn.innerHTML = `<div class="spinner"></div> Analyzing… <div class="btn-shimmer running"></div>`;
+        btn.classList.remove('bg-primary'); btn.classList.add('bg-blue-600');
+        btn.disabled = true;
+
+        // Simulate analysis time
+        await delay(2100); // 700ms * 3 candidates
+
+        await delay(800);
+        btn.classList.remove('bg-blue-600'); btn.classList.add('bg-accent');
+        btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> Analysis Complete`;
+        lucide.createIcons();
+
+        await delay(700);
+        await showInlineScorecard(CANDIDATES[0]);
+    }
+
+    async function showInlineScorecard(c) {
+        const poolView = document.getElementById('poolView');
+        const panel    = document.getElementById('scorecardPanel');
+        const style    = getRecStyle(c.rec);
+        const score    = Math.round(c.finalScore);
+        const initials = c.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+
+        if (isMobile()) {
+            document.getElementById('uploadPanel').classList.add('mobile-hidden');
+        }
+        poolView.classList.add('hidden');
+
+        panel.innerHTML = `
+            <div class="px-5 py-3.5 border-b border-gray-100 flex justify-between items-start shrink-0 bg-white">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-[14px]" style="background:${c.avatarBg};color:${c.avatarColor}">${initials}</div>
+                    <div class="w-9 h-9 rounded-full flex items-center justify-center font-bold text-[13px] shrink-0" style="background:${c.avatarBg};color:${c.avatarColor}">${initials}</div>
                     <div>
-                        <h3 class="text-[16px] font-bold text-gray-900">${c.name}</h3>
-                        <div class="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5">
-                            <i data-lucide="map-pin" class="w-3 h-3"></i> ${c.city} • <i data-lucide="mail" class="w-3 h-3"></i> ${c.email}
+                        <h3 class="text-[15px] font-bold text-gray-900">${c.name}</h3>
+                        <div class="text-[10.5px] text-gray-500 mt-0.5 flex items-center gap-1.5">
+                            <i data-lucide="map-pin" class="w-3 h-3"></i> ${c.city} &bull;
+                            <i data-lucide="mail" class="w-3 h-3"></i> ${c.email}
                         </div>
                     </div>
                 </div>
                 <div class="text-right">
-                    <div class="text-[24px] font-bold text-primary leading-none">${score}%</div>
-                    <div class="${style.bg} ${style.text} px-2.5 py-0.5 rounded-full text-[10px] font-bold mt-1.5 inline-block">${c.rec}</div>
+                    <div class="text-[23px] font-bold text-primary leading-none">${score}%</div>
+                    <div class="${style.bg} ${style.text} px-2.5 py-0.5 rounded-full text-[9.5px] font-bold mt-1.5 inline-block">${c.rec}</div>
                 </div>
-            `;
-
-            body.innerHTML = `
-                <div class="grid grid-cols-2 gap-6">
-                    <div class="flex flex-col gap-4">
-                        <div>
-                            <h4 class="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-3 border-b border-gray-100 pb-1.5">Criteria Scoring</h4>
-                            <div class="space-y-3">
-                                ${c.scores.map(s => `
-                                    <div>
-                                        <div class="flex justify-between items-end mb-1">
-                                            <span class="text-[11.5px] font-semibold text-gray-800">${s.param}</span>
-                                            <div class="flex items-center gap-1.5 text-[10px]">
-                                                <span class="text-gray-400">W: ${s.weight}%</span>
-                                                <span class="font-bold text-primary">${s.score.toFixed(1)}/10</span>
-                                            </div>
+            </div>
+            <div class="p-4 md:p-5 overflow-y-auto flex-1 bg-white">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                        <h4 class="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-3 border-b border-gray-100 pb-1.5">Criteria Scoring</h4>
+                        <div class="space-y-3">
+                            ${c.scores.map(s=>`
+                                <div>
+                                    <div class="flex justify-between items-end mb-1">
+                                        <span class="text-[11px] font-semibold text-gray-800">${s.param}</span>
+                                        <div class="flex items-center gap-1.5 text-[10px]">
+                                            <span class="text-gray-400">W:${s.weight}%</span>
+                                            <span class="font-bold text-primary">${s.score.toFixed(1)}/10</span>
                                         </div>
-                                        <div class="h-1 bg-gray-100 rounded-full overflow-hidden mb-1"><div class="h-full bg-primary" style="width:${s.score*10}%"></div></div>
-                                        <p class="text-[10px] text-gray-500 leading-relaxed">${s.evidence}</p>
                                     </div>
-                                `).join('')}
-                            </div>
+                                    <div class="h-1 bg-gray-100 rounded-full overflow-hidden mb-1"><div class="h-full bg-primary" style="width:${s.score*10}%"></div></div>
+                                    <p class="text-[10px] text-gray-500 leading-relaxed">${s.evidence}</p>
+                                </div>
+                            `).join('')}
                         </div>
                     </div>
-
-                    <div class="flex flex-col gap-4">
-                        <div>
-                            <h4 class="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-3 border-b border-gray-100 pb-1.5">AI Assessment</h4>
-                            
-                            <div class="bg-accent-light border-l-4 border-accent p-2.5 rounded-r-lg mb-2">
-                                <div class="text-[10px] font-bold text-accent uppercase tracking-wide mb-1">Strengths</div>
-                                <ul class="text-[11px] text-gray-800 space-y-0.5 list-disc list-inside">
-                                    ${c.strengths.map(s => `<li>${s}</li>`).join('')}
-                                </ul>
-                            </div>
-
-                            ${c.ambiguous.length ? `
-                            <div class="bg-warning-light border-l-4 border-warning p-2.5 rounded-r-lg mb-2">
-                                <div class="text-[10px] font-bold text-warning uppercase tracking-wide mb-1">Needs Clarification</div>
-                                <ul class="text-[11px] text-gray-800 space-y-0.5 list-disc list-inside">
-                                    ${c.ambiguous.map(s => `<li>${s}</li>`).join('')}
-                                </ul>
-                            </div>` : ''}
-
-                            <div class="bg-danger-light border-l-4 border-danger p-2.5 rounded-r-lg mb-3">
-                                <div class="text-[10px] font-bold text-danger uppercase tracking-wide mb-1">Shortcomings</div>
-                                <ul class="text-[11px] text-gray-800 space-y-0.5 list-disc list-inside">
-                                    ${c.weaknesses.map(s => `<li>${s}</li>`).join('')}
-                                </ul>
-                            </div>
-
-                            <p class="text-[11.5px] text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg border border-gray-100">
-                                <strong>Summary:</strong> ${c.summary}
-                            </p>
+                    <div class="flex flex-col gap-3">
+                        <h4 class="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-0 border-b border-gray-100 pb-1.5">AI Assessment</h4>
+                        <div class="bg-accent-light border-l-4 border-accent p-2.5 rounded-r-lg">
+                            <div class="text-[10px] font-bold text-accent uppercase tracking-wide mb-1">Strengths</div>
+                            <ul class="text-[10.5px] text-gray-800 space-y-0.5 list-disc list-inside">${c.strengths.map(s=>`<li>${s}</li>`).join('')}</ul>
                         </div>
-
+                        ${c.ambiguous.length ? `
+                        <div class="bg-warning-light border-l-4 border-warning p-2.5 rounded-r-lg">
+                            <div class="text-[10px] font-bold text-warning uppercase tracking-wide mb-1">Needs Clarification</div>
+                            <ul class="text-[10.5px] text-gray-800 space-y-0.5 list-disc list-inside">${c.ambiguous.map(s=>`<li>${s}</li>`).join('')}</ul>
+                        </div>` : ''}
+                        <div class="bg-danger-light border-l-4 border-danger p-2.5 rounded-r-lg">
+                            <div class="text-[10px] font-bold text-danger uppercase tracking-wide mb-1">Shortcomings</div>
+                            <ul class="text-[10.5px] text-gray-800 space-y-0.5 list-disc list-inside">${c.weaknesses.map(s=>`<li>${s}</li>`).join('')}</ul>
+                        </div>
+                        <p class="text-[10.5px] text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg border border-gray-100"><strong>Summary:</strong> ${c.summary}</p>
                         <div>
                             <h4 class="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2 border-b border-gray-100 pb-1.5">Follow-up Actions</h4>
                             <div class="space-y-1.5">
-                                ${c.followup.map(f => `
-                                    <div class="flex items-start gap-1.5 text-[11px] text-gray-700">
+                                ${c.followup.map(f=>`
+                                    <div class="flex items-start gap-1.5 text-[10.5px] text-gray-700">
                                         <i data-lucide="arrow-right-circle" class="w-3 h-3 text-primary shrink-0 mt-0.5"></i>
                                         <span>${f}</span>
                                     </div>
@@ -945,19 +872,186 @@ Qualifications & Experience:
                         </div>
                     </div>
                 </div>
-            `;
-            lucide.createIcons();
-            overlay.classList.add('open');
-        }
+            </div>
+        `;
 
-        function closeModal(e, force = false) {
-            if (force || !e || e.target.id === 'modalOverlay') {
-                document.getElementById('modalOverlay').classList.remove('open');
+        panel.classList.remove('hidden'); panel.classList.add('flex');
+        lucide.createIcons();
+
+        if (isMobile()) {
+            const scrollBody = panel.querySelector('.overflow-y-auto');
+            if (scrollBody) {
+                const dur = 3000, start = performance.now();
+                const tick = now => {
+                    const p = Math.min((now - start) / dur, 1);
+                    scrollBody.scrollTop = p * (scrollBody.scrollHeight - scrollBody.clientHeight);
+                    if (p < 1) requestAnimationFrame(tick);
+                };
+                requestAnimationFrame(tick);
             }
         }
 
-        // Initialize App Loop
-        window.addEventListener('load', () => setTimeout(executeStep1, 400));
-    </script>
+        await delay(3500);
+        await resetAndLoopDemo();
+    }
+
+    /* ── Reset & Loop ──────────────────────────────────────── */
+    async function resetAndLoopDemo() {
+        const demo = document.getElementById('demoArea');
+        demo.style.opacity = '0';
+        await delay(200);
+        resetDOMState();
+        showStep(1);
+        lucide.createIcons();
+        demo.style.opacity = '1';
+        await delay(100);
+        executeStep1();
+    }
+
+    /* ── UI Helpers ────────────────────────────────────────── */
+    function getRecStyle(rec) {
+        if (rec === 'To Be Interviewed') return { bg:'bg-accent-light',   text:'text-accent'   };
+        if (rec === 'Rejected')           return { bg:'bg-danger-light',   text:'text-danger'   };
+        return                                   { bg:'bg-warning-light',  text:'text-warning'  };
+    }
+
+    function addCandidateCard(c, i) {
+        const pool  = document.getElementById('candidatePool');
+        const style = getRecStyle(c.rec);
+        const score = Math.round(c.finalScore);
+        const initials = c.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+
+        const card = document.createElement('div');
+        card.className = 'candidate-card bg-white border border-gray-200 rounded-xl p-3 cursor-pointer shadow-sm flex flex-col gap-2 shrink-0';
+        card.onclick = () => openModal(c);
+        card.innerHTML = `
+            <div class="flex items-start justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0" style="background:${c.avatarBg};color:${c.avatarColor}">${initials}</div>
+                    <div class="min-w-0">
+                        <div class="font-semibold text-[12px] text-gray-900 leading-tight truncate">${c.name}</div>
+                        <div class="text-[10px] text-gray-400 mt-0.5 truncate w-24">${c.file}</div>
+                    </div>
+                </div>
+                <div class="text-right shrink-0 pl-2">
+                    <div class="text-[15px] font-bold text-primary leading-none">${score}%</div>
+                    <div class="${style.bg} ${style.text} px-2 py-0.5 rounded-full text-[9px] font-semibold mt-1 inline-block">${c.rec}</div>
+                </div>
+            </div>
+            <div class="flex flex-col gap-1 mt-0.5 border-t border-gray-100 pt-2">
+                ${c.scores.slice(0,3).map(s=>`
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[9px] text-gray-400 w-[70px] truncate">${s.param}</span>
+                        <div class="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden"><div class="h-full bg-primary score-fill w-0" data-score="${s.score}"></div></div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        pool.appendChild(card);
+        requestAnimationFrame(() => {
+            card.classList.add('visible');
+            setTimeout(() => {
+                card.querySelectorAll('.score-fill').forEach(b => { b.style.width = `${b.dataset.score * 10}%`; });
+            }, 100);
+        });
+    }
+
+    /* ── Modal ─────────────────────────────────────────────── */
+    function openModal(c) {
+        const overlay  = document.getElementById('modalOverlay');
+        const header   = document.getElementById('modalHeader');
+        const body     = document.getElementById('modalBody');
+        const style    = getRecStyle(c.rec);
+        const score    = Math.round(c.finalScore);
+        const initials = c.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+
+        header.innerHTML = `
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-[14px]" style="background:${c.avatarBg};color:${c.avatarColor}">${initials}</div>
+                <div>
+                    <h3 class="text-[16px] font-bold text-gray-900">${c.name}</h3>
+                    <div class="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5">
+                        <i data-lucide="map-pin" class="w-3 h-3"></i> ${c.city} &bull;
+                        <i data-lucide="mail" class="w-3 h-3"></i> ${c.email}
+                    </div>
+                </div>
+            </div>
+            <div class="text-right">
+                <div class="text-[24px] font-bold text-primary leading-none">${score}%</div>
+                <div class="${style.bg} ${style.text} px-2.5 py-0.5 rounded-full text-[10px] font-bold mt-1.5 inline-block">${c.rec}</div>
+            </div>
+        `;
+
+        body.innerHTML = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col gap-4">
+                    <div>
+                        <h4 class="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-3 border-b border-gray-100 pb-1.5">Criteria Scoring</h4>
+                        <div class="space-y-3">
+                            ${c.scores.map(s=>`
+                                <div>
+                                    <div class="flex justify-between items-end mb-1">
+                                        <span class="text-[11.5px] font-semibold text-gray-800">${s.param}</span>
+                                        <div class="flex items-center gap-1.5 text-[10px]">
+                                            <span class="text-gray-400">W: ${s.weight}%</span>
+                                            <span class="font-bold text-primary">${s.score.toFixed(1)}/10</span>
+                                        </div>
+                                    </div>
+                                    <div class="h-1 bg-gray-100 rounded-full overflow-hidden mb-1"><div class="h-full bg-primary" style="width:${s.score*10}%"></div></div>
+                                    <p class="text-[10px] text-gray-500 leading-relaxed">${s.evidence}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-4">
+                    <div>
+                        <h4 class="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-3 border-b border-gray-100 pb-1.5">AI Assessment</h4>
+                        <div class="bg-accent-light border-l-4 border-accent p-2.5 rounded-r-lg mb-2">
+                            <div class="text-[10px] font-bold text-accent uppercase tracking-wide mb-1">Strengths</div>
+                            <ul class="text-[11px] text-gray-800 space-y-0.5 list-disc list-inside">${c.strengths.map(s=>`<li>${s}</li>`).join('')}</ul>
+                        </div>
+                        ${c.ambiguous.length ? `
+                        <div class="bg-warning-light border-l-4 border-warning p-2.5 rounded-r-lg mb-2">
+                            <div class="text-[10px] font-bold text-warning uppercase tracking-wide mb-1">Needs Clarification</div>
+                            <ul class="text-[11px] text-gray-800 space-y-0.5 list-disc list-inside">${c.ambiguous.map(s=>`<li>${s}</li>`).join('')}</ul>
+                        </div>` : ''}
+                        <div class="bg-danger-light border-l-4 border-danger p-2.5 rounded-r-lg mb-3">
+                            <div class="text-[10px] font-bold text-danger uppercase tracking-wide mb-1">Shortcomings</div>
+                            <ul class="text-[11px] text-gray-800 space-y-0.5 list-disc list-inside">${c.weaknesses.map(s=>`<li>${s}</li>`).join('')}</ul>
+                        </div>
+                        <p class="text-[11.5px] text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg border border-gray-100"><strong>Summary:</strong> ${c.summary}</p>
+                    </div>
+                    <div>
+                        <h4 class="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2 border-b border-gray-100 pb-1.5">Follow-up Actions</h4>
+                        <div class="space-y-1.5">
+                            ${c.followup.map(f=>`
+                                <div class="flex items-start gap-1.5 text-[11px] text-gray-700">
+                                    <i data-lucide="arrow-right-circle" class="w-3 h-3 text-primary shrink-0 mt-0.5"></i>
+                                    <span>${f}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        lucide.createIcons();
+        overlay.classList.add('open');
+    }
+
+    function closeModal(e, force = false) {
+        if (force || !e || e.target.id === 'modalOverlay') {
+            document.getElementById('modalOverlay').classList.remove('open');
+        }
+    }
+
+    /* ── Init ──────────────────────────────────────────────── */
+    window.addEventListener('load', () => {
+        updateSidebar(1);
+        setTimeout(executeStep1, 400);
+    });
+</script>
 </body>
 </html>

@@ -140,6 +140,31 @@ const roles: Array<{
 
 const roleOrder: RoleId[] = ['candidate', 'recruiter', 'tpo'];
 
+type Testimonial = {
+  id: string;
+  videoSrc: string;
+  quote: string;
+  shortQuote: string;
+  name: string;
+  title: string;
+  company: string;
+  initials: string;
+};
+
+const testimonials: Testimonial[] = [
+  {
+    id: 'neetu-singh',
+    videoSrc: '/videos/Testimonial_SRGlobal.mp4.mp4',
+    quote:
+      'ProValuate has definitely streamlined our hiring process. It has saved a lot of manual effort and helps a lot in aligning the right candidate with the JD.',
+    shortQuote: 'Definitely streamlined our hiring process — saved a lot of manual effort.',
+    name: 'Neetu Singh',
+    title: 'HR Professional',
+    company: 'SR Global HR Solutions',
+    initials: 'NS',
+  },
+];
+
 export default function CoverPage() {
   const navigate = useNavigate();
   const cardRefs = useRef<Record<RoleId, HTMLDivElement | null>>({
@@ -147,7 +172,10 @@ export default function CoverPage() {
     recruiter: null,
     tpo: null,
   });
-  const [activeTab, setActiveTab] = useState<'cv-screening' | 'resume-ingestion' | 'dynamic-interview'>('cv-screening');
+  const mainRef = useRef<HTMLElement | null>(null);
+  const [activeTab, setActiveTab] = useState<'cv-screening' | 'resume-ingestion' | 'dynamic-interview' | 'sample-report'>('cv-screening');
+  const [activeTestimonial, setActiveTestimonial] = useState<Testimonial | null>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const go = (route: string) => {
     navigate(route);
@@ -168,6 +196,7 @@ export default function CoverPage() {
 
     const triggers: ScrollTrigger[] = [];
     const animations: gsap.core.Tween[] = [];
+    const scroller = mainRef.current;
 
     roleOrder.forEach((id, i) => {
       const el = cardRefs.current[id];
@@ -187,15 +216,18 @@ export default function CoverPage() {
         y: 0,
         rotationX: 0,
         scale: 1,
-        duration: 0.7,
-        delay: i * 0.03,
+        duration: 0.65,
+        delay: 0,
         ease: 'power3.out',
         paused: true,
       });
 
+      const startThresholds = ['top 80%', 'top 85%', 'top 90%'];
+
       const trigger = ScrollTrigger.create({
         trigger: el,
-        start: 'top 74%',
+        scroller: scroller as any,
+        start: startThresholds[i],
         end: 'top 15%',
         onEnter: () => anim.play(),
         onLeaveBack: () => anim.timeScale(1.15).reverse(0),
@@ -303,36 +335,36 @@ export default function CoverPage() {
             margin-left: -20px;    /* ← break out of px-5 (20px) parent padding */
             border-radius: 0;      /* ← no rounded corners at full bleed */
             overflow: hidden;
-            min-height: 100vh;   /* ← change from fixed to 100vh */
-            max-height: none;    /* ← remove max-height cap */
+            min-height: calc(100vh - 80px);   /* ← account for fixed header */
+            max-height: calc(100vh - 80px);    /* ← account for fixed header */
           }
           .feature-tab {
             font-size: 14px;
             padding: 12px 16px;
           }
           .tab-content {
-            min-height: 100vh;
-            max-height: none;
+            min-height: calc(100vh - 80px);
+            max-height: calc(100vh - 80px);
           }
           .tab-content iframe {
             width: 100vw !important;   /* ← iframe fills full width */
-            height: 100vh !important;      /* ← full viewport */
-            min-height: 100vh !important;
+            height: calc(100vh - 80px) !important;      /* ← account for fixed header */
+            min-height: calc(100vh - 80px) !important;
           }
         }
         
         /* Desktop adjustments for full-screen iframes */
         @media (min-width: 768px) {
           .demo-content {
-            min-height: 90vh;
-            max-height: 90vh;
+            min-height: calc(90vh - 96px);
+            max-height: calc(90vh - 96px);
           }
           .tab-content {
-            min-height: 90vh;
-            max-height: 90vh;
+            min-height: calc(90vh - 96px);
+            max-height: calc(90vh - 96px);
           }
           .tab-content iframe {
-            height: 90vh !important;
+            height: calc(90vh - 96px) !important;
             min-height: 600px !important;
           }
         }
@@ -351,8 +383,8 @@ export default function CoverPage() {
       {/* Light blue background matching Login page */}
       <div className="pointer-events-none fixed inset-0 z-0 bg-[linear-gradient(145deg,#F6FAFF_0%,#EEF6FF_55%,#FFFFFF_100%)]" />
 
-      <div className="cover-panel relative z-10 flex min-h-screen flex-col">
-        <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/95 px-2 py-4 backdrop-blur sm:px-4 sm:py-5 lg:px-4 lg:py-6">
+      <div className="cover-panel relative z-10 flex h-screen flex-col">
+        <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-slate-200 bg-white/95 px-2 py-4 backdrop-blur sm:px-4 sm:py-5 lg:px-4 lg:py-6">
           <div className="flex w-full min-w-0 items-center justify-between gap-3 pl-2 pr-4 sm:px-0 lg:px-8">
             <img
               src="/Logo_Transparent_BG.png"
@@ -360,32 +392,97 @@ export default function CoverPage() {
               className="h-12 w-auto shrink-0 sm:h-14 lg:h-16"
             />
             <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
-              <a
-                href="https://aitamate.com/contact.html"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="shrink-0 text-right text-sm font-semibold text-[#0d6ea3] no-underline transition-colors hover:text-[#042C53] sm:text-base lg:text-lg"
-              >
-                <span className="sm:hidden">Demo</span>
-                <span className="hidden sm:inline">Request for Demo</span>
-              </a>
-              <button
-                onClick={() => {
-                  const featuresSection = document.getElementById('features-section');
-                  if (featuresSection) {
-                    featuresSection.scrollIntoView({ behavior: 'smooth' });
-                  }
-                }}
-                className="shrink-0 text-right text-sm font-semibold text-[#0d6ea3] no-underline transition-colors hover:text-[#042C53] sm:text-base lg:text-lg"
-              >
-                <span className="sm:hidden">Features</span>
-                <span className="hidden sm:inline">Features</span>
-              </button>
+              {/* Mobile Menu - Hamburger */}
+              <div className="relative sm:hidden">
+                <button
+                  onClick={() => setIsMenuOpen(!isMenuOpen)}
+                  className="flex items-center gap-2 text-sm font-semibold text-[#0d6ea3] transition-colors hover:text-[#042C53]"
+                >
+                  Menu
+                  <svg
+                    className={`w-4 h-4 transition-transform duration-200 ${isMenuOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                </button>
+                
+                {/* Mobile Dropdown Menu */}
+                {isMenuOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-48 rounded-lg border border-slate-200 bg-white shadow-lg z-50">
+                    <div className="py-2">
+                      <Link
+                        to="/customers"
+                        className="block px-4 py-2 text-sm font-medium text-[#0a3a5a] hover:bg-[#f0f9ff] transition-colors"
+                        onClick={() => setIsMenuOpen(false)}
+                      >
+                        Customer Stories
+                      </Link>
+                      <a
+                        href="https://aitamate.com/contact.html"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block px-4 py-2 text-sm font-medium text-[#0a3a5a] hover:bg-[#f0f9ff] transition-colors"
+                        onClick={() => setIsMenuOpen(false)}
+                      >
+                        Request Demo
+                      </a>
+                      <button
+                        onClick={() => {
+                          const featuresSection = document.getElementById('features-section');
+                          if (featuresSection) {
+                            featuresSection.scrollIntoView({ behavior: 'smooth' });
+                          }
+                          setIsMenuOpen(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm font-medium text-[#0a3a5a] hover:bg-[#f0f9ff] transition-colors"
+                      >
+                        Benefits
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Desktop Navigation - Individual Items */}
+              <div className="hidden sm:flex items-center gap-2 sm:gap-3 lg:gap-4">
+                <Link
+                  to="/customers"
+                  className="shrink-0 text-right text-sm font-semibold text-[#0d6ea3] no-underline transition-colors hover:text-[#042C53] sm:text-base lg:text-lg"
+                >
+                  <span className="sm:hidden">Stories</span>
+                  <span className="hidden sm:inline">Customer Stories</span>
+                </Link>
+                <a
+                  href="https://aitamate.com/contact.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 text-right text-sm font-semibold text-[#0d6ea3] no-underline transition-colors hover:text-[#042C53] sm:text-base lg:text-lg"
+                >
+                  <span className="sm:hidden">Demo</span>
+                  <span className="hidden sm:inline">Request for Demo</span>
+                </a>
+                <button
+                  onClick={() => {
+                    const featuresSection = document.getElementById('features-section');
+                    if (featuresSection) {
+                      featuresSection.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
+                  className="shrink-0 text-right text-sm font-semibold text-[#0d6ea3] no-underline transition-colors hover:text-[#042C53] sm:text-base lg:text-lg"
+                >
+                  <span className="sm:hidden">Benefits</span>
+                  <span className="hidden sm:inline">Benefits</span>
+                </button>
+              </div>
             </div>
           </div>
         </header>
 
-        <section className="relative flex min-h-[180px] flex-col items-center justify-center px-5 pb-8 pt-10 text-center sm:min-h-[200px] sm:px-4 sm:pb-10 sm:pt-14 md:px-5 md:pt-16 lg:px-6">
+        <main ref={mainRef} className="flex-1 overflow-y-auto mt-20 sm:mt-24 lg:mt-28">
+          <section className="relative flex min-h-[180px] flex-col items-center justify-center px-5 pb-8 pt-10 text-center sm:min-h-[200px] sm:px-4 sm:pb-10 sm:pt-14 md:px-5 md:pt-16 lg:px-6">
           <div className="relative z-10 mx-auto w-full min-w-0 max-w-none">
             <h1 className="hero-line-1 mb-4 px-1 text-center text-lg font-bold leading-tight tracking-[-0.02em] text-[#0a3a5a] min-[360px]:text-xl sm:whitespace-nowrap sm:text-2xl md:text-3xl lg:text-5xl">
               Evidence-based assessment starts here. <span className="text-[#1a9fd6]">ProValuate</span>
@@ -395,10 +492,33 @@ export default function CoverPage() {
               One platform connecting candidates, recruiters, and placement officers —<br />
               powered by structured AI evaluation.
             </p>
+            {/* {testimonials.length > 0 && (
+              <div
+                className="hero-line-2 mx-auto mt-12 flex w-full max-w-4xl items-center gap-4 rounded-2xl border border-slate-200 bg-white/70 px-6 py-4 backdrop-blur-sm cursor-pointer hover:bg-white/90 transition-colors"
+                onClick={() => setActiveTestimonial(testimonials[0])}
+              >
+                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-[#E6F1FB] text-base font-semibold text-[#185FA5]">
+                  {testimonials[0].initials}
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-base italic leading-relaxed text-slate-600">"{testimonials[0].shortQuote}"</p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    <strong className="text-slate-500">{testimonials[0].name}</strong> · {testimonials[0].company}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="flex flex-shrink-0 items-center gap-2 rounded-full border border-[#1a9fd6] px-4 py-2 text-sm font-medium text-[#1a9fd6] hover:bg-[#E6F1FB] transition-colors"
+                  onClick={(e) => { e.stopPropagation(); setActiveTestimonial(testimonials[0]); }}
+                >
+                  ▶ Watch
+                </button>
+              </div>
+            )} */}
           </div>
         </section>
 
-        <section className="flex flex-1 flex-col items-center px-5 pb-14 pt-8 sm:px-4 sm:pb-20 sm:pt-10 md:px-5 lg:px-6">
+          <section className="flex flex-1 flex-col items-center px-5 pb-14 pt-8 sm:px-4 sm:pb-20 sm:pt-10 md:px-5 lg:px-6">
           <p className="mb-8 text-base font-semibold tracking-wide text-[#1a9fd6] sm:text-lg">
             CONTINUE AS
           </p>
@@ -484,7 +604,7 @@ export default function CoverPage() {
 
           {/* Feature Tabs Section */}
           <div id="features-section" className="mt-16 w-full max-w-7xl -mx-5 sm:-mx-4 md:-mx-5 lg:-mx-6 px-0 sm:px-0">
-            <h2 className="text-center text-2xl font-bold text-[#0a3a5a] mb-8">Explore Our Features</h2>
+            <h2 className="text-center text-2xl font-bold text-[#0a3a5a] mb-8">Explore the Benefits</h2>
             
             {/* Tab Navigation */}
             <div className="flex flex-wrap justify-center gap-4 mb-8">
@@ -500,7 +620,7 @@ export default function CoverPage() {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                   </svg>
-                  CV SCREENING
+                  Rank CVs Instantly
                 </div>
               </div>
               <div 
@@ -515,7 +635,7 @@ export default function CoverPage() {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
                   </svg>
-                  RESUME INGESTION
+                  Apply From Anywhere
                 </div>
               </div>
               <div 
@@ -530,7 +650,39 @@ export default function CoverPage() {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
                   </svg>
-                  DYNAMIC INTERVIEW
+                  Interviews That Adapt
+                </div>
+              </div>
+              <div 
+                className={`feature-tab px-6 py-3 rounded-xl bg-white border-2 font-semibold transition-all ${
+                  activeTab === 'sample-report' 
+                    ? 'border-[#1a9fd6] text-white active' 
+                    : 'border-gray-200 text-gray-600'
+                }`}
+                onClick={() => {
+                  // Download the sample report immediately without changing tab
+                  fetch('/REPORT.pdf')
+                    .then(response => response.blob())
+                    .then(blob => {
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = 'provaluate-sample-report.pdf';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+                    })
+                    .catch(error => {
+                      console.error('Error downloading report:', error);
+                    });
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                  Sample Report
                 </div>
               </div>
             </div>
@@ -562,7 +714,7 @@ export default function CoverPage() {
                     title="Dynamic Interview Demo"
                   />
                 )}
-              </div>
+                              </div>
             </div>
           </div>
 
@@ -585,7 +737,56 @@ export default function CoverPage() {
             </div>
           </div>
         </section>
+        </main>
       </div>
+      
+      {activeTestimonial && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(10,30,50,0.6)] p-4 backdrop-blur-sm"
+          onClick={() => setActiveTestimonial(null)}
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <span className="text-sm font-semibold text-[#0a3a5a]">Customer story</span>
+              <button
+                type="button"
+                className="text-slate-400 hover:text-slate-600 text-lg leading-none"
+                onClick={() => setActiveTestimonial(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Video */}
+            <video
+              src={activeTestimonial.videoSrc}
+              controls
+              autoPlay
+              className="w-full aspect-video bg-[#0a1e30]"
+            />
+
+            {/* Footer */}
+            <div className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#E6F1FB] text-sm font-semibold text-[#185FA5]">
+                  {activeTestimonial.initials}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[#0a3a5a]">{activeTestimonial.name}</p>
+                  <p className="text-xs text-slate-500">{activeTestimonial.title} · {activeTestimonial.company}</p>
+                </div>
+              </div>
+              <p className="mt-3 border-t border-slate-100 pt-3 text-xs italic leading-relaxed text-slate-500">
+                "{activeTestimonial.quote}"
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
