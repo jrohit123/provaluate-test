@@ -33,6 +33,7 @@ export default defineConfig(({ mode }) => {
       legalComments: 'none',
     },
     build: {
+      target: 'esnext',
       sourcemap: false,
       minify: false,
       chunkSizeWarningLimit: 1000,
