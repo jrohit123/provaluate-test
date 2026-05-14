@@ -432,20 +432,20 @@ const Login = () => {
                     </SheetTrigger>
                     <SheetContent side="right" className="w-64">
                       <div className="pt-8 space-y-2">
-                        <a
-                          href={`${import.meta.env.BASE_URL}pricing`}
+                        <Link
+                          to="/pricing"
                           className="block rounded-lg px-3 py-2 text-base font-medium text-[#0d6ea3] hover:bg-slate-50 hover:text-[#042C53]"
                           onClick={() => setMobileMenuOpen(false)}
                         >
                           Pricing
-                        </a>
-                        <a
-                          href={`${import.meta.env.BASE_URL}impact`}
+                        </Link>
+                        <Link
+                          to="/impact"
                           className="block rounded-lg px-3 py-2 text-base font-medium text-[#0d6ea3] hover:bg-slate-50 hover:text-[#042C53]"
                           onClick={() => setMobileMenuOpen(false)}
                         >
                           Impact
-                        </a>
+                        </Link>
                         <div className="my-3 h-px bg-slate-200" />
                         <Link
                           to="/"
@@ -460,18 +460,18 @@ const Login = () => {
 
                   {/* Desktop: inline nav */}
                   <nav className="hidden items-center gap-1 sm:flex">
-                    <a
-                      href={`${import.meta.env.BASE_URL}pricing`}
+                    <Link
+                      to="/pricing"
                       className="px-2.5 py-1.5 text-sm font-medium text-[#0d6ea3] hover:text-[#042C53] transition-colors rounded-md hover:bg-slate-50 sm:text-base"
                     >
                       Pricing
-                    </a>
-                    <a
-                      href={`${import.meta.env.BASE_URL}impact`}
+                    </Link>
+                    <Link
+                      to="/impact"
                       className="px-2.5 py-1.5 text-sm font-medium text-[#0d6ea3] hover:text-[#042C53] transition-colors rounded-md hover:bg-slate-50 sm:text-base"
                     >
                       Impact
-                    </a>
+                    </Link>
 
                     <Link
                       to="/"
