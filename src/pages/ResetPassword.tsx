@@ -313,9 +313,9 @@ const ResetPassword = () => {
               minLength={6}
               disabled={loading || !tokensReady}
             />
-            <Button 
-              type="submit" 
-              className="w-full" 
+            <Button
+              type="submit"
+              className="h-11 w-full text-base text-white shadow-[0_4px_18px_rgba(13,110,163,0.28)] transition-shadow hover:shadow-[0_6px_22px_rgba(13,110,163,0.34)] [background:linear-gradient(135deg,#042C53,#0d6ea3)] hover:[background:linear-gradient(135deg,#053565,#0c7eb8)] sm:h-12 sm:text-lg"
               disabled={loading || !tokensReady}
             >
               {loading ? 'Updating...' : 'Update Password'}

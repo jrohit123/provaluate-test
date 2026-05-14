@@ -310,7 +310,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
     setReminderStates(prev => ({...prev, [interviewId]: 'sending'}));
 
     try {
-      const interviewLink = `${window.location.origin}/interview/${interviewId}`;
+      const interviewLink = `${window.location.origin}${import.meta.env.BASE_URL}interview/${interviewId}`;
       
       const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.SEND_INTERVIEW_EMAIL), {
         method: 'POST',
@@ -575,7 +575,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => window.open(`/final-results/${interview.id}?variant=recruiter`, '_blank')}
+                              onClick={() => window.open(`${import.meta.env.BASE_URL}final-results/${interview.id}?variant=recruiter`, '_blank')}
                               className="w-full"
                             >
                               <BarChart3 className="w-4 h-4 mr-2" />
@@ -872,7 +872,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => window.open(`/final-results/${interview.id}?variant=recruiter`, '_blank')}
+                              onClick={() => window.open(`${import.meta.env.BASE_URL}final-results/${interview.id}?variant=recruiter`, '_blank')}
                               title={interview.status === 'terminated' ? 'View Interview Details (Terminated)' : 'View Final Results'}
                               className="h-8 w-8 p-0"
                             >
@@ -1050,7 +1050,7 @@ const InterviewDashboard: React.FC<InterviewDashboardProps> = ({ onSectionChange
             </DialogDescription>
           </DialogHeader>
           {linkModalInterviewId && (() => {
-            const link = `${window.location.origin}/interview/${linkModalInterviewId}`;
+            const link = `${window.location.origin}${import.meta.env.BASE_URL}interview/${linkModalInterviewId}`;
             const inv = interviews.find(i => i.id === linkModalInterviewId);
             return (
               <div className="space-y-4">

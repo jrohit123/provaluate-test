@@ -81,11 +81,8 @@ const CandidatePricing = () => {
               <img src={`${import.meta.env.BASE_URL}Logo_Transparent_BG.png`} alt="ProValuate" className="h-10 sm:h-16 lg:h-20 w-auto" />
             </Link>
             <div className="flex items-center gap-2 sm:gap-4">
-              <Link to="/candidate-login" className="min-h-[44px] flex items-center px-2 text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
-                Candidate login
-              </Link>
-              <Link to="/login" className="min-h-[44px] flex items-center px-2 text-sm sm:text-base text-gray-600 hover:text-gray-900 transition-colors">
-                Recruiter login
+              <Link to="/candidate-login" className="min-h-[44px] flex items-center px-3 py-2 text-sm sm:text-base font-semibold text-[#1a9fd6] hover:text-[#0a3a5a] transition-colors">
+                Home
               </Link>
               <a href="mailto:sales@aitamate.com?&subject=Provaluate&body=Hi,%0D%0A%0D%0AI'm facing an issue with ProValuate.%0D%0A%0D%0APlease provide me with more information with the below...%0D%0A%0D%0ARegards," target="_top" className="min-h-[44px] min-w-[44px] flex items-center justify-center text-sky-600 hover:text-sky-800 transition-colors" aria-label="Contact support">
                 <Mail className="h-6 w-6 sm:h-8 sm:w-8" />
