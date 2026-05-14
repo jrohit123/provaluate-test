@@ -14,7 +14,7 @@ type Testimonial = {
 const testimonials: Testimonial[] = [
   {
     id: 'neetu-singh',
-    videoSrc: '/videos/Testimonial_SRGlobal.mp4',
+    videoSrc: `${import.meta.env.BASE_URL}videos/Testimonial_SRGlobal.mp4`,
     quote:
       'ProValuate has definitely streamlined our hiring process. It has saved a lot of manual effort and helps a lot in aligning the right candidate with the JD. I would definitely recommend it to the people who are looking out to streamline their hiring process.',
     name: 'Neetu Singh',
@@ -33,7 +33,7 @@ export default function CustomersPage() {
       <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-slate-200 bg-white/95 px-2 py-4 backdrop-blur sm:px-4 sm:py-5 lg:px-4 lg:py-6">
           <div className="flex w-full min-w-0 items-center justify-between gap-3 pl-2 pr-4 sm:px-0 lg:px-8">
             <img
-              src="/Logo_Transparent_BG.png"
+              src={`${import.meta.env.BASE_URL}Logo_Transparent_BG.png`}
               alt="ProValuate"
               className="h-12 w-auto shrink-0 sm:h-14 lg:h-16"
             />

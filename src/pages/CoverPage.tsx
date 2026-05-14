@@ -154,7 +154,7 @@ type Testimonial = {
 const testimonials: Testimonial[] = [
   {
     id: 'neetu-singh',
-    videoSrc: '/videos/Testimonial_SRGlobal.mp4.mp4',
+    videoSrc: `${import.meta.env.BASE_URL}videos/Testimonial_SRGlobal.mp4.mp4`,
     quote:
       'ProValuate has definitely streamlined our hiring process. It has saved a lot of manual effort and helps a lot in aligning the right candidate with the JD.',
     shortQuote: 'Definitely streamlined our hiring process — saved a lot of manual effort.',
@@ -387,7 +387,7 @@ export default function CoverPage() {
         <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-slate-200 bg-white/95 px-2 py-4 backdrop-blur sm:px-4 sm:py-5 lg:px-4 lg:py-6">
           <div className="flex w-full min-w-0 items-center justify-between gap-3 pl-2 pr-4 sm:px-0 lg:px-8">
             <img
-              src="/Logo_Transparent_BG.png"
+              src={`${import.meta.env.BASE_URL}Logo_Transparent_BG.png`}
               alt="ProValuate"
               className="h-12 w-auto shrink-0 sm:h-14 lg:h-16"
             />
@@ -661,7 +661,7 @@ export default function CoverPage() {
                 }`}
                 onClick={() => {
                   // Download the sample report immediately without changing tab
-                  fetch('/REPORT.pdf')
+                  fetch(`${import.meta.env.BASE_URL}REPORT.pdf`)
                     .then(response => response.blob())
                     .then(blob => {
                       const url = URL.createObjectURL(blob);
@@ -692,7 +692,7 @@ export default function CoverPage() {
               <div className="tab-content w-full h-full overflow-visible">
                 {activeTab === 'cv-screening' && (
                   <iframe 
-                    src="/cv-screening.html" 
+                    src={`${import.meta.env.BASE_URL}cv-screening.html`} 
                     className="w-full h-full border-0 rounded-lg"
                     style={{ height: '90vh', minHeight: '600px' }}
                     title="CV Screening Demo"
@@ -700,7 +700,7 @@ export default function CoverPage() {
                 )}
                 {activeTab === 'resume-ingestion' && (
                   <iframe 
-                    src="/provaluate-ingestion-hub.html" 
+                    src={`${import.meta.env.BASE_URL}provaluate-ingestion-hub.html`} 
                     className="w-full h-full border-0 rounded-lg"
                     style={{ height: '90vh', minHeight: '600px' }}
                     title="Resume Ingestion Demo"
@@ -708,7 +708,7 @@ export default function CoverPage() {
                 )}
                 {activeTab === 'dynamic-interview' && (
                   <iframe 
-                    src="/interview-session.html" 
+                    src={`${import.meta.env.BASE_URL}interview-session.html`} 
                     className="w-full h-full border-0 rounded-lg"
                     style={{ height: '90vh', minHeight: '600px' }}
                     title="Dynamic Interview Demo"
