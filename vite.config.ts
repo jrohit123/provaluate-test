@@ -15,6 +15,7 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
+    base: mode === 'testing' ? '/provaluate-test/' : '/',
     server: {
       host: "::",
       port: 8080,
@@ -37,7 +38,6 @@ export default defineConfig(({ mode }) => {
       sourcemap: false,
       minify: false,
       chunkSizeWarningLimit: 1000,
-      // Additional memory optimization settings
       assetsInlineLimit: 4096,
       cssCodeSplit: true,
       rollupOptions: {
