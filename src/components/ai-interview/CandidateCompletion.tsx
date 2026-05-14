@@ -79,7 +79,7 @@ const CandidateCompletion = () => {
         <header className="flex-shrink-0 bg-sky-100 border-b border-sky-200">
           <div className="max-w-[1800px] mx-auto px-3 sm:px-6 py-3 sm:py-4 lg:py-5">
             <img
-              src="/Logo_Transparent_BG.png"
+              src={`${import.meta.env.BASE_URL}Logo_Transparent_BG.png`}
               alt="ProValuate"
               className="h-12 sm:h-16 lg:h-20 w-auto object-contain"
             />
@@ -103,7 +103,7 @@ const CandidateCompletion = () => {
       <header className="flex-shrink-0 bg-sky-100 border-b border-sky-200">
         <div className="max-w-[1800px] mx-auto px-3 sm:px-6 py-3 sm:py-4 lg:py-5">
           <img
-            src="/Logo_Transparent_BG.png"
+            src={`${import.meta.env.BASE_URL}Logo_Transparent_BG.png`}
             alt="ProValuate"
             className="h-12 sm:h-16 lg:h-20 w-auto object-contain"
           />

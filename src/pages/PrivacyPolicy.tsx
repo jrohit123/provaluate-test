@@ -8,7 +8,7 @@ const PrivacyPolicy = () => {
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <Link to="/login" className="flex items-center gap-3">
             <img
-              src="/assets/Logo-transparent_bg.png"
+              src={`${import.meta.env.BASE_URL}assets/Logo-transparent_bg.png`}
               alt="aitamate"
               className="h-14 sm:h-16 w-auto"
             />
@@ -178,9 +178,9 @@ const PrivacyPolicy = () => {
             </div>
             {/* Compliance badges */}
             <div className="flex flex-wrap items-center gap-6 sm:gap-8">
-              <img src="/assets/CCPA.png" alt="CCPA Compliant" className="h-24 sm:h-28 w-auto object-contain" />
-              <img src="/assets/ISO.png" alt="ISO Certified" className="h-20 sm:h-24 w-auto object-contain" />
-              <img src="/assets/GDPR.png" alt="GDPR" className="h-20 sm:h-24 w-auto object-contain" />
+              <img src={`${import.meta.env.BASE_URL}assets/CCPA.png`} alt="CCPA Compliant" className="h-24 sm:h-28 w-auto object-contain" />
+              <img src={`${import.meta.env.BASE_URL}assets/ISO.png`} alt="ISO Certified" className="h-20 sm:h-24 w-auto object-contain" />
+              <img src={`${import.meta.env.BASE_URL}assets/GDPR.png`} alt="GDPR" className="h-20 sm:h-24 w-auto object-contain" />
             </div>
           </div>
         </div>

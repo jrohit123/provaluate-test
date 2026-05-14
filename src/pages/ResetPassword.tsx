@@ -327,7 +327,7 @@ const ResetPassword = () => {
         {error && <div className="text-red-600 text-center mt-4">{error}</div>}
         
         <div className="mt-6 text-center">
-          <a href="/login" className="text-blue-600 underline">Back to login</a>
+          <a href={`${import.meta.env.BASE_URL}login`} className="text-blue-600 underline">Back to login</a>
         </div>
       </div>
     </div>

@@ -3372,7 +3372,7 @@ const ConversationalInterview = () => {
       const audioContext = new AudioContextClass();
       audioContextRef.current = audioContext;
 
-      await audioContext.audioWorklet.addModule('/worklets/MyProcessor.js');
+      await audioContext.audioWorklet.addModule(`${import.meta.env.BASE_URL}worklets/MyProcessor.js`);
       const source = audioContext.createMediaStreamSource(stream);
       const workletNode = new AudioWorkletNode(audioContext, 'my-processor');
       audioWorkletNodeRef.current = workletNode;

@@ -608,7 +608,7 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    window.location.href = '/tpo-login';
+    window.location.href = `${import.meta.env.BASE_URL}tpo-login`;
   };
 
   const firstName = (tpoMe?.tpo_user?.full_name || '').trim().split(/\s+/)[0] || 'User';

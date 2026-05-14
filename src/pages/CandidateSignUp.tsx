@@ -43,7 +43,7 @@ const CandidateSignUp = () => {
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
           <div className="flex justify-between items-center gap-2">
             <Link to="/candidate-login" className="flex items-center min-h-[44px]">
-              <img src="/Logo_Transparent_BG.png" alt="ProValuate" className="h-10 sm:h-12 w-auto" />
+              <img src={`${import.meta.env.BASE_URL}Logo_Transparent_BG.png`} alt="ProValuate" className="h-10 sm:h-12 w-auto" />
             </Link>
             <Link
               to="/candidate-login"

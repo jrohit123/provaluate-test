@@ -16,14 +16,14 @@ interface BrowserExtensionInfoProps {
   userId?: string;
 }
 
-const GMAIL_LOGO = '/assets/GMAIL%20LOGO.png';
-const OUTLOOK_LOGO = '/assets/OUTLOOK%20LOGO.png';
-const LINKEDIN_LOGO = '/assets/LINKEDIN%20LOGO.png';
-const ZOHO_LOGO = '/assets/ZOHO%20LOGO.png?v=2';
-const GMAIL_PLUGIN_ZIP_URL = '/downloads/Gmail-Plugin.zip';
-const OUTLOOK_MANIFEST_URL = '/downloads/manifest.xml';
-const LINKEDIN_PLUGIN_ZIP_URL = '/downloads/Linkedin-Plugin.zip';
-const ZOHO_PLUGIN_ZIP_URL = '/downloads/Zoho-Plugin.zip';
+const GMAIL_LOGO = `${import.meta.env.BASE_URL}assets/GMAIL%20LOGO.png`;
+const OUTLOOK_LOGO = `${import.meta.env.BASE_URL}assets/OUTLOOK%20LOGO.png`;
+const LINKEDIN_LOGO = `${import.meta.env.BASE_URL}assets/LINKEDIN%20LOGO.png`;
+const ZOHO_LOGO = `${import.meta.env.BASE_URL}assets/ZOHO%20LOGO.png?v=2`;
+const GMAIL_PLUGIN_ZIP_URL = `${import.meta.env.BASE_URL}downloads/Gmail-Plugin.zip`;
+const OUTLOOK_MANIFEST_URL = `${import.meta.env.BASE_URL}downloads/manifest.xml`;
+const LINKEDIN_PLUGIN_ZIP_URL = `${import.meta.env.BASE_URL}downloads/Linkedin-Plugin.zip`;
+const ZOHO_PLUGIN_ZIP_URL = `${import.meta.env.BASE_URL}downloads/Zoho-Plugin.zip`;
 
 function downloadFile(url: string, filename: string) {
   const a = document.createElement('a');

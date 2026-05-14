@@ -413,7 +413,7 @@ const Login = () => {
                 <div className="flex items-center justify-between gap-3 sm:gap-4">
                   <Link to="/">
                     <img
-                      src="/Logo_Transparent_BG.png"
+                      src={`${import.meta.env.BASE_URL}Logo_Transparent_BG.png`}
                       alt="ProValuate"
                       className="h-12 w-auto sm:h-14 lg:h-16 cursor-pointer hover:opacity-80 transition-opacity"
                     />
@@ -433,14 +433,14 @@ const Login = () => {
                     <SheetContent side="right" className="w-64">
                       <div className="pt-8 space-y-2">
                         <a
-                          href="/pricing"
+                          href={`${import.meta.env.BASE_URL}pricing`}
                           className="block rounded-lg px-3 py-2 text-base font-medium text-[#0d6ea3] hover:bg-slate-50 hover:text-[#042C53]"
                           onClick={() => setMobileMenuOpen(false)}
                         >
                           Pricing
                         </a>
                         <a
-                          href="/impact"
+                          href={`${import.meta.env.BASE_URL}impact`}
                           className="block rounded-lg px-3 py-2 text-base font-medium text-[#0d6ea3] hover:bg-slate-50 hover:text-[#042C53]"
                           onClick={() => setMobileMenuOpen(false)}
                         >
@@ -461,13 +461,13 @@ const Login = () => {
                   {/* Desktop: inline nav */}
                   <nav className="hidden items-center gap-1 sm:flex">
                     <a
-                      href="/pricing"
+                      href={`${import.meta.env.BASE_URL}pricing`}
                       className="px-2.5 py-1.5 text-sm font-medium text-[#0d6ea3] hover:text-[#042C53] transition-colors rounded-md hover:bg-slate-50 sm:text-base"
                     >
                       Pricing
                     </a>
                     <a
-                      href="/impact"
+                      href={`${import.meta.env.BASE_URL}impact`}
                       className="px-2.5 py-1.5 text-sm font-medium text-[#0d6ea3] hover:text-[#042C53] transition-colors rounded-md hover:bg-slate-50 sm:text-base"
                     >
                       Impact

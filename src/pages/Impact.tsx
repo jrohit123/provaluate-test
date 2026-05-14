@@ -92,11 +92,11 @@ const Impact = () => {
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-2 sm:space-x-3">
               <div>
-                <img src="/Logo_Transparent_BG.png" alt="ProValuate" className="h-12 sm:h-16 lg:h-20" />
+                <img src={`${import.meta.env.BASE_URL}Logo_Transparent_BG.png`} alt="ProValuate" className="h-12 sm:h-16 lg:h-20" />
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <a href="/" className="text-[#0d6ea3] hover:text-[#042C53] transition-colors font-medium">
+              <a href={import.meta.env.BASE_URL} className="text-[#0d6ea3] hover:text-[#042C53] transition-colors font-medium">
                 Home
               </a>
             </div>

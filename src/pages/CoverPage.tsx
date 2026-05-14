@@ -376,7 +376,7 @@ export default function CoverPage() {
         loop
         playsInline
         className="pointer-events-none fixed inset-0 z-0 h-full w-full object-cover"
-        src="/videos/video.mp4"
+        src={`${import.meta.env.BASE_URL}videos/video.mp4`}
       />
       <div className="pointer-events-none fixed inset-0 z-0 bg-white/70" /> */}
       

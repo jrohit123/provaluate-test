@@ -271,7 +271,7 @@ export const EvaluationCriteriaSection = ({ onSectionReady }: EvaluationCriteria
   };
 
   const handleDownloadTemplate = () => {
-    const TEMPLATE_PATH = '/templates/evaluation-criteria-template.xlsx';
+    const TEMPLATE_PATH = `${import.meta.env.BASE_URL}templates/evaluation-criteria-template.xlsx`;
 
     const downloadTemplate = async () => {
       try {

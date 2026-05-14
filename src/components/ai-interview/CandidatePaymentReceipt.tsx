@@ -37,7 +37,7 @@ const COMPANY_ADDRESS_LINES = [
   'Kasarvadavali, Ghodbunder road,',
   'Thane West - 400615',
 ];
-const RECEIPT_LOGO_SRC = '/assets/Logo-transparent_bg.png';
+const RECEIPT_LOGO_SRC = `${import.meta.env.BASE_URL}assets/Logo-transparent_bg.png`;
 
 function toNumber(value: number | string | null | undefined): number {
   const parsed = Number(value ?? 0);

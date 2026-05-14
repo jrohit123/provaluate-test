@@ -1368,7 +1368,7 @@ const FinalResults = () => {
         {/* <header className="flex-shrink-0 bg-sky-100 border-b border-sky-200">
           <div className="w-full pl-0 pr-2 sm:pr-6 py-2 sm:py-3 lg:py-4">
             <img
-              src="/Logo_Transparent_BG.png"
+              src={`${import.meta.env.BASE_URL}Logo_Transparent_BG.png`}
               alt="ProValuate"
               className="h-8 sm:h-10 lg:h-12 w-auto object-contain"
             />
@@ -1391,7 +1391,7 @@ const FinalResults = () => {
         {/* <header className="flex-shrink-0 bg-sky-100 border-b border-sky-200">
           <div className="w-full pl-0 pr-2 sm:pr-6 py-2 sm:py-3 lg:py-4">
             <img
-              src="/Logo_Transparent_BG.png"
+              src={`${import.meta.env.BASE_URL}Logo_Transparent_BG.png`}
               alt="ProValuate"
               className="h-8 sm:h-10 lg:h-12 w-auto object-contain"
             />
@@ -1459,7 +1459,7 @@ const FinalResults = () => {
             console.log('Logo image failed to load');
             resolve();
           };
-          logoImg.src = '/Logo_Transparent_BG.png';
+          logoImg.src = `${import.meta.env.BASE_URL}Logo_Transparent_BG.png`;
         });
       } catch (error) {
         console.log('Logo not found, continuing without logo');
@@ -1509,7 +1509,7 @@ const FinalResults = () => {
         } catch (_) {}
       }
       const isValidPhoto = (s: string | null) => !!s && s.startsWith('data:image/') && s.length >= 100;
-      const photoSrc = (candidatePhotoDataUrl && isValidPhoto(candidatePhotoDataUrl)) ? candidatePhotoDataUrl : '/assets/NAME.jpg';
+      const photoSrc = (candidatePhotoDataUrl && isValidPhoto(candidatePhotoDataUrl)) ? candidatePhotoDataUrl : `${import.meta.env.BASE_URL}assets/NAME.jpg`;
 
       // ── CANDIDATE PHOTO ──────────────────────────────────────────────────────────
       const photoSize = 52;

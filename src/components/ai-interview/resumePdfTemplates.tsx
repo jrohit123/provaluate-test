@@ -16,10 +16,10 @@ import { HEADER_ATS_COLORS, MODERN_MAIN_COLORS, PROFESSIONAL_MAIN_COLORS, isVali
 Font.register({
   family: 'Georgia',
   fonts: [
-    { src: '/fonts/Georgia.ttf', fontWeight: 400 },
-    { src: '/fonts/Georgia-Bold.ttf', fontWeight: 700 },
-    { src: '/fonts/Georgia-Italic.ttf', fontStyle: 'italic' },
-    { src: '/fonts/Georgia-BoldItalic.ttf', fontWeight: 700, fontStyle: 'italic' },
+    { src: `${import.meta.env.BASE_URL}fonts/Georgia.ttf`, fontWeight: 400 },
+    { src: `${import.meta.env.BASE_URL}fonts/Georgia-Bold.ttf`, fontWeight: 700 },
+    { src: `${import.meta.env.BASE_URL}fonts/Georgia-Italic.ttf`, fontStyle: 'italic' },
+    { src: `${import.meta.env.BASE_URL}fonts/Georgia-BoldItalic.ttf`, fontWeight: 700, fontStyle: 'italic' },
   ],
 });
 Font.registerHyphenationCallback((word) => [word]);

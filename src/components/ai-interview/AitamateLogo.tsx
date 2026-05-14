@@ -19,7 +19,7 @@ const AitamateLogo = ({ size = 'default', showTagline = true, className = '', va
     <div className={`flex flex-col items-center ${className}`}>
       {/* Logo Image */}
       <img 
-        src="/assets/Logo-transparent_bg.png" 
+        src={`${import.meta.env.BASE_URL}assets/Logo-transparent_bg.png`} 
         alt="Aitamate Logo" 
         className={`${sizeClasses[size]} object-contain`}
         onError={(e) => {

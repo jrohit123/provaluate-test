@@ -2726,7 +2726,7 @@ export const ResumeUploadSection = ({ onSectionReady }: ResumeUploadSectionProps
               <Button 
                 onClick={() => {
                   // Navigate to admin user management for recharge
-                  window.location.href = '/dashboard?section=admin-user-management';
+                  window.location.href = `${import.meta.env.BASE_URL}dashboard?section=admin-user-management`;
                 }}
                 className="flex-1 bg-[#094D7B] hover:bg-[#094D7B]/90"
               >
