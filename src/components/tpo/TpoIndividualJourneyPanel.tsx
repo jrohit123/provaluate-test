@@ -415,7 +415,7 @@ export function TpoIndividualJourneyPanel({ studentName, interviews, focusCampus
                     })()}
                     <Button asChild size="sm" variant="outline" className="h-8 px-3 text-xs">
                       <a
-                        href={`/final-results/${a.id}`}
+                        href={`${import.meta.env.BASE_URL}final-results/${a.id}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5"

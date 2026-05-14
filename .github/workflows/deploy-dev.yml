@@ -48,6 +48,11 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=4096
 
+      - name: GitHub Pages SPA fallback and Jekyll bypass
+        run: |
+          cp dist/index.html dist/404.html
+          touch dist/.nojekyll
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 

@@ -454,7 +454,7 @@ export function StudentPerformanceReportView({
                       className={compactActionBtn}
                     >
                       <a
-                        href={`/final-results/${i.id}`}
+                        href={`${import.meta.env.BASE_URL}final-results/${i.id}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-1.5"
@@ -508,7 +508,7 @@ export function StudentPerformanceReportView({
                   {showTakeInterview && i.status !== 'completed' && i.status !== 'terminated' && (
                     <Button asChild size="sm" variant="outline" className={compactActionBtn}>
                       <a
-                        href={`/interview/${i.id}`}
+                        href={`${import.meta.env.BASE_URL}interview/${i.id}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-1.5"
@@ -519,7 +519,7 @@ export function StudentPerformanceReportView({
                     </Button>
                   )}
                   <Button asChild size="sm" variant="outline" className={compactActionBtn}>
-                    <a href={`/final-results/${i.id}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5">
+                    <a href={`${import.meta.env.BASE_URL}final-results/${i.id}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5">
                       <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" aria-hidden />
                       View report
                     </a>

@@ -484,7 +484,7 @@ function PersonalInterviewsSection({
                     {terminated && (
                       <Button asChild size="sm" variant="outline" className={compactBtn}>
                         <a
-                          href={`/final-results/${row.id}`}
+                          href={`${import.meta.env.BASE_URL}final-results/${row.id}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1.5"
@@ -497,7 +497,7 @@ function PersonalInterviewsSection({
                     {!completed && !terminated && (
                       <Button asChild size="sm" variant="outline" className={compactBtn}>
                         <a
-                          href={`/interview/${row.id}`}
+                          href={`${import.meta.env.BASE_URL}interview/${row.id}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1.5"
