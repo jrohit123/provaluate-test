@@ -121,6 +121,7 @@ export interface Database {
           default_criteria_id: string | null
           post_on_career_page: boolean | null
           status: string | null
+          generation_hints: string[] | null
           created_at: string
           updated_at: string
         }
@@ -135,6 +136,7 @@ export interface Database {
           default_criteria_id?: string | null
           post_on_career_page?: boolean | null
           status?: string | null
+          generation_hints?: string[] | null
           created_at?: string
           updated_at?: string
         }
@@ -149,6 +151,7 @@ export interface Database {
           default_criteria_id?: string | null
           post_on_career_page?: boolean | null
           status?: string | null
+          generation_hints?: string[] | null
           created_at?: string
           updated_at?: string
         }
@@ -307,6 +310,7 @@ export interface Database {
           title: string | null
           jd_file: string | null
           extracted_text: string | null
+          generation_hints: string[] | null
           created_at: string
           updated_at: string
         }
@@ -316,6 +320,7 @@ export interface Database {
           title?: string | null
           jd_file?: string | null
           extracted_text?: string | null
+          generation_hints?: string[] | null
           created_at?: string
           updated_at?: string
         }
@@ -325,6 +330,7 @@ export interface Database {
           title?: string | null
           jd_file?: string | null
           extracted_text?: string | null
+          generation_hints?: string[] | null
           created_at?: string
           updated_at?: string
         }

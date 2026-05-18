@@ -381,6 +381,13 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
   const [inviteSummaryDialogOpen, setInviteSummaryDialogOpen] = useState(false);
   const [manageRolesOpen, setManageRolesOpen] = useState(false);
   const [updatingVariantKey, setUpdatingVariantKey] = useState<string | null>(null);
+  const [addCourseOpen, setAddCourseOpen] = useState(false);
+  const [addCourseName, setAddCourseName] = useState('');
+  const [addCourseCode, setAddCourseCode] = useState('');
+  const [addCourseDuration, setAddCourseDuration] = useState('4');
+  const [addCourseMonth, setAddCourseMonth] = useState('7');
+  const [addCourseDay, setAddCourseDay] = useState('1');
+  const [addingCourse, setAddingCourse] = useState(false);
 
   const courses = useMemo(() => stats?.course_breakdown || [], [stats]);
 
@@ -1052,6 +1059,40 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
     setJourneyRoleFocus(cohortTemplate?.title || cohortTemplate?.position || null);
   };
 
+  const handleAddCourse = async () => {
+    if (!addCourseName.trim() || !addCourseCode.trim()) {
+      toast({ title: 'Missing fields', description: 'Course name and code are required.', variant: 'destructive' });
+      return;
+    }
+    try {
+      setAddingCourse(true);
+      const headers = await getAuthHeaders();
+      const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.TPO_COLLEGE_COURSES), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          course_name: addCourseName.trim(),
+          course_code: addCourseCode.trim().toUpperCase(),
+          duration_years: parseFloat(addCourseDuration),
+          academic_start_month: parseInt(addCourseMonth),
+          academic_start_day: parseInt(addCourseDay),
+          is_active: true,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error || 'Failed to add course');
+      toast({ title: 'Course added', description: `"${addCourseName.trim()}" added successfully.` });
+      setAddCourseOpen(false);
+      setAddCourseName(''); setAddCourseCode(''); setAddCourseDuration('4');
+      setAddCourseMonth('7'); setAddCourseDay('1');
+      await loadData();
+    } catch (e: unknown) {
+      toast({ title: 'Failed to add course', description: e instanceof Error ? e.message : 'Please try again.', variant: 'destructive' });
+    } finally {
+      setAddingCourse(false);
+    }
+  };
+
   const renderInviteReview = () => (
     <div className="w-full min-w-0 space-y-6">
       <Card className="min-h-[600px]">
@@ -1561,8 +1602,14 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
         </div>
       </section>
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <div className="px-6 py-5 border-b border-gray-200">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h3 className="text-base font-semibold text-gray-900">Course-wise registration</h3>
+          <Button
+            className="[background:linear-gradient(135deg,#020f1a,#042C53)] hover:[background:linear-gradient(135deg,#031525,#053565)] text-white"
+            onClick={() => setAddCourseOpen(true)}
+          >
+            + Add new course
+          </Button>
         </div>
         <div className="p-6">
           {courses.length === 0 ? (
@@ -1574,7 +1621,10 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
                 const percentage = maxStudents > 0 ? ((course.student_count || 0) / maxStudents) * 100 : 0;
                 return (
                   <div key={course.course_id} className="flex items-center gap-4">
-                    <span className="text-sm text-gray-600 w-[250px] flex-shrink-0">{course.course_name}</span>
+                    <span className="text-sm text-gray-600 w-[250px] flex-shrink-0">
+                      {course.course_name}
+                      {course.course_code && <span className="text-[#042C53] font-medium"> [{course.course_code}]</span>}
+                    </span>
                     <div className="flex-1 h-3 bg-gray-100 rounded-md overflow-hidden">
                       <div 
                         className="h-full rounded-md [background:linear-gradient(135deg,#020f1a,#042C53)]"
@@ -1594,6 +1644,69 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
           )}
         </div>
       </div>
+      <Dialog open={addCourseOpen} onOpenChange={setAddCourseOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add new course</DialogTitle>
+            <DialogDescription>
+              This course will be linked to your college and appear in invite setup.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Course name *</Label>
+              <input className="h-10 border rounded-md px-3 text-sm w-full" placeholder="e.g. B.Tech Computer Science"
+                value={addCourseName} onChange={e => setAddCourseName(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Course code *</Label>
+                <input className="h-10 border rounded-md px-3 text-sm w-full uppercase font-mono" placeholder="e.g. BTECH-CS"
+                  value={addCourseCode} onChange={e => setAddCourseCode(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Duration (years)</Label>
+                <Select value={addCourseDuration} onValueChange={setAddCourseDuration}>
+                  <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {['1','2','3','4','5','5.5','6'].map(v => (
+                      <SelectItem key={v} value={v}>{v} yr{v !== '1' ? 's' : ''}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Academic start month</Label>
+                <Select value={addCourseMonth} onValueChange={setAddCourseMonth}>
+                  <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
+                      <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Start day</Label>
+                <input className="h-10 border rounded-md px-3 text-sm w-full" type="number"
+                  min="1" max="31" value={addCourseDay} onChange={e => setAddCourseDay(e.target.value)} />
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t mt-4">
+            <Button variant="outline" onClick={() => setAddCourseOpen(false)}>Cancel</Button>
+            <Button
+              className="[background:linear-gradient(135deg,#020f1a,#042C53)] text-white"
+              onClick={handleAddCourse}
+              disabled={addingCourse}
+            >
+              {addingCourse ? 'Saving…' : 'Save course'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 

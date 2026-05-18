@@ -42,6 +42,12 @@ import {
   TPO_DASHBOARD_WORKFLOW_STEPS,
 } from '@/hooks/useWorkflowNavigation';
 
+export type JdSource =
+  | 'jd_candidates'
+  | 'campus_interview_templates'
+  | 'jd_for_interview'
+  | 'job_descriptions';
+
 /** When provided, JDs are loaded from this list (e.g. candidate's jd_candidates) instead of company tables. Recruiter flow unchanged when omitted. */
 export type InjectedJD = {
   jd_id: string;
@@ -49,9 +55,31 @@ export type InjectedJD = {
   extracted_text?: string | null;
   jd_file?: string | null;
   created_at?: string;
+  /** Which table this JD row lives in (for persisting generation_hints). */
+  jd_source?: JdSource;
+  /** Optional focus-area hints persisted on the JD row. */
+  generation_hints?: string[] | null;
+  /** false when JD is disabled in Manage Job Descriptions (interview or CV screening). */
+  is_active?: boolean;
   custom_role_parameters_id?: string | null;
   interview_mode?: 'ai' | 'structured' | null;
   interview_type?: 'functional' | 'behavioral' | 'mixed' | 'technical' | null;
+};
+
+/** Matches max_competencies in configuration_values.txt — one optional focus hint per competency slot. */
+const MAX_GENERATION_HINTS = 5;
+
+const normalizeGenerationHint = (raw: string) =>
+  raw.trim().replace(/^[,;\s]+|[,;\s]+$/g, '');
+
+const parseGenerationHintsFromInput = (raw: string): string[] =>
+  raw.split(/[,;\n]+/).map(normalizeGenerationHint).filter(Boolean);
+
+const formatJdDropdownLabel = (jd: InjectedJD, showActiveStatus: boolean) => {
+  const title = (jd.title ?? 'Untitled').trim();
+  if (!showActiveStatus) return title;
+  const statusLabel = jd.is_active !== false ? 'Enabled' : 'Disabled';
+  return `${title} (${statusLabel})`;
 };
 
 interface AIsetupProps {
@@ -111,6 +139,8 @@ const HRInterviewCreator = ({
     ? TPO_DASHBOARD_WORKFLOW_STEPS
     : INTERVIEW_WORKFLOW_STEPS;
   const isCandidateFlow = !!candidateId || tpoEmbeddedWorkflow;
+  /** Recruiter-only: show (Enabled)/(Disabled) in role dropdown and respect Manage JD toggles. */
+  const showJdEnableDisableInDropdown = !candidateId && !tpoCampusTemplatePersist;
   const candidateCurrentStep = tpoEmbeddedWorkflow
     ? tpoWorkflowStepIndex!
     : pathname.includes('/jds/create')
@@ -127,6 +157,8 @@ const HRInterviewCreator = ({
       navigate(CANDIDATE_WORKFLOW_PATHS[stepIndex]);
     }
   };
+
+  const usesSharedCreateRoleTabs = !!(candidateId || tpoCampusTemplatePersist);
 
   const saveCandidateRoleDraft = async () => {
     if (!candidateId) return;
@@ -145,6 +177,28 @@ const HRInterviewCreator = ({
     }
     try {
       await extractTextUploadAndSaveCandidateJD(uploadedFile, roleName);
+    } catch (err) {
+      toast.error((err as Error)?.message ?? 'Failed to save role');
+    }
+  };
+
+  const saveRecruiterRoleDraft = async () => {
+    if (candidateId || tpoCampusTemplatePersist) return;
+    const roleName = formData.newRole.trim();
+    if (!roleName) {
+      toast.error('Please enter a role name');
+      return;
+    }
+    if (!uploadedFile) {
+      toast.error('Please upload a JD file before saving');
+      return;
+    }
+    if (roleNameCheckState === 'taken') {
+      toast.error('This role name is already used for selected mode and type. Try a different name.');
+      return;
+    }
+    try {
+      await extractTextAndSaveRecruiterJD(uploadedFile, roleName);
     } catch (err) {
       toast.error((err as Error)?.message ?? 'Failed to save role');
     }
@@ -178,6 +232,9 @@ const HRInterviewCreator = ({
   const [isSavingCompetencies, setIsSavingCompetencies] = useState(false);
   const [competenciesSaved, setCompetenciesSaved] = useState(false);
   const [isExpandDialogOpen, setIsExpandDialogOpen] = useState(false);
+  const [generationHints, setGenerationHints] = useState<string[]>([]);
+  const [hintInputValue, setHintInputValue] = useState('');
+  const [hintsPersisted, setHintsPersisted] = useState(false);
   const [loadedPositions, setLoadedPositions] = useState<Set<string>>(new Set());
   const [expandedCompetencies, setExpandedCompetencies] = useState<Set<string>>(new Set());
   /** Per-competency max_time before "Requires written answer" was checked; restored when unchecked */
@@ -185,7 +242,9 @@ const HRInterviewCreator = ({
   const [roleNameCheckState, setRoleNameCheckState] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
   const [roleNameCheckMessage, setRoleNameCheckMessage] = useState('');
   const [candidateRoleTab, setCandidateRoleTab] = useState<'create' | 'existing'>('existing');
+  const [recruiterRoleTab, setRecruiterRoleTab] = useState<'create' | 'existing'>('existing');
   const [candidateRoleSaveState, setCandidateRoleSaveState] = useState<{ status: 'idle' | 'saved'; roleName?: string; jdId?: string }>({ status: 'idle' });
+  const [recruiterRoleSaveState, setRecruiterRoleSaveState] = useState<{ status: 'idle' | 'saved'; roleName?: string; jdId?: string }>({ status: 'idle' });
   const [pendingUploadedJdPath, setPendingUploadedJdPath] = useState<string | null>(null);
   const [pendingExtractedJdText, setPendingExtractedJdText] = useState<string>('');
   const [pendingSelectJdId, setPendingSelectJdId] = useState<string | null>(null);
@@ -256,7 +315,7 @@ const HRInterviewCreator = ({
       // Load from jd_for_interview table (AI interview) - FIRST
       const { data: interviewData, error: interviewError } = await supabase
         .from('jd_for_interview')
-        .select('id, title, jd_file, created_at, extracted_text, is_active, updated_at')
+        .select('id, title, jd_file, created_at, extracted_text, is_active, updated_at, generation_hints')
         .eq('company_id', user.profile.company_id)
         .order('created_at', { ascending: false });
       
@@ -264,12 +323,18 @@ const HRInterviewCreator = ({
         console.error('Error loading AI interview JDs:', interviewError);
       } else {
         console.log('AI interview JDs loaded:', interviewData?.length || 0, interviewData);
-        const mappedInterviewData = (interviewData || []).map(item => ({
+        const interviewRows = showJdEnableDisableInDropdown
+          ? (interviewData || [])
+          : (interviewData || []).filter((item) => item.is_active !== false);
+        const mappedInterviewData = interviewRows.map(item => ({
           jd_id: item.id,
           title: item.title,
           extracted_text: item.extracted_text,
           jd_file: item.jd_file,
-          created_at: item.created_at
+          created_at: item.created_at,
+          is_active: item.is_active ?? true,
+          jd_source: 'jd_for_interview' as const,
+          generation_hints: (item as { generation_hints?: string[] | null }).generation_hints ?? null,
         }));
         allJobDescriptions = [...allJobDescriptions, ...mappedInterviewData];
         setInterviewJobDescriptions((interviewData || []).map(item => ({
@@ -286,12 +351,14 @@ const HRInterviewCreator = ({
     
     try {
       // Load from job_descriptions table (CV screening) - SECOND
-      const { data: cvData, error: cvError } = await supabase
+      let cvQuery = supabase
         .from('job_descriptions')
-        .select('jd_id, title, jd_file, created_at, status, content, extracted_text')
-        .eq('company_id', user.profile.company_id)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false });
+        .select('jd_id, title, jd_file, created_at, status, description, generation_hints')
+        .eq('company_id', user.profile.company_id);
+      if (!showJdEnableDisableInDropdown) {
+        cvQuery = cvQuery.eq('status', 'active');
+      }
+      const { data: cvData, error: cvError } = await cvQuery.order('created_at', { ascending: false });
       
       if (cvError) {
         console.error('Error loading CV screening JDs:', cvError);
@@ -300,9 +367,12 @@ const HRInterviewCreator = ({
         const mappedCvData = (cvData || []).map(item => ({
           jd_id: item.jd_id,
           title: item.title,
-          extracted_text: item.extracted_text,
+          extracted_text: item.description,
           jd_file: item.jd_file,
-          created_at: item.created_at
+          created_at: item.created_at,
+          is_active: item.status === 'active',
+          jd_source: 'job_descriptions' as const,
+          generation_hints: item.generation_hints ?? null,
         }));
         allJobDescriptions = [...allJobDescriptions, ...mappedCvData];
       }
@@ -476,11 +546,223 @@ const HRInterviewCreator = ({
   const templateHasSavedInterviewVariant = (jd: InjectedJD) =>
     !!(jd.custom_role_parameters_id || jd.interview_mode || jd.interview_type);
 
+  const applyHintsFromSelectedJd = (jd: InjectedJD) => {
+    const hints = Array.isArray(jd.generation_hints)
+      ? jd.generation_hints.filter((h): h is string => Boolean(h?.trim())).slice(0, MAX_GENERATION_HINTS)
+      : [];
+    setGenerationHints(hints);
+    setHintInputValue('');
+    setHintsPersisted(hints.length > 0);
+  };
+
+  const saveGenerationHintsForSelectedRole = async (hints: string[]) => {
+    if (!selectedTemplateId) return;
+    const selectedJD = effectiveJobDescriptions.find((jd) => jd.jd_id === selectedTemplateId);
+    if (!selectedJD) return;
+
+    const hintsPayload =
+      hints.length > 0 ? hints.slice(0, MAX_GENERATION_HINTS) : null;
+    const now = new Date().toISOString();
+
+    if (candidateId) {
+      const { error } = await supabase
+        .from('jd_candidates')
+        .update({ generation_hints: hintsPayload, updated_at: now })
+        .eq('id', selectedTemplateId)
+        .eq('candidate_id', candidateId);
+      if (error) throw error;
+      return;
+    }
+
+    if (tpoCampusTemplatePersist) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      const res = await fetch(buildApiUrl(`${API_CONFIG.ENDPOINTS.TPO_CAMPUS_INTERVIEWS}/${selectedTemplateId}`), {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ generation_hints: hintsPayload }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((payload as { error?: string }).error || 'Failed to save generation hints');
+      }
+      return;
+    }
+
+    if (!companyId) return;
+    const source = selectedJD.jd_source ?? 'jd_for_interview';
+
+    if (source === 'job_descriptions') {
+      const { error } = await supabase
+        .from('job_descriptions')
+        .update({ generation_hints: hintsPayload, updated_at: now })
+        .eq('jd_id', selectedTemplateId)
+        .eq('company_id', companyId);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from('jd_for_interview')
+        .update({ generation_hints: hintsPayload, updated_at: now })
+        .eq('id', selectedTemplateId)
+        .eq('company_id', companyId);
+      if (error) throw error;
+    }
+  };
+
+  const addGenerationHint = (raw: string) => {
+    const parts = parseGenerationHintsFromInput(raw);
+    if (!parts.length) return;
+    setGenerationHints((prev) => {
+      if (prev.length >= MAX_GENERATION_HINTS) {
+        toast.error(
+          `Maximum ${MAX_GENERATION_HINTS} focus areas allowed (matches max competencies). Remove one to add another.`,
+          { id: 'hints-max-limit' }
+        );
+        return prev;
+      }
+      const next = [...prev];
+      for (const part of parts) {
+        if (next.length >= MAX_GENERATION_HINTS) {
+          toast.error(
+            `Maximum ${MAX_GENERATION_HINTS} focus areas allowed. Remove one to add another.`,
+            { id: 'hints-max-limit' }
+          );
+          break;
+        }
+        if (!next.some((h) => h.toLowerCase() === part.toLowerCase())) {
+          next.push(part);
+        }
+      }
+      return next;
+    });
+    setHintInputValue('');
+    setHintsPersisted(false);
+  };
+
+  const removeGenerationHint = (index: number) => {
+    setGenerationHints((prev) => prev.filter((_, i) => i !== index));
+    setHintsPersisted(false);
+  };
+
+  const clearGenerationHints = () => {
+    setGenerationHints([]);
+    setHintInputValue('');
+    setHintsPersisted(false);
+  };
+
+  const handleHintInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addGenerationHint(hintInputValue);
+    }
+  };
+
+  const renderFocusAreaHintsSection = () => (
+    <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 sm:p-4 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium text-slate-900">
+            Focus area hints{' '}
+            <span className="text-xs font-normal text-slate-500">(optional)</span>
+          </p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Competency names to include when generating. Each chip becomes at least one competency, plus JD-based ones — max {MAX_GENERATION_HINTS}.
+          </p>
+        </div>
+        <span className="text-xs text-slate-500 whitespace-nowrap shrink-0">
+          {generationHints.length} {generationHints.length === 1 ? 'hint' : 'hints'}
+        </span>
+      </div>
+
+      {generationHints.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {generationHints.map((hint, index) => (
+            <span
+              key={`${hint}-${index}`}
+              className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-800"
+            >
+              {hint}
+              <button
+                type="button"
+                onClick={() => removeGenerationHint(index)}
+                className="text-blue-400 hover:text-blue-700 leading-none"
+                aria-label={`Remove ${hint}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <Input
+          value={hintInputValue}
+          onChange={(e) => setHintInputValue(e.target.value)}
+          onKeyDown={handleHintInputKeyDown}
+          placeholder={`e.g. Kerberos, Jenkins — press Enter or comma to add (max ${MAX_GENERATION_HINTS})`}
+          maxLength={70}
+          disabled={!selectedTemplateId || generationHints.length >= MAX_GENERATION_HINTS}
+          className="text-sm flex-1 min-w-[200px]"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => addGenerationHint(hintInputValue)}
+          disabled={
+            !selectedTemplateId ||
+            !hintInputValue.trim() ||
+            generationHints.length >= MAX_GENERATION_HINTS
+          }
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          Add
+        </Button>
+        {generationHints.length > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="text-red-600 border-red-200 hover:bg-red-50"
+            onClick={clearGenerationHints}
+          >
+            Clear all
+          </Button>
+        )}
+      </div>
+
+      {!selectedTemplateId && (
+        <p className="text-xs text-slate-500">Select a role above to add focus hints.</p>
+      )}
+
+      {selectedTemplateId && generationHints.length >= MAX_GENERATION_HINTS && (
+        <p className="text-xs text-amber-700">
+          Maximum {MAX_GENERATION_HINTS} focus areas reached. Remove one to add another.
+        </p>
+      )}
+
+      {hintsPersisted && generationHints.length > 0 && (
+        <p className="text-xs text-emerald-700">
+          Hints saved — they will reload when you open this role again.
+        </p>
+      )}
+    </div>
+  );
+
   // Handle job description selection from both CV screening and AI interview
   const handleJobDescriptionSelect = async (jdId: string) => {
     const selectedJD = effectiveJobDescriptions.find((jd: InjectedJD) => jd.jd_id === jdId);
+    if (showJdEnableDisableInDropdown && selectedJD?.is_active === false) {
+      toast.error('This role is disabled. Enable it from Manage Job Descriptions to use it.');
+      return;
+    }
     if (selectedJD) {
       setSelectedTemplateId(jdId);
+      applyHintsFromSelectedJd(selectedJD);
       const selectedTitle = selectedJD.title ?? '';
       const configured = templateHasSavedInterviewVariant(selectedJD);
       // TPO campus: keep interview mode/type from form until template row has saved variant.
@@ -656,8 +938,11 @@ const HRInterviewCreator = ({
       
       setUploadedFile(file);
 
-      // Candidate Create tab: extract only when Save is clicked
-      if (candidateId && candidateRoleTab === 'create') {
+      // Create tab: extract only when Save is clicked (candidate, TPO, or recruiter)
+      const deferCreateRoleUpload = usesSharedCreateRoleTabs
+        ? candidateRoleTab === 'create'
+        : recruiterRoleTab === 'create';
+      if (deferCreateRoleUpload) {
         setFormData(prev => ({ ...prev, jobDescription: '' }));
         return;
       }
@@ -731,6 +1016,186 @@ const HRInterviewCreator = ({
       setUploadedFile(null);
       setFormData(prev => ({ ...prev, newRole: '', jobDescription: '' }));
       toast.success('Your role has been saved', { id: 'candidate-role-saved' });
+    } finally {
+      setIsExtractingText(false);
+      setIsUploading(false);
+    }
+  };
+
+  const extractTextAndSaveTpoJD = async (file: File, roleName: string) => {
+    setIsExtractingText(true);
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('job-descriptions')
+        .upload(fileName, file);
+
+      if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+
+      const formDataForExtraction = new FormData();
+      formDataForExtraction.append('file', file);
+      formDataForExtraction.append('title', roleName);
+
+      const response = await apiCall(API_CONFIG.ENDPOINTS.EXTRACT_JD_TEXT, {
+        method: 'POST',
+        body: formDataForExtraction,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to extract text from file: ${errorText}`);
+      }
+
+      const { extractedText } = await response.json();
+      const cleanedText = String(extractedText || '')
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, (ch) => (ch === '\n' || ch === '\r' ? ch : ''))
+        .replace(/\\u[0-9A-Fa-f]{4}/g, '')
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\[tbf]/g, ' ')
+        .replace(/[^\x20-\x7E\u00A0-\u00FF\n\r]/g, '')
+        .replace(/[&]{2,}/g, ' ')
+        .replace(/[0-9]{6,}/g, '')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\r\n|\r/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.TPO_CAMPUS_INTERVIEWS), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          title: roleName,
+          position: roleName,
+          jd_file: uploadData.path,
+          extracted_jd_text: cleanedText,
+          status: 'draft',
+        }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string; template_id?: string };
+      if (!res.ok) {
+        throw new Error(payload.error || 'Failed to save campus interview template');
+      }
+
+      if (injectedLoadJobDescriptions) await injectedLoadJobDescriptions();
+
+      const newJdId = payload.template_id ?? null;
+      setCandidateRoleSaveState({ status: 'saved', roleName, jdId: newJdId ?? undefined });
+      if (newJdId) setPendingSelectJdId(newJdId);
+      setUploadedFile(null);
+      setFormData((prev) => ({ ...prev, newRole: '', jobDescription: '' }));
+      setCandidateRoleTab('existing');
+      toast.success('Your role has been saved', { id: 'tpo-role-saved' });
+    } finally {
+      setIsExtractingText(false);
+      setIsUploading(false);
+    }
+  };
+
+  const saveTpoRoleDraft = async () => {
+    if (!tpoCampusTemplatePersist) return;
+    const roleName = formData.newRole.trim();
+    if (!roleName) {
+      toast.error('Please enter a role name');
+      return;
+    }
+    if (!uploadedFile) {
+      toast.error('Please upload a JD file before saving');
+      return;
+    }
+    if (roleNameCheckState === 'taken') {
+      toast.error('This role name is already used for selected mode and type. Try a different name.');
+      return;
+    }
+    try {
+      await extractTextAndSaveTpoJD(uploadedFile, roleName);
+    } catch (err) {
+      toast.error((err as Error)?.message ?? 'Failed to save role');
+    }
+  };
+
+  const extractTextAndSaveRecruiterJD = async (file: File, roleName: string) => {
+    if (!user?.profile?.company_id) {
+      throw new Error('Company not found');
+    }
+    if (interviewJdLimitInfo && !interviewJdLimitInfo.canCreateJD && interviewJdLimitInfo.maxActiveJDs > 0) {
+      throw new Error(
+        `You have reached your limit of ${interviewJdLimitInfo.maxActiveJDs} active interview JDs. Please disable one from Manage Job Descriptions to add a new one.`
+      );
+    }
+
+    setIsExtractingText(true);
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('job-descriptions')
+        .upload(fileName, file);
+
+      if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+
+      const formDataForExtraction = new FormData();
+      formDataForExtraction.append('file', file);
+      formDataForExtraction.append('title', roleName);
+
+      const response = await apiCall(API_CONFIG.ENDPOINTS.EXTRACT_JD_TEXT, {
+        method: 'POST',
+        body: formDataForExtraction,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to extract text from file: ${errorText}`);
+      }
+
+      const { extractedText } = await response.json();
+      const cleanedText = String(extractedText || '')
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, (ch) => (ch === '\n' || ch === '\r' ? ch : ''))
+        .replace(/\\u[0-9A-Fa-f]{4}/g, '')
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\[tbf]/g, ' ')
+        .replace(/[^\x20-\x7E\u00A0-\u00FF\n\r]/g, '')
+        .replace(/[&]{2,}/g, ' ')
+        .replace(/[0-9]{6,}/g, '')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\r\n|\r/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
+      const { data: jdData, error: jdError } = await supabase
+        .from('jd_for_interview')
+        .insert({
+          title: roleName,
+          jd_file: uploadData.path,
+          extracted_text: cleanedText,
+          company_id: user.profile.company_id,
+        })
+        .select()
+        .single();
+
+      if (jdError) throw new Error(jdError.message);
+
+      await loadJobDescriptions();
+      await checkInterviewJDLimit();
+
+      const newJdId = jdData?.id ?? null;
+      setRecruiterRoleSaveState({ status: 'saved', roleName, jdId: newJdId ?? undefined });
+      if (newJdId) setPendingSelectJdId(newJdId);
+      setUploadedFile(null);
+      setFormData(prev => ({ ...prev, newRole: '', jobDescription: '' }));
+      setRecruiterRoleTab('existing');
+      toast.success('Your role has been saved', { id: 'recruiter-role-saved' });
     } finally {
       setIsExtractingText(false);
       setIsUploading(false);
@@ -815,6 +1280,11 @@ const HRInterviewCreator = ({
         setPendingExtractedJdText(cleanedText);
         setFormData(prev => ({ ...prev, jobDescription: cleanedText }));
         toast.success('JD text extracted. Click Save to create the role.', { id: 'jd-extracted-candidate' });
+        return;
+      }
+
+      // TPO create tab: persist only on explicit Save (see extractTextAndSaveTpoJD)
+      if (tpoCampusTemplatePersist && candidateRoleTab === 'create') {
         return;
       }
 
@@ -942,8 +1412,15 @@ const HRInterviewCreator = ({
       if (allowedTypes.includes(file.type) || allowedExtensions.includes(fileExtension)) {
         if (file.size <= 3 * 1024 * 1024) {
           setUploadedFile(file);
-          
-          // Extract text from file and upload to storage
+
+          const deferCreateRoleUpload = usesSharedCreateRoleTabs
+            ? candidateRoleTab === 'create'
+            : recruiterRoleTab === 'create';
+          if (deferCreateRoleUpload) {
+            setFormData(prev => ({ ...prev, jobDescription: '' }));
+            return;
+          }
+
           await extractTextAndUploadJD(file);
         } else {
           toast.error('File size must be less than 3MB');
@@ -1395,14 +1872,17 @@ const HRInterviewCreator = ({
           job_description: formData.jobDescription,
           interview_count: interviewCount,
           interview_type: formData.interviewType,
-          existing_parameters: customCompetencies // API key unchanged: existing competency config
+          existing_parameters: customCompetencies, // API key unchanged: existing competency config
+          ...(generationHints.length > 0
+            ? { generation_hints: generationHints.slice(0, MAX_GENERATION_HINTS) }
+            : {}),
         })
       });
 
       if (response.ok) {
         const data = await response.json();
         const generatedCompetencies = data.parameters || {};
-        
+
         // Preserve existing manual settings and only use AI for missing fields.
         // Use backend weight as-is (1-100) so total stays 100%; avoid clamping to 10-40 here.
         const competencyKeys = Object.keys(generatedCompetencies);
@@ -1439,9 +1919,24 @@ const HRInterviewCreator = ({
         setCustomCompetencies(competenciesWithDefaults);
         setCompetenciesSaved(false);
         calculateDuration(competenciesWithDefaults);
+
+        if (selectedTemplateId) {
+          try {
+            await saveGenerationHintsForSelectedRole(generationHints);
+            setHintsPersisted(true);
+          } catch (hintErr) {
+            console.warn('Failed to persist generation hints after generate:', hintErr);
+          }
+        }
         
         const method = data.cached ? 'cached' : 'fresh';
-        toast.success(`Generated ${method} competencies for ${roleName} (Interview #${interviewCount})`, { id: 'params-generated' });
+        const hintsNote =
+          generationHints.length > 0
+            ? ` Included your ${generationHints.length} focus area${generationHints.length === 1 ? '' : 's'}: ${generationHints.join(', ')}.`
+            : '';
+        toast.success(`Generated ${method} competencies for ${roleName} (Interview #${interviewCount}).${hintsNote}`, {
+          id: 'params-generated',
+        });
       } else {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to generate competencies');
@@ -1656,12 +2151,24 @@ const HRInterviewCreator = ({
   }, [formData.newRole, formData.interviewMode, formData.interviewType, crpScopePayload.parameter_pack_origin, crpScopePayload.company_id, crpScopePayload.user_id]);
 
   useEffect(() => {
-    if (!pendingSelectJdId) return;
-    const exists = effectiveJobDescriptions.some((jd) => jd.jd_id === pendingSelectJdId);
-    if (!exists) return;
+    if (!showJdEnableDisableInDropdown || !pendingSelectJdId) return;
+    const jd = effectiveJobDescriptions.find((item) => item.jd_id === pendingSelectJdId);
+    if (!jd || jd.is_active === false) return;
     handleJobDescriptionSelect(pendingSelectJdId);
     setPendingSelectJdId(null);
-  }, [pendingSelectJdId, effectiveJobDescriptions]);
+  }, [pendingSelectJdId, effectiveJobDescriptions, showJdEnableDisableInDropdown]);
+
+  useEffect(() => {
+    if (!showJdEnableDisableInDropdown || !selectedTemplateId) return;
+    const selected = effectiveJobDescriptions.find((jd) => jd.jd_id === selectedTemplateId);
+    if (selected?.is_active === false) {
+      setSelectedTemplateId('');
+      setFormData((prev) => ({ ...prev, position: '', jobDescription: '' }));
+      setGenerationHints([]);
+      setHintInputValue('');
+      setHintsPersisted(false);
+    }
+  }, [effectiveJobDescriptions, selectedTemplateId, showJdEnableDisableInDropdown]);
 
   const saveCompetencies = async () => {
     const roleName = formData.newRole || formData.position;
@@ -1759,6 +2266,11 @@ const HRInterviewCreator = ({
       if (error) throw error;
 
       setCompetenciesSaved(true);
+
+      if (selectedTemplateId) {
+        await saveGenerationHintsForSelectedRole(generationHints);
+        setHintsPersisted(true);
+      }
 
       if (tpoCampusTemplatePersist && data?.id && selectedTemplateId) {
         try {
@@ -2049,7 +2561,9 @@ const HRInterviewCreator = ({
   const competencyActionBtnClass = useCandidateAuthPalette
     ? 'flex items-center gap-2 w-full sm:w-auto [background:linear-gradient(135deg,#1a9fd6,#2563eb)] hover:[background:linear-gradient(135deg,#1490c0,#1d4ed8)] text-white'
     : 'flex items-center gap-2 w-full sm:w-auto bg-[#094D7B] hover:bg-[#094D7B]/90 text-white';
-  const showCandidateConfiguration = !candidateId || candidateRoleTab === 'existing';
+  const showCandidateConfiguration = usesSharedCreateRoleTabs
+    ? candidateRoleTab === 'existing'
+    : recruiterRoleTab === 'existing';
   const stepProgressTheme = candidateId ? 'candidate' : tpoEmbeddedWorkflow ? 'tpo' : 'recruiter';
 
   return (
@@ -2305,7 +2819,7 @@ const HRInterviewCreator = ({
               </Dialog>
             </div>
           )}
-          {candidateId ? (
+          {usesSharedCreateRoleTabs ? (
             <Tabs value={candidateRoleTab} onValueChange={(v) => setCandidateRoleTab(v as 'create' | 'existing')}>
               <TabsList className="w-full grid grid-cols-2">
                 <TabsTrigger value="create">Create New Role</TabsTrigger>
@@ -2393,7 +2907,7 @@ const HRInterviewCreator = ({
                   <div className="flex justify-center">
                     <Button
                       type="button"
-                      onClick={saveCandidateRoleDraft}
+                      onClick={candidateId ? saveCandidateRoleDraft : saveTpoRoleDraft}
                       disabled={isUploading || isExtractingText || !formData.newRole.trim() || !uploadedFile}
                       className={competencyActionBtnClass}
                     >
@@ -2430,8 +2944,12 @@ const HRInterviewCreator = ({
                         </SelectTrigger>
                         <SelectContent>
                           {effectiveJobDescriptions.map((jd: InjectedJD) => (
-                            <SelectItem key={jd.jd_id} value={jd.jd_id}>
-                              {jd.title ?? 'Untitled'}
+                            <SelectItem
+                              key={jd.jd_id}
+                              value={jd.jd_id}
+                              disabled={showJdEnableDisableInDropdown && jd.is_active === false}
+                            >
+                              {formatJdDropdownLabel(jd, showJdEnableDisableInDropdown)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -2536,45 +3054,39 @@ const HRInterviewCreator = ({
                         value={formData.jobDescription}
                         onChange={handleInputChange}
                         placeholder="Job description will be auto-filled when you select a role above..."
-                        rows={8}
-                        className="resize-none text-sm sm:text-base flex-1 min-h-[260px]"
+                        rows={6}
+                        className="resize-none text-sm sm:text-base flex-1 min-h-[180px]"
                         readOnly
                       />
                     </div>
+
+                    {renderFocusAreaHintsSection()}
                   </div>
+
                 </div>
               </TabsContent>
             </Tabs>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-              {/* Left Column */}
-              <div className="space-y-4 min-w-0">
-                <>
-                  <div className="space-y-2">
-                    <Label className="text-sm sm:text-base">Select Role *</Label>
-                    <Select value={selectedTemplateId} onValueChange={handleJobDescriptionSelect}>
-                      <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
-                        <SelectValue placeholder="Select a role from existing job descriptions..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {effectiveJobDescriptions.map((jd: InjectedJD) => (
-                          <SelectItem key={jd.jd_id} value={jd.jd_id}>
-                            {jd.title ?? 'Untitled'}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+            <Tabs value={recruiterRoleTab} onValueChange={(v) => setRecruiterRoleTab(v as 'create' | 'existing')}>
+              <TabsList className="w-full grid grid-cols-2">
+                <TabsTrigger value="create">Create New Role</TabsTrigger>
+                <TabsTrigger value="existing">Existing Roles</TabsTrigger>
+              </TabsList>
 
+              <TabsContent value="create" className="space-y-4">
+                <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="newRole" className="text-sm sm:text-base">New Role *</Label>
+                    <Label htmlFor="newRole" className="text-sm sm:text-base">Role Name *</Label>
                     <Input
                       id="newRole"
                       name="newRole"
                       value={formData.newRole}
-                      onChange={handleInputChange}
-                      placeholder="Enter new role name if creating a new position"
-                      className="text-sm sm:text-base"
+                      onChange={(e) => {
+                        setRecruiterRoleSaveState({ status: 'idle' });
+                        handleInputChange(e);
+                      }}
+                      placeholder="Enter role name"
+                      className="text-sm sm:text-base w-full"
                     />
                     {roleNameCheckState !== 'idle' && (
                       <p className={`text-xs ${roleNameCheckState === 'taken' ? 'text-red-600' : roleNameCheckState === 'available' ? 'text-emerald-600' : 'text-gray-500'}`}>
@@ -2584,194 +3096,219 @@ const HRInterviewCreator = ({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="interviewMode" className="text-sm sm:text-base">Interview Mode *</Label>
-                    <Select
-                      value={formData.interviewMode}
-                      onValueChange={(value: 'ai' | 'structured') =>
-                        setFormData(prev => ({ ...prev, interviewMode: value }))
-                      }
+                    <Label className="text-sm sm:text-base">Upload New Job Description</Label>
+                    <div
+                      className={`border-2 border-dashed rounded-lg p-4 sm:p-6 text-center transition-colors ${
+                        isDragOver ? 'border-primary-500 bg-primary-50' : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
                     >
-                      <SelectTrigger className="w-full min-h-[44px] h-12 sm:h-14 touch-manipulation">
-                        <SelectValue placeholder="Select interview mode..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ai">
-                          <div className="flex items-center gap-3">
-                            <span>🤖</span>
-                            <div>
-                              <div className="font-medium text-sm sm:text-base">AI Interview (Dynamic)</div>
-                              <div className="text-xs sm:text-sm text-gray-500">Questions generated based on candidate answers</div>
-                            </div>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="structured">
-                          <div className="flex items-center gap-3">
-                            <span>📝</span>
-                            <div>
-                              <div className="font-medium text-sm sm:text-base">Structured Interview (Pre-defined)</div>
-                              <div className="text-xs sm:text-sm text-gray-500">HR writes custom questions and competencies</div>
-                            </div>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {formData.interviewMode === 'ai' && (
-                    <div className="space-y-2">
-                      <Label htmlFor="interviewType" className="text-sm sm:text-base">Interview Type *</Label>
-                      <Select
-                        value={formData.interviewType}
-                        onValueChange={async (value: 'functional' | 'behavioral' | 'mixed') => {
-                          setFormData(prev => ({ ...prev, interviewType: value }));
-                          if (formData.position) {
-                            await loadCompetenciesForPosition(formData.position, formData.interviewMode, value);
-                          }
-                        }}
+                      <Upload className="mx-auto h-6 w-6 sm:h-8 sm:w-8 text-gray-400 mb-2" />
+                      <p className="text-xs sm:text-sm font-medium text-gray-900 mb-1">
+                        Drop files here or click to browse (PDF, DOCX, TXT)
+                      </p>
+                      <p className="text-xs text-gray-500 mb-3">Maximum file size: 3MB</p>
+                      <Input
+                        type="file"
+                        accept=".pdf,.docx,.txt"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                        id="file-upload-recruiter"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => document.getElementById('file-upload-recruiter')?.click()}
+                        disabled={isUploading || isExtractingText}
+                        className="w-full sm:w-auto"
                       >
-                        <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
-                          <SelectValue placeholder="Select interview type..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="functional">Functional</SelectItem>
-                          <SelectItem value="behavioral">Behavioral</SelectItem>
-                          <SelectItem value="mixed">Mixed (Functional + Behavioral)</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        {isExtractingText ? 'Extracting Text...' : isUploading ? 'Saving...' : 'Choose File'}
+                      </Button>
                     </div>
-                  )}
-                </>
-              </div>
 
-              {/* Right Column */}
-              <div className="space-y-4">
-
-
-
-
-              {/* Drag and Drop Upload Area */}
-              {(!candidateId || candidateRoleTab === 'create') && (
-                <div className="space-y-2">
-                  <Label className="text-sm sm:text-base">Upload New Job Description</Label>
-                  <div
-                    className={`border-2 border-dashed rounded-lg p-4 sm:p-6 text-center transition-colors ${
-                      isDragOver 
-                        ? (isCandidate ? 'border-sky-500 bg-sky-50' : 'border-primary-500 bg-primary-50')
-                        : 'border-gray-300 hover:border-gray-400'
-                    }`}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                  >
-                    <Upload className="mx-auto h-6 w-6 sm:h-8 sm:w-8 text-gray-400 mb-2" />
-                    <p className="text-xs sm:text-sm font-medium text-gray-900 mb-1">
-                      Drop files here or click to browse (PDF, DOCX, TXT)
-                    </p>
-                    <p className="text-xs text-gray-500 mb-3">
-                      Maximum file size: 3MB
-                    </p>
-                    <Input
-                      type="file"
-                      accept=".pdf,.docx,.txt"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                      id="file-upload"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => document.getElementById('file-upload')?.click()}
-                      disabled={isUploading || isExtractingText}
-                      className="w-full sm:w-auto"
-                    >
-                      {isExtractingText ? 'Extracting Text...' : isUploading ? 'Uploading...' : 'Choose File'}
-                    </Button>
+                    {uploadedFile && (
+                      <div className="flex items-center justify-between p-2 bg-gray-50 rounded border">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-gray-500" />
+                          <div>
+                            <p className="text-xs font-medium text-gray-900">{uploadedFile.name}</p>
+                            <p className="text-xs text-gray-500">{(uploadedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={removeUploadedFile}
+                          className="h-6 w-6 p-0"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
-                  {candidateId && candidateRoleTab === 'create' && (
+                  <div className="flex justify-center">
                     <Button
                       type="button"
-                      onClick={saveCandidateRoleDraft}
-                      disabled={isUploading || isExtractingText || !formData.newRole.trim() || !pendingUploadedJdPath || !pendingExtractedJdText.trim()}
+                      onClick={saveRecruiterRoleDraft}
+                      disabled={isUploading || isExtractingText || !formData.newRole.trim() || !uploadedFile}
                       className={competencyActionBtnClass}
                     >
                       <Save className="h-4 w-4" />
                       Save
                     </Button>
-                  )}
+                  </div>
 
-                  {/* Uploaded File Display */}
-                  {uploadedFile && (
-                    <div className="flex items-center justify-between p-2 bg-gray-50 rounded border">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-gray-500" />
-                        <div>
-                          <p className="text-xs font-medium text-gray-900">{uploadedFile.name}</p>
-                          <p className="text-xs text-gray-500">
-                            {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
-                        </div>
-                      </div>
+                  {recruiterRoleSaveState.status === 'saved' && (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                      <p className="text-sm font-medium text-emerald-800">Your role has been saved.</p>
                       <Button
                         type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={removeUploadedFile}
-                        className="h-6 w-6 p-0"
+                        className="mt-2 w-full"
+                        onClick={() => {
+                          setRecruiterRoleTab('existing');
+                        }}
                       >
-                        <X className="h-3 w-3" />
+                        Proceed to configuration of competancies
                       </Button>
                     </div>
                   )}
-                </div>
-              )}
+                </div></TabsContent>
 
-              {/* Job Description Field */}
-              <div className="space-y-2">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                  <Label htmlFor="jobDescription" className="text-sm sm:text-base">Job Description *</Label>
-                  {formData.jobDescription && (
-                    <Dialog open={isExpandDialogOpen} onOpenChange={setIsExpandDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-blue-600 hover:text-blue-700 flex items-center gap-1 w-full sm:w-auto"
+              <TabsContent value="existing" className="space-y-3">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 items-stretch">
+                  <div className="space-y-4 min-w-0">
+                    <div className="space-y-2">
+                      <Label className="text-sm sm:text-base">Select Role *</Label>
+                      <Select value={selectedTemplateId} onValueChange={handleJobDescriptionSelect}>
+                        <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
+                          <SelectValue placeholder="Select a role from existing job descriptions..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {effectiveJobDescriptions.map((jd: InjectedJD) => (
+                            <SelectItem
+                              key={jd.jd_id}
+                              value={jd.jd_id}
+                              disabled={showJdEnableDisableInDropdown && jd.is_active === false}
+                            >
+                              {formatJdDropdownLabel(jd, showJdEnableDisableInDropdown)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="interviewMode" className="text-sm sm:text-base">Interview Mode *</Label>
+                      <Select
+                        value={formData.interviewMode}
+                        onValueChange={(value: 'ai' | 'structured') =>
+                          setFormData(prev => ({ ...prev, interviewMode: value }))
+                        }
+                      >
+                        <SelectTrigger className="w-full min-h-[44px] h-12 sm:h-14 touch-manipulation">
+                          <SelectValue placeholder="Select interview mode..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ai">
+                            <div className="flex items-center gap-3">
+                              <span>🤖</span>
+                              <div>
+                                <div className="font-medium text-sm sm:text-base">AI Interview (Dynamic)</div>
+                                <div className="text-xs sm:text-sm text-gray-500">Questions generated based on candidate answers</div>
+                              </div>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="structured">
+                            <div className="flex items-center gap-3">
+                              <span>📝</span>
+                              <div>
+                                <div className="font-medium text-sm sm:text-base">Structured Interview (Pre-defined)</div>
+                                <div className="text-xs sm:text-sm text-gray-500">HR writes custom questions and competencies</div>
+                              </div>
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {formData.interviewMode === 'ai' && (
+                      <div className="space-y-2">
+                        <Label htmlFor="interviewType" className="text-sm sm:text-base">Interview Type *</Label>
+                        <Select
+                          value={formData.interviewType}
+                          onValueChange={async (value: 'functional' | 'behavioral' | 'mixed') => {
+                            setFormData(prev => ({ ...prev, interviewType: value }));
+                            if (formData.position) {
+                              await loadCompetenciesForPosition(formData.position, formData.interviewMode, value);
+                            }
+                          }}
                         >
-                          <Maximize2 className="h-4 w-4" />
-                          Expand
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[80vh] overflow-hidden">
-                        <DialogHeader>
-                          <DialogTitle className="text-lg sm:text-xl">Job Description - Full Text</DialogTitle>
-                          <DialogDescription className="text-sm sm:text-base">
-                            View the complete job description text that was extracted from the uploaded PDF file.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="overflow-y-auto max-h-[60vh]">
-                          <div className="whitespace-pre-wrap text-xs sm:text-sm leading-relaxed p-3 sm:p-4 bg-gray-50 rounded-lg border">
-                            {formData.jobDescription}
-                          </div>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                  )}
+                          <SelectTrigger className="w-full min-h-[44px] touch-manipulation">
+                            <SelectValue placeholder="Select interview type..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="functional">Functional</SelectItem>
+                            <SelectItem value="behavioral">Behavioral</SelectItem>
+                            <SelectItem value="mixed">Mixed (Functional + Behavioral)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 flex flex-col h-full">
+                    <div className="space-y-2 flex flex-col flex-1">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                        <Label htmlFor="jobDescription" className="text-sm sm:text-base">Job Description *</Label>
+                        {formData.jobDescription && (
+                          <Dialog open={isExpandDialogOpen} onOpenChange={setIsExpandDialogOpen}>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-blue-600 hover:text-blue-700 flex items-center gap-1 w-full sm:w-auto"
+                              >
+                                <Maximize2 className="h-4 w-4" />
+                                Expand
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[80vh] overflow-hidden">
+                              <DialogHeader>
+                                <DialogTitle className="text-lg sm:text-xl">Job Description - Full Text</DialogTitle>
+                                <DialogDescription className="text-sm sm:text-base">
+                                  View the complete job description text that was extracted from the uploaded PDF file.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="overflow-y-auto max-h-[60vh]">
+                                <div className="whitespace-pre-wrap text-xs sm:text-sm leading-relaxed p-3 sm:p-4 bg-gray-50 rounded-lg border">
+                                  {formData.jobDescription}
+                                </div>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        )}
+                      </div>
+                      <Textarea
+                        id="jobDescription"
+                        name="jobDescription"
+                        value={formData.jobDescription}
+                        onChange={handleInputChange}
+                        placeholder="Job description will be auto-filled when you select a role above..."
+                        rows={6}
+                        className="resize-none text-sm sm:text-base flex-1 min-h-[180px]"
+                        readOnly
+                      />
+                    </div>
+                    {renderFocusAreaHintsSection()}
+                  </div>
                 </div>
-                <Textarea
-                  id="jobDescription"
-                  name="jobDescription"
-                  value={formData.jobDescription}
-                  onChange={handleInputChange}
-                  placeholder="Job description will be auto-filled when you select a role above..."
-                  rows={4}
-                  className="resize-none text-sm sm:text-base"
-                  readOnly
-                />
-              </div>
-            </div>
-          </div>
+              </TabsContent>
+            </Tabs>
           )}
         </CardContent>
       </Card>
