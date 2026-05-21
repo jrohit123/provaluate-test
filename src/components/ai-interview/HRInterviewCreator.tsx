@@ -983,7 +983,7 @@ const HRInterviewCreator = ({
         if (createdInterviews.length === 1) {
           // Single candidate - send individual email
           const interview = createdInterviews[0];
-          const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
+          const interviewLink = `${window.location.origin}${import.meta.env.BASE_URL}interview/${interview.interview_id}`;
           
           const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.SEND_INTERVIEW_EMAIL), {
             method: 'POST',
@@ -1020,7 +1020,7 @@ const HRInterviewCreator = ({
           
           for (const interview of createdInterviews) {
             try {
-              const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
+              const interviewLink = `${window.location.origin}${import.meta.env.BASE_URL}interview/${interview.interview_id}`;
               
               const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.SEND_INTERVIEW_EMAIL), {
                 method: 'POST',
@@ -1093,7 +1093,7 @@ const HRInterviewCreator = ({
         // Send individual emails to each candidate with their specific interview link
         for (const [index, interview] of createdInterviews.entries()) {
           try {
-            const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
+            const interviewLink = `${window.location.origin}${import.meta.env.BASE_URL}interview/${interview.interview_id}`;
             
             const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.SEND_INTERVIEW_EMAIL), {
               method: 'POST',
@@ -1163,7 +1163,7 @@ const HRInterviewCreator = ({
       if (createdInterviews.length === 1) {
         // Single candidate - copy individual email
         const interview = createdInterviews[0];
-        const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
+        const interviewLink = `${window.location.origin}${import.meta.env.BASE_URL}interview/${interview.interview_id}`;
         const template = getEmailTemplate(interview.candidate_name, interviewType, interviewLink);
         
         const emailContent = `To: ${interview.candidate_email}\nSubject: ${template.subject}\n\n${template.body}`;
@@ -1177,7 +1177,7 @@ const HRInterviewCreator = ({
         const emailList = createdInterviews.map(i => i.candidate_email).join(', ');
         const template = getEmailTemplate('', interviewType);
         const allLinks = createdInterviews.map(interview => 
-          `${interview.candidate_name}: ${window.location.origin}/interview/${interview.interview_id}`
+          `${interview.candidate_name}: ${window.location.origin}${import.meta.env.BASE_URL}interview/${interview.interview_id}`
         ).join('\n\n');
         const emailBody = template.body.replace('{INTERVIEW_LINK}', allLinks);
         
@@ -1339,7 +1339,7 @@ const HRInterviewCreator = ({
   };
 
   const copyInterviewLink = (interviewId: string) => {
-    const interviewLink = `${window.location.origin}/interview/${interviewId}`;
+    const interviewLink = `${window.location.origin}${import.meta.env.BASE_URL}interview/${interviewId}`;
     navigator.clipboard.writeText(interviewLink);
     toast({
       title: "Link Copied",
@@ -1350,7 +1350,7 @@ const HRInterviewCreator = ({
   const copyAllLinksToClipboard = () => {
     if (createdInterviews.length > 0) {
       const allLinks = createdInterviews.map(interview => 
-        `${interview.candidate_name}: ${window.location.origin}/interview/${interview.interview_id}`
+        `${interview.candidate_name}: ${window.location.origin}${import.meta.env.BASE_URL}interview/${interview.interview_id}`
       ).join('\n');
       navigator.clipboard.writeText(allLinks);
       toast({
@@ -2029,7 +2029,7 @@ const HRInterviewCreator = ({
                       let failCount = 0;
                       for (const interview of createdInterviews) {
                         try {
-                          const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
+                          const interviewLink = `${window.location.origin}${import.meta.env.BASE_URL}interview/${interview.interview_id}`;
                           const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.SEND_INTERVIEW_EMAIL), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -2073,7 +2073,7 @@ const HRInterviewCreator = ({
           </CardHeader>
           <CardContent className="space-y-4">
             {createdInterviews.map((interview, index) => {
-              const interviewLink = `${window.location.origin}/interview/${interview.interview_id}`;
+              const interviewLink = `${window.location.origin}${import.meta.env.BASE_URL}interview/${interview.interview_id}`;
               return (
                 <div key={interview.interview_id} className="bg-gray-50 rounded-lg p-3 sm:p-4">
                   {!useCandidateSelfPanel && (

@@ -9,12 +9,7 @@ import { SessionManager } from '@/utils/sessionManager';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { API_CONFIG, buildApiUrl } from '@/constants/api';
 import { Loader2 } from 'lucide-react';
-
-declare global {
-  interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
-  }
-}
+import { buildCandidateRazorpayOptions, openCandidateRazorpayCheckout } from '@/utils/candidateRazorpayCheckout';
 
 type Plan = { id: string; plan_name: string; jd_count: number; cost: number; interview_count: number; is_free: boolean };
 
@@ -399,21 +394,19 @@ export default function CandidateOnboarding() {
       const contactForRazorpay =
         digitsOnly.length === 10 ? '91' + digitsOnly : digitsOnly.length > 0 ? digitsOnly : '';
       const { data: { user: authUser } } = await supabase.auth.getUser();
-      const options: Record<string, unknown> = {
+      const plan = plans.find((p) => p.id === selectedPlanId);
+      const options = buildCandidateRazorpayOptions({
         key: key_id,
         amount,
         currency,
         order_id,
+        description: plan?.plan_name,
         prefill: {
           ...(contactForRazorpay ? { contact: contactForRazorpay } : {}),
           ...(authUser?.email && { email: authUser.email }),
         },
-        modal: {
-          ondismiss: () => {
-            setSubmitting(false);
-          },
-        },
-        handler: async (response: { razorpay_payment_id: string; razorpay_signature: string }) => {
+        onDismiss: () => setSubmitting(false),
+        onSuccess: async (response) => {
           setFinishingPayment(true);
           setSubmitting(false);
           try {
@@ -421,7 +414,7 @@ export default function CandidateOnboarding() {
               method: 'POST',
               headers,
               body: JSON.stringify({
-                razorpay_order_id: order_id,
+                razorpay_order_id: response.razorpay_order_id || order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
               }),
@@ -447,11 +440,11 @@ export default function CandidateOnboarding() {
             setError(err instanceof Error ? err.message : 'Payment verification failed.');
           }
         },
-      };
-      if (window.Razorpay) {
-        const rzp = new window.Razorpay(options);
-        rzp.open();
-      } else {
+      });
+      if (!openCandidateRazorpayCheckout(options, (msg) => {
+        setError(msg);
+        setSubmitting(false);
+      })) {
         setError('Payment gateway could not be loaded.');
         setSubmitting(false);
       }

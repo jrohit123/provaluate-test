@@ -189,7 +189,7 @@ const Login = () => {
       }
 
       // Get the current origin for the redirect URL (user=recruiter so ResetPassword redirects back to main login)
-      const redirectTo = `${window.location.origin}/reset-password?user=recruiter`;
+      const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}reset-password?user=recruiter`;
       
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
         redirectTo: redirectTo,

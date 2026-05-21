@@ -122,7 +122,7 @@ const TpoLogin = () => {
     setIsLoading(true);
     try {
       if (isSignup) {
-        const emailRedirectTo = `${window.location.origin}/tpo-login`;
+        const emailRedirectTo = `${window.location.origin}${import.meta.env.BASE_URL}tpo-login`;
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -212,7 +212,7 @@ const TpoLogin = () => {
       if (!emailRegex.test(resetEmail)) {
         throw new Error('Please enter a valid email address.');
       }
-      const redirectTo = `${window.location.origin}/reset-password?user=tpo`;
+      const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}reset-password?user=tpo`;
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
         redirectTo,
       });

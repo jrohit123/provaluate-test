@@ -22,6 +22,7 @@ import {
   getReceiptReference,
   type CandidateReceiptPurchase,
 } from '@/components/ai-interview/CandidatePaymentReceipt';
+import { buildCandidateRazorpayOptions, openCandidateRazorpayCheckout } from '@/utils/candidateRazorpayCheckout';
 
 type ReferralRow = {
   name: string;
@@ -344,31 +345,28 @@ export function ReferralsSection() {
         return;
       }
       const { order_id, amount, currency, key_id } = orderData;
-      const rzp = (window as unknown as { Razorpay?: new (o: Record<string, unknown>) => { open: () => void } }).Razorpay;
-      if (!rzp) {
-        setPlanError('Payment gateway could not be loaded. Refresh the page.');
-        setPlanSubmitting(false);
-        return;
-      }
       const digitsOnly = (candidateMobile || '').trim().replace(/\D/g, '');
       const contactForRazorpay = digitsOnly.length === 10 ? '91' + digitsOnly : digitsOnly;
       const { data: { user: authUser } } = await supabase.auth.getUser();
       const prefill: Record<string, string> = {};
       if (contactForRazorpay) prefill.contact = contactForRazorpay;
       if (authUser?.email) prefill.email = authUser.email;
-      const rzpInstance = new rzp({
+      const selectedPlan = plans.find((p) => p.id === selectedPlanId);
+      const options = buildCandidateRazorpayOptions({
         key: key_id,
         amount,
         currency: currency || 'INR',
         order_id,
-        ...(Object.keys(prefill).length > 0 && { prefill }),
-        handler: async (response: { razorpay_payment_id: string; razorpay_signature: string }) => {
+        description: selectedPlan?.plan_name,
+        prefill,
+        onDismiss: () => setPlanSubmitting(false),
+        onSuccess: async (response) => {
           try {
             const verifyRes = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.CANDIDATE_VERIFY_PAYMENT), {
               method: 'POST',
               headers: await getAuthHeaders(),
               body: JSON.stringify({
-                razorpay_order_id: order_id,
+                razorpay_order_id: response.razorpay_order_id || order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
               }),
@@ -395,7 +393,13 @@ export function ReferralsSection() {
           setPlanSubmitting(false);
         },
       });
-      rzpInstance.open();
+      if (!openCandidateRazorpayCheckout(options, (msg) => {
+        setPlanError(msg);
+        setPlanSubmitting(false);
+      })) {
+        setPlanError('Payment gateway could not be loaded. Refresh the page.');
+        setPlanSubmitting(false);
+      }
     } catch (e) {
       setPlanError(e instanceof Error ? e.message : 'Something went wrong.');
     }

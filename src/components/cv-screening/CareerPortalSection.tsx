@@ -218,7 +218,7 @@ export function CareerPortalSection({ onSectionReady }: CareerPortalSectionProps
 
   const careerUrl =
     company?.career_slug
-      ? `${typeof window !== 'undefined' ? window.location.origin : ''}/careers/${company.career_slug}`
+      ? `${typeof window !== 'undefined' ? window.location.origin : ''}${import.meta.env.BASE_URL}careers/${company.career_slug}`
       : '';
 
   return (

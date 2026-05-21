@@ -69,6 +69,8 @@ export const API_CONFIG = {
     CANDIDATE_COLLEGE_ENROLLMENT: '/api/candidate/college/enrollment',
     CANDIDATE_CAMPUS_INTERVIEWS: '/api/candidate/campus-interviews',
     CANDIDATE_CAMPUS_INTERVIEW_LINK_ATTEMPT: '/api/candidate/campus-interviews/link-attempt',
+    CANDIDATE_INVITE_VALIDATE: '/api/candidate/invite/validate',
+    CANDIDATE_INVITE_ACTIVATE: '/api/candidate/invite/activate',
 
     // TPO onboarding and dashboard
     TPO_ME: '/api/tpo/me',
@@ -81,6 +83,9 @@ export const API_CONFIG = {
     TPO_ACTIVITY_COHORT: '/api/tpo/activity/cohort',
     TPO_CAMPUS_ROLE_INVITES: '/api/tpo/campus-role-invites',
     TPO_CAMPUS_ROLE_APPLICATIONS: '/api/tpo/campus-role-applications',
+    TPO_ROSTER_UPLOAD: '/api/tpo/roster/upload',
+    TPO_ROSTER_LIST: '/api/tpo/roster',
+    TPO_ROSTER_SEND_INVITES: '/api/tpo/roster/send-invites',
     CANDIDATE_CAMPUS_OPPORTUNITIES: '/api/candidate/campus-opportunities',
   },
   TIMEOUTS: {

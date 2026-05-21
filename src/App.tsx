@@ -26,6 +26,7 @@ import CandidateSignUp from "./pages/CandidateSignUp";
 import CandidateLogin from "./pages/CandidateLogin";
 import CandidatePricing from "./pages/CandidatePricing";
 import CandidateOnboarding from "./pages/CandidateOnboarding";
+import CandidateInviteSignup from "./pages/CandidateInviteSignup";
 import CandidateDashboard from "./pages/CandidateDashboard";
 import TpoLogin from "./pages/TpoLogin";
 import TpoDashboard from "./pages/TpoDashboard";
@@ -297,6 +298,7 @@ const App = () => {
             <Route path="/tpo-login" element={<TpoLogin />} />
             <Route path="/candidate-pricing" element={<CandidatePricing />} />
             <Route path="/candidate-onboarding" element={<CandidateOnboarding />} />
+            <Route path="/candidate-invite" element={<CandidateInviteSignup />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/pricing" element={<Pricing />} />

@@ -33,8 +33,9 @@ import {
   TpoIndividualJourneyPanel,
   type TpoJourneyInterview,
 } from '@/components/tpo/TpoIndividualJourneyPanel';
+import TpoBulkInvitePanel from '@/components/tpo/TpoBulkInvitePanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Home, Settings2, Activity, Shield, LogOut, Megaphone } from 'lucide-react';
+import { Home, Settings2, Activity, Shield, LogOut, Megaphone, UserPlus } from 'lucide-react';
 import { useAnimatedNumber } from '@/hooks/useAnimatedNumber';
 
 type StatsResponse = {
@@ -172,7 +173,7 @@ type TpoMeResponse = {
 };
 type TpoUserProfile = NonNullable<TpoMeResponse['tpo_user']>;
 
-type TpoSection = 'home' | 'configure' | 'invite_students' | 'invite_review' | 'activity' | 'settings';
+type TpoSection = 'home' | 'configure' | 'invite_students' | 'bulk_invite' | 'invite_review' | 'activity' | 'settings';
 
 type CollegeCourseRow = { id: string; course_name: string; course_code: string | null };
 type PublishCompetencySummary = {
@@ -285,6 +286,17 @@ function TpoAppSidebar({ activeSection, onSectionChange, fullName }: TpoSidebarP
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
+                  onClick={() => handleSectionNav('bulk_invite')}
+                  isActive={activeSection === 'bulk_invite'}
+                  tooltip="Bulk invite"
+                  className={menuBtnClass}
+                >
+                  <UserPlus className="w-6 h-6 shrink-0" />
+                  <span>Bulk invite</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
                   onClick={() => handleSectionNav('activity')}
                   isActive={activeSection === 'activity'}
                   tooltip="Student activity"
@@ -387,6 +399,7 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
   const [addCourseDuration, setAddCourseDuration] = useState('4');
   const [addCourseMonth, setAddCourseMonth] = useState('7');
   const [addCourseDay, setAddCourseDay] = useState('1');
+  const [addCourseYear, setAddCourseYear] = useState(String(new Date().getFullYear()));
   const [addingCourse, setAddingCourse] = useState(false);
 
   const courses = useMemo(() => stats?.course_breakdown || [], [stats]);
@@ -1076,6 +1089,7 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
           duration_years: parseFloat(addCourseDuration),
           academic_start_month: parseInt(addCourseMonth),
           academic_start_day: parseInt(addCourseDay),
+          academic_start_year: parseInt(addCourseYear),
           is_active: true,
         }),
       });
@@ -1084,7 +1098,7 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
       toast({ title: 'Course added', description: `"${addCourseName.trim()}" added successfully.` });
       setAddCourseOpen(false);
       setAddCourseName(''); setAddCourseCode(''); setAddCourseDuration('4');
-      setAddCourseMonth('7'); setAddCourseDay('1');
+      setAddCourseMonth('7'); setAddCourseDay('1'); setAddCourseYear(String(new Date().getFullYear()));
       await loadData();
     } catch (e: unknown) {
       toast({ title: 'Failed to add course', description: e instanceof Error ? e.message : 'Please try again.', variant: 'destructive' });
@@ -1694,6 +1708,17 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
                   min="1" max="31" value={addCourseDay} onChange={e => setAddCourseDay(e.target.value)} />
               </div>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Batch / intake year</Label>
+              <Select value={addCourseYear} onValueChange={setAddCourseYear}>
+                <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 2 + i).map((yr) => (
+                    <SelectItem key={yr} value={String(yr)}>{yr}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="flex justify-end gap-2 pt-4 border-t mt-4">
             <Button variant="outline" onClick={() => setAddCourseOpen(false)}>Cancel</Button>
@@ -2094,6 +2119,7 @@ const TpoDashboard = ({ initialTpoUser }: { initialTpoUser?: TpoUserProfile | nu
                 </div>
               )}
               {activeSection === 'invite_students' && renderInviteStudents()}
+              {activeSection === 'bulk_invite' && <TpoBulkInvitePanel />}
               {activeSection === 'invite_review' && renderInviteReview()}
               {activeSection === 'activity' && renderActivity()}
               {activeSection === 'settings' && renderAdminSettings()}
