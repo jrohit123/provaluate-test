@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { CheckCircle, Clock, XCircle, Mail } from 'lucide-react';
 import { buildApiUrl, API_CONFIG } from '@/constants/api';
 
 const CandidateCompletion = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const params = useParams();
   const [candidateName, setCandidateName] = useState<string | undefined>((location.state as any)?.candidateName);
   const [position, setPosition] = useState<string | undefined>((location.state as any)?.position);
@@ -27,6 +28,20 @@ const CandidateCompletion = () => {
     };
     exitFullscreen();
   }, []);
+
+  // Keep completion page as terminal step in browser history.
+  // Browser Back from here goes to performance report, not back into the interview.
+  useEffect(() => {
+    const onPopState = () => {
+      navigate('/candidate-dashboard/performance-report', { replace: true });
+    };
+    // Push one extra history entry so the first Back triggers popstate here
+    window.history.pushState({ fromCompletion: true }, '', window.location.href);
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+    };
+  }, [navigate]);
 
   useEffect(() => {
     const run = async () => {

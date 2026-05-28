@@ -1023,6 +1023,22 @@ function ProfileBuilderSection({ candidateId }: { candidateId: string | undefine
   const [publicationEntry, setPublicationEntry] = useState<PublicationEntry>({});
   const [genericEntry, setGenericEntry] = useState<GenericEntry>({ title: '', description: '' });
 
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Upload states ──────────────────────────────────────────────────────────
+  const [jdUploading, setJdUploading] = useState(false);
+  const [jdError, setJdError] = useState<string | null>(null);
+  const [jdId, setJdId] = useState<string | null>(null);
+  const [jdTitle, setJdTitle] = useState<string | null>(null);
+
+  const [resumeUploading, setResumeUploading] = useState(false);
+
+  const jdFileInputRef = useRef<HTMLInputElement>(null);
+  const resumeFileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (!candidateId) {
       setLoading(false);
@@ -1038,6 +1054,82 @@ function ProfileBuilderSection({ candidateId }: { candidateId: string | undefine
       setLoading(false);
     })();
   }, [candidateId]);
+
+  // ── JD upload handler ──────────────────────────────────────────────────────
+  const handleJdUpload = useCallback(async (file: File) => {
+    if (!candidateId) return;
+    setJdUploading(true);
+    setJdError(null);
+    setJdId(null);
+    setJdTitle(null);
+    setUploadSuccess(false);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const res = await fetch(
+        buildApiUrl('/api/candidate/upload-jd'),
+        {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        }
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((json as { error?: string }).error || 'JD upload failed');
+
+      setJdId((json as { jd_id: string }).jd_id);
+      setJdTitle((json as { title: string }).title);
+    } catch (e: unknown) {
+      setJdError(e instanceof Error ? e.message : 'JD upload failed');
+    } finally {
+      setJdUploading(false);
+    }
+  }, [candidateId]);
+
+  // ── Resume upload handler ──────────────────────────────────────────────────
+  const handleResumeUpload = useCallback(async (file: File) => {
+    if (!candidateId) return;
+    setResumeUploading(true);
+    setUploadError(null);
+    setUploadSuccess(false);
+
+    const formData = new FormData();
+    formData.append('file', file);
+    if (jdId) formData.append('jd_id', jdId);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const res = await fetch(
+        buildApiUrl('/api/candidate/parse-resume-to-profile'),
+        {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        }
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((json as { error?: string }).error || 'Resume parse failed');
+
+      const { data } = await supabase
+        .from('candidate_profile_details')
+        .select('profile_data')
+        .eq('candidate_id', candidateId)
+        .maybeSingle();
+      if (data) setProfileData((data.profile_data as ProfileData) ?? {});
+      setUploadSuccess(true);
+    } catch (e: unknown) {
+      setUploadError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setResumeUploading(false);
+    }
+  }, [candidateId, jdId]);
 
   const persistProfile = useCallback(async (next: ProfileData): Promise<boolean> => {
     if (!candidateId) return false;
@@ -1485,15 +1577,103 @@ function ProfileBuilderSection({ candidateId }: { candidateId: string | undefine
 
   return (
     <div className="w-full">
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5 sm:mb-6">
         <div>
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Add Content</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Fill in each section — data appears live in your Resume Builder.</p>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Upload your JD then your resume — AI will tailor your profile to the role.
+          </p>
         </div>
-        <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" onClick={() => navigate('/candidate-dashboard')} aria-label="Close">
-          <X className="h-5 w-5" />
-        </Button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Step 1 — JD upload */}
+          <input
+            ref={jdFileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.txt"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleJdUpload(file);
+              e.target.value = '';
+            }}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className={`min-h-[44px] gap-2 ${jdId ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50' : 'border-sky-300 text-sky-700 hover:bg-sky-50 hover:border-sky-400'}`}
+            onClick={() => jdFileInputRef.current?.click()}
+            disabled={jdUploading}
+            title="Upload the job description you are targeting"
+          >
+            {jdUploading
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading JD…</>
+              : jdId
+                ? <><Check className="h-4 w-4" /> JD: {jdTitle?.slice(0, 20)}{(jdTitle?.length ?? 0) > 20 ? '…' : ''}</>
+                : <><FileText className="h-4 w-4" /> Step 1: Upload JD</>
+            }
+          </Button>
+
+          {/* Step 2 — Resume upload (locked until JD uploaded) */}
+          <input
+            ref={resumeFileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.txt"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleResumeUpload(file);
+              e.target.value = '';
+            }}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-h-[44px] gap-2 border-sky-300 text-sky-700 hover:bg-sky-50 hover:border-sky-400 disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={() => resumeFileInputRef.current?.click()}
+            disabled={!jdId || resumeUploading}
+            title={!jdId ? 'Upload a JD first to enable tailored resume parsing' : 'Upload your resume — AI will tailor it to the JD'}
+          >
+            {resumeUploading
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Tailoring…</>
+              : uploadSuccess
+                ? <><Check className="h-4 w-4" /> Re-upload Resume</>
+                : <><FileText className="h-4 w-4" /> Step 2: Upload Resume</>
+            }
+          </Button>
+        </div>
       </div>
+
+      {/* Feedback banners */}
+      {jdError && (
+        <div className="mb-3 rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-700 flex items-center gap-2">
+          <X className="h-4 w-4 shrink-0" /> JD upload failed: {jdError}
+        </div>
+      )}
+      {uploadError && (
+        <div className="mb-3 rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-700 flex items-center gap-2">
+          <X className="h-4 w-4 shrink-0" /> {uploadError}
+        </div>
+      )}
+      {!jdId && (
+        <div className="mb-4 rounded-lg bg-sky-50 border border-sky-200 px-4 py-2.5 text-sm text-sky-700 flex items-center gap-2">
+          <FileText className="h-4 w-4 shrink-0" />
+          Upload the job description first, then your resume — AI will rewrite your profile to match the role.
+        </div>
+      )}
+      {jdId && !uploadSuccess && (
+        <div className="mb-4 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-2.5 text-sm text-emerald-700 flex items-center gap-2">
+          <Check className="h-4 w-4 shrink-0" />
+          JD uploaded. Now upload your resume and AI will tailor every section to this role.
+        </div>
+      )}
+      {uploadSuccess && (
+        <div className="mb-4 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-2.5 text-sm text-emerald-700 flex items-center gap-2">
+          <Check className="h-4 w-4 shrink-0" />
+          Profile tailored to your JD and filled below. Review and edit any section as needed.
+        </div>
+      )}
 
       {loading && <div className="flex items-center gap-2 text-gray-600"><Loader2 className="h-5 w-5 animate-spin" /> Loading…</div>}
 

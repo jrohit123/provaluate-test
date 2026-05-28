@@ -16,6 +16,7 @@ export type PerformanceInterviewRow = {
   interview_source?: string | null;
   campus_template_id?: string | null;
   overall_score?: number | null;
+  total_score?: number | null;
   completed_at?: string | null;
 };
 

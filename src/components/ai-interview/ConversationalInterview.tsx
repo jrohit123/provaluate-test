@@ -129,7 +129,8 @@ const fetchInterviewPhrase = async (
   candidateName: string,
   position: string,
   questionIndex?: number,
-  totalQuestions?: number
+  totalQuestions?: number,
+  keyphrases?: string[],
 ): Promise<string> => {
   try {
     const response = await apiCall(API_CONFIG.ENDPOINTS.GENERATE_INTERVIEW_PHRASE, {
@@ -141,6 +142,7 @@ const fetchInterviewPhrase = async (
         position,
         ...(questionIndex != null && { question_index: questionIndex }),
         ...(totalQuestions != null && { total_questions: totalQuestions }),
+        ...(keyphrases && keyphrases.length > 0 && { keyphrases }),
       }),
     }, 10000);
     if (response.ok) {
@@ -154,10 +156,21 @@ const fetchInterviewPhrase = async (
 };
 
 // Fallback phrases when API fails
+const FALLBACK_TRANSITION_POOL = [
+  "Let's keep the momentum going with the next one.",
+  "Got it! Let's shift gears slightly for this next part.",
+  "That makes a lot of sense. Moving right along.",
+  "Really interesting perspective — here's the next one.",
+  "Noted! Let's move on to the next question.",
+  "Good stuff. Let's keep going.",
+  "Alright, let's build on that with the next one.",
+  "Thanks for sharing that. On to the next question.",
+];
+
 const FALLBACK_PHRASES = {
   welcome: (name: string, pos: string) =>
     `Hello ${name}! Welcome to your ${pos} interview. I'm excited to learn more about you. Let's begin with our first question.`,
-  transition: () => "Let's move to the next question.",
+  transition: () => FALLBACK_TRANSITION_POOL[Math.floor(Math.random() * FALLBACK_TRANSITION_POOL.length)],
   completion: (name: string, pos: string) =>
     `Thank you, ${name}! You've successfully completed your ${pos} interview. We appreciate your time. Our team will review and get back to you soon. Good luck!`,
 };
@@ -318,7 +331,7 @@ const ConversationalInterview = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioWorkletNodeRef = useRef<AudioWorkletNode | null>(null);
   const audioWorkletStreamRef = useRef<MediaStream | null>(null);
-  const speakQueueRef = useRef<{ text: string; onEnd?: () => void; onAudioStart?: () => void }[]>([]);
+  const speakQueueRef = useRef<{ text: string; onEnd?: () => void; onAudioStart?: () => void; preloadedBlobPromise?: Promise<Blob | null> | null }[]>([]);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const isTerminatedRef = useRef(false);
   const handleSubmitAnswerRef = useRef<(() => Promise<void>) | null>(null);
@@ -347,6 +360,10 @@ const ConversationalInterview = () => {
   const priorAnswerKeyphrasesRef = useRef<string[]>([]);
   /** Promise for previous question's media upload; awaited in generateNextQuestion before TTS */
   const pendingMediaUploadPromiseRef = useRef<Promise<void> | null>(null);
+  /** Promise for personalised transition phrase — fired in parallel with generate-question after submit */
+  const pendingTransitionPhraseRef = useRef<Promise<string> | null>(null);
+  /** Pre-generated personalised completion phrase (with keyphrases) — used by finishInterview instead of fetching a generic one */
+  const pendingCompletionPhraseRef = useRef<string | null>(null);
   /** When set (timer expiry), use these blobs for submit so audio/video are never skipped */
   const submitBlobsOverrideRef = useRef<{ audioBlob: Blob | null; questionVideoBlob: Blob | null } | null>(null);
 
@@ -476,6 +493,7 @@ const ConversationalInterview = () => {
   
   // Deepgram Live API refs (for Chrome - real-time transcription)
   const deepgramWsRef = useRef<WebSocket | null>(null);
+  const deepgramInterimRef = useRef<string>('');
   const deepgramAudioContextRef = useRef<AudioContext | null>(null);
   const deepgramScriptNodeRef = useRef<ScriptProcessorNode | null>(null);
   // OpenAI Realtime API refs (kept for cleanup; Chrome now uses Deepgram)
@@ -518,6 +536,21 @@ const ConversationalInterview = () => {
     // Remove overlapping portion from new text
     const uniqueWords = words.slice(overlapIndex);
     return existingText + (existingText ? ' ' : '') + uniqueWords.join(' ');
+  }, []);
+
+  // Overlap-aware append for Deepgram and OpenAI — handles partial/final segment boundaries
+  // without the aggressive deduplication of cleanTranscript.
+  const appendWithoutOverlap = useCallback((existing: string, segment: string): string => {
+    if (!existing) return segment;
+    const ew = existing.trim().split(/\s+/);
+    const nw = segment.trim().split(/\s+/);
+    for (let o = Math.min(4, nw.length, ew.length); o >= 2; o--) {
+      if (ew.slice(-o).join(' ').toLowerCase() === nw.slice(0, o).join(' ').toLowerCase()) {
+        const appended = nw.slice(o).join(' ');
+        return appended ? existing + ' ' + appended : existing;
+      }
+    }
+    return existing + ' ' + segment;
   }, []);
 
   // Check if audio chunk has sufficient volume (silence detection)
@@ -579,7 +612,7 @@ const ConversationalInterview = () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: 16000, channelCount: 1 } });
       openAIAudioStreamRef.current = stream;
-      const params = new URLSearchParams({ encoding: 'linear16', sample_rate: '16000', channels: '1', language: 'en', smart_format: 'true', model: 'nova-2' });
+      const params = new URLSearchParams({ encoding: 'linear16', sample_rate: '16000', channels: '1', language: 'en', smart_format: 'true', model: 'nova-2', interim_results: 'true', endpointing: '300', utterance_end_ms: '1000' });
       const ws = new WebSocket(`wss://api.deepgram.com/v1/listen?${params.toString()}`, ['token', apiKey]);
       deepgramWsRef.current = ws;
       ws.onopen = () => { console.log('✅ [DEEPGRAM] WebSocket connected'); };
@@ -590,9 +623,14 @@ const ConversationalInterview = () => {
             const transcript = (data.channel.alternatives[0].transcript || '').trim();
             if (transcript && webSpeechActiveRef.current && transcriptionModeRef.current === 'deepgram') {
               const isFinal = data.is_final === true || data.speech_final === true;
-              if (isFinal) accumulatedTranscriptRef.current = cleanTranscript(transcript, accumulatedTranscriptRef.current);
-              else accumulatedTranscriptRef.current = (accumulatedTranscriptRef.current + (accumulatedTranscriptRef.current ? ' ' : '') + transcript).trim();
-              setTranscript(accumulatedTranscriptRef.current.trim());
+              if (isFinal) {
+                accumulatedTranscriptRef.current = appendWithoutOverlap(accumulatedTranscriptRef.current, transcript);
+                deepgramInterimRef.current = '';
+                setTranscript(accumulatedTranscriptRef.current.trim());
+              } else {
+                deepgramInterimRef.current = transcript;
+                setTranscript((accumulatedTranscriptRef.current + (accumulatedTranscriptRef.current ? ' ' : '') + transcript).trim());
+              }
             }
           }
         } catch (e) {}
@@ -648,7 +686,7 @@ const ConversationalInterview = () => {
         await initOpenAIRealtimeSpeechRef.current?.();
       }
     }
-  }, [cleanTranscript, detectBrowser]);
+  }, [cleanTranscript, appendWithoutOverlap, detectBrowser]);
 
   // OpenAI Realtime API (for Chrome) - Real-time streaming transcription
   const initOpenAIRealtimeSpeech = useCallback(async () => {
@@ -739,11 +777,16 @@ const ConversationalInterview = () => {
         try {
           const data = JSON.parse(event.data);
           const t = data.type;
-          // Use only 'completed' for transcript — deltas have no word boundaries and caused duplicate + no-space text
-          if (t === 'conversation.item.input_audio_transcription.completed' && data.transcript) {
+          // Use delta for live preview, completed for final commit
+          if (t === 'conversation.item.input_audio_transcription.delta' && data.delta) {
+            if (webSpeechActiveRef.current && transcriptionModeRef.current === 'openai') {
+              const preview = (accumulatedTranscriptRef.current + (accumulatedTranscriptRef.current ? ' ' : '') + data.delta).trim();
+              setTranscript(preview);
+            }
+          } else if (t === 'conversation.item.input_audio_transcription.completed' && data.transcript) {
             const text = String(data.transcript).trim();
             if (text && webSpeechActiveRef.current && transcriptionModeRef.current === 'openai') {
-              accumulatedTranscriptRef.current = cleanTranscript(text, accumulatedTranscriptRef.current);
+              accumulatedTranscriptRef.current = appendWithoutOverlap(accumulatedTranscriptRef.current, text);
               setTranscript(accumulatedTranscriptRef.current.trim());
             }
           } else if (t === 'error') {
@@ -807,7 +850,7 @@ const ConversationalInterview = () => {
         await initAssemblyAIRealtimeSpeechRef.current?.();
       }
     }
-  }, [cleanTranscript, detectBrowser]);
+  }, [cleanTranscript, appendWithoutOverlap, detectBrowser]);
 
   // AssemblyAI Streaming API (for Chrome) - Token from backend to avoid CORS
   const initAssemblyAIRealtimeSpeech = useCallback(async () => {
@@ -850,7 +893,7 @@ const ConversationalInterview = () => {
           const text = String(data.transcript).trim();
           if (!text) return;
           if (data.end_of_turn === true) {
-            accumulatedTranscriptRef.current = cleanTranscript(text, accumulatedTranscriptRef.current);
+            accumulatedTranscriptRef.current = appendWithoutOverlap(accumulatedTranscriptRef.current, text);
             assemblyAICurrentPartialRef.current = '';
             setTranscript(accumulatedTranscriptRef.current.trim());
           } else {
@@ -939,7 +982,7 @@ const ConversationalInterview = () => {
         webSpeechActiveRef.current = false;
       }
     }
-  }, [cleanTranscript, detectBrowser]);
+  }, [cleanTranscript, appendWithoutOverlap, detectBrowser]);
 
   useEffect(() => {
     initOpenAIRealtimeSpeechRef.current = initOpenAIRealtimeSpeech;
@@ -1648,6 +1691,15 @@ const ConversationalInterview = () => {
        try {
          // Load interview data first
          await loadInterviewData();
+
+         // Pre-fetch welcome phrase in parallel with camera + audio init
+         // so it's ready the moment camera permissions are granted.
+         const candidateName = interviewData.candidateName || 'there';
+         const position = interviewData.position || 'this role';
+         const welcomePhrasePromise = fetchInterviewPhrase('welcome', candidateName, position)
+           .then(p => p || FALLBACK_PHRASES.welcome(candidateName, position))
+           .catch(() => FALLBACK_PHRASES.welcome(candidateName, position));
+
          // Initialize camera (this will request camera permissions)
          console.log('🎥 Initializing camera before interview starts...');
          await initializeCamera();
@@ -1661,21 +1713,43 @@ const ConversationalInterview = () => {
              console.log('🎤 Starting welcome message and requesting fullscreen...');
              requestFullscreen();
              setAiPlaceholder('welcome');
-             const candidateName = interviewData.candidateName || 'there';
-             const position = interviewData.position || 'this role';
-             const welcomePhrase = await fetchInterviewPhrase('welcome', candidateName, position);
-             const welcomeMessage = welcomePhrase || FALLBACK_PHRASES.welcome(candidateName, position);
+
+             // Welcome phrase already in-flight since loadInterviewData finished — just await it
+             const welcomeMessage = await welcomePhrasePromise;
+
              if (aiAudioEnabled && 'speechSynthesis' in window) {
                console.log('🎤 Starting welcome message (question text only in display)');
                const pattern = createSpeechPattern(welcomeMessage);
                setSpeechPattern(pattern);
                setPatternIndex(0);
+
+               // Pre-fetch first question TTS NOW, while welcome is about to play.
+               // firstQuestionRef is already populated from loadInterviewData.
+               // By the time welcome finishes (~5–8s), the TTS blob will be ready.
+               const firstQ = firstQuestionRef.current;
+               const firstQuestionText = firstQ ? (firstQ.question || firstQ.question_text || '') : '';
+               const firstQuestionTTSPreload: Promise<Blob | null> = firstQuestionText
+                 ? fetch(buildApiUrl(API_CONFIG.ENDPOINTS.TTS), {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ text: `Question 1: ${firstQuestionText}` }),
+                   }).then(r => {
+                     if (!r.ok) throw new Error('First question TTS preload failed');
+                     return r.blob();
+                   }).catch(e => {
+                     console.warn('⚠️ First question TTS pre-fetch failed, will retry normally:', e);
+                     return null;
+                   })
+                 : Promise.resolve(null);
+
                speakWithAI(welcomeMessage, {
                  onAudioStart: () => setAiPlaceholder(''),
-                 onEnd: () => {
+                 onEnd: async () => {
                    console.log('🎤 Welcome message finished, starting first question...');
                    hasSpokenWelcomeRef.current = true;
                    setIsInterviewTimerActive(true);
+                   // 200ms breathing room between welcome and first question
+                   await new Promise(resolve => setTimeout(resolve, 2000));
                    const firstQ = firstQuestionRef.current;
                    if (firstQ && (firstQ.question || firstQ.question_text)) {
                      const questionText = firstQ.question || firstQ.question_text;
@@ -1684,7 +1758,9 @@ const ConversationalInterview = () => {
                      setAiPlaceholder('generating_first');
                      setIsWelcomeMessage(false);
                      hasSpokenFirstQuestionRef.current = true;
+                     // Use pre-fetched TTS blob — should be ready after welcome duration
                      speakWithAI(questionMessage, {
+                       preloadedBlobPromise: firstQuestionTTSPreload,
                        onAudioStart: () => {
                          setAiMessage(questionText);
                          setAiPlaceholder('');
@@ -1769,7 +1845,7 @@ const ConversationalInterview = () => {
 
   // AI Text-to-Speech: OpenAI TTS with Web Speech API fallback
   const speakWithAI = useCallback(
-    (text: string, options?: { onEnd?: () => void; onAudioStart?: () => void }) => {
+    (text: string, options?: { onEnd?: () => void; onAudioStart?: () => void; preloadedBlobPromise?: Promise<Blob | null> | null }) => {
       if (!text) return;
 
       if (!aiAudioEnabled) {
@@ -1786,7 +1862,7 @@ const ConversationalInterview = () => {
       }
 
       const queue = speakQueueRef.current;
-      queue.push({ text, onEnd: options?.onEnd, onAudioStart: options?.onAudioStart });
+      queue.push({ text, onEnd: options?.onEnd, onAudioStart: options?.onAudioStart, preloadedBlobPromise: options?.preloadedBlobPromise ?? null });
 
       const processNext = () => {
         const item = queue[0];
@@ -1820,17 +1896,39 @@ const ConversationalInterview = () => {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUTS.TTS || 15000);
 
-        fetch(buildApiUrl(API_CONFIG.ENDPOINTS.TTS), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: item.text }),
-          signal: controller.signal,
-        })
-          .then((r) => {
-            clearTimeout(timeoutId);
-            if (!r.ok) throw new Error('TTS failed');
-            return r.blob();
-          })
+        // Use pre-fetched blob if available, otherwise do the normal fetch
+        const blobPromise: Promise<Blob> = item.preloadedBlobPromise
+          ? item.preloadedBlobPromise
+              .then((blob: Blob | null) => {
+                clearTimeout(timeoutId);
+                if (!blob) throw new Error('Preloaded blob was null');
+                return blob;
+              })
+              .catch(() => {
+                // Pre-fetch failed — fall back to normal fetch
+                return fetch(buildApiUrl(API_CONFIG.ENDPOINTS.TTS), {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ text: item.text }),
+                  signal: controller.signal,
+                }).then((r) => {
+                  clearTimeout(timeoutId);
+                  if (!r.ok) throw new Error('TTS failed');
+                  return r.blob();
+                });
+              })
+          : fetch(buildApiUrl(API_CONFIG.ENDPOINTS.TTS), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: item.text }),
+              signal: controller.signal,
+            }).then((r) => {
+              clearTimeout(timeoutId);
+              if (!r.ok) throw new Error('TTS failed');
+              return r.blob();
+            });
+
+        blobPromise
           .then((blob) => {
             if (isTerminatedRef.current) {
               return;
@@ -1946,17 +2044,20 @@ const ConversationalInterview = () => {
       if (response.ok) {
         const result = await response.json();
         const totalQuestions = result.total_questions ?? currentQuestionIndex + 1;
-        const completionPhrase = await fetchInterviewPhrase(
-          'completion',
-          interviewData.candidateName || 'there',
-          interviewData.position || 'this interview',
-          currentQuestionIndex + 1,
-          totalQuestions
-        );
-        const completionMessage = completionPhrase || FALLBACK_PHRASES.completion(
-          interviewData.candidateName || 'there',
-          interviewData.position || 'this interview'
-        );
+        // Use pre-generated personalised completion phrase (with keyphrases) if available,
+        // otherwise fetch a generic one as fallback.
+        const completionMessage = pendingCompletionPhraseRef.current
+          ? (() => { const m = pendingCompletionPhraseRef.current!; pendingCompletionPhraseRef.current = null; return m; })()
+          : (await fetchInterviewPhrase(
+              'completion',
+              interviewData.candidateName || 'there',
+              interviewData.position || 'this interview',
+              currentQuestionIndex + 1,
+              totalQuestions
+            )) || FALLBACK_PHRASES.completion(
+              interviewData.candidateName || 'there',
+              interviewData.position || 'this interview'
+            );
         
         let hasNavigated = false;
         const navigateToCompletion = () => {
@@ -2214,7 +2315,9 @@ const ConversationalInterview = () => {
         console.log('🎤 Question ID:', questionId, 'Already spoken:', spokenQuestions.has(questionId));
         console.log('🎤 Clean question text:', cleanQuestionText);
         
-        // Await previous question's media upload (between "Generating your next question" and before reading ends)
+        // Await previous question's media upload — hidden behind transition phrase which is
+        // already playing from handleSubmitAnswer. By the time generateNextQuestion is called
+        // (inside transition's onEnd), the upload is almost always already done.
         if (pendingMediaUploadPromiseRef.current) {
           try {
             await pendingMediaUploadPromiseRef.current;
@@ -2224,36 +2327,40 @@ const ConversationalInterview = () => {
           }
           pendingMediaUploadPromiseRef.current = null;
         }
-        
-        // Use conversational transition phrase from API or fallback (do not display - question text only)
-        const transitionPhrase = data.transition_phrase || FALLBACK_PHRASES.transition();
-        
+
         // Only speak if this question hasn't been spoken before and we have valid text
         if (!spokenQuestions.has(questionId) && cleanQuestionText && cleanQuestionText !== 'Question data unavailable') {
-          // Timer will be initialized when recording starts, not when question is spoken
           console.log('⏰ Timer will start when recording begins');
-          
-          // Set question finished speaking to false initially
           setQuestionFinishedSpeaking(false);
-          
-          // Speak transition immediately, then show and speak question when transition ends
-          console.log('🎤 Speaking transition message...');
-          speakWithAI(transitionPhrase, {
-            onEnd: () => {
-              console.log('🎤 Transition finished, speaking question (text when audio starts)');
-              setAiPlaceholder('generating_next');
-              setSpokenQuestions(prev => {
-                const newSet = new Set([...prev, questionId]);
-                console.log('📝 Updated spoken questions:', Array.from(newSet));
-                return newSet;
-              });
-              speakWithAI(questionMessage, {
-                onAudioStart: () => {
-                  setAiMessage(cleanQuestionText);
-                  setAiPlaceholder('');
-                }
-              });
-            },
+
+          // Pre-fetch question TTS immediately — fires as soon as question text is known
+          const questionTTSPreload: Promise<Blob | null> = fetch(buildApiUrl(API_CONFIG.ENDPOINTS.TTS), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: questionMessage }),
+          }).then((r) => {
+            if (!r.ok) throw new Error('Preload TTS failed');
+            return r.blob();
+          }).catch((e) => {
+            console.warn('⚠️ Question TTS pre-fetch failed, will retry normally:', e);
+            return null;
+          });
+
+          setAiPlaceholder('generating_next');
+          setSpokenQuestions(prev => {
+            const newSet = new Set([...prev, questionId]);
+            console.log('📝 Updated spoken questions:', Array.from(newSet));
+            return newSet;
+          });
+
+          // Speak question directly — transition was already spoken in handleSubmitAnswer
+          console.log('🎤 Speaking question...');
+          speakWithAI(questionMessage, {
+            preloadedBlobPromise: questionTTSPreload,
+            onAudioStart: () => {
+              setAiMessage(cleanQuestionText);
+              setAiPlaceholder('');
+            }
           });
         } else {
           console.log('⚠️ Question already spoken or invalid, skipping speech');
@@ -2473,12 +2580,8 @@ const ConversationalInterview = () => {
               formData.append('written_answer', (writtenAnswer || '').trim());
             formData.append('video_duration', String(questionVideoDuration || 0));
             formData.append('video_format', 'webm');
-            if (questionVideoBlobToUse) {
-              formData.append('video_file', questionVideoBlobToUse, `question_${currentQuestionIndex}.webm`);
-            }
-            if (audioBlobToSend) {
-              formData.append('audio_file', audioBlobToSend, `question_${currentQuestionIndex}_audio.wav`);
-            }
+            // video_file and audio_file are sent separately via /upload-question-media
+            // so submit-answer returns in ~300ms instead of waiting for the full upload
 
             const response = await apiCall(API_CONFIG.ENDPOINTS.SUBMIT_ANSWER, {
                method: 'POST',
@@ -2492,6 +2595,63 @@ const ConversationalInterview = () => {
                const result = await response.json();
                if (result.total_questions != null) totalQuestionsRef.current = result.total_questions;
                priorAnswerKeyphrasesRef.current = Array.isArray(result.keyphrases) ? result.keyphrases : [];
+
+               // Fire video + audio upload in background, decoupled from transcript submission.
+               // generateNextQuestion will await this via pendingMediaUploadPromiseRef before
+               // the question TTS plays, so it's hidden behind the transition phrase duration.
+               if (questionVideoBlobToUse) {
+                 const capturedVideoBlob = questionVideoBlobToUse;
+                 const capturedAudioBlob = audioBlobToSend;
+                 const capturedQuestionId = questionId;
+                 const capturedQuestionIndex = currentQuestionIndex;
+                 const capturedDuration = questionVideoDuration || 0;
+                 pendingMediaUploadPromiseRef.current = uploadQuestionMedia({
+                   interviewId: interviewData.interviewId,
+                   questionId: capturedQuestionId,
+                   questionOrder: capturedQuestionIndex,
+                   videoBlob: capturedVideoBlob,
+                   audioBlob: capturedAudioBlob,
+                   duration: capturedDuration,
+                 }).catch((e) => {
+                   console.warn('⚠️ Background video upload failed:', e);
+                 });
+               }
+
+               // Fire personalised phrase in parallel — transition for mid-interview,
+               // personalised completion (with keyphrases) for the last answer.
+               const nextQuestionIndex = currentQuestionIndex + 1;
+               const isLastQuestion = totalQuestionsRef.current != null && nextQuestionIndex >= totalQuestionsRef.current;
+               const capturedKeyphrases = Array.isArray(result.keyphrases) ? result.keyphrases : [];
+               if (isLastQuestion) {
+                 // Last answer — pre-fetch personalised completion phrase with keyphrases.
+                 // Stored in pendingCompletionPhraseRef so finishInterview uses it instead
+                 // of fetching a generic one.
+                 fetchInterviewPhrase(
+                   'completion',
+                   interviewData.candidateName || 'there',
+                   interviewData.position || 'this role',
+                   nextQuestionIndex,
+                   totalQuestionsRef.current ?? undefined,
+                   capturedKeyphrases,
+                 ).then(p => {
+                   pendingCompletionPhraseRef.current = p || FALLBACK_PHRASES.completion(
+                     interviewData.candidateName || 'there',
+                     interviewData.position || 'this role'
+                   );
+                 }).catch(() => {
+                   // finishInterview will fall back to its own fetch
+                 });
+               } else if (nextQuestionIndex >= 1) {
+                 // Normal transition — personalised with keyphrases
+                 pendingTransitionPhraseRef.current = fetchInterviewPhrase(
+                   'transition',
+                   interviewData.candidateName || 'there',
+                   interviewData.position || 'this role',
+                   nextQuestionIndex,
+                   totalQuestionsRef.current ?? undefined,
+                   capturedKeyphrases,
+                 ).then(p => p || FALLBACK_PHRASES.transition());
+               }
                
                // Check if interview is completed
                if (result.interview_completed) {
@@ -2542,15 +2702,47 @@ const ConversationalInterview = () => {
 
                setAiPlaceholder('generating_next');
                setAiMessage('');
-               console.log('🔄 Generating next question (media upload running in parallel)...');
-               await generateNextQuestion();
-               
-               // Reset submission states after next question is generated with a small delay
-               setTimeout(() => {
-                 setAnswerSubmitted(false);
-                 setSubmissionStatus('idle');
-                 dispatch(interviewActions.setSubmitting(false));
-               }, 1000); // 1 second delay to show the submitted state
+
+               // ── PARALLEL FIX ──────────────────────────────────────────────────────
+               // Fire generate-question IMMEDIATELY — before even awaiting the transition
+               // phrase. This means the LLM call (~3–6s) runs in parallel with:
+               //   - transition phrase fetch (~1s)
+               //   - transition TTS fetch (~1.5s)
+               //   - transition audio playing (~3–5s)
+               // By the time transition finishes, the question is already generated.
+               // ──────────────────────────────────────────────────────────────────────
+               if (nextQuestionIndex >= 1 && !isLastQuestion) {
+                 // 1. Fire generate-question NOW — don't await, store the promise
+                 const questionPromise = generateNextQuestion();
+
+                 // 2. Await transition phrase (already in-flight since submit responded, ~1s)
+                 const transitionText = await (pendingTransitionPhraseRef.current ?? Promise.resolve(FALLBACK_PHRASES.transition()));
+                 pendingTransitionPhraseRef.current = null;
+
+                 // 3. Speak transition immediately — question LLM already running in parallel
+                 console.log('🎤 Speaking transition phrase while question generates in parallel...');
+                 speakWithAI(transitionText, {
+                   onEnd: async () => {
+                     // 200ms breathing room between transition and question
+                     await new Promise(resolve => setTimeout(resolve, 2000));
+                     // 4. Await the question promise — likely already resolved by now
+                     await questionPromise;
+                     setTimeout(() => {
+                       setAnswerSubmitted(false);
+                       setSubmissionStatus('idle');
+                       dispatch(interviewActions.setSubmitting(false));
+                     }, 1000);
+                   }
+                 });
+               } else {
+                 // First question (no transition) or last question — go straight to generate
+                 await generateNextQuestion();
+                 setTimeout(() => {
+                   setAnswerSubmitted(false);
+                   setSubmissionStatus('idle');
+                   dispatch(interviewActions.setSubmitting(false));
+                 }, 1000);
+               }
                
              } else {
                console.error('❌ Answer submission failed with status:', response.status);
@@ -2959,7 +3151,8 @@ const ConversationalInterview = () => {
         videoBitsPerSecond,
         timeSlice: INTERVIEW_CONSTANTS.MEDIA.TIME_SLICE,
         ondataavailable: function(blob) {
-          console.log('🎥 Video+audio chunk:', blob.type, blob.size);
+          // Chunks accumulate in RecordRTC internally; full blob uploaded via
+          // /upload-question-media after submit, decoupled from transcript submission
         }
       });
       questionVideoRecorder.startRecording();

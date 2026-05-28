@@ -38,6 +38,14 @@ type CsvPreviewRow = {
   valid: boolean;
 };
 
+type UploadResult = {
+  inserted: number;
+  skipped: number;
+  already_registered: number;
+  already_on_platform: number;
+  invalid: number;
+};
+
 // ── Column alias resolution (mirrors the Python side) ───────────────────────
 const COLUMN_ALIASES: Record<string, string[]> = {
   first_name:    ['first_name','firstname','first name','fname','given_name','given name','name'],
@@ -123,6 +131,7 @@ export default function TpoBulkInvitePanel() {
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [rosterPage, setRosterPage] = useState(0);
   const [statusFilter, setStatusFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -215,6 +224,7 @@ export default function TpoBulkInvitePanel() {
   const handleFileChange = (file: File | null) => {
     setCsvFile(file);
     setCsvPreview([]);
+    setUploadResult(null);
     if (!file) return;
     void parseFilePreview(file).then(setCsvPreview);
   };
@@ -242,6 +252,14 @@ export default function TpoBulkInvitePanel() {
       const uploadData = await uploadRes.json().catch(() => ({}));
       if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed');
 
+      setUploadResult({
+        inserted:            uploadData.inserted            ?? 0,
+        skipped:             uploadData.skipped             ?? 0,
+        already_registered:  uploadData.already_registered  ?? 0,
+        already_on_platform: uploadData.already_on_platform ?? 0,
+        invalid:             uploadData.invalid             ?? 0,
+      });
+
       const newIds: string[] = (uploadData.rows || [])
         .filter((r: { status: string; roster_id?: string }) => r.status === 'inserted' && r.roster_id)
         .map((r: { roster_id: string }) => r.roster_id);
@@ -262,7 +280,15 @@ export default function TpoBulkInvitePanel() {
 
       toast({
         title: 'Done',
-        description: `Imported ${uploadData.inserted}, skipped ${uploadData.skipped}, sent ${sent} emails${failed ? `, ${failed} failed` : ''}`,
+        description: [
+          `Imported ${uploadData.inserted ?? 0}`,
+          uploadData.skipped             ? `skipped ${uploadData.skipped} duplicates` : null,
+          uploadData.already_on_platform ? `${uploadData.already_on_platform} already on ProValuate` : null,
+          uploadData.already_registered  ? `${uploadData.already_registered} already registered` : null,
+          uploadData.invalid             ? `${uploadData.invalid} invalid rows` : null,
+          `sent ${sent} emails`,
+          failed                         ? `${failed} failed` : null,
+        ].filter(Boolean).join(', '),
       });
       setCsvFile(null);
       setCsvPreview([]);
@@ -348,6 +374,37 @@ export default function TpoBulkInvitePanel() {
           </div>
         ))}
       </div>
+
+      {/* Last upload result breakdown — shown only after an upload */}
+      {uploadResult && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          {uploadResult.inserted > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-emerald-800 font-medium">
+              {uploadResult.inserted} new
+            </span>
+          )}
+          {uploadResult.already_on_platform > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-50 text-amber-800 font-medium">
+              {uploadResult.already_on_platform} already on ProValuate
+            </span>
+          )}
+          {uploadResult.already_registered > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-sky-50 text-sky-800 font-medium">
+              {uploadResult.already_registered} already registered
+            </span>
+          )}
+          {uploadResult.skipped > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 text-gray-600 font-medium">
+              {uploadResult.skipped} duplicate
+            </span>
+          )}
+          {uploadResult.invalid > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-50 text-red-800 font-medium">
+              {uploadResult.invalid} invalid
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Upload card */}
       <Card>
