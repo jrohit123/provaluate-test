@@ -1749,7 +1749,7 @@ const ConversationalInterview = () => {
                    hasSpokenWelcomeRef.current = true;
                    setIsInterviewTimerActive(true);
                    // 200ms breathing room between welcome and first question
-                   await new Promise(resolve => setTimeout(resolve, 2000));
+                   await new Promise(resolve => setTimeout(resolve, 3000));
                    const firstQ = firstQuestionRef.current;
                    if (firstQ && (firstQ.question || firstQ.question_text)) {
                      const questionText = firstQ.question || firstQ.question_text;
@@ -2724,7 +2724,7 @@ const ConversationalInterview = () => {
                  speakWithAI(transitionText, {
                    onEnd: async () => {
                      // 200ms breathing room between transition and question
-                     await new Promise(resolve => setTimeout(resolve, 2000));
+                     await new Promise(resolve => setTimeout(resolve, 3000));
                      // 4. Await the question promise — likely already resolved by now
                      await questionPromise;
                      setTimeout(() => {
