@@ -5,7 +5,7 @@ import { componentTagger } from "lovable-tagger";
 
 export default defineConfig(({ mode }) => {
   return {
-    base: mode === 'testing' ? '/provaluate-test/' : '/',
+    base: '/',
     server: {
       host: "::",
       port: 8080,
