@@ -602,9 +602,20 @@ const ConversationalInterview = () => {
   // Deepgram Live API (Chrome primary) — on failure/limit falls back to OpenAI then AssemblyAI
   const initDeepgramRealtimeSpeech = useCallback(async () => {
     if (transcriptionModeRef.current !== 'deepgram') return;
-    const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
-    if (!apiKey) {
-      toast.error('Deepgram API key not configured.');
+    const pythonUrl = import.meta.env.VITE_PYTHON_URL || 'http://localhost:5003';
+    let apiKey: string;
+    try {
+      const tokenRes = await fetch(`${pythonUrl}/api/deepgram-token`);
+      if (!tokenRes.ok) {
+        toast.error('Failed to get Deepgram token.');
+        transcriptionModeRef.current = 'openai';
+        await initOpenAIRealtimeSpeech();
+        return;
+      }
+      const { key } = await tokenRes.json();
+      apiKey = key;
+    } catch {
+      toast.error('Failed to get Deepgram token.');
       transcriptionModeRef.current = 'openai';
       await initOpenAIRealtimeSpeech();
       return;
@@ -691,11 +702,6 @@ const ConversationalInterview = () => {
   // OpenAI Realtime API (for Chrome) - Real-time streaming transcription
   const initOpenAIRealtimeSpeech = useCallback(async () => {
     if (transcriptionModeRef.current !== 'openai') return;
-    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-    if (!apiKey) {
-      toast.error('OpenAI API key not configured.');
-      return;
-    }
     console.log('🎯 [REALTIME] Initializing OpenAI Realtime API for Chrome...');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -709,12 +715,10 @@ const ConversationalInterview = () => {
       });
       openAIAudioStreamRef.current = stream;
 
-      const clientSecretRes = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
+      const pythonUrl = import.meta.env.VITE_PYTHON_URL || 'http://localhost:5003';
+      const clientSecretRes = await fetch(`${pythonUrl}/api/openai-realtime-token`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           session: {
             type: 'transcription',
@@ -997,17 +1001,8 @@ const ConversationalInterview = () => {
       return;
     }
 
-    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-    if (!apiKey) {
-      console.error('❌ OpenAI API key not found. Please set VITE_OPENAI_API_KEY in your .env file.');
-      toast.error('OpenAI API key not configured.');
-      return;
-    }
-
     console.log('🎯 [OPENAI] Initializing OpenAI Whisper API for Chrome...');
-
     try {
-      // Get microphone stream with optimized settings for Whisper
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -1083,11 +1078,9 @@ const ConversationalInterview = () => {
               console.log('📝 [OPENAI] Using context prompt:', contextPrompt.slice(-50) + '...');
             }
 
-            const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+            const pythonUrl = import.meta.env.VITE_PYTHON_URL || 'http://localhost:5003';
+            const response = await fetch(`${pythonUrl}/api/whisper-transcribe`, {
               method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${apiKey}`,
-              },
               body: formData,
             });
 
