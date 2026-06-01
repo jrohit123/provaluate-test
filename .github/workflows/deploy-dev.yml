@@ -50,7 +50,7 @@ jobs:
 
       - name: GitHub Pages SPA fallback and Jekyll bypass
         run: |
-          cp 404.html dist/404.html
+          cp public/404.html dist/404.html
           touch dist/.nojekyll
 
       - name: Setup Pages
