@@ -74,20 +74,6 @@ export class UsageTrackingService {
         throw new Error('Company not found');
       }
 
-      // ✅ NEW: Check trial status via backend
-      const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
-      let trialStatus = null;
-      
-      try {
-        const trialResponse = await fetch(`${API_BASE_URL}/subscription/check-trial-status?company_id=${companyId}`);
-        if (trialResponse.ok) {
-          trialStatus = await trialResponse.json();
-        }
-      } catch (error) {
-        console.warn('Could not fetch trial status:', error);
-      }
-
-      // 2) Fetch plan info separately (selected_plan stores plan name, not FK)
       let maxCVs = 0;
       let planName = 'No Plan';
       let planData: { plan_name?: string; max_cvs?: number; plan_cost?: number; plan_type?: string; max_interviews?: number | null } | null = null;
@@ -110,11 +96,39 @@ export class UsageTrackingService {
       }
 
       const currentCount = companyData.cv_processed_count || 0;
-      
-      // ✅ UPDATED: Check subscription status and trial expiration
+      const isTrial = planData != null ? (planData.plan_cost ?? 0) === 0 : false;
       const subscriptionStatus = companyData.subscription_status || '';
-      const isExpired = subscriptionStatus === 'expired' || (trialStatus?.is_expired ?? false);
-      const isTrial = trialStatus?.is_trial ?? (planData != null ? (planData.plan_cost ?? 0) === 0 : false);
+      let isExpired = subscriptionStatus === 'expired';
+      let daysRemaining: number | undefined;
+      let cvsExhausted = false;
+      let shouldForceUpgrade = false;
+      let warningMessage: string | undefined;
+
+      if (isTrial && companyData.subscription_end) {
+        const endDate = new Date(companyData.subscription_end);
+        const now = new Date();
+        daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysRemaining < 0) {
+          isExpired = true;
+        }
+      }
+
+      const availableCVs = maxCVs === 0 ? -1 : maxCVs - currentCount;
+      cvsExhausted = maxCVs > 0 && availableCVs <= 0;
+
+      if (isTrial) {
+        shouldForceUpgrade = isExpired || cvsExhausted;
+        if (isExpired) {
+          warningMessage = `Your ${planName} has expired. Please upgrade to continue.`;
+        } else if (cvsExhausted) {
+          warningMessage = `You have exhausted your CV quota (${maxCVs} CVs). Please upgrade to continue.`;
+        }
+      } else {
+        shouldForceUpgrade = isExpired || cvsExhausted;
+        if (cvsExhausted && !isExpired) {
+          warningMessage = `You have used all CVs on your ${planName} plan. Purchase again or refresh quotas to continue.`;
+        }
+      }
 
       // Effective plan type: null/missing → combo (same as free tier / full access)
       const planType = (companyData.plan_type || planData?.plan_type || 'combo').toLowerCase();
@@ -130,21 +144,17 @@ export class UsageTrackingService {
           resetDate: companyData.cv_processing_reset_date || new Date().toISOString(),
           isTrial,
           isExpired,
-          isExpiringSoon: trialStatus?.is_expiring_soon ?? false,
-          daysRemaining: trialStatus?.days_remaining ?? undefined,
+          isExpiringSoon: false,
+          daysRemaining,
           cvsExhausted: true,
           shouldForceUpgrade: true,
           warningMessage:
-            trialStatus?.warning_message ??
+            warningMessage ??
             'Aapke plan mein CV screening shamil nahi hai. CV screening use karne ke liye CV ya Combo plan pe switch kijiye.'
         };
       }
       
       // Block processing if expired (for CV/combo)
-      // Calculate available CVs: maxCVs - currentCount
-      // Negative currentCount means bonus CVs (e.g., -18 = 18 bonus CVs)
-      // Available = maxCVs - currentCount = 50 - (-18) = 68 CVs
-      const availableCVs = maxCVs === 0 ? -1 : (maxCVs - currentCount);
       const canProcess = !isExpired && (maxCVs === 0 || availableCVs > 0);
       const remaining = availableCVs;
 
@@ -156,13 +166,13 @@ export class UsageTrackingService {
         planName,
         resetDate: companyData.cv_processing_reset_date || new Date().toISOString(),
         // ✅ NEW: Trial status fields
-        isTrial: isTrial,
-        isExpired: isExpired,
-        isExpiringSoon: trialStatus?.is_expiring_soon ?? false,
-        daysRemaining: trialStatus?.days_remaining ?? undefined,
-        cvsExhausted: trialStatus?.cvs_exhausted ?? (remaining <= 0),
-        shouldForceUpgrade: trialStatus?.should_force_upgrade ?? (isExpired || (isTrial && remaining <= 0)),
-        warningMessage: trialStatus?.warning_message ?? undefined
+        isTrial,
+        isExpired,
+        isExpiringSoon: false,
+        daysRemaining,
+        cvsExhausted,
+        shouldForceUpgrade,
+        warningMessage,
       };
     } catch (error) {
       console.error('Error checking CV processing limit:', error);

@@ -91,9 +91,11 @@ const Login = () => {
 
       if (isSignup) {
         // Sign up with Supabase Auth
+        const emailRedirectTo = `${window.location.origin}${import.meta.env.BASE_URL}login`;
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
+          options: { emailRedirectTo },
         });
         if (error) throw error;
         toast({

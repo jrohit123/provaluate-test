@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Download, 
@@ -9,6 +9,8 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Loader2,
   Menu,
   LayoutDashboard
@@ -825,8 +827,27 @@ const FinalResults = () => {
   const [expandedQuestions, setExpandedQuestions] = useState(new Set());
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
-  const [playingVideo, setPlayingVideo] = useState(null);
+  const [playingVideo, setPlayingVideo] = useState<{ url: string; questionText: string; index: number } | null>(null);
   const [playingAudio, setPlayingAudio] = useState(null);
+
+  const videoList = useMemo(() => {
+    if (!reportData?.answers) return [];
+    const questions: any[] = reportData?.questions || [];
+    return [...reportData.answers]
+      .filter((a: any) => a.question_video_url)
+      .sort((a: any, b: any) => (a.question_order || 0) - (b.question_order || 0))
+      .map((a: any, idx: number) => {
+        const matchedQ = questions.find((q: any) =>
+          q.question_order === a.question_order
+        );
+        const questionText =
+          matchedQ?.question_text ||
+          matchedQ?.question ||
+          a.question_text ||
+          `Question ${(a.question_order || 0) + 1}`;
+        return { url: a.question_video_url as string, questionText, index: idx };
+      });
+  }, [reportData]);
   const [showingWrittenAnswer, setShowingWrittenAnswer] = useState(null);
   const [showSpeechDetailsCard, setShowSpeechDetailsCard] = useState(false);
   const [activeTab, setActiveTab] = useState<'ov' | 'dd' | 'sp'>('ov');
@@ -842,14 +863,20 @@ const FinalResults = () => {
     setSpeechSectionExpanded((s) => ({ ...s, [key]: !s[key] }));
   };
 
-  const playVideo = (videoUrl) => {
-    if (videoUrl) {
-      setPlayingVideo(videoUrl);
-    }
+  const playVideo = (videoUrl: string, questionText = 'Question Video', index = -1) => {
+    if (videoUrl) setPlayingVideo({ url: videoUrl, questionText, index });
   };
 
-  const closeVideo = () => {
-    setPlayingVideo(null);
+  const closeVideo = () => setPlayingVideo(null);
+
+  const prevVideo = () => {
+    if (!playingVideo || playingVideo.index <= 0) return;
+    setPlayingVideo(videoList[playingVideo.index - 1]);
+  };
+
+  const nextVideo = () => {
+    if (!playingVideo || playingVideo.index < 0 || playingVideo.index >= videoList.length - 1) return;
+    setPlayingVideo(videoList[playingVideo.index + 1]);
   };
 
   const playAudio = (audioUrl) => {
@@ -3658,7 +3685,10 @@ selectedCompetencyKey === paramKey
                                       </button>
                                     )}
                                     {answer.question_video_url && (
-                                      <button onClick={() => playVideo(answer.question_video_url)} className={`inline-flex items-center gap-2 px-4 py-2 ${btnPrimary} text-white rounded-lg text-sm`}>
+                                      <button onClick={() => {
+                                        const idx = videoList.findIndex(v => v.url === answer.question_video_url);
+                                        playVideo(answer.question_video_url, question?.question_text || answer.question_text || `Question ${(answer.question_order || 0) + 1}`, idx);
+                                      }} className={`inline-flex items-center gap-2 px-4 py-2 ${btnPrimary} text-white rounded-lg text-sm`}>
                                         <Download className="h-4 w-4" /> Play Video
                                       </button>
                                     )}
@@ -4433,7 +4463,7 @@ selectedCompetencyKey === paramKey
                 </div>
                 <div className="flex flex-wrap gap-2 sm:flex-shrink-0">
                   <button
-                    onClick={() => playVideo(reportData.interview.session_video_url)}
+                    onClick={() => playVideo(reportData.interview.session_video_url, 'Full Interview Session')}
                     className={`min-h-[44px] px-4 py-2 rounded-lg ${btnPrimary} text-white text-sm sm:text-base font-medium transition-colors touch-manipulation flex-1 sm:flex-none`}
                   >
                     Play Full Video
@@ -4472,10 +4502,24 @@ selectedCompetencyKey === paramKey
 
       {/* Video Modal */}
       {playingVideo && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-2 sm:p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-2 sm:p-4 gap-3 sm:gap-4">
+
+          {/* Prev button */}
+          <button
+            onClick={prevVideo}
+            disabled={playingVideo.index <= 0}
+            className={`flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full ${btnPrimary} disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-white transition-all`}
+            aria-label="Previous question"
+          >
+            <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" />
+          </button>
+
+          {/* Modal box */}
           <div className="rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden transition-colors duration-300 bg-white shadow-xl flex flex-col">
-            <div className="flex items-center justify-between gap-2 p-3 sm:p-4 flex-shrink-0 min-w-0">
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">Question Video Player</h3>
+            <div className="flex items-start justify-between gap-2 p-3 sm:p-4 flex-shrink-0 min-w-0">
+              <p className="text-sm sm:text-base font-medium text-gray-700 leading-snug">
+                {playingVideo.questionText}
+              </p>
               <button
                 onClick={closeVideo}
                 className="flex-shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-colors text-gray-500 hover:text-gray-900 touch-manipulation"
@@ -4485,17 +4529,31 @@ selectedCompetencyKey === paramKey
               </button>
             </div>
             <div className="p-2 sm:p-4 min-h-0 flex-1 overflow-auto">
-              <video
-                controls
-                autoPlay
-                muted
-                className="w-full h-auto max-h-[70vh] rounded-lg"
-                src={playingVideo}
-              >
-                Your browser does not support the video element.
-              </video>
+              <div className="relative">
+                <video
+                  controls
+                  autoPlay
+                  className="w-full h-auto max-h-[70vh] rounded-lg"
+                  src={playingVideo.url}
+                >
+                  Your browser does not support the video element.
+                </video>
+                {/* Transparent overlay to block accidental click-to-pause on video body */}
+                <div className="absolute inset-0" style={{ bottom: '46px', cursor: 'default' }} />
+              </div>
             </div>
           </div>
+
+          {/* Next button */}
+          <button
+            onClick={nextVideo}
+            disabled={playingVideo.index < 0 || playingVideo.index >= videoList.length - 1}
+            className={`flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full ${btnPrimary} disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-white transition-all`}
+            aria-label="Next question"
+          >
+            <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
+          </button>
+
         </div>
       )}
 

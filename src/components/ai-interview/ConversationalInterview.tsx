@@ -3936,14 +3936,45 @@ const ConversationalInterview = () => {
     // Stop video+audio recording (single stream)
     if (videoRecorder && videoRecorder.stopRecording) {
       try {
-        videoRecorder.stopRecording(() => {
+        const recordingDuration = questionVideoDuration || 0;
+        videoRecorder.stopRecording(async () => {
           try {
-            const videoBlob = videoRecorder.getBlob();
-            console.log('🎥 Retrieved camera video blob:', videoBlob);
-            console.log('🎥 Video blob size:', videoBlob?.size);
-            console.log('🎥 Video blob type:', videoBlob?.type);
+            const rawVideoBlob = videoRecorder.getBlob();
+            console.log('🎥 Retrieved camera video blob:', rawVideoBlob);
+            console.log('🎥 Video blob size:', rawVideoBlob?.size);
+            console.log('🎥 Video blob type:', rawVideoBlob?.type);
 
-            if (videoBlob && videoBlob.size > 0) {
+            if (rawVideoBlob && rawVideoBlob.size > 0) {
+              let videoBlob = rawVideoBlob;
+              try {
+                console.log('🔧 ts-ebml: starting WebM seek fix...');
+
+                // Polyfill Buffer THEN import ts-ebml — order is guaranteed with dynamic imports
+                if (typeof (globalThis as any).Buffer === 'undefined') {
+                  const bufferModule = await import('buffer');
+                  (globalThis as any).Buffer = bufferModule.Buffer;
+                }
+                const { Decoder, Reader, tools } = await import('ts-ebml');
+
+                const decoder = new Decoder();
+                const reader = new Reader();
+                reader.logging = false;
+                reader.drop_default_duration = false;
+                const arrayBuf = await rawVideoBlob.arrayBuffer();
+                const elms = decoder.decode(arrayBuf);
+                elms.forEach(elm => reader.read(elm));
+                reader.stop();
+                console.log('🔧 ts-ebml: duration:', reader.duration, '| cues:', reader.cues.length, '| metadataSize:', reader.metadataSize);
+                const refinedMetadataBuf = tools.makeMetadataSeekable(
+                  reader.metadatas, reader.duration, reader.cues
+                );
+                const body = arrayBuf.slice(reader.metadataSize);
+                videoBlob = new Blob([refinedMetadataBuf, body], { type: rawVideoBlob.type });
+                console.log('✅ ts-ebml: done. cues:', reader.cues.length, '| original:', rawVideoBlob.size, '| fixed:', videoBlob.size);
+              } catch (ebmlErr) {
+                console.warn('⚠️ ts-ebml failed:', ebmlErr);
+                videoBlob = rawVideoBlob;
+              }
               setQuestionVideoBlob(videoBlob);
               console.log('✅ Camera video blob set successfully');
               toast.success('Camera recording saved!');

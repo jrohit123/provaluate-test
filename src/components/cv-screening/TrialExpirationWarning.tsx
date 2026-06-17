@@ -36,29 +36,25 @@ export function TrialExpirationWarning() {
   useEffect(() => {
     if (!user?.profile?.company_id) return;
 
-    const checkTrialStatus = async () => {
-      try {
-        const API_BASE_URL = import.meta.env.VITE_PYTHON_URL;
-        const response = await fetch(
-          `${API_BASE_URL}/subscription/check-trial-status?company_id=${user.profile.company_id}`
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.is_trial && (data.show_warning || data.is_expired || data.should_force_upgrade)) {
-            setTrialStatus(data);
-          }
-        }
-      } catch (error) {
-        console.error('Error checking trial status:', error);
-      }
-    };
-
-    const checkCVUsage = async () => {
+    const checkWarnings = async () => {
       try {
         const usageInfo = await UsageTrackingService.checkCVProcessingLimit(user.profile.company_id);
-        
-        // Only show low CV warning if not on trial (trial warnings take priority)
+
+        if (usageInfo.isTrial && (usageInfo.isExpired || usageInfo.shouldForceUpgrade)) {
+          setTrialStatus({
+            is_trial: true,
+            is_expired: !!usageInfo.isExpired,
+            is_expiring_soon: false,
+            days_remaining: usageInfo.daysRemaining ?? 0,
+            cvs_exhausted: !!usageInfo.cvsExhausted,
+            should_force_upgrade: !!usageInfo.shouldForceUpgrade,
+            warning_message: usageInfo.warningMessage ?? null,
+            plan_name: usageInfo.planName,
+          });
+        } else {
+          setTrialStatus(null);
+        }
+
         if (!usageInfo.isTrial && usageInfo.maxCVs > 0) {
           const usagePercentage = (usageInfo.currentCVCount / usageInfo.maxCVs) * 100;
           const remainingCVs = usageInfo.remainingCVs;
@@ -87,18 +83,13 @@ export function TrialExpirationWarning() {
           setLowCVWarning(null);
         }
       } catch (error) {
-        console.error('Error checking CV usage:', error);
+        console.error('Error checking usage warnings:', error);
       }
     };
 
-    checkTrialStatus();
-    checkCVUsage();
-    
-    // Check every hour
-    const interval = setInterval(() => {
-      checkTrialStatus();
-      checkCVUsage();
-    }, 3600000);
+    checkWarnings();
+
+    const interval = setInterval(checkWarnings, 3600000);
     
     return () => clearInterval(interval);
   }, [user]);

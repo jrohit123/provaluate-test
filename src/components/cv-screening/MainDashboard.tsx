@@ -292,7 +292,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                 </div>
                   {companyData?.subscription_end && (
                     <div className="text-sm text-[#094D7B]">
-                      Renews on: {(() => {
+                      Expires on: {(() => {
                         const date = new Date(companyData.subscription_end);
                         const day = date.getDate().toString().padStart(2, '0');
                         const month = date.toLocaleDateString('en-GB', { month: 'short' }).substring(0, 3);

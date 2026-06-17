@@ -6,12 +6,18 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { startRecruiterPlanCheckout } from '@/utils/recruiterPayment';
 
 interface Plan {
   plan_id: string;
   plan_name: string;
   plan_cost: number;
   duration: number; // in days
+  plan_type: string;
+  max_cvs?: number | null;
+  max_interviews?: number | null;
+  max_users?: number | null;
+  active_jobs?: number | null;
 }
 
 export default function Signup() {
@@ -23,6 +29,9 @@ export default function Signup() {
   const [companyName, setCompanyName] = useState('');
   const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
+  const [selectedPlanType, setSelectedPlanType] = useState<'cv' | 'interview' | 'combo' | ''>('');
+  const [selectedTier, setSelectedTier] = useState('');
+  const [useFreeTrialPlan, setUseFreeTrialPlan] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [freeTrialEligible, setFreeTrialEligible] = useState(false);
@@ -107,7 +116,6 @@ export default function Signup() {
         }
         
         setPlans(plansList);
-        if (plansList.length > 0) setSelectedPlanId(plansList[0].plan_id);
       } catch (err: any) {
         setError(err.message || 'Failed to load plans.');
       } finally {
@@ -120,6 +128,41 @@ export default function Signup() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email]);
 
+  useEffect(() => {
+    if (useFreeTrialPlan) {
+      const freePlan = plans.find((p: any) => Number(p.plan_cost) === 0);
+      if (freePlan) setSelectedPlanId(freePlan.plan_id);
+      return;
+    }
+    if (selectedPlanType && selectedTier) {
+      const match = plans.find(
+        (p: any) =>
+          p.plan_type === selectedPlanType &&
+          p.plan_name === selectedTier &&
+          Number(p.plan_cost) > 0
+      );
+      setSelectedPlanId(match ? match.plan_id : '');
+    } else {
+      setSelectedPlanId('');
+    }
+  }, [selectedPlanType, selectedTier, useFreeTrialPlan, plans]);
+
+  const paidPlans = plans.filter((p: any) => Number(p.plan_cost) > 0);
+  const freePlan = plans.find((p: any) => Number(p.plan_cost) === 0);
+
+  const availablePlanTypes = Array.from(new Set(paidPlans.map((p: any) => p.plan_type))) as string[];
+
+  const availableTiers = selectedPlanType
+    ? Array.from(new Set(paidPlans.filter((p: any) => p.plan_type === selectedPlanType).map((p: any) => p.plan_name))) as string[]
+    : [];
+
+  const selectedPlanObj = selectedPlanId
+    ? plans.find((p: any) => p.plan_id === selectedPlanId) ?? null
+    : null;
+
+  const planTypeLabel = (pt: string) =>
+    pt === 'cv' ? 'CV Only' : pt === 'interview' ? 'Interviews Only' : 'Combo';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -130,8 +173,14 @@ export default function Signup() {
       return;
     }
     
-    if (!firstName || !lastName || !email || !password || !companyName || !selectedPlanId) {
+    if (!firstName || !lastName || !email || !password || !companyName) {
       setError('All fields are required.');
+      return;
+    }
+    const planId = selectedPlanId;
+    if (!planId) {
+      setError('Please select a plan.');
+      setLoading(false);
       return;
     }
     setLoading(true);
@@ -194,10 +243,12 @@ export default function Signup() {
         .single();
       if (createCompanyError) throw createCompanyError;
       // Create user in Supabase Auth
+      const emailRedirectTo = `${window.location.origin}${import.meta.env.BASE_URL}login`;
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
+          emailRedirectTo,
           data: {
             first_name: firstName,
             last_name: lastName,
@@ -223,88 +274,39 @@ export default function Signup() {
         });
       if (userDbError) throw userDbError;
 
-      // If paid plan selected, create subscription and open payment
+      // If paid plan selected, create order and open one-time payment
       const isPaidPlan = plan.plan_cost && plan.plan_cost > 0;
       if (isPaidPlan) {
-        // Paid plan - create subscription and open Razorpay checkout
-        const API_BASE_URL = import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com';
-        
         try {
-          // Step 1: Create subscription on backend
-          const createSubscriptionResponse = await fetch(`${API_BASE_URL}/payments/create-subscription`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              company_id: newCompany.company_id,
-              plan_id: plan.plan_id
-            })
-          });
-
-          if (!createSubscriptionResponse.ok) {
-            const errorData = await createSubscriptionResponse.json();
-            throw new Error(errorData.error || 'Failed to create subscription');
-          }
-
-          const subscriptionData = await createSubscriptionResponse.json();
-          
-          // Step 2: Check if Razorpay is loaded
-          if (typeof window === 'undefined' || !(window as any).Razorpay) {
-            throw new Error('Razorpay SDK not loaded. Please refresh the page.');
-          }
-
-          // Step 3: Open Razorpay subscription checkout
-          const options = {
-            key: subscriptionData.key_id,
-            subscription_id: subscriptionData.subscription_id,
-            name: "aitamate",
-            description: `Subscription for ${plan.plan_name} - ₹${plan.plan_cost}/month`,
-            prefill: {
-              name: `${firstName} ${lastName}`.trim() || email.split('@')[0] || "Customer",
-              email: email,
-              contact: ""
-            },
-            notes: {
-              company_id: newCompany.company_id,
-              plan_name: plan.plan_name
-            },
-            theme: {
-              color: "#1A56DB"
-            },
-            handler: async function (response: any) {
-              try {
-                toast.success('Subscription activated! Please log in to continue.');
-                navigate('/login');
-              } catch (error: any) {
-                console.error('Error processing subscription:', error);
-                toast.error('Subscription activated but an error occurred. Please log in.');
-                navigate('/login');
-              }
-            },
-            modal: {
-              ondismiss: function() {
-                // User closed payment modal - still allow them to login
-                // They can use "Recharge" button later to complete payment
-                toast.info('Payment cancelled. You can complete payment later from your dashboard.');
-                navigate('/login');
-              }
-            }
-          };
-          
-          const rzp1 = new (window as any).Razorpay(options);
-          
-          rzp1.on('payment.failed', function (response: any) {
-            console.error('Payment failed:', response.error);
-            toast.error('Payment failed. You can try again from your dashboard after logging in.');
-            navigate('/login');
-          });
-          
-          rzp1.open();
           setLoading(false);
-          return; // Don't navigate yet, wait for payment
-        } catch (subscriptionError: any) {
-          console.error('Error creating subscription:', subscriptionError);
-          // If subscription creation fails, still allow signup but show warning
-          toast.warning('Account created but subscription setup failed. Please use "Recharge" button after logging in.');
+          const opened = await startRecruiterPlanCheckout({
+            companyId: newCompany.company_id,
+            planId: plan.plan_id,
+            planName: plan.plan_name,
+            prefill: {
+              name: `${firstName} ${lastName}`.trim() || email.split('@')[0] || 'Customer',
+              email,
+            },
+            onSuccess: () => {
+              toast.success('Payment successful! Please log in to continue.');
+              navigate('/login');
+            },
+            onError: (message) => {
+              toast.error(message);
+            },
+            onDismiss: () => {
+              toast.info('Payment cancelled. You can complete payment later from your dashboard.');
+              navigate('/login');
+            },
+          });
+          if (!opened) {
+            toast.warning('Payment gateway could not be loaded. You can pay from your dashboard after logging in.');
+            navigate('/login');
+          }
+          return;
+        } catch (paymentError: any) {
+          console.error('Error starting payment:', paymentError);
+          toast.warning('Account created but payment setup failed. Please use Purchase Plan after logging in.');
           navigate('/login');
           return;
         }
@@ -369,23 +371,120 @@ export default function Signup() {
               onChange={e => setCompanyName(e.target.value)}
               required
             />
-            <Select value={selectedPlanId} onValueChange={setSelectedPlanId} required>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a plan..." />
-              </SelectTrigger>
-              <SelectContent>
-                {plans.map(plan => (
-                  <SelectItem key={plan.plan_id} value={plan.plan_id}>
-                    {plan.plan_name}
-                    {plan.plan_type ? ` (${plan.plan_type === 'cv' ? 'CV Only' : plan.plan_type === 'interview' ? 'Interviews Only' : 'Combo'})` : ''} — ₹{plan.plan_cost}/month
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* When domain is blocked, hide the plan selector entirely */}
+            {!domainBlocked && (
+              <>
+                {/* Free Tier option (only if eligible) */}
+                {freeTrialEligible && freePlan && (
+                  <div
+                    className={`border rounded-lg p-3 cursor-pointer transition-colors ${
+                      useFreeTrialPlan
+                        ? 'border-green-500 bg-green-50'
+                        : 'border-gray-200 bg-gray-50 hover:border-green-400'
+                    }`}
+                    onClick={() => {
+                      setUseFreeTrialPlan(!useFreeTrialPlan);
+                      if (!useFreeTrialPlan) {
+                        setSelectedPlanType('');
+                        setSelectedTier('');
+                      }
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        readOnly
+                        checked={useFreeTrialPlan}
+                        className="w-4 h-4 accent-green-600 pointer-events-none"
+                      />
+                      <div>
+                        <div className="font-semibold text-green-700 text-sm">Start with Free Tier</div>
+                        <div className="text-xs text-green-600 mt-0.5">
+                          {freePlan.max_cvs ?? 0} CVs · {freePlan.max_interviews ?? 0} Interviews · {freePlan.max_users} User · No expiry
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Paid plan selector */}
+                {!useFreeTrialPlan && (
+                  <>
+                    {/* Dropdown 1: Plan Type */}
+                    <Select
+                      value={selectedPlanType}
+                      onValueChange={(val) => {
+                        setSelectedPlanType(val as any);
+                        setSelectedTier(''); // reset tier when type changes
+                      }}
+                      required={!useFreeTrialPlan}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select plan type..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availablePlanTypes.map((pt) => (
+                          <SelectItem key={pt} value={pt}>
+                            {planTypeLabel(pt)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {/* Dropdown 2: Tier (only when type is selected) */}
+                    {selectedPlanType && (
+                      <Select
+                        value={selectedTier}
+                        onValueChange={setSelectedTier}
+                        required={!useFreeTrialPlan}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select tier..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableTiers.map((tier) => (
+                            <SelectItem key={tier} value={tier}>
+                              {tier}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+
+                    {/* Read-only plan details (only when both are selected) */}
+                    {selectedPlanObj && (
+                      <div className="border rounded-lg overflow-hidden">
+                        <div className="bg-gray-100 px-4 py-2.5 font-semibold text-gray-800 text-sm">
+                          ₹{selectedPlanObj.plan_cost} for {selectedPlanObj.max_cvs ?? 0} CVs and {selectedPlanObj.max_interviews ?? 0} IVs
+                        </div>
+                        <div className="bg-gray-50 px-4 py-2 text-xs text-gray-500 italic">
+                          Valid for 365 days from date of purchase
+                        </div>
+                        <div className="bg-gray-50 px-4 pb-2 text-xs text-gray-400">
+                          Max Users: {selectedPlanObj.max_users} · Active JDs: {selectedPlanObj.active_jobs === 0 ? 'Unlimited' : selectedPlanObj.active_jobs}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Free Tier details */}
+                {useFreeTrialPlan && freePlan && (
+                  <div className="border border-green-200 rounded-lg overflow-hidden">
+                    <div className="bg-green-50 px-4 py-2.5 font-semibold text-green-800 text-sm">
+                      Free — {freePlan.max_cvs ?? 0} CVs and {freePlan.max_interviews ?? 0} IVs
+                    </div>
+                    <div className="bg-green-50 px-4 py-2 text-xs text-green-600 italic border-t border-green-200">
+                      Forever free with limited usage
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
             <Button 
               type="submit" 
               className="w-full" 
-              disabled={loading || domainBlocked}
+              disabled={loading || domainBlocked || (!selectedPlanId)}
             >
               {loading ? 'Signing Up...' : domainBlocked ? 'Domain Not Allowed' : 'Sign Up'}
             </Button>

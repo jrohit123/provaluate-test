@@ -33,7 +33,7 @@ export function buildCandidateRazorpayOptions(
     amount: params.amount,
     currency: params.currency || 'INR',
     order_id: params.order_id,
-    name: params.name ?? 'ProValuate',
+    name: params.name ?? 'aitamate Solutions',
     ...(params.description ? { description: params.description } : {}),
     method: { ...CANDIDATE_RAZORPAY_CHECKOUT_METHODS },
     ...(params.prefill && Object.keys(params.prefill).length > 0

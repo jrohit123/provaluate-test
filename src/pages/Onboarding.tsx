@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { SessionManager } from '@/utils/sessionManager';
+import { startRecruiterPlanCheckout } from '@/utils/recruiterPayment';
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -14,6 +15,9 @@ export default function Onboarding() {
   const [companyName, setCompanyName] = useState('');
   const [plans, setPlans] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
+  const [selectedPlanType, setSelectedPlanType] = useState<'cv' | 'interview' | 'combo' | ''>('');
+  const [selectedTier, setSelectedTier] = useState('');
+  const [selectedPath, setSelectedPath] = useState<'free' | 'paid' | ''>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [user, setUser] = useState(null);
@@ -50,17 +54,57 @@ export default function Onboarding() {
         return;
       }
       setPlans(activePlans || []);
-      if (activePlans && activePlans.length > 0) setSelectedPlanId(activePlans[0].plan_id);
       setLoading(false);
     };
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (selectedPath === 'free') {
+      const freePlan = plans.find((p: any) => Number(p.plan_cost) === 0);
+      if (freePlan) setSelectedPlanId(freePlan.plan_id);
+      return;
+    }
+    if (selectedPlanType && selectedTier) {
+      const match = plans.find(
+        (p: any) =>
+          p.plan_type === selectedPlanType &&
+          p.plan_name === selectedTier &&
+          Number(p.plan_cost) > 0
+      );
+      setSelectedPlanId(match ? match.plan_id : '');
+    } else {
+      setSelectedPlanId('');
+    }
+  }, [selectedPlanType, selectedTier, selectedPath, plans]);
+
+  const paidPlans = plans.filter((p: any) => Number(p.plan_cost) > 0);
+  const freePlan = plans.find((p: any) => Number(p.plan_cost) === 0);
+
+  const availablePlanTypes = Array.from(new Set(paidPlans.map((p: any) => p.plan_type))) as string[];
+
+  const availableTiers = selectedPlanType
+    ? Array.from(new Set(paidPlans.filter((p: any) => p.plan_type === selectedPlanType).map((p: any) => p.plan_name))) as string[]
+    : [];
+
+  const selectedPlanObj = selectedPlanId
+    ? plans.find((p: any) => p.plan_id === selectedPlanId) ?? null
+    : null;
+
+  const planTypeLabel = (pt: string) =>
+    pt === 'cv' ? 'CV Only' : pt === 'interview' ? 'Interviews Only' : 'Combo';
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!firstName || !lastName || !selectedPlanId || !companyName) {
-      setError('All fields are required.');
+    if (!selectedPath) {
+      setError('Please choose how you want to get started.');
+      return;
+    }
+    const planId = selectedPlanId;
+    if (!planId) {
+      setError('Please select a plan.');
+      setLoading(false);
       return;
     }
     setLoading(true);
@@ -179,88 +223,40 @@ export default function Onboarding() {
       localStorage.setItem('recruitai_auth', 'true');
       console.log('✅ Step 4: Auth flag set in localStorage');
 
-      // If paid plan selected, create subscription and open payment
+      // If paid plan selected, create order and open one-time payment
       const isPaidPlan = plan.plan_cost && plan.plan_cost > 0;
       if (isPaidPlan) {
-        // Paid plan - create subscription and open Razorpay checkout
-        const API_BASE_URL = import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com';
-        
         try {
-          // Step 1: Create subscription on backend
-          const createSubscriptionResponse = await fetch(`${API_BASE_URL}/payments/create-subscription`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              company_id: newCompany.company_id,
-              plan_id: plan.plan_id
-            })
-          });
-
-          if (!createSubscriptionResponse.ok) {
-            const errorData = await createSubscriptionResponse.json();
-            throw new Error(errorData.error || 'Failed to create subscription');
-          }
-
-          const subscriptionData = await createSubscriptionResponse.json();
-          
-          // Step 2: Check if Razorpay is loaded
-          if (typeof window === 'undefined' || !(window as any).Razorpay) {
-            throw new Error('Razorpay SDK not loaded. Please refresh the page.');
-          }
-
-          // Step 3: Open Razorpay subscription checkout
-          const options = {
-            key: subscriptionData.key_id,
-            subscription_id: subscriptionData.subscription_id,
-            name: "aitamate",
-            description: `Subscription for ${plan.plan_name} - ₹${plan.plan_cost}/month`,
+          const opened = await startRecruiterPlanCheckout({
+            companyId: newCompany.company_id,
+            planId: plan.plan_id,
+            planName: plan.plan_name,
             prefill: {
-              name: `${firstName} ${lastName}`.trim() || user.email.split('@')[0] || "Customer",
+              name: `${firstName} ${lastName}`.trim() || user.email.split('@')[0] || 'Customer',
               email: user.email,
-              contact: ""
             },
-            notes: {
-              company_id: newCompany.company_id,
-              plan_name: plan.plan_name
+            onSuccess: () => {
+              willNavigate = true;
+              window.location.href = '/dashboard?section=main-dashboard';
             },
-            theme: {
-              color: "#1A56DB"
+            onError: () => {
+              willNavigate = true;
+              window.location.href = '/dashboard?section=main-dashboard';
             },
-            handler: async function (response: any) {
-              try {
-                // Changed from window.location.replace to navigate
-                setTimeout(() => navigate('/dashboard?section=main-dashboard'), 1000);
-              } catch (error: any) {
-                console.error('Error processing subscription:', error);
-                setTimeout(() => navigate('/dashboard?section=main-dashboard'), 1000);
-              }
+            onDismiss: () => {
+              willNavigate = true;
+              window.location.href = '/dashboard?section=main-dashboard';
             },
-            modal: {
-              ondismiss: function() {
-                // User closed payment modal - still allow them to proceed
-                // They can use "Recharge" button later to complete payment
-                // Changed from window.location.replace to navigate
-                setTimeout(() => navigate('/dashboard?section=main-dashboard'), 1000);
-              }
-            }
-          };
-          
-          const rzp1 = new (window as any).Razorpay(options);
-          
-          rzp1.on('payment.failed', function (response: any) {
-            console.error('Payment failed:', response.error);
-            // Changed from window.location.replace to navigate
-            setTimeout(() => navigate('/dashboard?section=main-dashboard'), 1000);
           });
-          
-          rzp1.open();
-          // Keep loading true - don't show form again, Razorpay modal will handle the UI
-          return; // Don't navigate yet, wait for payment
-        } catch (subscriptionError: any) {
-          console.error('Error creating subscription:', subscriptionError);
-          // If subscription creation fails, still allow onboarding
+          if (!opened) {
+            willNavigate = true;
+            window.location.href = '/dashboard?section=main-dashboard';
+          }
+          return;
+        } catch (paymentError: any) {
+          console.error('Error starting payment:', paymentError);
           willNavigate = true;
-          navigate('/dashboard?section=main-dashboard');
+          window.location.href = '/dashboard?section=main-dashboard';
           return;
         }
       } else {
@@ -268,7 +264,7 @@ export default function Onboarding() {
         console.log('User profile created!');
         willNavigate = true;
         // Navigate immediately - keep loading true so form doesn't show again
-        navigate('/dashboard?section=main-dashboard');
+        window.location.href = '/dashboard?section=main-dashboard';
       }
     } catch (err) {
       setError(err.message || 'Onboarding failed.');
@@ -318,19 +314,131 @@ export default function Onboarding() {
               onChange={e => setCompanyName(e.target.value)}
               required
             />
-            <Select value={selectedPlanId} onValueChange={setSelectedPlanId} required>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a plan..." />
-              </SelectTrigger>
-              <SelectContent>
-                {plans.map(plan => (
-                  <SelectItem key={plan.plan_id} value={plan.plan_id}>
-                    {plan.plan_name}
-                    {plan.plan_type ? ` (${plan.plan_type === 'cv' ? 'CV Only' : plan.plan_type === 'interview' ? 'Interviews Only' : 'Combo'})` : ''} — ₹{plan.plan_cost}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Choose how to get started
+            </p>
+
+            {/* ── Free path card ── */}
+            {freePlan && (
+              <div
+                onClick={() => {
+                  setSelectedPath('free');
+                  setSelectedPlanType('');
+                  setSelectedTier('');
+                }}
+                className={`border rounded-lg p-3.5 cursor-pointer transition-colors ${
+                  selectedPath === 'free'
+                    ? 'border-primary-700 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                    selectedPath === 'free' ? 'border-primary-700' : 'border-gray-300'
+                  }`}>
+                    {selectedPath === 'free' && (
+                      <div className="w-2 h-2 rounded-full bg-primary-700" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-medium text-black">Start free</span>
+                    </div>
+                    <p className="text-xs text-black">
+                      {freePlan.max_cvs ?? 0} CVs · {freePlan.max_interviews ?? 0} interviews · {freePlan.max_users} user · No expiry
+                    </p>
+                    <p className="text-xs text-black italic mt-1">
+                      Upgrade anytime from Admin Settings
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Paid path card ── */}
+            <div
+              onClick={() => setSelectedPath('paid')}
+              className={`border rounded-lg p-3.5 cursor-pointer transition-colors ${
+                selectedPath === 'paid'
+                  ? 'border-primary-700 bg-blue-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                  selectedPath === 'paid' ? 'border-primary-700' : 'border-gray-300'
+                }`}>
+                  {selectedPath === 'paid' && (
+                    <div className="w-2 h-2 rounded-full bg-primary-700" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <span className="text-sm font-medium text-black">Choose a plan</span>
+                  <p className="text-xs text-black mt-1">
+                    CV only · Interviews only · Combo — from ₹2,500
+                  </p>
+
+                  {selectedPath === 'paid' && (
+                    <div
+                      className="mt-3 pt-3 border-t border-gray-200 space-y-2"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <Select
+                        value={selectedPlanType}
+                        onValueChange={(val) => {
+                          setSelectedPlanType(val as any);
+                          setSelectedTier('');
+                        }}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select plan type..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availablePlanTypes.map((pt) => (
+                            <SelectItem key={pt} value={pt}>
+                              {planTypeLabel(pt)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      {selectedPlanType && (
+                        <Select value={selectedTier} onValueChange={setSelectedTier}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select tier..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableTiers.map((tier) => (
+                              <SelectItem key={tier} value={tier}>
+                                {tier}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+
+                      {selectedPlanObj && (
+                        <div className="border rounded-lg overflow-hidden mt-1">
+                          <div className="bg-gray-100 px-4 py-2.5 font-semibold text-black text-sm">
+                            ₹{selectedPlanObj.plan_cost} for {selectedPlanObj.max_cvs ?? 0} CVs and {selectedPlanObj.max_interviews ?? 0} IVs
+                          </div>
+                          <div className="bg-gray-50 px-4 py-2 text-xs text-black italic font-semibold">
+                            Valid for 365 days from date of purchase
+                          </div>
+                          <div className="bg-gray-50 px-4 pb-2 text-xs text-black font-semibold">
+                            Max Users: {selectedPlanObj.max_users} · Active JDs: {selectedPlanObj.active_jobs === 0 ? 'Unlimited' : selectedPlanObj.active_jobs}
+                          </div>
+                        </div>
+                      )}
+
+                      <p className="text-xs text-black italic font-semibold">
+                        Can't decide? You can always start free instead.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Submitting...' : 'Complete Onboarding'}
             </Button>
