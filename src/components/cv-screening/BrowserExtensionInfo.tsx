@@ -20,6 +20,7 @@ const GMAIL_LOGO = `${import.meta.env.BASE_URL}assets/GMAIL%20LOGO.png`;
 const OUTLOOK_LOGO = `${import.meta.env.BASE_URL}assets/OUTLOOK%20LOGO.png`;
 const LINKEDIN_LOGO = `${import.meta.env.BASE_URL}assets/LINKEDIN%20LOGO.png`;
 const ZOHO_LOGO = `${import.meta.env.BASE_URL}assets/ZOHO%20LOGO.png?v=2`;
+const TELEGRAM_LOGO = `${import.meta.env.BASE_URL}assets/TELEGRAM%20LOGO.png`;
 const GMAIL_PLUGIN_ZIP_URL = `${import.meta.env.BASE_URL}downloads/Gmail-Plugin.zip`;
 const OUTLOOK_MANIFEST_URL = `${import.meta.env.BASE_URL}downloads/manifest.xml`;
 const LINKEDIN_PLUGIN_ZIP_URL = `${import.meta.env.BASE_URL}downloads/Linkedin-Plugin.zip`;
@@ -42,7 +43,30 @@ export const BrowserExtensionInfo = ({
   onOpenChange,
   userId,
 }: BrowserExtensionInfoProps) => {
-  const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'outlook' | 'linkedin' | 'zoho' | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'outlook' | 'linkedin' | 'zoho' | 'telegram' | null>(null);
+  const [telegramConnectInfo, setTelegramConnectInfo] = useState<{
+    deep_link: string;
+    bot_username: string;
+    manual_command: string;
+    expires_in_minutes: number;
+  } | null>(null);
+  const [telegramLoading, setTelegramLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleConnectTelegram = async () => {
+    setTelegramLoading(true);
+    try {
+      const telegramRegisterUrl = `${PYTHON_API_BASE.replace(/\/$/, '')}/api/telegram/register-start${userId ? `?user_id=${encodeURIComponent(userId)}` : ''}`;
+      const res = await fetch(telegramRegisterUrl);
+      const data = await res.json();
+      setTelegramConnectInfo(data);
+      window.open(data.deep_link, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      console.error('Failed to start Telegram connection', e);
+    } finally {
+      setTelegramLoading(false);
+    }
+  };
 
   // Reset to provider choice when modal closes
   useEffect(() => {
@@ -65,7 +89,7 @@ export const BrowserExtensionInfo = ({
               Choose your provider to get started. Evaluate resumes from your inbox or LinkedIn without leaving Gmail, Outlook, Zoho, or LinkedIn.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mt-6">
             <button
               type="button"
               onClick={() => setSelectedProvider('gmail')}
@@ -97,6 +121,14 @@ export const BrowserExtensionInfo = ({
             >
               <img src={LINKEDIN_LOGO} alt="LinkedIn" className="w-14 h-14 object-contain mb-3" />
               <span className="font-semibold text-[#094D7B]">LinkedIn</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedProvider('telegram')}
+              className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-gray-200 hover:border-[#094D7B] hover:bg-[#094D7B]/5 transition-all duration-200 text-left"
+            >
+              <img src={TELEGRAM_LOGO} alt="Telegram" className="w-14 h-14 object-contain mb-3" />
+              <span className="font-semibold text-[#094D7B]">Telegram</span>
             </button>
           </div>
         </DialogContent>
@@ -313,6 +345,120 @@ export const BrowserExtensionInfo = ({
                 Download LinkedIn plugin (ZIP)
                 <FileArchive className="w-4 h-4" />
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // Step 2d: Telegram view (Connect Telegram bot)
+  if (selectedProvider === 'telegram') {
+    const telegramRegisterUrl = `${PYTHON_API_BASE.replace(/\/$/, '')}/api/telegram/register-start${userId ? `?user_id=${encodeURIComponent(userId)}` : ''}`;
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-6">
+          <DialogHeader className="flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute left-4 top-4 gap-1 text-sm md:text-base"
+              onClick={() => setSelectedProvider(null)}
+            >
+              <ArrowLeft className="w-5 h-5" /> Back
+            </Button>
+            <DialogTitle className="text-2xl font-bold text-[#094D7B] pt-10">
+              ProValuate for Telegram
+            </DialogTitle>
+            <DialogDescription className="text-base mt-2">
+              Connect your Telegram account once, then screen CVs directly from the chat without leaving the app.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className={instructionsSectionClass}>
+            <div className="border border-[#094D7B]/20 rounded-lg p-5 bg-[#094D7B]/5">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-3 flex items-center gap-2">
+                <Mail className="w-5 h-5 text-[#094D7B]" />
+                What you need
+              </h3>
+              <ul className="space-y-2 text-sm text-gray-700">
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                  <span>Be logged in to ProValuate (this dashboard)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                  <span>Connect Telegram once using the button below</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                  <span>Send CVs as files to the bot for instant scoring</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="border border-green-200 rounded-lg p-5 bg-green-50/50">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-3 flex items-center gap-2">
+                <Globe className="w-5 h-5 text-green-600" />
+                Connect Telegram (one-time)
+              </h3>
+              <p className="text-sm text-gray-700 mb-4">
+                Click below to open Telegram and start a chat with the ProValuate bot. You only need to do this once.
+              </p>
+              <Button
+                onClick={handleConnectTelegram}
+                disabled={telegramLoading}
+                className="flex items-center gap-2 bg-[#094D7B] text-white shadow-[0_4px_18px_rgba(9,77,123,0.28)] transition-shadow hover:bg-[#094D7B] hover:shadow-[0_6px_22px_rgba(9,77,123,0.34)]"
+                size="lg"
+              >
+                <Mail className="w-4 h-4" />
+                {telegramLoading ? 'Opening...' : 'Connect Telegram'}
+              </Button>
+              {!userId && (
+                <p className="text-xs text-amber-700 mt-2">
+                  For the best experience, ensure you are logged in to ProValuate before connecting.
+                </p>
+              )}
+              {telegramConnectInfo && (
+                <div className="mt-4 border border-gray-200 rounded-lg p-4 bg-gray-50">
+                  <p className="text-sm text-gray-700 mb-2">
+                    Didn't open Telegram automatically? Open Telegram yourself (the app, or{' '}
+                    <a href="https://web.telegram.org" target="_blank" rel="noopener noreferrer" className="underline">
+                      web.telegram.org
+                    </a>
+                    ), search for <strong>@{telegramConnectInfo.bot_username}</strong>, and send:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-sm bg-white border border-gray-300 rounded px-3 py-2 font-mono">
+                      {telegramConnectInfo.manual_command}
+                    </code>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(telegramConnectInfo.manual_command);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }}
+                    >
+                      {copied ? 'Copied' : 'Copy'}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    This link expires in {telegramConnectInfo.expires_in_minutes} minutes.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="border border-purple-200 rounded-lg p-5 bg-purple-50/50">
+              <h3 className="text-lg font-semibold text-[#094D7B] mb-3 flex items-center gap-2">
+                <Globe className="w-5 h-5 text-purple-600" />
+                How to Use
+              </h3>
+              <p className="text-sm text-gray-700">
+                After connecting, open your Telegram chat with ProValuate. Send /newassessment to pick a job and criteria, then upload the candidate's CV as a file (PDF, DOC, DOCX, or TXT). You'll receive the score and recommendation directly in the chat.
+              </p>
             </div>
           </div>
         </DialogContent>
