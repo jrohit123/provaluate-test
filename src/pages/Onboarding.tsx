@@ -123,15 +123,27 @@ export default function Onboarding() {
         setLoading(false);
         return;
       }
-      // Double check company does not exist
-      const { data: existingCompanies } = await supabase
-        .from('companies')
-        .select('company_id')
-        .eq('email_domain', domain);
-      if (existingCompanies && existingCompanies.length > 0) {
-        setError('A company with your email domain already exists. Please contact your company admin to be invited.');
-        setLoading(false);
-        return;
+
+      // Check if this domain is a shared/public domain (gmail, outlook, etc.)
+      const { data: blockedDomainMatch } = await supabase
+        .from('blocked_domains')
+        .select('domain')
+        .eq('domain', domain)
+        .maybeSingle();
+
+      const isSharedDomain = !!blockedDomainMatch;
+
+      // Only enforce "company already exists" for real corporate domains
+      if (!isSharedDomain) {
+        const { data: existingCompanies } = await supabase
+          .from('companies')
+          .select('company_id')
+          .eq('email_domain', domain);
+        if (existingCompanies && existingCompanies.length > 0) {
+          setError('A company with your email domain already exists. Please contact your company admin to be invited.');
+          setLoading(false);
+          return;
+        }
       }
       // Get selected plan details
       const plan = plans.find(p => p.plan_id === selectedPlanId);

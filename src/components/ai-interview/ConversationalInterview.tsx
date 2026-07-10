@@ -511,6 +511,9 @@ const ConversationalInterview = () => {
   const assemblyAIAudioStreamRef = useRef<MediaStream | null>(null);
   const assemblyAICurrentPartialRef = useRef<string>(''); // in-progress turn for live display
   const transcriptionModeRef = useRef<'web-speech' | 'deepgram' | 'openai' | 'assemblyai' | null>(null);
+  // Sticky failed-provider tracking — once a provider fails during this interview session
+  // it is added here and startWebSpeech skips it, so every new question doesn't retry a dead key.
+  const sttFailedProvidersRef = useRef<Set<'deepgram' | 'openai' | 'assemblyai' | 'web-speech'>>(new Set());
   const lastTranscriptionTimeRef = useRef<number>(0);
   const initOpenAIRealtimeSpeechRef = useRef<() => Promise<void>>(async () => {});
   const initAssemblyAIRealtimeSpeechRef = useRef<() => Promise<void>>(async () => {});
@@ -648,6 +651,7 @@ const ConversationalInterview = () => {
       };
       const tryFallbackFromDeepgram = () => {
         if (transcriptionModeRef.current !== 'deepgram') return;
+        sttFailedProvidersRef.current.add('deepgram');
         if (openAIAudioStreamRef.current) {
           openAIAudioStreamRef.current.getTracks().forEach((t: MediaStreamTrack) => t.stop());
           openAIAudioStreamRef.current = null;
@@ -750,6 +754,7 @@ const ConversationalInterview = () => {
 
       const tryFallbackFromOpenAI = () => {
         if (transcriptionModeRef.current !== 'openai') return;
+        sttFailedProvidersRef.current.add('openai');
         if (openAIAudioStreamRef.current) {
           openAIAudioStreamRef.current.getTracks().forEach((t: MediaStreamTrack) => t.stop());
           openAIAudioStreamRef.current = null;
@@ -759,7 +764,6 @@ const ConversationalInterview = () => {
         if (openAIRealtimeAudioContextRef.current) { openAIRealtimeAudioContextRef.current.close().catch(() => {}); openAIRealtimeAudioContextRef.current = null; }
         const { isEdge } = detectBrowser();
         if (isEdge) {
-          // Edge: Deepgram + AssemblyAI already tried — Web Speech is last resort
           transcriptionModeRef.current = 'web-speech';
           console.log('🔄 [OPENAI] Edge: Fallback to Web Speech API (last resort)');
           initWebSpeech();
@@ -912,6 +916,7 @@ const ConversationalInterview = () => {
 
       const tryFallbackFromAssemblyAI = () => {
         if (transcriptionModeRef.current !== 'assemblyai') return;
+        sttFailedProvidersRef.current.add('assemblyai');
         assemblyAICurrentPartialRef.current = '';
         if (assemblyAIWsRef.current) { try { assemblyAIWsRef.current.close(); } catch (_) {} assemblyAIWsRef.current = null; }
         if (assemblyAIScriptNodeRef.current) { try { assemblyAIScriptNodeRef.current.disconnect(); } catch (_) {} assemblyAIScriptNodeRef.current = null; }
@@ -1342,70 +1347,58 @@ const ConversationalInterview = () => {
   const startWebSpeech = useCallback(async () => {
     const browser = detectBrowser();
     webSpeechActiveRef.current = true;
+    const failed = sttFailedProvidersRef.current;
 
-    // ✅ CHROME: Deepgram first → OpenAI fallback → AssemblyAI final fallback
-    if (browser.isChrome) {
-      console.log('🌐 [BROWSER] ✅ Detected Chrome - using Deepgram (→ OpenAI → AssemblyAI fallback)');
-      transcriptionModeRef.current = 'deepgram';
-      
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-          recognitionRef.current = null;
-        } catch (e) {
-          console.warn('⚠️ [CHROME] Cleaned up Web Speech instance');
-        }
-      }
-      
-      await initDeepgramRealtimeSpeech();
-      return;
+    // ── STT provider order: Deepgram → OpenAI → AssemblyAI (Chrome)
+    //                        Deepgram → AssemblyAI → OpenAI → Web Speech (Edge)
+    // Once a provider fails during this session it stays in sttFailedProvidersRef
+    // and is skipped here — so every new question never retries a dead key.
+
+    // Determine the first non-failed provider to use
+    const chromeOrder: Array<'deepgram' | 'openai' | 'assemblyai'> = ['deepgram', 'openai', 'assemblyai'];
+    const edgeOrder: Array<'deepgram' | 'assemblyai' | 'openai' | 'web-speech'> = ['deepgram', 'assemblyai', 'openai', 'web-speech'];
+    const providerOrder = browser.isEdge ? edgeOrder : chromeOrder;
+    const nextProvider = providerOrder.find(p => !failed.has(p as any)) ?? providerOrder[providerOrder.length - 1];
+
+    console.log(`🌐 [STT] Browser=${browser.isChrome ? 'Chrome' : browser.isEdge ? 'Edge' : 'Other'} | Failed=${[...failed].join(',') || 'none'} | Starting with: ${nextProvider}`);
+
+    // Tear down any stale connections before starting fresh
+    if (deepgramWsRef.current) { try { deepgramWsRef.current.close(); } catch (e) {} deepgramWsRef.current = null; }
+    if (deepgramScriptNodeRef.current) { try { deepgramScriptNodeRef.current.disconnect(); } catch (_) {} deepgramScriptNodeRef.current = null; }
+    if (deepgramAudioContextRef.current) { deepgramAudioContextRef.current.close().catch(() => {}); deepgramAudioContextRef.current = null; }
+    if (openAIRealtimeWsRef.current) { try { openAIRealtimeWsRef.current.close(); } catch (e) {} openAIRealtimeWsRef.current = null; }
+    if (openAIRealtimeAudioContextRef.current) { openAIRealtimeAudioContextRef.current.close().catch(() => {}); openAIRealtimeAudioContextRef.current = null; }
+    openAIRealtimeScriptNodeRef.current = null;
+    if (openAIAudioRecorderRef.current) {
+      try { openAIAudioRecorderRef.current.stopRecording(); openAIAudioRecorderRef.current = null; } catch (e) {}
     }
+    if (openAIAudioStreamRef.current) { openAIAudioStreamRef.current.getTracks().forEach(track => track.stop()); openAIAudioStreamRef.current = null; }
+    if (assemblyAIWsRef.current) { try { assemblyAIWsRef.current.close(); } catch (e) {} assemblyAIWsRef.current = null; }
+    if (assemblyAIScriptNodeRef.current) { try { assemblyAIScriptNodeRef.current.disconnect(); } catch (_) {} assemblyAIScriptNodeRef.current = null; }
+    if (assemblyAIAudioContextRef.current) { assemblyAIAudioContextRef.current.close().catch(() => {}); assemblyAIAudioContextRef.current = null; }
+    if (assemblyAIAudioStreamRef.current) { assemblyAIAudioStreamRef.current.getTracks().forEach(track => track.stop()); assemblyAIAudioStreamRef.current = null; }
 
-    // ✅ EDGE: Deepgram first → AssemblyAI → OpenAI → Web Speech API (last resort)
-    if (browser.isEdge) {
-      console.log('🌐 [BROWSER] ✅ Detected Edge - using Deepgram (→ AssemblyAI → OpenAI → Web Speech fallback)');
-      transcriptionModeRef.current = 'deepgram';
+    transcriptionModeRef.current = nextProvider as typeof transcriptionModeRef.current;
 
-      // Tear down any stale instances before starting fresh
-      if (deepgramWsRef.current) { try { deepgramWsRef.current.close(); } catch (e) {} deepgramWsRef.current = null; }
-      if (deepgramScriptNodeRef.current) { try { deepgramScriptNodeRef.current.disconnect(); } catch (_) {} deepgramScriptNodeRef.current = null; }
-      if (deepgramAudioContextRef.current) { deepgramAudioContextRef.current.close().catch(() => {}); deepgramAudioContextRef.current = null; }
-      if (openAIRealtimeWsRef.current) { try { openAIRealtimeWsRef.current.close(); } catch (e) {} openAIRealtimeWsRef.current = null; }
-      if (openAIRealtimeAudioContextRef.current) { openAIRealtimeAudioContextRef.current.close().catch(() => {}); openAIRealtimeAudioContextRef.current = null; }
-      openAIRealtimeScriptNodeRef.current = null;
-      if (openAIAudioRecorderRef.current) {
-        try { openAIAudioRecorderRef.current.stopRecording(); openAIAudioRecorderRef.current = null; } catch (e) {}
-      }
-      if (openAIAudioStreamRef.current) { openAIAudioStreamRef.current.getTracks().forEach(track => track.stop()); openAIAudioStreamRef.current = null; }
-      if (assemblyAIWsRef.current) { try { assemblyAIWsRef.current.close(); } catch (e) {} assemblyAIWsRef.current = null; }
-      if (assemblyAIScriptNodeRef.current) { try { assemblyAIScriptNodeRef.current.disconnect(); } catch (_) {} assemblyAIScriptNodeRef.current = null; }
-      if (assemblyAIAudioContextRef.current) { assemblyAIAudioContextRef.current.close().catch(() => {}); assemblyAIAudioContextRef.current = null; }
-      if (assemblyAIAudioStreamRef.current) { assemblyAIAudioStreamRef.current.getTracks().forEach(track => track.stop()); assemblyAIAudioStreamRef.current = null; }
-
+    if (nextProvider === 'deepgram') {
       await initDeepgramRealtimeSpeech();
-      return;
-    }
-
-    // ⚠️ FALLBACK: Unknown browser - try Web Speech first, then AssemblyAI
-    console.log('🌐 [BROWSER] ⚠️ Unknown browser - trying Web Speech API first');
-    transcriptionModeRef.current = 'web-speech';
-    initWebSpeech();
-    
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.start();
-        console.log('✅ Web Speech started successfully (fallback)');
-      } catch (error: any) {
-        if (!error.message?.includes('already started')) {
-          console.error('❌ Failed to start Web Speech, trying AssemblyAI...');
-          transcriptionModeRef.current = 'assemblyai';
-          await initAssemblyAIRealtimeSpeech();
-        }
-      }
-    } else {
-      console.log('⚠️ Web Speech API not available, trying AssemblyAI...');
-      transcriptionModeRef.current = 'assemblyai';
+    } else if (nextProvider === 'openai') {
+      await initOpenAIRealtimeSpeech();
+    } else if (nextProvider === 'assemblyai') {
       await initAssemblyAIRealtimeSpeech();
+    } else {
+      // web-speech last resort (Edge only)
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); recognitionRef.current = null; } catch (e) {}
+      }
+      initWebSpeech();
+      if (recognitionRef.current) {
+        try { recognitionRef.current.start(); } catch (error: any) {
+          if (!error.message?.includes('already started')) {
+            console.error('❌ Web Speech start failed:', error);
+          }
+        }
+      }
     }
   }, [initWebSpeech, initDeepgramRealtimeSpeech, initOpenAIRealtimeSpeech, initAssemblyAIRealtimeSpeech, detectBrowser]);
 
@@ -4168,7 +4161,7 @@ const ConversationalInterview = () => {
                   <div className="w-full h-full min-h-0 flex items-center justify-center overflow-y-auto overflow-x-hidden">
                     <div className="w-full max-w-full bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 my-auto max-h-[22vh] sm:max-h-[38vh] overflow-y-auto overflow-x-hidden">
                       <p className="text-black font-medium leading-relaxed break-words text-base sm:text-lg text-center">
-                        {aiPlaceholder === 'welcome' && 'Welcome to Provaluate interview platform. Have a great interview!'}
+                        {aiPlaceholder === 'welcome' && 'Welcome to ProValuate interview platform. Have a great interview!'}
                         {aiPlaceholder === 'generating_first' && `Generating your first question${'.'.repeat(loadingDots + 1)}`}
                         {aiPlaceholder === 'generating_next' && `Generating your next question${'.'.repeat(loadingDots + 1)}`}
                       </p>
@@ -4442,14 +4435,14 @@ const ConversationalInterview = () => {
             </button>
             
             
-            {/* End Interview Button - same colour as Submit */}
+            {/* End Interview Button */}
             <button
               onClick={() => {
                 if (window.confirm('Are you sure you want to end the interview? This action cannot be undone.')) {
                   terminateInterview('Manual termination by candidate willingly');
                 }
               }}
-              className="flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-6 py-3 bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white rounded-xl font-medium transition-all"
+              className="flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-all"
             >
               <X className="w-5 h-5" />
               End Interview
