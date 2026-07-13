@@ -366,6 +366,18 @@ const ConversationalInterview = () => {
   const pendingCompletionPhraseRef = useRef<string | null>(null);
   /** When set (timer expiry), use these blobs for submit so audio/video are never skipped */
   const submitBlobsOverrideRef = useRef<{ audioBlob: Blob | null; questionVideoBlob: Blob | null } | null>(null);
+  /** Chunked video upload refs */
+  const chunkIndexRef = useRef(0);
+  const chunkUploadQueueRef = useRef<Promise<void>>(Promise.resolve());
+  /** Timing instrumentation */
+  const timingRef = useRef<{ [key: string]: number }>({});
+  const logTiming = (label: string) => {
+    const t0 = timingRef.current['submit-answer-response-received'];
+    const now = performance.now();
+    timingRef.current[label] = now;
+    const delta = t0 ? `(+${(now - t0).toFixed(0)}ms since submit)` : '';
+    console.log(`⏱️ [TIMING] ${label} @ ${now.toFixed(0)}ms ${delta}`);
+  };
 
   const terminateInterview = useCallback(async (reason) => {
     // Use consistent toast ID to prevent duplicate messages
@@ -389,12 +401,12 @@ const ConversationalInterview = () => {
       console.log('🚫 Terminating interview due to:', reason);
       if (pendingMediaUploadPromiseRef.current) {
         try {
-          toast.loading('Saving your responses...', { id: 'terminate-upload' });
+          // toast.loading('Saving your responses...', { id: 'terminate-upload' });
           await pendingMediaUploadPromiseRef.current;
-          toast.dismiss('terminate-upload');
+          // toast.dismiss('terminate-upload');
         } catch (e) {
           console.warn('⚠️ Pending media upload failed:', e);
-          toast.dismiss('terminate-upload');
+          // toast.dismiss('terminate-upload');
         }
         pendingMediaUploadPromiseRef.current = null;
       }
@@ -411,14 +423,14 @@ const ConversationalInterview = () => {
 
       if (response.ok) {
         console.log('✅ Interview status updated to terminated');
-        toast.error(`Interview terminated: ${reason}`, { id: terminationToastId });
+        // toast.error(`Interview terminated: ${reason}`, { id: terminationToastId });
       } else {
         console.error('❌ Failed to update interview status');
-        toast.error(`Interview terminated: ${reason}`, { id: terminationToastId });
+        // toast.error(`Interview terminated: ${reason}`, { id: terminationToastId });
       }
     } catch (error) {
       console.error('❌ Error terminating interview:', error);
-      toast.error(`Interview terminated: ${reason}`, { id: terminationToastId });
+      // toast.error(`Interview terminated: ${reason}`, { id: terminationToastId });
     }
 
     // Navigate to candidate completion page (which handles terminated interviews)
@@ -451,13 +463,13 @@ const ConversationalInterview = () => {
 
     // Show only one warning message per tab switch
     if (currentCount <= MAX_TAB_CHANGES) {
-      toast('Warning: Stay on this tab during the interview!', {
-        id: 'tab-switch-warning',
-        duration: 3000,
-      });
+      // toast('Warning: Stay on this tab during the interview!', {
+      //   id: 'tab-switch-warning',
+      //   duration: 3000,
+      // });
     } else if (currentCount > MAX_TAB_CHANGES) {
       console.log('🚫 Too many tab changes, terminating interview');
-      toast.error('Interview terminated due to tab switching', { id: 'tab-switch-terminated' });
+      // toast.error('Interview terminated due to tab switching', { id: 'tab-switch-terminated' });
       terminateInterview('Candidate switched tabs multiple times during interview');
     }
 
@@ -610,7 +622,7 @@ const ConversationalInterview = () => {
     try {
       const tokenRes = await fetch(`${pythonUrl}/api/deepgram-token`);
       if (!tokenRes.ok) {
-        toast.error('Failed to get Deepgram token.');
+        // toast.error('Failed to get Deepgram token.');
         transcriptionModeRef.current = 'openai';
         await initOpenAIRealtimeSpeech();
         return;
@@ -618,7 +630,7 @@ const ConversationalInterview = () => {
       const { key } = await tokenRes.json();
       apiKey = key;
     } catch {
-      toast.error('Failed to get Deepgram token.');
+      // toast.error('Failed to get Deepgram token.');
       transcriptionModeRef.current = 'openai';
       await initOpenAIRealtimeSpeech();
       return;
@@ -671,7 +683,7 @@ const ConversationalInterview = () => {
         }
       };
       ws.onerror = () => {
-        toast.error('Deepgram connection error — switching to next provider.');
+        // toast.error('Deepgram connection error — switching to next provider.');
         tryFallbackFromDeepgram();
       };
       ws.onclose = (ev) => {
@@ -692,11 +704,11 @@ const ConversationalInterview = () => {
       webSpeechActiveRef.current = true;
       const { isEdge } = detectBrowser();
       if (isEdge) {
-        toast.error('Failed to start Deepgram — trying AssemblyAI.');
+        // toast.error('Failed to start Deepgram — trying AssemblyAI.');
         transcriptionModeRef.current = 'assemblyai';
         await initAssemblyAIRealtimeSpeechRef.current?.();
       } else {
-        toast.error('Failed to start Deepgram — trying OpenAI.');
+        // toast.error('Failed to start Deepgram — trying OpenAI.');
         transcriptionModeRef.current = 'openai';
         await initOpenAIRealtimeSpeechRef.current?.();
       }
@@ -739,13 +751,13 @@ const ConversationalInterview = () => {
       if (!clientSecretRes.ok) {
         const errText = await clientSecretRes.text();
         console.error('❌ [REALTIME] Client secret failed:', clientSecretRes.status, errText);
-        toast.error('Failed to create transcription session. Check API key and Realtime access.');
+        // toast.error('Failed to create transcription session. Check API key and Realtime access.');
         return;
       }
       const { value: ephemeralKey } = await clientSecretRes.json();
       if (!ephemeralKey) {
         console.error('❌ [REALTIME] No ephemeral key in response');
-        toast.error('Failed to create transcription session.');
+        // toast.error('Failed to create transcription session.');
         return;
       }
 
@@ -808,7 +820,7 @@ const ConversationalInterview = () => {
 
       ws.onerror = () => {
         console.error('❌ [REALTIME] WebSocket error');
-        toast.error('OpenAI Realtime error — switching to next provider.');
+        // toast.error('OpenAI Realtime error — switching to next provider.');
         tryFallbackFromOpenAI();
       };
       ws.onclose = (ev) => {
@@ -846,14 +858,14 @@ const ConversationalInterview = () => {
       webSpeechActiveRef.current = true;
       const { isEdge } = detectBrowser();
       if (isEdge) {
-        toast.error('OpenAI Realtime failed — falling back to Web Speech.');
+        // toast.error('OpenAI Realtime failed — falling back to Web Speech.');
         transcriptionModeRef.current = 'web-speech';
         initWebSpeech();
         if (recognitionRef.current) {
           try { recognitionRef.current.start(); } catch (e) {}
         }
       } else {
-        toast.error('OpenAI Realtime failed — trying AssemblyAI.');
+        // toast.error('OpenAI Realtime failed — trying AssemblyAI.');
         transcriptionModeRef.current = 'assemblyai';
         await initAssemblyAIRealtimeSpeechRef.current?.();
       }
@@ -870,12 +882,12 @@ const ConversationalInterview = () => {
       if (!tokenRes.ok) {
         const errData = await tokenRes.json().catch(() => ({}));
         console.error('❌ [ASSEMBLYAI] Token failed:', tokenRes.status, errData);
-        toast.error(errData?.error || 'Failed to get AssemblyAI token. Set ASSEMBLYAI_API_KEY on server.');
+        // toast.error(errData?.error || 'Failed to get AssemblyAI token. Set ASSEMBLYAI_API_KEY on server.');
         return;
       }
       const { token } = await tokenRes.json();
       if (!token) {
-        toast.error('Failed to get AssemblyAI streaming token.');
+        // toast.error('Failed to get AssemblyAI streaming token.');
         return;
       }
       const params = new URLSearchParams({
@@ -926,7 +938,7 @@ const ConversationalInterview = () => {
         if (isEdge) {
           transcriptionModeRef.current = 'openai';
           console.log('🔄 [ASSEMBLYAI] Edge: Fallback to OpenAI Realtime');
-          toast.error('AssemblyAI error — switching to OpenAI.');
+          // toast.error('AssemblyAI error — switching to OpenAI.');
           initOpenAIRealtimeSpeechRef.current?.();
         }
         // Chrome: AssemblyAI is the final fallback — no further fallback
@@ -936,7 +948,7 @@ const ConversationalInterview = () => {
         console.error('❌ [ASSEMBLYAI] WebSocket error');
         tryFallbackFromAssemblyAI();
         if (transcriptionModeRef.current !== 'openai') {
-          toast.error('AssemblyAI transcription connection error.');
+          // toast.error('AssemblyAI transcription connection error.');
         }
       };
       ws.onclose = () => {
@@ -982,12 +994,12 @@ const ConversationalInterview = () => {
       if (assemblyAIWsRef.current) { try { assemblyAIWsRef.current.close(); } catch (_) {} assemblyAIWsRef.current = null; }
       const { isEdge } = detectBrowser();
       if (isEdge) {
-        toast.error('AssemblyAI failed — trying OpenAI Realtime.');
+        // toast.error('AssemblyAI failed — trying OpenAI Realtime.');
         webSpeechActiveRef.current = true;
         transcriptionModeRef.current = 'openai';
         await initOpenAIRealtimeSpeechRef.current?.();
       } else {
-        toast.error('Failed to start AssemblyAI transcription. Check microphone and API key.');
+        // toast.error('Failed to start AssemblyAI transcription. Check microphone and API key.');
         webSpeechActiveRef.current = false;
       }
     }
@@ -1121,7 +1133,7 @@ const ConversationalInterview = () => {
       console.log('🎯 [OPENAI] Audio recording started for transcription');
     } catch (error: any) {
       console.error('❌ [OPENAI] Failed to initialize:', error);
-      toast.error('Failed to start OpenAI transcription. Please check microphone permissions.');
+      // toast.error('Failed to start OpenAI transcription. Please check microphone permissions.');
       webSpeechActiveRef.current = false;
     }
   }, [cleanTranscript]);
@@ -1139,7 +1151,7 @@ const ConversationalInterview = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       console.warn('Web Speech API not supported in this browser.');
-      toast.error('Live transcription not supported in this browser.');
+      // toast.error('Live transcription not supported in this browser.');
       return;
     }
     
@@ -1257,14 +1269,14 @@ const ConversationalInterview = () => {
       // Handle fatal errors
       if (errorType === 'not-allowed') {
         console.error('🚫 [FATAL] Microphone permission denied');
-        toast.error('Microphone permission denied.');
+        // toast.error('Microphone permission denied.');
         webSpeechActiveRef.current = false;
         return;
       }
       
       if (errorType === 'audio-capture') {
         console.error('🚫 [FATAL] No microphone detected');
-        toast.error('No microphone detected. Please check your settings.');
+        // toast.error('No microphone detected. Please check your settings.');
         webSpeechActiveRef.current = false;
         return;
       }
@@ -1549,7 +1561,7 @@ const ConversationalInterview = () => {
     }
     // Camera stream cleanup is handled by videoStreamRef
 
-    toast.success('Interview time completed! Finishing interview...', { id: 'interview-time-completed', duration: 1500 });
+    // toast.success('Interview time completed! Finishing interview...', { id: 'interview-time-completed', duration: 1500 });
 
     // CRITICAL FIX: Immediate finalization with minimal delay
     setTimeout(() => {
@@ -1560,7 +1572,7 @@ const ConversationalInterview = () => {
           }
         } catch (error) {
           console.error('❌ Error auto-finishing interview:', error);
-          toast.error('Failed to finish interview', { id: 'auto-finish-error' });
+          // toast.error('Failed to finish interview', { id: 'auto-finish-error' });
           // Force navigation even on error
           navigate('/dashboard');
         }
@@ -1720,6 +1732,7 @@ const ConversationalInterview = () => {
                      headers: { 'Content-Type': 'application/json' },
                      body: JSON.stringify({ text: `Question 1: ${firstQuestionText}` }),
                    }).then(r => {
+                     console.log('⏱️ [TTS] provider used:', r.headers.get('X-TTS-Provider'));
                      if (!r.ok) throw new Error('First question TTS preload failed');
                      return r.blob();
                    }).catch(e => {
@@ -1735,7 +1748,7 @@ const ConversationalInterview = () => {
                    hasSpokenWelcomeRef.current = true;
                    setIsInterviewTimerActive(true);
                    // 200ms breathing room between welcome and first question
-                   await new Promise(resolve => setTimeout(resolve, 3000));
+                   await new Promise(resolve => setTimeout(resolve, 1500));
                    const firstQ = firstQuestionRef.current;
                    if (firstQ && (firstQ.question || firstQ.question_text)) {
                      const questionText = firstQ.question || firstQ.question_text;
@@ -1786,7 +1799,7 @@ const ConversationalInterview = () => {
                        })
                        .catch((e) => {
                          console.warn('Failed to fetch first question:', e);
-                         toast.error('Could not load first question. Please refresh and try again.');
+                         // toast.error('Could not load first question. Please refresh and try again.');
                        });
                    }
                  },
@@ -1898,6 +1911,7 @@ const ConversationalInterview = () => {
                   body: JSON.stringify({ text: item.text }),
                   signal: controller.signal,
                 }).then((r) => {
+                  console.log('⏱️ [TTS] provider used:', r.headers.get('X-TTS-Provider'));
                   clearTimeout(timeoutId);
                   if (!r.ok) throw new Error('TTS failed');
                   return r.blob();
@@ -1909,6 +1923,7 @@ const ConversationalInterview = () => {
               body: JSON.stringify({ text: item.text }),
               signal: controller.signal,
             }).then((r) => {
+              console.log('⏱️ [TTS] provider used:', r.headers.get('X-TTS-Provider'));
               clearTimeout(timeoutId);
               if (!r.ok) throw new Error('TTS failed');
               return r.blob();
@@ -1950,7 +1965,7 @@ const ConversationalInterview = () => {
             if (!hasSpeechSynthesis) {
               if (!ttsFallbackToastShownRef.current) {
                 ttsFallbackToastShownRef.current = true;
-                toast.error('Audio playback unavailable', { id: 'tts-error', duration: 3000 });
+                // toast.error('Audio playback unavailable', { id: 'tts-error', duration: 3000 });
               }
               setAiPlaceholder('');
               handlePlaybackEnd();
@@ -1958,7 +1973,7 @@ const ConversationalInterview = () => {
             }
             if (!ttsFallbackToastShownRef.current) {
               ttsFallbackToastShownRef.current = true;
-              toast('Using fallback voice', { id: 'tts-fallback', duration: 2000 });
+              // toast('Using fallback voice', { id: 'tts-fallback', duration: 2000 });
             }
             const utterance = new SpeechSynthesisUtterance(item.text);
             utterance.rate = 0.9;
@@ -2010,12 +2025,12 @@ const ConversationalInterview = () => {
       // Await any pending question media upload before finishing
       if (pendingMediaUploadPromiseRef.current) {
         try {
-          toast.loading('Uploading your responses...', { id: 'finish-upload' });
+          // toast.loading('Uploading your responses...', { id: 'finish-upload' });
           await pendingMediaUploadPromiseRef.current;
-          toast.dismiss('finish-upload');
+          // toast.dismiss('finish-upload');
         } catch (e) {
           console.warn('⚠️ Pending media upload failed:', e);
-          toast.dismiss('finish-upload');
+          // toast.dismiss('finish-upload');
         }
         pendingMediaUploadPromiseRef.current = null;
       }
@@ -2053,7 +2068,7 @@ const ConversationalInterview = () => {
             clearTimeout(completionTimerRef.current);
             completionTimerRef.current = null;
           }
-          toast.success(INTERVIEW_CONSTANTS.SUCCESS.INTERVIEW_COMPLETED, { id: 'interview-completed' });
+          // toast.success(INTERVIEW_CONSTANTS.SUCCESS.INTERVIEW_COMPLETED, { id: 'interview-completed' });
           hasInitializedRef.current = false;
           navigate('/candidate-completion', {
             state: {
@@ -2094,7 +2109,7 @@ const ConversationalInterview = () => {
       }
     } catch (error) {
       console.error('Error finishing interview:', error);
-      toast.error('Failed to finish interview', { id: 'finish-interview-error' });
+      // toast.error('Failed to finish interview', { id: 'finish-interview-error' });
     }
      }, [interviewData.interviewId, navigate, interviewData.candidateName, interviewData.position, speakWithAI, isRecording, currentQuestionIndex]);
 
@@ -2124,6 +2139,7 @@ const ConversationalInterview = () => {
       }, API_CONFIG.TIMEOUTS.GENERATE_QUESTION);
 
       if (response.ok) {
+        logTiming('generate-question-llm-response-received');
         priorAnswerKeyphrasesRef.current = [];
         const data = await response.json();
         console.log('📊 Full response data:', data);
@@ -2255,6 +2271,8 @@ const ConversationalInterview = () => {
         setAudioBlob(null);
         setQuestionVideoBlob(null);
         setQuestionVideoDuration(0);
+        chunkIndexRef.current = 0;
+        chunkUploadQueueRef.current = Promise.resolve();
         
         console.log('🔄 Reset all states for new question');
         writtenQuestionTimerLockedRef.current = false; // Allow timer to be set for the new question
@@ -2305,8 +2323,10 @@ const ConversationalInterview = () => {
         // already playing from handleSubmitAnswer. By the time generateNextQuestion is called
         // (inside transition's onEnd), the upload is almost always already done.
         if (pendingMediaUploadPromiseRef.current) {
+          logTiming('media-upload-await-start');
           try {
             await pendingMediaUploadPromiseRef.current;
+            logTiming('media-upload-await-end');
             console.log('✅ Previous question media upload completed');
           } catch (e) {
             console.warn('⚠️ Previous question media upload failed:', e);
@@ -2320,13 +2340,18 @@ const ConversationalInterview = () => {
           setQuestionFinishedSpeaking(false);
 
           // Pre-fetch question TTS immediately — fires as soon as question text is known
+          logTiming('question-tts-preload-fetch-start');
           const questionTTSPreload: Promise<Blob | null> = fetch(buildApiUrl(API_CONFIG.ENDPOINTS.TTS), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: questionMessage }),
           }).then((r) => {
+            console.log('⏱️ [TTS] provider used:', r.headers.get('X-TTS-Provider'));
             if (!r.ok) throw new Error('Preload TTS failed');
             return r.blob();
+          }).then((blob) => {
+            logTiming('question-tts-preload-resolved');
+            return blob;
           }).catch((e) => {
             console.warn('⚠️ Question TTS pre-fetch failed, will retry normally:', e);
             return null;
@@ -2344,6 +2369,8 @@ const ConversationalInterview = () => {
           speakWithAI(questionMessage, {
             preloadedBlobPromise: questionTTSPreload,
             onAudioStart: () => {
+              logTiming('question-audio-playback-start');
+              console.log('⏱️ [TIMING SUMMARY]', JSON.stringify(timingRef.current, null, 2));
               setAiMessage(cleanQuestionText);
               setAiPlaceholder('');
             }
@@ -2374,13 +2401,13 @@ const ConversationalInterview = () => {
         } else {
           // Other error
           console.error('❌ Error generating question:', response.status, errorData);
-          toast.error(`Failed to generate next question: ${errorData.message || 'Server error'}`, { id: 'question-generate-error' });
+          // toast.error(`Failed to generate next question: ${errorData.message || 'Server error'}`, { id: 'question-generate-error' });
         }
       }
       
     } catch (error) {
       console.error('Error generating question:', error);
-      toast.error('Failed to generate next question', { id: 'question-generate-error-2' });
+      // toast.error('Failed to generate next question', { id: 'question-generate-error-2' });
     } finally {
       setIsGeneratingQuestion(false);
     }
@@ -2410,6 +2437,49 @@ const ConversationalInterview = () => {
       body: formData,
     }, API_CONFIG.TIMEOUTS.VIDEO_UPLOAD);
     if (!res.ok) throw new Error('Upload question media failed');
+  }, []);
+
+  /** Upload a single video chunk during recording (chunked upload strategy). */
+  const uploadVideoChunk = useCallback(async (params: {
+    interviewId: string;
+    questionOrder: number;
+    chunkIndex: number;
+    blob: Blob;
+  }) => {
+    const { interviewId, questionOrder, chunkIndex, blob } = params;
+    const formData = new FormData();
+    formData.append('interview_id', interviewId);
+    formData.append('question_order', String(questionOrder));
+    formData.append('chunk_index', String(chunkIndex));
+    formData.append('video_chunk', blob, `chunk_${chunkIndex}.webm`);
+    const res = await apiCall(API_CONFIG.ENDPOINTS.UPLOAD_QUESTION_VIDEO_CHUNK, {
+      method: 'POST',
+      body: formData,
+    }, 30000);
+    if (!res.ok) throw new Error(`Chunk ${chunkIndex} upload failed: ${res.status}`);
+  }, []);
+
+  /** Finalize video upload after recording stops: concatenates chunks and triggers speech analysis. */
+  const finalizeQuestionVideo = useCallback(async (params: {
+    interviewId: string;
+    questionOrder: number;
+    audioBlob: Blob | null;
+    duration: number;
+  }) => {
+    const { interviewId, questionOrder, audioBlob, duration } = params;
+    // Wait for every in-flight chunk upload to land before telling the server to assemble
+    await chunkUploadQueueRef.current.catch(() => {});
+    const formData = new FormData();
+    formData.append('interview_id', interviewId);
+    formData.append('question_order', String(questionOrder));
+    formData.append('duration', String(duration));
+    formData.append('video_format', 'webm');
+    if (audioBlob) formData.append('audio_file', audioBlob, `question_${questionOrder}_audio.wav`);
+    const res = await apiCall(API_CONFIG.ENDPOINTS.FINALIZE_QUESTION_VIDEO, {
+      method: 'POST',
+      body: formData,
+    }, 30000);
+    if (!res.ok) throw new Error('Finalize question video failed');
   }, []);
 
      const handleSubmitAnswer = useCallback(async () => {
@@ -2455,7 +2525,7 @@ const ConversationalInterview = () => {
        // Check for corrupted transcription
        if (transcript && isCorruptedTranscription(transcript)) {
          console.log('❌ Corrupted transcription detected:', transcript);
-         toast.error('Audio quality issue detected. Please re-record your answer with clearer speech and minimal background noise.');
+         // toast.error('Audio quality issue detected. Please re-record your answer with clearer speech and minimal background noise.');
          return;
        }
        
@@ -2467,7 +2537,7 @@ const ConversationalInterview = () => {
          
          // If cleaned transcript is too short, ask user to re-record
          if (cleanedTranscript.length < 20) {
-           toast.error('Audio quality too poor. Please re-record your answer.');
+           // toast.error('Audio quality too poor. Please re-record your answer.');
            return;
          }
        }
@@ -2477,7 +2547,7 @@ const ConversationalInterview = () => {
         if (isForceSubmitOnTimerExpiry) {
           cleanedTranscript = '';
         } else {
-          toast.error('No speech captured. Please speak your answer before submitting.');
+          // toast.error('No speech captured. Please speak your answer before submitting.');
           return;
         }
       }
@@ -2485,12 +2555,12 @@ const ConversationalInterview = () => {
       // When question requires a written answer (e.g. SQL/code), require it before submit (unless timer expired—then submit whatever is in the box)
       const requiresWritten = currentQuestion?.requires_written_answer === true;
       if (requiresWritten && (!writtenAnswer || !writtenAnswer.trim()) && !isForceSubmitOnTimerExpiry) {
-        toast.error('This question requires a written answer (e.g. SQL or code). Please write your answer in the box below, then submit.');
+        // toast.error('This question requires a written answer (e.g. SQL or code). Please write your answer in the box below, then submit.');
         return;
       }
 
        if (!isVideoOn) {
-         toast.error('Camera must be on to submit answer');
+         // toast.error('Camera must be on to submit answer');
          return;
        }
 
@@ -2579,6 +2649,7 @@ const ConversationalInterview = () => {
 
              if (response.ok) {
                const result = await response.json();
+               logTiming('submit-answer-response-received');
                if (result.total_questions != null) totalQuestionsRef.current = result.total_questions;
                priorAnswerKeyphrasesRef.current = Array.isArray(result.keyphrases) ? result.keyphrases : [];
 
@@ -2586,20 +2657,17 @@ const ConversationalInterview = () => {
                // generateNextQuestion will await this via pendingMediaUploadPromiseRef before
                // the question TTS plays, so it's hidden behind the transition phrase duration.
                if (questionVideoBlobToUse) {
-                 const capturedVideoBlob = questionVideoBlobToUse;
-                 const capturedAudioBlob = audioBlobToSend;
                  const capturedQuestionId = questionId;
                  const capturedQuestionIndex = currentQuestionIndex;
                  const capturedDuration = questionVideoDuration || 0;
-                 pendingMediaUploadPromiseRef.current = uploadQuestionMedia({
+                 const capturedAudioBlob = audioBlobToSend;
+                 pendingMediaUploadPromiseRef.current = finalizeQuestionVideo({
                    interviewId: interviewData.interviewId,
-                   questionId: capturedQuestionId,
                    questionOrder: capturedQuestionIndex,
-                   videoBlob: capturedVideoBlob,
                    audioBlob: capturedAudioBlob,
                    duration: capturedDuration,
                  }).catch((e) => {
-                   console.warn('⚠️ Background video upload failed:', e);
+                   console.warn('⚠️ Finalize question video failed:', e);
                  });
                }
 
@@ -2629,6 +2697,7 @@ const ConversationalInterview = () => {
                  });
                } else if (nextQuestionIndex >= 1) {
                  // Normal transition — personalised with keyphrases
+                 logTiming('transition-phrase-fetch-start');
                  pendingTransitionPhraseRef.current = fetchInterviewPhrase(
                    'transition',
                    interviewData.candidateName || 'there',
@@ -2636,7 +2705,10 @@ const ConversationalInterview = () => {
                    nextQuestionIndex,
                    totalQuestionsRef.current ?? undefined,
                    capturedKeyphrases,
-                 ).then(p => p || FALLBACK_PHRASES.transition());
+                 ).then(p => {
+                   logTiming('transition-phrase-text-resolved');
+                   return p || FALLBACK_PHRASES.transition();
+                 });
                }
                
                // Check if interview is completed
@@ -2680,10 +2752,10 @@ const ConversationalInterview = () => {
                dispatch(interviewActions.setSubmitting(false));
 
                setTimeout(() => {
-                 toast.success('Answer submitted successfully!', {
-                   id: 'answer-submitted',
-                   duration: 2000,
-                 });
+                 // toast.success('Answer submitted successfully!', {
+                 //   id: 'answer-submitted',
+                 //   duration: 2000,
+                 // });
                }, 0);
 
                setAiPlaceholder('generating_next');
@@ -2699,20 +2771,26 @@ const ConversationalInterview = () => {
                // ──────────────────────────────────────────────────────────────────────
                if (nextQuestionIndex >= 1 && !isLastQuestion) {
                  // 1. Fire generate-question NOW — don't await, store the promise
+                 logTiming('generate-question-call-start');
                  const questionPromise = generateNextQuestion();
 
                  // 2. Await transition phrase (already in-flight since submit responded, ~1s)
                  const transitionText = await (pendingTransitionPhraseRef.current ?? Promise.resolve(FALLBACK_PHRASES.transition()));
                  pendingTransitionPhraseRef.current = null;
+                 logTiming('transition-text-ready');
 
                  // 3. Speak transition immediately — question LLM already running in parallel
                  console.log('🎤 Speaking transition phrase while question generates in parallel...');
                  speakWithAI(transitionText, {
+                   onAudioStart: () => logTiming('transition-audio-playback-start'),
                    onEnd: async () => {
+                     logTiming('transition-audio-playback-end');
                      // 200ms breathing room between transition and question
-                     await new Promise(resolve => setTimeout(resolve, 3000));
+                     await new Promise(resolve => setTimeout(resolve, 1500));
+                     logTiming('breathing-room-delay-end');
                      // 4. Await the question promise — likely already resolved by now
                      await questionPromise;
+                     logTiming('question-promise-resolved');
                      setTimeout(() => {
                        setAnswerSubmitted(false);
                        setSubmissionStatus('idle');
@@ -2739,13 +2817,13 @@ const ConversationalInterview = () => {
                if (retryCount < maxRetries && currentQuestionIndex === 0) {
                  retryCount++;
                  console.log(`🔄 Retrying submission (attempt ${retryCount + 1}/${maxRetries + 1})...`);
-                 toast.error(`Submission failed, retrying... (${retryCount}/${maxRetries})`, { id: 'answer-retry' });
+                 // toast.error(`Submission failed, retrying... (${retryCount}/${maxRetries})`, { id: 'answer-retry' });
                  
                  // Wait a bit before retry
                  await new Promise(resolve => setTimeout(resolve, 1000));
                  return attemptSubmission();
                } else {
-                 toast.error('Failed to submit answer', { id: 'answer-submit-error' });
+                 // toast.error('Failed to submit answer', { id: 'answer-submit-error' });
                  // Reset states on failure
                  dispatch(interviewActions.setSubmitting(false));
                  setSubmissionStatus('idle');
@@ -2755,7 +2833,7 @@ const ConversationalInterview = () => {
              clearTimeout(answerTimeout);
              if (fetchError.name === 'AbortError') {
                console.error('❌ Answer submission timed out');
-               toast.error('Submission timed out. Please try again.');
+               // toast.error('Submission timed out. Please try again.');
              } else {
                console.error('❌ Error during answer submission:', fetchError);
                
@@ -2763,13 +2841,13 @@ const ConversationalInterview = () => {
                if (retryCount < maxRetries && currentQuestionIndex === 0) {
                  retryCount++;
                  console.log(`🔄 Retrying submission after error (attempt ${retryCount + 1}/${maxRetries + 1})...`);
-                 toast.error(`Submission error, retrying... (${retryCount}/${maxRetries})`);
+                 // toast.error(`Submission error, retrying... (${retryCount}/${maxRetries})`);
                  
                  // Wait a bit before retry
                  await new Promise(resolve => setTimeout(resolve, 1000));
                  return attemptSubmission();
                } else {
-                 toast.error('Failed to submit answer. Please try again.');
+                 // toast.error('Failed to submit answer. Please try again.');
                }
              }
              // Reset states on error
@@ -2783,7 +2861,7 @@ const ConversationalInterview = () => {
          
        } catch (error) {
          console.error('Error submitting answer:', error);
-         toast.error('Failed to submit answer');
+         // toast.error('Failed to submit answer');
          // Reset states on error
          dispatch(interviewActions.setSubmitting(false));
          setSubmissionStatus('idle');
@@ -2825,14 +2903,14 @@ const ConversationalInterview = () => {
     }
 
     if (timeRemaining <= 30 && lastInterviewWarningRef.current !== 30) {
-      toast('30 seconds remaining! Please finish your current response.', {
-        id: 'interview-warning-30',
-      });
+      // toast('30 seconds remaining! Please finish your current response.', {
+      //   id: 'interview-warning-30',
+      // });
       lastInterviewWarningRef.current = 30;
     } else if (timeRemaining <= 60 && lastInterviewWarningRef.current !== 60) {
-      toast('1 minute remaining in your interview!', {
-        id: 'interview-warning-60',
-      });
+      // toast('1 minute remaining in your interview!', {
+      //   id: 'interview-warning-60',
+      // });
       lastInterviewWarningRef.current = 60;
     } else if (timeRemaining <= 120 && timeRemaining > 0) {
       console.log(`⏰ Time remaining: ${timeRemaining}s - approaching completion`);
@@ -2856,24 +2934,24 @@ const ConversationalInterview = () => {
 
     // Prioritize 30-second warning - check this first
     if (questionTimeRemaining <= 30 && lastQuestionWarningRef.current !== 30) {
-      toast('Less than 30 seconds remaining! Answer will auto-submit soon.', {
-        id: 'question-warning-30',
-      });
+      // toast('Less than 30 seconds remaining! Answer will auto-submit soon.', {
+      //   id: 'question-warning-30',
+      // });
       lastQuestionWarningRef.current = 30;
     } else if (questionTimeRemaining > 30 && questionTimeRemaining <= 60 && lastQuestionWarningRef.current !== 60) {
-      toast('1 minute remaining for this question.', {
-        id: 'question-warning-60',
-      });
+      // toast('1 minute remaining for this question.', {
+      //   id: 'question-warning-60',
+      // });
       lastQuestionWarningRef.current = 60;
     }
   }, [isQuestionTimerActive, questionTimeRemaining]);
   useEffect(() => {
     if (!isVideoOn && !cameraWarningShownRef.current) {
       cameraWarningShownRef.current = true;
-      toast.error('Camera must remain on during the interview!', {
-        id: 'camera-warning',
-        duration: 5000
-      });
+      // toast.error('Camera must remain on during the interview!', {
+      //   id: 'camera-warning',
+      //   duration: 5000
+      // });
       const timer = setTimeout(() => {
         if (!isVideoOn) {
           terminateInterview('Camera turned off');
@@ -3011,7 +3089,7 @@ const ConversationalInterview = () => {
 
       if (!isCurrentlyFullscreen) {
         console.log('🚫 Fullscreen exited - terminating interview');
-        toast.error('Interview terminated: Fullscreen mode exited');
+        // toast.error('Interview terminated: Fullscreen mode exited');
         terminateInterview('Candidate exited fullscreen mode during interview');
       }
     };
@@ -3039,9 +3117,9 @@ const ConversationalInterview = () => {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.key === 'Escape' || event.keyCode === 27) && isFullscreenRef.current) {
-        toast('STOP! Pressing ESC will exit fullscreen and terminate your interview!', {
-          duration: 2000,
-        });
+        // toast('STOP! Pressing ESC will exit fullscreen and terminate your interview!', {
+        //   duration: 2000,
+        // });
 
         if (escTerminateTimeoutRef.current) {
           clearTimeout(escTerminateTimeoutRef.current);
@@ -3073,7 +3151,7 @@ const ConversationalInterview = () => {
       
       // Check if camera permissions are already granted and camera stream is available
       if (!cameraPermissionGranted || !streamRef.current || !isVideoOn) {
-        toast.error('Camera permissions required. Please allow camera access first.');
+        // toast.error('Camera permissions required. Please allow camera access first.');
         return;
       }
       
@@ -3099,7 +3177,7 @@ const ConversationalInterview = () => {
       // Get camera video stream (already initialized)
       const cameraStream = streamRef.current;
       if (!cameraStream) {
-        toast.error('Camera stream not available. Please refresh and try again.');
+        // toast.error('Camera stream not available. Please refresh and try again.');
         return;
       }
       
@@ -3127,6 +3205,8 @@ const ConversationalInterview = () => {
       console.log('🎬 Combined stream: video tracks=', combinedStream.getVideoTracks().length, 'audio tracks=', combinedStream.getAudioTracks().length);
 
       const videoBitsPerSecond = INTERVIEW_CONSTANTS.MEDIA.VIDEO_BITRATE;
+      chunkIndexRef.current = 0;
+      chunkUploadQueueRef.current = Promise.resolve();
       const questionVideoRecorder = new RecordRTC(combinedStream, {
         type: 'video',
         mimeType: 'video/webm',
@@ -3135,10 +3215,23 @@ const ConversationalInterview = () => {
         frameRate: 10,
         disableLogs: false,
         videoBitsPerSecond,
-        timeSlice: INTERVIEW_CONSTANTS.MEDIA.TIME_SLICE,
+        timeSlice: 5000, // stream in 5s chunks instead of one big blob at the end
         ondataavailable: function(blob) {
-          // Chunks accumulate in RecordRTC internally; full blob uploaded via
-          // /upload-question-media after submit, decoupled from transcript submission
+          if (!blob || blob.size === 0) return;
+          const capturedInterviewId = interviewData.interviewId;
+          const capturedQuestionIndex = currentQuestionIndex;
+          const chunkIndex = chunkIndexRef.current++;
+          // Chain so chunks upload strictly in order without blocking recording
+          chunkUploadQueueRef.current = chunkUploadQueueRef.current
+            .then(() => uploadVideoChunk({
+              interviewId: capturedInterviewId,
+              questionOrder: capturedQuestionIndex,
+              chunkIndex,
+              blob,
+            }))
+            .catch((e) => {
+              console.warn(`⚠️ Chunk ${chunkIndex} upload failed:`, e);
+            });
         }
       });
       questionVideoRecorder.startRecording();
@@ -3189,7 +3282,7 @@ const ConversationalInterview = () => {
       
     } catch (error) {
       console.error('❌ Automatic camera recording start error:', error);
-      toast.error('Failed to start camera recording. Please refresh and try again.');
+      // toast.error('Failed to start camera recording. Please refresh and try again.');
     }
   };
   
@@ -3208,7 +3301,7 @@ const ConversationalInterview = () => {
             console.log('🎥 Auto-starting recording after countdown');
             startQuestionRecording().catch(error => {
               console.error('❌ Error auto-starting recording:', error);
-              toast.error('Failed to start recording automatically. Please try manually.');
+              // toast.error('Failed to start recording automatically. Please try manually.');
             });
           }
           return 0;
@@ -3288,11 +3381,11 @@ const ConversationalInterview = () => {
         
       } else {
         console.error('❌ Failed to load interview data:', response.status);
-        toast.error('Failed to load interview data');
+        // toast.error('Failed to load interview data');
       }
     } catch (error) {
       console.error('❌ Error loading interview data:', error);
-      toast.error('Failed to load interview data');
+      // toast.error('Failed to load interview data');
     }
   }, [interviewData, setCurrentQuestion, setAiMessage, aiSpeaking, isRecording, isVideoOn]);
 
@@ -3498,7 +3591,7 @@ const ConversationalInterview = () => {
                 startRecordingRef.current?.();
               } catch (err) {
                 console.error('❌ startRecordingRef.current threw:', err);
-                toast.error('Failed to start recording automatically.');
+                // toast.error('Failed to start recording automatically.');
               }
 
               return 0;
@@ -3597,14 +3690,14 @@ const ConversationalInterview = () => {
       videoTrack.onended = () => {
         setIsVideoOn(false);
         setCameraPermissionGranted(false);
-        toast.error('Camera access lost. Interview may be affected.');
+        // toast.error('Camera access lost. Interview may be affected.');
       };
       
     } catch (error) {
       console.error('Error accessing camera:', error);
       setCameraPermissionGranted(false);
       setHasRequestedCameraPermissions(false);
-      toast.error('Camera access required for interview');
+      // toast.error('Camera access required for interview');
       navigate('/setup');
     }
   }, [navigate, isMobile]);
@@ -3713,18 +3806,18 @@ const ConversationalInterview = () => {
 
       setIsFullscreen(true);
       console.log('✅ Fullscreen mode activated');
-      toast.success('Interview started in fullscreen mode');
+      // toast.success('Interview started in fullscreen mode');
     } catch (error) {
       console.error('❌ Fullscreen request failed:', error);
       const attempts = fullscreenAttempts + 1;
       setFullscreenAttempts(attempts);
 
       if (attempts < 3) {
-        toast('Please allow fullscreen for the interview', {
-          duration: 4000,
-        });
+        // toast('Please allow fullscreen for the interview', {
+        //   duration: 4000,
+        // });
       } else {
-        toast.error('Fullscreen is required. Interview will be terminated.');
+        // toast.error('Fullscreen is required. Interview will be terminated.');
         setTimeout(() => {
           terminateInterview('Fullscreen permission denied multiple times');
         }, 2000);
@@ -3808,7 +3901,7 @@ const ConversationalInterview = () => {
     socket.on('transcription_error', (data) => {
       console.error('❌ Transcription error:', data);
       if (data && data.error) {
-        toast.error(`Transcription error: ${data.error}`);
+        // toast.error(`Transcription error: ${data.error}`);
       }
     });
 
@@ -3970,7 +4063,7 @@ const ConversationalInterview = () => {
               }
               setQuestionVideoBlob(videoBlob);
               console.log('✅ Camera video blob set successfully');
-              toast.success('Camera recording saved!');
+              // toast.success('Camera recording saved!');
               if (resolveVideoRef) {
                 resolveVideoRef(videoBlob);
                 resolveVideoRef = null;
@@ -3984,7 +4077,7 @@ const ConversationalInterview = () => {
             }
           } catch (blobError) {
             console.error('❌ Error getting video blob:', blobError);
-            toast.error('Error processing video recording');
+            // toast.error('Error processing video recording');
             if (resolveVideoRef) {
               resolveVideoRef(null);
               resolveVideoRef = null;
@@ -4055,13 +4148,13 @@ const ConversationalInterview = () => {
           videoRef.current.srcObject = stream;
         }
         setIsVideoOn(true);
-        toast.success('Camera turned back on');
+        // toast.success('Camera turned back on');
       } catch (error) {
-        toast.error('Failed to turn camera back on');
+        // toast.error('Failed to turn camera back on');
       }
     } else {
       // Don't allow turning camera off
-      toast.error('Camera must remain on during the interview!');
+      // toast.error('Camera must remain on during the interview!');
     }
   };
 
@@ -4076,7 +4169,7 @@ const ConversationalInterview = () => {
         currentAudioRef.current = null;
       }
     }
-    toast.success(`AI audio ${aiAudioEnabled ? 'disabled' : 'enabled'}`);
+    // toast.success(`AI audio ${aiAudioEnabled ? 'disabled' : 'enabled'}`);
   };
 
   if (isCreatingInterview) {

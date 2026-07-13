@@ -16,6 +16,8 @@ export const API_CONFIG = {
     SUBMIT_ANSWER: '/api/submit-answer',
     UPLOAD_QUESTION_VIDEO: '/api/upload-question-video',
     UPLOAD_QUESTION_MEDIA: '/api/upload-question-media',
+    UPLOAD_QUESTION_VIDEO_CHUNK: '/api/upload-question-video-chunk',
+    FINALIZE_QUESTION_VIDEO: '/api/finalize-question-video',
     
     // Competency config (API paths unchanged for backend compatibility)
     CUSTOM_PARAMETERS: '/api/custom-parameters',
