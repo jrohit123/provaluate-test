@@ -43,8 +43,8 @@ export const INTERVIEW_CONSTANTS = {
     MIN_AUDIO_DURATION: 1000, // 1 second
     MAX_AUDIO_DURATION: 300000, // 5 minutes
     AUDIO_BITRATE: 128000, // 128 kbps
-    VIDEO_BITRATE: 300000, // 300 kbps – smaller files, faster uploads; good for talking-head interview (desktop + mobile)
-    TIME_SLICE: 15000, // 15 seconds
+    VIDEO_BITRATE: 300000, // 400 kbps – smaller files, faster uploads; good for talking-head interview (desktop + mobile)
+    TIME_SLICE: 5000, // stream in 5s chunks — smaller blast radius per chunk failure, retries stay cheap
   },
   
   // Retry constants

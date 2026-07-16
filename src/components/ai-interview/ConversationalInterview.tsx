@@ -54,6 +54,7 @@ import { getAdaptiveVideoConstraints } from '@/utils/mediaConstraints';
 import { API_CONFIG, buildApiUrl, apiCall } from '@/constants/api';
 import { INTERVIEW_CONSTANTS } from '@/constants/interview';
 import { supabase } from '@/integrations/supabase/client';
+import { consumeWelcomeTtsCache } from '@/utils/welcomeTtsCache';
 import { Socket } from 'socket.io-client';
 import {
   Mic,
@@ -302,7 +303,8 @@ const ConversationalInterview = () => {
   const [aiAudioEnabled, setAiAudioEnabled] = useState(true);
   const [isInterviewInitialized, setIsInterviewInitialized] = useState(false);
   const [aiMessage, setAiMessage] = useState('');
-  const [aiPlaceholder, setAiPlaceholder] = useState<'welcome' | 'generating_first' | 'generating_next' | ''>('');
+  const [aiPlaceholder, setAiPlaceholder] = useState<'welcome' | 'generating_first' | 'analysing_answer' | 'generating_next' | ''>('');
+  const [displayCaption, setDisplayCaption] = useState<string>('');
   const [loadingDots, setLoadingDots] = useState(0); // 0→1 dot, 1→2 dots, 2→3 dots (cycles)
   const [isWelcomeMessage, setIsWelcomeMessage] = useState(false);
   const [spokenQuestions, setSpokenQuestions] = useState(new Set());
@@ -361,7 +363,13 @@ const ConversationalInterview = () => {
   /** Promise for previous question's media upload; awaited in generateNextQuestion before TTS */
   const pendingMediaUploadPromiseRef = useRef<Promise<void> | null>(null);
   /** Promise for personalised transition phrase — fired in parallel with generate-question after submit */
-  const pendingTransitionPhraseRef = useRef<Promise<string> | null>(null);
+  const pendingTransitionPhraseRef = useRef<Promise<{ text: string; ttsPromise: Promise<Blob | null> }> | null>(null);
+  /** Stashed question TTS data for deferred speaking after transition phrase finishes */
+  const pendingQuestionSpeakRef = useRef<{
+    text: string;
+    cleanText: string;
+    preloadedBlobPromise: Promise<Blob | null>;
+  } | null>(null);
   /** Pre-generated personalised completion phrase (with keyphrases) — used by finishInterview instead of fetching a generic one */
   const pendingCompletionPhraseRef = useRef<string | null>(null);
   /** When set (timer expiry), use these blobs for submit so audio/video are never skipped */
@@ -369,6 +377,7 @@ const ConversationalInterview = () => {
   /** Chunked video upload refs */
   const chunkIndexRef = useRef(0);
   const chunkUploadQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const chunkUploadFailedRef = useRef(false);
   /** Timing instrumentation */
   const timingRef = useRef<{ [key: string]: number }>({});
   const logTiming = (label: string) => {
@@ -1694,9 +1703,16 @@ const ConversationalInterview = () => {
          // so it's ready the moment camera permissions are granted.
          const candidateName = interviewData.candidateName || 'there';
          const position = interviewData.position || 'this role';
-         const welcomePhrasePromise = fetchInterviewPhrase('welcome', candidateName, position)
-           .then(p => p || FALLBACK_PHRASES.welcome(candidateName, position))
-           .catch(() => FALLBACK_PHRASES.welcome(candidateName, position));
+
+         const cachedWelcome = consumeWelcomeTtsCache(interviewData.interviewId);
+         const welcomePhrasePromise = cachedWelcome
+           ? cachedWelcome.messagePromise
+               .then(p => p || FALLBACK_PHRASES.welcome(candidateName, position))
+               .catch(() => FALLBACK_PHRASES.welcome(candidateName, position))
+           : fetchInterviewPhrase('welcome', candidateName, position)
+               .then(p => p || FALLBACK_PHRASES.welcome(candidateName, position))
+               .catch(() => FALLBACK_PHRASES.welcome(candidateName, position));
+         const welcomeAudioBlobPromise = cachedWelcome ? cachedWelcome.audioBlobPromise : null;
 
          // Initialize camera (this will request camera permissions)
          console.log('🎥 Initializing camera before interview starts...');
@@ -1741,7 +1757,11 @@ const ConversationalInterview = () => {
                    })
                  : Promise.resolve(null);
 
+               // Add 1 second delay before playing welcome audio
+               await new Promise(resolve => setTimeout(resolve, 1000));
+
                speakWithAI(welcomeMessage, {
+                 preloadedBlobPromise: welcomeAudioBlobPromise,
                  onAudioStart: () => setAiPlaceholder(''),
                  onEnd: async () => {
                    console.log('🎤 Welcome message finished, starting first question...');
@@ -2082,14 +2102,30 @@ const ConversationalInterview = () => {
         if (!hasSpokenCompletionRef.current) {
           console.log('🎤 Speaking completion message:', completionMessage);
           hasSpokenCompletionRef.current = true;
-          const safetyTimer = setTimeout(() => {
-            console.log('🏁 Completion safety timeout, navigating...');
-            navigateToCompletion();
-          }, 15000);
-          completionTimerRef.current = safetyTimer as unknown as NodeJS.Timeout;
+
+          // Safety timer is a last-resort fallback only (TTS totally fails to start).
+          // Once real audio starts playing we re-arm it from the audio's ACTUAL
+          // duration instead of a word-count guess, so it can never race real playback.
+          const armSafetyTimer = (durationMs: number) => {
+            if (completionTimerRef.current) {
+              clearTimeout(completionTimerRef.current as NodeJS.Timeout);
+            }
+            completionTimerRef.current = setTimeout(() => {
+              console.log('🏁 Completion safety timeout, navigating...');
+              navigateToCompletion();
+            }, durationMs) as unknown as NodeJS.Timeout;
+          };
+          armSafetyTimer(20000); // covers TTS fetch latency in case audio never starts at all
+
           try {
             const speak = speakWithAIRef.current || speakWithAI;
             speak(completionMessage, {
+              onAudioStart: () => {
+                const audio = currentAudioRef.current;
+                if (audio && isFinite(audio.duration) && audio.duration > 0) {
+                  armSafetyTimer(audio.duration * 1000 + 4000); // real duration + 4s buffer
+                }
+              },
               onEnd: () => {
                 clearTimeout(completionTimerRef.current as NodeJS.Timeout);
                 completionTimerRef.current = null;
@@ -2113,7 +2149,7 @@ const ConversationalInterview = () => {
     }
      }, [interviewData.interviewId, navigate, interviewData.candidateName, interviewData.position, speakWithAI, isRecording, currentQuestionIndex]);
 
-  const generateNextQuestion = useCallback(async (simplifyQuestion = false) => {
+  const generateNextQuestion = useCallback(async (simplifyQuestion = false, suppressInitialPlaceholder = false) => {
     if (isGeneratingQuestion) {
       console.log('⚠️ Already generating question, skipping');
       return;
@@ -2165,8 +2201,12 @@ const ConversationalInterview = () => {
         const newQuestionIndex = currentQuestionIndex + 1;
         dispatch(interviewActions.setQuestionIndex(newQuestionIndex));
         setCurrentQuestion(data.question);
-        // Show "Loading next question..." until new question text is spoken; hide old question and input boxes
-        setAiPlaceholder('generating_next');
+        // Show "Loading next question..." until new question text is spoken; hide old question and input boxes.
+        // Skipped when pre-fetched in parallel with the transition phrase — the transition's own
+        // onEnd handler owns this placeholder in that case, so we don't race it.
+        if (!suppressInitialPlaceholder) {
+          setAiPlaceholder('generating_next');
+        }
         setAiMessage('');
 
         // CRITICAL FIX: Reset transcript and transcription accumulator before next question starts
@@ -2357,24 +2397,39 @@ const ConversationalInterview = () => {
             return null;
           });
 
-          setAiPlaceholder('generating_next');
+          if (!suppressInitialPlaceholder) {
+            setAiPlaceholder('generating_next');
+          }
           setSpokenQuestions(prev => {
             const newSet = new Set([...prev, questionId]);
             console.log('📝 Updated spoken questions:', Array.from(newSet));
             return newSet;
           });
 
-          // Speak question directly — transition was already spoken in handleSubmitAnswer
-          console.log('🎤 Speaking question...');
-          speakWithAI(questionMessage, {
-            preloadedBlobPromise: questionTTSPreload,
-            onAudioStart: () => {
-              logTiming('question-audio-playback-start');
-              console.log('⏱️ [TIMING SUMMARY]', JSON.stringify(timingRef.current, null, 2));
-              setAiMessage(cleanQuestionText);
-              setAiPlaceholder('');
-            }
-          });
+          if (suppressInitialPlaceholder) {
+            // Called from the parallel transition-phrase path: don't speak yet.
+            // Stash it — the transition's own onEnd handler will speak it once
+            // the transition phrase has actually finished playing, so we never
+            // race the two items into the speakWithAI queue out of order.
+            console.log('🎤 Question TTS pre-fetched — deferring speak until transition ends');
+            pendingQuestionSpeakRef.current = {
+              text: questionMessage,
+              cleanText: cleanQuestionText,
+              preloadedBlobPromise: questionTTSPreload,
+            };
+          } else {
+            // First/last question or "I don't know" flow — no transition phrase involved, speak now.
+            console.log('🎤 Speaking question...');
+            speakWithAI(questionMessage, {
+              preloadedBlobPromise: questionTTSPreload,
+              onAudioStart: () => {
+                logTiming('question-audio-playback-start');
+                console.log('⏱️ [TIMING SUMMARY]', JSON.stringify(timingRef.current, null, 2));
+                setAiMessage(cleanQuestionText);
+                setAiPlaceholder('');
+              }
+            });
+          }
         } else {
           console.log('⚠️ Question already spoken or invalid, skipping speech');
           // If question already spoken, set finished speaking to true
@@ -2439,6 +2494,26 @@ const ConversationalInterview = () => {
     if (!res.ok) throw new Error('Upload question media failed');
   }, []);
 
+  /** Retry an async op with exponential backoff. Throws only after all attempts fail. */
+  const withRetry = async <T,>(
+    fn: () => Promise<T>,
+    { attempts = 3, baseDelayMs = 800, label = 'operation' }: { attempts?: number; baseDelayMs?: number; label?: string } = {}
+  ): Promise<T> => {
+    let lastErr: unknown;
+    for (let i = 0; i < attempts; i++) {
+      try {
+        return await fn();
+      } catch (e) {
+        lastErr = e;
+        console.warn(`⚠️ ${label} failed (attempt ${i + 1}/${attempts}):`, e);
+        if (i < attempts - 1) {
+          await new Promise(r => setTimeout(r, baseDelayMs * Math.pow(2, i))); // 800ms, 1.6s, 3.2s...
+        }
+      }
+    }
+    throw lastErr;
+  };
+
   /** Upload a single video chunk during recording (chunked upload strategy). */
   const uploadVideoChunk = useCallback(async (params: {
     interviewId: string;
@@ -2467,19 +2542,26 @@ const ConversationalInterview = () => {
     duration: number;
   }) => {
     const { interviewId, questionOrder, audioBlob, duration } = params;
-    // Wait for every in-flight chunk upload to land before telling the server to assemble
     await chunkUploadQueueRef.current.catch(() => {});
+
+    if (chunkUploadFailedRef.current) {
+      console.warn('⚠️ Proceeding to finalize despite a chunk failure — video may be incomplete.');
+    }
+
     const formData = new FormData();
     formData.append('interview_id', interviewId);
     formData.append('question_order', String(questionOrder));
     formData.append('duration', String(duration));
     formData.append('video_format', 'webm');
     if (audioBlob) formData.append('audio_file', audioBlob, `question_${questionOrder}_audio.wav`);
-    const res = await apiCall(API_CONFIG.ENDPOINTS.FINALIZE_QUESTION_VIDEO, {
-      method: 'POST',
-      body: formData,
-    }, 30000);
-    if (!res.ok) throw new Error('Finalize question video failed');
+
+    await withRetry(
+      async () => {
+        const res = await apiCall(API_CONFIG.ENDPOINTS.FINALIZE_QUESTION_VIDEO, { method: 'POST', body: formData }, 30000);
+        if (!res.ok) throw new Error(`Finalize question video failed: ${res.status}`);
+      },
+      { attempts: 3, baseDelayMs: 1000, label: 'finalize question video' }
+    );
   }, []);
 
      const handleSubmitAnswer = useCallback(async () => {
@@ -2613,19 +2695,26 @@ const ConversationalInterview = () => {
              console.log('🔍 transcript length:', finalTranscript.length);
 
             // Extract WAV from WebM in browser so backend can run speech analysis without decoding WebM.
-            let audioBlobToSend: Blob | null = null;
-            if (questionVideoBlobToUse) {
-              try {
-                audioBlobToSend = await extractWavFromWebMBlob(questionVideoBlobToUse);
-                if (audioBlobToSend && audioBlobToSend.size > 1000) {
-                  console.log('✅ WAV extracted — wav size:', audioBlobToSend.size, '| webm size:', questionVideoBlobToUse.size);
-                } else {
-                  console.warn('⚠️ WAV extraction returned null or too small.', 'webm type:', questionVideoBlobToUse.type, 'webm size:', questionVideoBlobToUse.size);
-                }
-              } catch (e) {
-                console.warn('WAV extraction from WebM failed, submitting video only:', e);
-              }
-            }
+            // Kick off WAV extraction but DO NOT await it here — SUBMIT_ANSWER doesn't
+            // need it. It's only consumed by finalizeQuestionVideo further down, which
+            // already runs in the background. Awaiting here was serializing an 8-15s
+            // decode+encode in front of the network call for no reason.
+            const audioBlobPromise: Promise<Blob | null> = questionVideoBlobToUse
+              ? extractWavFromWebMBlob(questionVideoBlobToUse)
+                  .then((blob) => {
+                    if (blob && blob.size > 1000) {
+                      console.log('✅ WAV extracted — wav size:', blob.size, '| webm size:', questionVideoBlobToUse!.size);
+                    } else {
+                      console.warn('⚠️ WAV extraction returned null or too small.', 'webm type:', questionVideoBlobToUse!.type, 'webm size:', questionVideoBlobToUse!.size);
+                    }
+                    return blob;
+                  })
+                  .catch((e) => {
+                    console.warn('WAV extraction from WebM failed, submitting video only:', e);
+                    return null;
+                  })
+              : Promise.resolve(null);
+            console.log('⏱️ audioBlobPromise started, submit-answer firing immediately');
 
             const formData = new FormData();
             formData.append('interview_id', interviewData.interviewId);
@@ -2657,18 +2746,20 @@ const ConversationalInterview = () => {
                // generateNextQuestion will await this via pendingMediaUploadPromiseRef before
                // the question TTS plays, so it's hidden behind the transition phrase duration.
                if (questionVideoBlobToUse) {
-                 const capturedQuestionId = questionId;
                  const capturedQuestionIndex = currentQuestionIndex;
                  const capturedDuration = questionVideoDuration || 0;
-                 const capturedAudioBlob = audioBlobToSend;
-                 pendingMediaUploadPromiseRef.current = finalizeQuestionVideo({
-                   interviewId: interviewData.interviewId,
-                   questionOrder: capturedQuestionIndex,
-                   audioBlob: capturedAudioBlob,
-                   duration: capturedDuration,
-                 }).catch((e) => {
-                   console.warn('⚠️ Finalize question video failed:', e);
-                 });
+                 pendingMediaUploadPromiseRef.current = audioBlobPromise
+                   .then((capturedAudioBlob) =>
+                     finalizeQuestionVideo({
+                       interviewId: interviewData.interviewId,
+                       questionOrder: capturedQuestionIndex,
+                       audioBlob: capturedAudioBlob,
+                       duration: capturedDuration,
+                     })
+                   )
+                   .catch((e) => {
+                     console.warn('⚠️ Finalize question video failed:', e);
+                   });
                }
 
                // Fire personalised phrase in parallel — transition for mid-interview,
@@ -2707,7 +2798,21 @@ const ConversationalInterview = () => {
                    capturedKeyphrases,
                  ).then(p => {
                    logTiming('transition-phrase-text-resolved');
-                   return p || FALLBACK_PHRASES.transition();
+                   const text = p || FALLBACK_PHRASES.transition();
+                   // Kick off TTS the instant we have text — overlaps with the still-running
+                   // generate-question LLM call instead of waiting until speakWithAI is invoked.
+                   const ttsPromise = fetch(buildApiUrl(API_CONFIG.ENDPOINTS.TTS), {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ text }),
+                   }).then(r => {
+                     if (!r.ok) throw new Error('Transition TTS preload failed');
+                     return r.blob();
+                   }).catch(e => {
+                     console.warn('⚠️ Transition TTS pre-fetch failed, will fall back to normal fetch:', e);
+                     return null;
+                   });
+                   return { text, ttsPromise };
                  });
                }
                
@@ -2730,7 +2835,7 @@ const ConversationalInterview = () => {
                  setAnswerSubmitted(true);
                  setSubmissionStatus('submitted');
                  dispatch(interviewActions.setSubmitting(false));
-                 setAiPlaceholder('generating_next');
+                 setAiPlaceholder('analysing_answer');
                  setAiMessage('');
                  speakWithAI(result.tts_phrase, {
                    onEnd: async () => {
@@ -2758,7 +2863,7 @@ const ConversationalInterview = () => {
                  // });
                }, 0);
 
-               setAiPlaceholder('generating_next');
+               setAiPlaceholder('analysing_answer');
                setAiMessage('');
 
                // ── PARALLEL FIX ──────────────────────────────────────────────────────
@@ -2770,20 +2875,32 @@ const ConversationalInterview = () => {
                // By the time transition finishes, the question is already generated.
                // ──────────────────────────────────────────────────────────────────────
                if (nextQuestionIndex >= 1 && !isLastQuestion) {
-                 // 1. Fire generate-question NOW — don't await, store the promise
+                 // 1. Fire generate-question NOW — don't await, store the promise.
+                 // suppressInitialPlaceholder=true: the transition phrase's own onAudioStart/onEnd
+                 // handlers below own the placeholder text during this window, so this prefetch
+                 // must not touch it (that was the source of the out-of-order flash).
                  logTiming('generate-question-call-start');
-                 const questionPromise = generateNextQuestion();
+                 const questionPromise = generateNextQuestion(false, true);
 
                  // 2. Await transition phrase (already in-flight since submit responded, ~1s)
-                 const transitionText = await (pendingTransitionPhraseRef.current ?? Promise.resolve(FALLBACK_PHRASES.transition()));
+                 const { text: transitionText, ttsPromise: transitionTTSPromise } = await (
+                   pendingTransitionPhraseRef.current ?? Promise.resolve({ text: FALLBACK_PHRASES.transition(), ttsPromise: Promise.resolve(null) })
+                 );
                  pendingTransitionPhraseRef.current = null;
                  logTiming('transition-text-ready');
 
                  // 3. Speak transition immediately — question LLM already running in parallel
                  console.log('🎤 Speaking transition phrase while question generates in parallel...');
                  speakWithAI(transitionText, {
-                   onAudioStart: () => logTiming('transition-audio-playback-start'),
+                   preloadedBlobPromise: transitionTTSPromise,
+                   onAudioStart: () => {
+                     setDisplayCaption(transitionText); // caption now matches what's being spoken
+                     setAiPlaceholder(''); // clear analysing state when phrase starts
+                     logTiming('transition-audio-playback-start');
+                   },
                    onEnd: async () => {
+                     setDisplayCaption('');
+                     setAiPlaceholder('generating_next');
                      logTiming('transition-audio-playback-end');
                      // 200ms breathing room between transition and question
                      await new Promise(resolve => setTimeout(resolve, 1500));
@@ -2791,6 +2908,27 @@ const ConversationalInterview = () => {
                      // 4. Await the question promise — likely already resolved by now
                      await questionPromise;
                      logTiming('question-promise-resolved');
+
+                     // 5. NOW speak the question — transition has definitely finished,
+                     // so this is guaranteed to be the first thing pushed into the
+                     // speakWithAI queue after it. If the TTS preload is still in
+                     // flight, speakWithAI will just await it same as before.
+                     const pendingQuestion = pendingQuestionSpeakRef.current;
+                     pendingQuestionSpeakRef.current = null;
+                     if (pendingQuestion) {
+                       speakWithAI(pendingQuestion.text, {
+                         preloadedBlobPromise: pendingQuestion.preloadedBlobPromise,
+                         onAudioStart: () => {
+                           logTiming('question-audio-playback-start');
+                           console.log('⏱️ [TIMING SUMMARY]', JSON.stringify(timingRef.current, null, 2));
+                           setAiMessage(pendingQuestion.cleanText);
+                           setAiPlaceholder('');
+                         }
+                       });
+                     } else {
+                       console.warn('⚠️ No pending question to speak after transition — question TTS may not have been prefetched');
+                     }
+
                      setTimeout(() => {
                        setAnswerSubmitted(false);
                        setSubmissionStatus('idle');
@@ -2878,9 +3016,9 @@ const ConversationalInterview = () => {
     handleSubmitAnswerRef.current = handleSubmitAnswer;
   }, [handleSubmitAnswer]);
 
-  // Animate dots (1 → 2 → 3 → 1) when showing "Generating your first/next question"
+  // Animate dots (1 → 2 → 3 → 1) when showing loading states
   useEffect(() => {
-    const isGenerating = aiPlaceholder === 'generating_first' || aiPlaceholder === 'generating_next';
+    const isGenerating = aiPlaceholder === 'generating_first' || aiPlaceholder === 'analysing_answer' || aiPlaceholder === 'generating_next';
     if (!isGenerating) return;
     const id = setInterval(() => {
       setLoadingDots((prev) => (prev + 1) % 3);
@@ -3207,6 +3345,7 @@ const ConversationalInterview = () => {
       const videoBitsPerSecond = INTERVIEW_CONSTANTS.MEDIA.VIDEO_BITRATE;
       chunkIndexRef.current = 0;
       chunkUploadQueueRef.current = Promise.resolve();
+      chunkUploadFailedRef.current = false;
       const questionVideoRecorder = new RecordRTC(combinedStream, {
         type: 'video',
         mimeType: 'video/webm',
@@ -3215,7 +3354,7 @@ const ConversationalInterview = () => {
         frameRate: 10,
         disableLogs: false,
         videoBitsPerSecond,
-        timeSlice: 5000, // stream in 5s chunks instead of one big blob at the end
+        timeSlice: INTERVIEW_CONSTANTS.MEDIA.TIME_SLICE,
         ondataavailable: function(blob) {
           if (!blob || blob.size === 0) return;
           const capturedInterviewId = interviewData.interviewId;
@@ -3223,14 +3362,18 @@ const ConversationalInterview = () => {
           const chunkIndex = chunkIndexRef.current++;
           // Chain so chunks upload strictly in order without blocking recording
           chunkUploadQueueRef.current = chunkUploadQueueRef.current
-            .then(() => uploadVideoChunk({
-              interviewId: capturedInterviewId,
-              questionOrder: capturedQuestionIndex,
-              chunkIndex,
-              blob,
-            }))
+            .then(() => withRetry(
+              () => uploadVideoChunk({
+                interviewId: capturedInterviewId,
+                questionOrder: capturedQuestionIndex,
+                chunkIndex,
+                blob,
+              }),
+              { attempts: 3, label: `chunk ${chunkIndex} upload` }
+            ))
             .catch((e) => {
-              console.warn(`⚠️ Chunk ${chunkIndex} upload failed:`, e);
+              console.error(`❌ Chunk ${chunkIndex} permanently failed after retries:`, e);
+              chunkUploadFailedRef.current = true;
             });
         }
       });
@@ -4250,13 +4393,22 @@ const ConversationalInterview = () => {
                 {aiAudioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
               </button>
               <div className="w-full min-h-0 flex-1 flex items-center justify-center px-2 py-2 overflow-hidden">
-                {aiPlaceholder ? (
+                {displayCaption ? (
                   <div className="w-full h-full min-h-0 flex items-center justify-center overflow-y-auto overflow-x-hidden">
-                    <div className="w-full max-w-full bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 my-auto max-h-[22vh] sm:max-h-[38vh] overflow-y-auto overflow-x-hidden">
-                      <p className="text-black font-medium leading-relaxed break-words text-base sm:text-lg text-center">
+                    <div className="w-full max-w-full bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 my-auto max-h-[22vh] sm:max-h-[38vh] overflow-y-auto overflow-x-hidden text-center">
+                      <p className="text-gray-900 font-medium leading-relaxed break-words text-base sm:text-lg">
+                        {displayCaption}
+                      </p>
+                    </div>
+                  </div>
+                ) : aiPlaceholder ? (
+                  <div className="w-full h-full min-h-0 flex items-center justify-center overflow-y-auto overflow-x-hidden">
+                    <div className="w-full max-w-full bg-sky-100 rounded-lg px-3 py-2 sm:px-4 sm:py-3 my-auto max-h-[22vh] sm:max-h-[38vh] overflow-y-auto overflow-x-hidden text-center">
+                      <p className="text-gray-900 font-medium leading-relaxed break-words text-base sm:text-lg">
                         {aiPlaceholder === 'welcome' && 'Welcome to ProValuate interview platform. Have a great interview!'}
                         {aiPlaceholder === 'generating_first' && `Generating your first question${'.'.repeat(loadingDots + 1)}`}
-                        {aiPlaceholder === 'generating_next' && `Generating your next question${'.'.repeat(loadingDots + 1)}`}
+                        {aiPlaceholder === 'analysing_answer' && `Analysing your answer${'.'.repeat(loadingDots + 1)}`}
+                        {aiPlaceholder === 'generating_next' && `Preparing your next question${'.'.repeat(loadingDots + 1)}`}
                       </p>
                     </div>
                   </div>

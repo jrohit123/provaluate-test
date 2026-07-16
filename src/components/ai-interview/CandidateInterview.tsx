@@ -17,6 +17,7 @@ import { getAdaptiveVideoConstraints } from '@/utils/mediaConstraints';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuthContext, isCandidate } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { prefetchWelcomeTts } from '@/utils/welcomeTtsCache';
 
 const CandidateInterview = () => {
   const { interviewId } = useParams();
@@ -185,6 +186,10 @@ const CandidateInterview = () => {
 
           setInterviewData(flattenedData);
           setIsLoading(false);
+          // Prefetch welcome phrase + TTS audio now, while candidate does photo capture / system checks
+          if (flattenedData?.id && flattenedData?.candidate_name && flattenedData?.position) {
+            prefetchWelcomeTts(flattenedData.id, flattenedData.candidate_name, flattenedData.position);
+          }
           // If logged-in candidate, link this interview to their account for "My Interviews"
           if (interviewId && isCandidate(user) && user.candidate?.candidate_id) {
             supabase
