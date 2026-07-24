@@ -321,6 +321,8 @@ const ConversationalInterview = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenAttempts, setFullscreenAttempts] = useState(0);
   const [isTranscriptDialogOpen, setIsTranscriptDialogOpen] = useState(false);
+  const [showEndConfirmModal, setShowEndConfirmModal] = useState(false);
+  const [showReturnToFullscreenOverlay, setShowReturnToFullscreenOverlay] = useState(false);
   const [writtenAnswer, setWrittenAnswer] = useState(''); // For questions that require SQL/code/calculation in a separate box
   const transcriptTextareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -457,37 +459,34 @@ const ConversationalInterview = () => {
   const escTerminateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTabViolationRef = useRef(0);
   const isFullscreenRef = useRef(false);
+  const escViolationCountRef = useRef(0); // 0–2 = warn; 3 = terminate
   const MAX_TAB_CHANGES = 2;
 
   const handleTabViolation = useCallback((reason: string) => {
     const now = Date.now();
-    // Debounce: Only show one toast per 2 seconds to prevent spam
-    if (now - lastTabViolationRef.current < 2000) {
-      return;
-    }
+    // Debounce: ignore events that fire within 2 seconds of each other
+    if (now - lastTabViolationRef.current < 2000) return;
     lastTabViolationRef.current = now;
+
     tabChangeCountRef.current += 1;
-    const currentCount = tabChangeCountRef.current;
-    console.log(`⚠️ Tab change detected via ${reason} (${currentCount}/${MAX_TAB_CHANGES})`);
+    const count = tabChangeCountRef.current;
+    console.log(`⚠️ Tab/focus violation via ${reason} (${count}/${MAX_TAB_CHANGES + 1})`);
 
-    // Show only one warning message per tab switch
-    if (currentCount <= MAX_TAB_CHANGES) {
-      // toast('Warning: Stay on this tab during the interview!', {
-      //   id: 'tab-switch-warning',
-      //   duration: 3000,
-      // });
-    } else if (currentCount > MAX_TAB_CHANGES) {
-      console.log('🚫 Too many tab changes, terminating interview');
-      // toast.error('Interview terminated due to tab switching', { id: 'tab-switch-terminated' });
-      terminateInterview('Candidate switched tabs multiple times during interview');
-    }
-
-    if (tabWarningTimeoutRef.current) {
-      clearTimeout(tabWarningTimeoutRef.current);
-      tabWarningTimeoutRef.current = null;
+    if (count <= MAX_TAB_CHANGES) {
+      toast(
+        count === 1
+          ? '⚠️ Warning (1/2): Stay on this tab during the interview!'
+          : '🚨 Final warning (2/2): One more tab switch will end your interview!',
+        { id: 'tab-switch-warning', duration: 4000 }
+      );
+    } else {
+      toast.error('Interview ended: too many tab switches.', {
+        id: 'tab-switch-terminated',
+      });
+      terminateInterview('Candidate left the interview tab multiple times');
     }
   }, [terminateInterview]);
-  
+
   // Browser detection utility - properly distinguishes Chrome and Edge
   const detectBrowser = useCallback(() => {
     const userAgent = navigator.userAgent.toLowerCase();
@@ -3041,14 +3040,14 @@ const ConversationalInterview = () => {
     }
 
     if (timeRemaining <= 30 && lastInterviewWarningRef.current !== 30) {
-      // toast('30 seconds remaining! Please finish your current response.', {
-      //   id: 'interview-warning-30',
-      // });
+      toast('30 seconds remaining! Please finish your current response.', {
+        id: 'interview-warning-30',
+      });
       lastInterviewWarningRef.current = 30;
     } else if (timeRemaining <= 60 && lastInterviewWarningRef.current !== 60) {
-      // toast('1 minute remaining in your interview!', {
-      //   id: 'interview-warning-60',
-      // });
+      toast('1 minute remaining in your interview!', {
+        id: 'interview-warning-60',
+      });
       lastInterviewWarningRef.current = 60;
     } else if (timeRemaining <= 120 && timeRemaining > 0) {
       console.log(`⏰ Time remaining: ${timeRemaining}s - approaching completion`);
@@ -3072,14 +3071,14 @@ const ConversationalInterview = () => {
 
     // Prioritize 30-second warning - check this first
     if (questionTimeRemaining <= 30 && lastQuestionWarningRef.current !== 30) {
-      // toast('Less than 30 seconds remaining! Answer will auto-submit soon.', {
-      //   id: 'question-warning-30',
-      // });
+      toast('Less than 30 seconds remaining! Answer will auto-submit soon.', {
+        id: 'question-warning-30',
+      });
       lastQuestionWarningRef.current = 30;
     } else if (questionTimeRemaining > 30 && questionTimeRemaining <= 60 && lastQuestionWarningRef.current !== 60) {
-      // toast('1 minute remaining for this question.', {
-      //   id: 'question-warning-60',
-      // });
+      toast('1 minute remaining for this question.', {
+        id: 'question-warning-60',
+      });
       lastQuestionWarningRef.current = 60;
     }
   }, [isQuestionTimerActive, questionTimeRemaining]);
@@ -3210,7 +3209,7 @@ const ConversationalInterview = () => {
     };
   }, [isInterviewTimerActive, handleTabViolation]);
 
-  // Fullscreen change monitoring
+  // Fullscreen change monitoring — COUNT-BASED (3 violations → terminate)
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isCurrentlyFullscreen = !!(
@@ -3220,15 +3219,20 @@ const ConversationalInterview = () => {
       );
 
       setIsFullscreen(isCurrentlyFullscreen);
+      isFullscreenRef.current = isCurrentlyFullscreen;
 
-      if (!isInterviewTimerActive) {
-        return;
-      }
+      if (!isInterviewTimerActive) return;
 
       if (!isCurrentlyFullscreen) {
-        console.log('🚫 Fullscreen exited - terminating interview');
-        // toast.error('Interview terminated: Fullscreen mode exited');
-        terminateInterview('Candidate exited fullscreen mode during interview');
+        escViolationCountRef.current += 1;
+        const count = escViolationCountRef.current;
+
+        if (count >= 3) {
+          toast.error('Interview terminated: fullscreen exited too many times.', { id: 'esc-terminated' });
+          terminateInterview('Candidate exited fullscreen 3 times');
+        } else {
+          setShowReturnToFullscreenOverlay(true);
+        }
       }
     };
 
@@ -3243,42 +3247,43 @@ const ConversationalInterview = () => {
     };
   }, [isInterviewTimerActive, terminateInterview]);
 
-  // ESC key detection warning
+  // ESC key — early visual warning only; fullscreenchange handles counting & re-entry
   useEffect(() => {
-    if (!isInterviewTimerActive) {
-      if (escTerminateTimeoutRef.current) {
-        clearTimeout(escTerminateTimeoutRef.current);
-        escTerminateTimeoutRef.current = null;
-      }
-      return;
-    }
+    if (!isInterviewTimerActive) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.key === 'Escape' || event.keyCode === 27) && isFullscreenRef.current) {
-        // toast('STOP! Pressing ESC will exit fullscreen and terminate your interview!', {
-        //   duration: 2000,
-        // });
-
-        if (escTerminateTimeoutRef.current) {
-          clearTimeout(escTerminateTimeoutRef.current);
+        const nextCount = escViolationCountRef.current + 1; // preview what the count will be
+        if (nextCount < 3) {
+          toast(
+            nextCount === 1
+              ? '⚠️ ESC detected — do not exit fullscreen! (Warning 1 of 2)'
+              : '🚨 ESC detected again — this is your last warning! (2 of 2)',
+            { id: 'esc-keydown-warn', duration: 2500 }
+          );
         }
-
-        escTerminateTimeoutRef.current = setTimeout(() => {
-          terminateInterview('ESC key pressed during interview');
-        }, 300);
+        // Counting happens in fullscreenchange — no setTimeout terminate here
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isInterviewTimerActive]);
 
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      if (escTerminateTimeoutRef.current) {
-        clearTimeout(escTerminateTimeoutRef.current);
-        escTerminateTimeoutRef.current = null;
+  // Shift+Tab detection — counts against the shared tab-violation counter
+  useEffect(() => {
+    if (!isInterviewTimerActive) return;
+
+    const handleShiftTab = (event: KeyboardEvent) => {
+      if (event.key === 'Tab' && event.shiftKey) {
+        event.preventDefault(); // prevent focus from leaving the interview
+        handleTabViolation('Shift+Tab');
       }
     };
-  }, [isInterviewTimerActive, terminateInterview]);
+
+    document.addEventListener('keydown', handleShiftTab);
+    return () => document.removeEventListener('keydown', handleShiftTab);
+  }, [isInterviewTimerActive, handleTabViolation]);
 
   const startRecordingRef = useRef<(() => Promise<void>) | null>(null);
   
@@ -4279,25 +4284,22 @@ const ConversationalInterview = () => {
   };
 
   const toggleVideo = async () => {
+    if (!streamRef.current) return;
+
     if (!isVideoOn) {
-      // Try to turn camera back on (adaptive constraints for mobile)
-      try {
-        const videoConstraints = getAdaptiveVideoConstraints({
-          preferMobile: isMobile,
-          preferFrontCamera: isMobile,
-        });
-        const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-        setIsVideoOn(true);
-        // toast.success('Camera turned back on');
-      } catch (error) {
-        // toast.error('Failed to turn camera back on');
+      streamRef.current.getVideoTracks().forEach(t => { t.enabled = true; });
+      if (videoRef.current && !videoRef.current.srcObject) {
+        videoRef.current.srcObject = streamRef.current;
       }
+      videoRef.current?.play().catch(() => {});
+      setIsVideoOn(true);
     } else {
-      // Don't allow turning camera off
-      // toast.error('Camera must remain on during the interview!');
+      streamRef.current.getVideoTracks().forEach(t => { t.enabled = false; });
+      setIsVideoOn(false);
+      toast('📷 Camera off — turn it back on within 5 seconds.', {
+        id: 'camera-off-warn',
+        duration: 5000,
+      });
     }
   };
 
@@ -4464,32 +4466,29 @@ const ConversationalInterview = () => {
                   Camera Required
                 </div>
               )}
-              {isVideoOn ? (
-                <>
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    muted
-                    playsInline
-                    className="w-full h-full min-h-[180px] object-cover rounded-none sm:rounded-lg shadow-md lg:transform lg:scale-105 lg:hover:scale-110 transition-transform duration-300"
-                  />
-                  
-                  {/* Countdown Overlay */}
-                  {recordingCountdown > 0 && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10 rounded-lg">
-                      <div className="text-white text-9xl font-bold animate-ping">
-                        {recordingCountdown}
-                      </div>
+              <div className="relative w-full h-full">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className="w-full h-full min-h-[180px] object-cover rounded-none sm:rounded-lg shadow-md lg:transform lg:scale-105 lg:hover:scale-110 transition-transform duration-300"
+                />
+                {!isVideoOn && (
+                  <div className="absolute inset-0 bg-gray-900 flex flex-col items-center justify-center rounded-none sm:rounded-lg">
+                    <VideoOff className="w-14 h-14 text-red-400 mb-3" />
+                    <p className="text-red-300 font-medium text-sm">Camera is off</p>
+                    <p className="text-gray-500 text-xs mt-1">Click the camera icon to turn it back on</p>
+                  </div>
+                )}
+                {recordingCountdown > 0 && isVideoOn && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10 rounded-lg">
+                    <div className="text-white text-9xl font-bold animate-ping">
+                      {recordingCountdown}
                     </div>
-                  )}
-                </>
-              ) : (
-                <div className="text-center">
-                  <VideoOff className="w-16 h-16 text-red-500 mx-auto mb-4" />
-                  <p className="text-red-700 font-medium">Camera is required</p>
-                  <p className="text-gray-500 text-sm">Please turn on your camera to continue</p>
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -4682,11 +4681,7 @@ const ConversationalInterview = () => {
             
             {/* End Interview Button */}
             <button
-              onClick={() => {
-                if (window.confirm('Are you sure you want to end the interview? This action cannot be undone.')) {
-                  terminateInterview('Manual termination by candidate willingly');
-                }
-              }}
+              onClick={() => setShowEndConfirmModal(true)}
               className="flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-all"
             >
               <X className="w-5 h-5" />
@@ -4696,6 +4691,64 @@ const ConversationalInterview = () => {
          </div>
 
       </div>
+
+      {/* End Interview Confirmation Modal — rendered in-DOM so fullscreen is not broken */}
+      {showEndConfirmModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 text-center">
+            <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-gray-900 mb-2">End the interview?</h2>
+            <p className="text-sm text-gray-600 mb-6">
+              This cannot be undone. Your current answer will not be submitted and the
+              interview will be marked as terminated.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowEndConfirmModal(false)}
+                className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                Continue Interview
+              </button>
+              <button
+                onClick={() => {
+                  setShowEndConfirmModal(false);
+                  terminateInterview('Manual termination by candidate willingly');
+                }}
+                className="flex-1 py-3 rounded-xl bg-red-600 text-white font-medium hover:bg-red-700 transition-colors"
+              >
+                Yes, End It
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReturnToFullscreenOverlay && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center cursor-pointer"
+          onClick={async () => {
+            try {
+              await document.documentElement.requestFullscreen();
+              setShowReturnToFullscreenOverlay(false);
+            } catch {
+              // if denied again it will fire fullscreenchange which increments the count
+            }
+          }}
+        >
+          <AlertTriangle className="w-16 h-16 text-amber-400 mb-4" />
+          <h2 className="text-white text-2xl font-bold mb-2 text-center px-4">
+            Warning {escViolationCountRef.current} of 2 — Fullscreen Required
+          </h2>
+          <p className="text-gray-400 text-sm mb-6 text-center px-8">
+            {escViolationCountRef.current === 2
+              ? 'This is your final warning. One more exit will end your interview.'
+              : 'Exiting fullscreen is not allowed during the interview.'}
+          </p>
+          <div className="bg-amber-400 text-black font-bold py-4 px-10 rounded-xl text-lg animate-pulse">
+            Click anywhere to return to fullscreen
+          </div>
+        </div>
+      )}
     </div>
   );
 };
