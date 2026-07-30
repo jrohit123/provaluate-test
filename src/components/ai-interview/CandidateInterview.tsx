@@ -409,6 +409,11 @@ const CandidateInterview = () => {
   ];
   const [checkedRules, setCheckedRules] = useState<boolean[]>(() => RULES.map(() => false));
 
+  const camPass = cameraMicCheck === 'pass' && cameraReady;
+  const systemCheckPassed = camPass && micConfirmed;
+  const instructionsAcknowledged = checkedRules.every(Boolean);
+  const firstThreeStepsComplete = systemCheckPassed && instructionsAcknowledged && previewAcknowledged;
+
   // ── Interface Preview state ────────────────────────────────────────
   const [activePreviewScenario, setActivePreviewScenario] = useState<PreviewScenarioId>('normal-flow');
   const [previewStepIndex, setPreviewStepIndex] = useState(0);
@@ -713,7 +718,7 @@ const CandidateInterview = () => {
     video.play().catch(err => {
       console.error('Video play error:', err);
     });
-  }, [cameraReady, photoCaptured]);
+  }, [cameraReady, photoCaptured, firstThreeStepsComplete]);
 
   // Capture photo from video stream
   const capturePhoto = async (): Promise<string | null> => {
@@ -842,21 +847,28 @@ const CandidateInterview = () => {
 
   // Initialize camera when interview data loads (and re-initialize when Retake is clicked)
   useEffect(() => {
-    if (interviewData && !photoCaptured) {
+    if (interviewData && !photoCaptured && !streamRef.current) {
       initializeCamera();
     }
+  }, [interviewData, photoCaptured]);
 
+  useEffect(() => {
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
       }
     };
-  }, [interviewData, photoCaptured]);
+  }, []);
 
   // Attach the shared stream to the System Check modal's own <video> when it opens
   useEffect(() => {
-    if (!showSystemCheckModal || !streamRef.current || !systemCheckVideoRef.current) return;
+    if (!showSystemCheckModal) return;
+    if (!streamRef.current) {
+      initializeCamera();
+      return;
+    }
+    if (!systemCheckVideoRef.current) return;
     systemCheckVideoRef.current.srcObject = streamRef.current;
     systemCheckVideoRef.current.play().catch(() => {});
   }, [showSystemCheckModal]);
@@ -1003,10 +1015,7 @@ const CandidateInterview = () => {
     });
   };
 
-  const camPass = cameraMicCheck === 'pass' && cameraReady;
-  const systemCheckPassed = camPass && micConfirmed;
-  const instructionsAcknowledged = checkedRules.every(Boolean);
-  const canStartInterview = systemCheckPassed && instructionsAcknowledged && photoCaptured && previewAcknowledged;
+  const canStartInterview = firstThreeStepsComplete && photoCaptured;
 
   if (isLoading) {
     return (
@@ -1196,12 +1205,33 @@ const CandidateInterview = () => {
                 <span className="break-words">Photo Capture</span>
               </h2>
               <p className="text-gray-600 text-sm sm:text-base text-center mb-4 break-words">
-                {!photoCaptured
-                  ? 'Position yourself in the frame. Required before starting.'
-                  : 'Review your photo. You can retake if needed.'}
+                {!firstThreeStepsComplete
+                  ? 'Complete Instructions, System Check & Interface Demo first.'
+                  : !photoCaptured
+                    ? 'Position yourself in the frame. Required before starting.'
+                    : 'Review your photo. You can retake if needed.'}
               </p>
 
-              {!photoCaptured ? (
+              {!firstThreeStepsComplete ? (
+                <>
+                  <div className="relative bg-gray-100 rounded-xl overflow-hidden mb-3 sm:mb-4 aspect-video max-h-[40vh] sm:max-h-[50vh] min-h-[180px] sm:min-h-[200px] border border-gray-200">
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                      <div className="text-center text-gray-900 font-bold">
+                        <Camera className="w-12 h-12 mx-auto mb-2" />
+                        <p className="text-sm px-4">Finish Instructions, System Check & Interface Demo first</p>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full min-h-[44px] sm:min-h-[48px] bg-gray-300 text-gray-500 py-3 rounded-xl cursor-not-allowed flex items-center justify-center gap-2 text-sm sm:text-base font-semibold"
+                  >
+                    <Camera className="w-5 h-5" />
+                    Capture Photo (locked)
+                  </button>
+                </>
+              ) : !photoCaptured ? (
                 <>
                   <div className="relative bg-gray-100 rounded-xl overflow-hidden mb-3 sm:mb-4 aspect-video max-h-[40vh] sm:max-h-[50vh] min-h-[180px] sm:min-h-[200px] border border-gray-200">
                     {!cameraReady ? (
