@@ -3236,19 +3236,21 @@ const FinalResults = () => {
                 {reportData?.questions?.length ?? 0}
               </span>
             </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'sp'}
-              onClick={() => setActiveTab('sp')}
-              className={`px-4 py-3 text-base font-medium border-b-2 transition-colors ${
-                activeTab === 'sp'
-                  ? 'text-[#0d6ea3] border-[#0d6ea3] font-semibold'
-                  : 'text-gray-600 border-transparent hover:text-[#0d6ea3]'
-              }`}
-            >
-              Speech &amp; Coaching
-            </button>
+            {isCandidateReport && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'sp'}
+                onClick={() => setActiveTab('sp')}
+                className={`px-4 py-3 text-base font-medium border-b-2 transition-colors ${
+                  activeTab === 'sp'
+                    ? 'text-[#0d6ea3] border-[#0d6ea3] font-semibold'
+                    : 'text-gray-600 border-transparent hover:text-[#0d6ea3]'
+                }`}
+              >
+                Speech &amp; Coaching
+              </button>
+            )}
           </div>
         </nav>
 
@@ -3764,8 +3766,8 @@ selectedCompetencyKey === paramKey
           </div>
         )}
 
-        {/* ═══ TAB 3 — SPEECH & COACHING ═══ */}
-        {activeTab === 'sp' && (
+        {/* ═══ TAB 3 — SPEECH & COACHING (candidate report only) ═══ */}
+        {activeTab === 'sp' && isCandidateReport && (
           <div className="space-y-4 sm:space-y-6">
             {/* Speech Metrics — Overall Average */}
             <div className="rounded-lg p-4 sm:p-6 bg-[linear-gradient(145deg,#F6FAFF_0%,#EEF6FF_55%,#FFFFFF_100%)] border border-gray-200 shadow-sm">

@@ -4630,8 +4630,8 @@ const ConversationalInterview = () => {
                  {/* Controls - flex-shrink-0 so always visible; no page scroll needed */}
          <div className="flex flex-shrink-0 flex-wrap items-center justify-center gap-3 sm:gap-4 py-2 sm:py-3 lg:py-0 lg:pb-2 bg-white border-t border-gray-200 px-2 sm:-mx-1 sm:px-2">
            
-                                           {/* Stop Recording Button - only show when recording */}
-             {isRecording && (
+                                           {/* Single button slot: Stop Recording while recording, Submit Answer once stopped — never both at once */}
+             {isRecording ? (
                <button
                  onClick={stopQuestionRecording}
                  disabled={!isVideoOn || isSubmitting}
@@ -4640,43 +4640,43 @@ const ConversationalInterview = () => {
                  <MicOff className="w-5 h-5" />
                  Stop Recording
                </button>
+             ) : (
+               <button
+                onClick={handleSubmitAnswer}
+                disabled={!transcript?.trim() || isSubmitting || !isVideoOn || answerSubmitted || (currentQuestion?.requires_written_answer === true && !writtenAnswer?.trim()) || !questionVideoBlob}
+                className={`flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-6 py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                  answerSubmitted || submissionStatus === 'submitted'
+                    ? 'bg-[#1e5da8] text-white cursor-default animate-pulse'
+                    : isSubmitting
+                      ? 'bg-[#1e5da8]/80 text-white cursor-wait'
+                      : 'bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white'
+                }`}
+              >
+                {isSubmitting ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <Send className="w-5 h-5" />
+                )}
+                {answerSubmitted 
+                  ? 'Submitted' 
+                  : isSubmitting 
+                    ? submissionStatus === 'uploading' 
+                      ? 'Uploading...' 
+                      : submissionStatus === 'processing'
+                        ? 'Processing...'
+                        : submissionStatus === 'submitted'
+                          ? 'Submitted'
+                          : 'Submitting...'
+                    : 'Submit Answer'
+                }
+                {!isVideoOn && !answerSubmitted && (
+                  <span className="text-xs ml-2">(Camera off)</span>
+                )}
+                {isVideoOn && !answerSubmitted && !questionVideoBlob && (
+                  <span className="text-xs ml-2">(Waiting for recording)</span>
+                )}
+              </button>
              )}
-           
-                       <button
-              onClick={handleSubmitAnswer}
-              disabled={!transcript?.trim() || isSubmitting || !isVideoOn || answerSubmitted || (currentQuestion?.requires_written_answer === true && !writtenAnswer?.trim()) || (!isRecording && !questionVideoBlob)}
-              className={`flex items-center justify-center gap-2 min-h-[44px] min-w-[44px] px-6 py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                answerSubmitted || submissionStatus === 'submitted'
-                  ? 'bg-[#1e5da8] text-white cursor-default animate-pulse'
-                  : isSubmitting
-                    ? 'bg-[#1e5da8]/80 text-white cursor-wait'
-                    : 'bg-[#1e5da8] hover:bg-[#1e5da8]/90 text-white'
-              }`}
-            >
-              {isSubmitting ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <Send className="w-5 h-5" />
-              )}
-              {answerSubmitted 
-                ? 'Submitted' 
-                : isSubmitting 
-                  ? submissionStatus === 'uploading' 
-                    ? 'Uploading...' 
-                    : submissionStatus === 'processing'
-                      ? 'Processing...'
-                      : submissionStatus === 'submitted'
-                        ? 'Submitted'
-                        : 'Submitting...'
-                  : 'Submit Answer'
-              }
-              {!isVideoOn && !answerSubmitted && (
-                <span className="text-xs ml-2">(Camera off)</span>
-              )}
-              {isVideoOn && !answerSubmitted && (!questionVideoBlob && !isRecording) && (
-                <span className="text-xs ml-2">(Start recording)</span>
-              )}
-            </button>
             
             
             {/* End Interview Button */}
