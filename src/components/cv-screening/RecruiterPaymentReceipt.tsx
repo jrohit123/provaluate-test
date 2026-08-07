@@ -9,6 +9,7 @@ export type RecruiterReceiptPurchase = {
   plan_name: string | null;
   gross_amount: number | string | null;
   credits_used: number | string | null;
+  discount_amount?: number | string | null;
   amount_paid: number | string | null;
   payment_status: string | null;
   razorpay_order_id: string | null;
@@ -87,16 +88,19 @@ export function getReceiptReference(purchase: Pick<RecruiterReceiptPurchase, 'id
 
 function getPurchaseBreakdown(purchase: RecruiterReceiptPurchase): {
   gross: number;
-  credits: number;
   discount: number;
   total: number;
 } {
   const gross = toNumber(purchase.gross_amount);
-  const credits = toNumber(purchase.credits_used);
   const metadata = purchase.metadata && typeof purchase.metadata === 'object' ? purchase.metadata : null;
-  const discount = toNumber(metadata?.discount_amount as number | string | null | undefined);
+  // Prefer the dedicated column; fall back to metadata for older rows
+  const discount = toNumber(
+    purchase.discount_amount != null
+      ? purchase.discount_amount
+      : (metadata?.discount_amount as number | string | null | undefined)
+  );
   const total = toNumber(purchase.amount_paid);
-  return { gross, credits, discount, total };
+  return { gross, discount, total };
 }
 
 async function loadLogoAsDataUrl(src: string): Promise<string | null> {
@@ -187,7 +191,7 @@ export async function downloadRecruiterReceiptPdf(details: RecruiterReceiptDetai
   const logo = await loadLogoAsDataUrl(RECEIPT_LOGO_SRC);
   const planDetails = await getCompanyPlanDetails(details.purchase.plan_id);
   const planDetailText = buildPlanDetailText(planDetails);
-  const { gross, credits, discount, total } = getPurchaseBreakdown(details.purchase);
+  const { gross, discount, total } = getPurchaseBreakdown(details.purchase);
   const receiptDate = formatReceiptDate(details.purchase.payment_date || details.purchase.purchased_at);
   const status = getReceiptStatusLabel(details.purchase.payment_status);
   const reference = getReceiptReference(details.purchase);
@@ -256,16 +260,14 @@ export async function downloadRecruiterReceiptPdf(details: RecruiterReceiptDetai
   const tableX = 14;
   const tableW = pageWidth - 28;
   const tablePad = 4;
-  const colDescriptionW = 80;
+  const colDescriptionW = 90;
   const colQtyW = 18;
-  const colUnitPriceW = 28;
-  const colCreditsW = 30;
-  const colAmountW = tableW - colDescriptionW - colQtyW - colUnitPriceW - colCreditsW;
+  const colUnitPriceW = 38;
+  const colAmountW = tableW - colDescriptionW - colQtyW - colUnitPriceW;
   const col1X = tableX;
   const col2X = col1X + colDescriptionW;
   const col3X = col2X + colQtyW;
   const col4X = col3X + colUnitPriceW;
-  const col5X = col4X + colCreditsW;
   doc.setFillColor(240, 247, 255);
   doc.roundedRect(tableX, y, tableW, 10, 2, 2, 'F');
   doc.setFont('helvetica', 'bold');
@@ -273,8 +275,7 @@ export async function downloadRecruiterReceiptPdf(details: RecruiterReceiptDetai
   doc.text('Description', col1X + tablePad, y + 6.5);
   doc.text('Qty', col2X + colQtyW / 2, y + 6.5, { align: 'center' });
   doc.text('Unit Price', col3X + colUnitPriceW / 2, y + 6.5, { align: 'center' });
-  doc.text('Credits Used', col4X + colCreditsW / 2, y + 6.5, { align: 'center' });
-  doc.text('Amount', col5X + colAmountW - tablePad, y + 6.5, { align: 'right' });
+  doc.text('Amount', col4X + colAmountW - tablePad, y + 6.5, { align: 'right' });
   y += 14;
 
   doc.setFont('helvetica', 'normal');
@@ -292,8 +293,7 @@ export async function downloadRecruiterReceiptPdf(details: RecruiterReceiptDetai
   }
   doc.text('1', col2X + colQtyW / 2, y, { align: 'center' });
   doc.text(formatReceiptCurrency(gross), col3X + colUnitPriceW / 2, y, { align: 'center' });
-  doc.text(formatReceiptCurrency(credits), col4X + colCreditsW / 2, y, { align: 'center' });
-  doc.text(formatReceiptCurrency(total), col5X + colAmountW - tablePad, y, { align: 'right' });
+  doc.text(formatReceiptCurrency(total), col4X + colAmountW - tablePad, y, { align: 'right' });
   y += Math.max(8, (descLines.length + detailLines.length) * 5 + 3);
 
   doc.setDrawColor(228, 232, 238);
@@ -307,13 +307,10 @@ export async function downloadRecruiterReceiptPdf(details: RecruiterReceiptDetai
   doc.text(formatReceiptCurrency(gross), summaryXValue, y, { align: 'right' });
   y += 6;
   if (discount > 0) {
-    doc.text('Discount', summaryXLabel, y);
+    doc.text('Discount Applied', summaryXLabel, y);
     doc.text(`-${formatReceiptCurrency(discount)}`, summaryXValue, y, { align: 'right' });
     y += 6;
   }
-  doc.text('Discount Applied', summaryXLabel, y);
-  doc.text(`-${formatReceiptCurrency(credits)}`, summaryXValue, y, { align: 'right' });
-  y += 7;
   doc.setFont('helvetica', 'bold');
   doc.text('Total Paid', summaryXLabel, y);
   doc.text(formatReceiptCurrency(total), summaryXValue, y, { align: 'right' });
@@ -349,7 +346,7 @@ export async function downloadRecruiterReceiptPdf(details: RecruiterReceiptDetai
 }
 
 export function RecruiterPaymentReceipt({ companyName, billingContactName, billingContactEmail, subscriptionStart, subscriptionEnd, purchase }: RecruiterReceiptDetails) {
-  const { gross, credits, discount, total } = getPurchaseBreakdown(purchase);
+  const { gross, discount, total } = getPurchaseBreakdown(purchase);
   const reference = getReceiptReference(purchase);
   const status = getReceiptStatusLabel(purchase.payment_status);
   const datePaid = formatReceiptDate(purchase.payment_date || purchase.purchased_at);
@@ -420,14 +417,13 @@ export function RecruiterPaymentReceipt({ companyName, billingContactName, billi
 
         <div className="mt-12 border-t border-slate-200 pt-8">
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-            <div className="grid grid-cols-[minmax(0,3.1fr)_0.8fr_1.1fr_1.25fr_1fr] bg-slate-100 px-4 py-3 text-xs font-semibold uppercase tracking-[0.06em] text-slate-600">
+            <div className="grid grid-cols-[minmax(0,3.1fr)_0.8fr_1.4fr_1fr] bg-slate-100 px-4 py-3 text-xs font-semibold uppercase tracking-[0.06em] text-slate-600">
               <div className="min-w-0 pr-3">Description</div>
               <div className="min-w-0 text-center">Qty</div>
               <div className="min-w-0 pr-2 text-right">Unit Price</div>
-              <div className="min-w-0 pr-2 text-right">Credits Used</div>
               <div className="min-w-0 text-right">Amount</div>
             </div>
-            <div className="grid grid-cols-[minmax(0,3.1fr)_0.8fr_1.1fr_1.25fr_1fr] items-start border-t border-slate-200 bg-white px-4 py-5 text-sm text-slate-800">
+            <div className="grid grid-cols-[minmax(0,3.1fr)_0.8fr_1.4fr_1fr] items-start border-t border-slate-200 bg-white px-4 py-5 text-sm text-slate-800">
               <div className="break-words pr-6 font-medium leading-relaxed">
                 <div>Recruiter Plan - {purchase.plan_name || 'Selected Plan'}</div>
                 {planDetailText ? (
@@ -438,7 +434,6 @@ export function RecruiterPaymentReceipt({ companyName, billingContactName, billi
               </div>
               <div className="pt-0.5 text-center">1</div>
               <div className="pr-2 text-right">{formatReceiptCurrency(gross)}</div>
-              <div className="pr-2 text-right">{formatReceiptCurrency(credits)}</div>
               <div className="text-right font-semibold">{formatReceiptCurrency(total)}</div>
             </div>
           </div>
@@ -452,14 +447,10 @@ export function RecruiterPaymentReceipt({ companyName, billingContactName, billi
             </div>
             {discount > 0 ? (
               <div className="flex items-center justify-between text-slate-700">
-                <span>Discount</span>
+                <span>Discount Applied</span>
                 <span>-{formatReceiptCurrency(discount)}</span>
               </div>
             ) : null}
-            <div className="flex items-center justify-between text-slate-700">
-              <span>Discount Applied</span>
-              <span>-{formatReceiptCurrency(credits)}</span>
-            </div>
             <div className="flex items-center justify-between border-t border-slate-200 pt-3 text-base font-semibold text-slate-900">
               <span>Total Paid</span>
               <span>{formatReceiptCurrency(total)}</span>

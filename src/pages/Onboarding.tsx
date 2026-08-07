@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { SessionManager } from '@/utils/sessionManager';
-import { startRecruiterPlanCheckout } from '@/utils/recruiterPayment';
+import { startRecruiterPlanCheckout, type CouponPreviewResult } from '@/utils/recruiterPayment';
+import { CouponField } from '@/components/cv-screening/CouponField';
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -21,6 +22,8 @@ export default function Onboarding() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [user, setUser] = useState(null);
+  const [couponCode, setCouponCode] = useState('');
+  const [couponPricing, setCouponPricing] = useState<CouponPreviewResult | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -145,6 +148,28 @@ export default function Onboarding() {
           return;
         }
       }
+
+      // Always check company name, regardless of domain type — this is the only
+      // dedup signal available for shared domains (gmail.com, outlook.com, etc.).
+      // Normalized in JS (case + collapsed whitespace) since Postgres ilike alone
+      // can't collapse internal double-spaces on the stored value.
+      const normalizedInputName = companyName.trim().replace(/\s+/g, ' ').toLowerCase();
+      const { data: allCompanies, error: nameCheckError } = await supabase
+        .from('companies')
+        .select('company_id, company_name');
+      if (nameCheckError) {
+        console.error('Error checking company name:', nameCheckError);
+      } else {
+        const nameTaken = (allCompanies || []).some(
+          (c) => c.company_name?.trim().replace(/\s+/g, ' ').toLowerCase() === normalizedInputName
+        );
+        if (nameTaken) {
+          setError('A company with this name is already registered. If this is your organization, please contact your company admin to be invited. Otherwise, try a slightly different name.');
+          setLoading(false);
+          return;
+        }
+      }
+
       // Get selected plan details
       const plan = plans.find(p => p.plan_id === selectedPlanId);
       if (!plan) {
@@ -243,6 +268,7 @@ export default function Onboarding() {
             companyId: newCompany.company_id,
             planId: plan.plan_id,
             planName: plan.plan_name,
+            couponCode: couponPricing?.valid ? couponCode : undefined,
             prefill: {
               name: `${firstName} ${lastName}`.trim() || user.email.split('@')[0] || 'Customer',
               email: user.email,
@@ -441,6 +467,18 @@ export default function Onboarding() {
                             Max Users: {selectedPlanObj.max_users} · Active JDs: {selectedPlanObj.active_jobs === 0 ? 'Unlimited' : selectedPlanObj.active_jobs}
                           </div>
                         </div>
+                      )}
+
+                      {/* Coupon field — only renders for a selected paid plan; no companyId yet at signup */}
+                      {selectedPlanObj && (
+                        <CouponField
+                          planId={selectedPlanObj.plan_id}
+                          planCost={Number(selectedPlanObj.plan_cost)}
+                          onChange={(code, pricing) => {
+                            setCouponCode(code);
+                            setCouponPricing(pricing);
+                          }}
+                        />
                       )}
 
                       <p className="text-xs text-black italic font-semibold">

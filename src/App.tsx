@@ -43,6 +43,11 @@ import CandidateCompletion from "./components/ai-interview/CandidateCompletion";
 import CompanyCareerPage from "./pages/CompanyCareerPage";
 import CompanyCareerJobPage from "./pages/CompanyCareerJobPage";
 import CustomersPage from "./pages/CustomersPage";
+import JDRecordingDemo from "./pages/JDRecordingDemo";
+import CriteriaRecordingDemo from "./pages/CriteriaRecordingDemo";
+import ResumeRecordingDemo from "./pages/ResumeRecordingDemo";
+import InterviewRecordingDemo from "./pages/InterviewRecordingDemo";
+import FullDemo from "./pages/FullDemo";
 
 import { supabase } from "@/integrations/supabase/client";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -402,6 +407,22 @@ const App = () => {
             
             {/* Customer Stories page - no auth */}
             <Route path="/customers" element={<CustomersPage />} />
+
+            {/* JD Recording Demo — no auth, standalone */}
+            {/* <Route path="/jd-demo" element={<JDRecordingDemo />} /> */}
+
+            {/* Criteria Recording Demo — no auth, standalone */}
+            {/* <Route path="/criteria-demo" element={<CriteriaRecordingDemo />} /> */}
+
+            {/* Resume Recording Demo — no auth, standalone */}
+            {/* <Route path="/resume-demo" element={<ResumeRecordingDemo />} /> */}
+
+            {/* Interview Recording Demo — no auth, standalone */}
+            {/* <Route path="/interview-demo" element={<InterviewRecordingDemo />} /> */}
+            {/* <Route path="/interview-recording-demo" element={<InterviewRecordingDemo />} /> */}
+
+            {/* Full End-to-End Demo — no auth, standalone */}
+            {/* <Route path="/full-demo" element={<FullDemo />} /> */}
             
             {/* Landing: choose recruiter / candidate / TPO sign-in */}
             <Route path="/" element={<CoverPage />} />

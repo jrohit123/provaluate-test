@@ -11,10 +11,70 @@ export type RecruiterCheckoutPrefill = {
   contact?: string;
 };
 
+export type CouponPreviewResult = {
+  valid: boolean;
+  message: string;
+  coupon_id: string | null;
+  original_amount: number | null;
+  discount_amount: number | null;
+  final_amount: number | null;
+};
+
+/** Live, read-only price preview — does not reserve or consume the coupon. */
+export async function previewCoupon(params: {
+  code: string;
+  planId: string;
+  companyId?: string;
+}): Promise<CouponPreviewResult> {
+  try {
+    const res = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.RECRUITER_VALIDATE_COUPON), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code: params.code,
+        plan_id: params.planId,
+        company_id: params.companyId,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    return {
+      valid: !!data.valid,
+      message: data.message || (res.ok ? '' : 'Could not validate coupon'),
+      coupon_id: data.coupon_id ?? null,
+      original_amount: data.original_amount ?? null,
+      discount_amount: data.discount_amount ?? null,
+      final_amount: data.final_amount ?? null,
+    };
+  } catch (err) {
+    return {
+      valid: false,
+      message: err instanceof Error ? err.message : 'Could not validate coupon',
+      coupon_id: null,
+      original_amount: null,
+      discount_amount: null,
+      final_amount: null,
+    };
+  }
+}
+
+async function releaseCouponReservation(orderId: string | undefined) {
+  if (!orderId) return;
+  try {
+    await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.RECRUITER_CANCEL_ORDER), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ razorpay_order_id: orderId }),
+    });
+  } catch {
+    // Best-effort only — the 30-minute staleness window in reserve_coupon covers this.
+  }
+}
+
 export async function startRecruiterPlanCheckout(params: {
   companyId: string;
   planId: string;
   planName: string;
+  couponCode?: string;
   prefill?: RecruiterCheckoutPrefill;
   onSuccess: () => void | Promise<void>;
   onError: (message: string) => void;
@@ -26,6 +86,7 @@ export async function startRecruiterPlanCheckout(params: {
     body: JSON.stringify({
       company_id: params.companyId,
       plan_id: params.planId,
+      coupon_code: params.couponCode || undefined,
     }),
   });
   const orderData = await orderRes.json().catch(() => ({}));
@@ -35,6 +96,17 @@ export async function startRecruiterPlanCheckout(params: {
   }
 
   const { order_id, amount, currency, key_id } = orderData;
+
+  const handleDismiss = () => {
+    void releaseCouponReservation(order_id);
+    params.onDismiss?.();
+  };
+
+  const handleFailure = (message: string) => {
+    void releaseCouponReservation(order_id);
+    params.onError(message);
+  };
+
   const options = buildCandidateRazorpayOptions({
     key: key_id,
     amount,
@@ -43,7 +115,7 @@ export async function startRecruiterPlanCheckout(params: {
     description: `${params.planName} — one-time plan`,
     prefill: params.prefill,
     themeColor: '#094D7B',
-    onDismiss: params.onDismiss,
+    onDismiss: handleDismiss,
     onSuccess: async (response: CandidateRazorpaySuccess) => {
       try {
         const verifyRes = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.RECRUITER_VERIFY_PAYMENT), {
@@ -69,6 +141,5 @@ export async function startRecruiterPlanCheckout(params: {
     },
   });
 
-  return openCandidateRazorpayCheckout(options, params.onError);
+  return openCandidateRazorpayCheckout(options, handleFailure);
 }
-

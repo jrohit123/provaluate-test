@@ -8,7 +8,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { UsageTrackingService } from '@/services/usageTrackingService';
-import { startRecruiterPlanCheckout } from '@/utils/recruiterPayment';
+import { startRecruiterPlanCheckout, type CouponPreviewResult } from '@/utils/recruiterPayment';
+import { CouponField } from '@/components/cv-screening/CouponField';
 import { ReceiptText, Eye, Download, Loader2 } from 'lucide-react';
 import {
   RecruiterPaymentReceipt,
@@ -36,6 +37,8 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
   const [selectedNewPlan, setSelectedNewPlan] = useState<string>('');
   const [selectedNewPlanType, setSelectedNewPlanType] = useState('');
   const [selectedNewTier, setSelectedNewTier] = useState('');
+  const [rechargeCouponCode, setRechargeCouponCode] = useState('');
+  const [rechargeCouponPricing, setRechargeCouponPricing] = useState<CouponPreviewResult | null>(null);
   const [inviteForm, setInviteForm] = useState({ firstName: '', lastName: '', email: '', role: 'user' });
   const [inviteError, setInviteError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -122,7 +125,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
     try {
       const { data, error: fetchError } = await supabase
         .from('recruiter_plan_purchases')
-        .select('id, company_id, plan_id, plan_name, gross_amount, credits_used, amount_paid, payment_status, razorpay_order_id, razorpay_payment_id, payment_date, purchased_at, metadata')
+        .select('id, company_id, plan_id, plan_name, gross_amount, credits_used, discount_amount, amount_paid, payment_status, razorpay_order_id, razorpay_payment_id, payment_date, purchased_at, metadata')
         .eq('company_id', user.profile.company_id)
         .eq('payment_status', 'completed')
         .order('payment_date', { ascending: false, nullsFirst: false });
@@ -350,6 +353,7 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
       companyId: company.company_id,
       planId: selectedPlanData.plan_id,
       planName: selectedPlanData.plan_name,
+      couponCode: rechargeCouponPricing?.valid ? rechargeCouponCode : undefined,
       prefill: checkoutPrefill(),
       onSuccess: async () => {
         await loadCompanyData();
@@ -359,6 +363,8 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
         });
         setPlanChangeOpen(false);
         setSelectedNewPlan('');
+        setRechargeCouponCode('');
+        setRechargeCouponPricing(null);
         setChangingPlan(false);
       },
       onError: (message) => {
@@ -523,6 +529,8 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                   setSelectedNewPlan('');
                   setSelectedNewPlanType('');
                   setSelectedNewTier('');
+                  setRechargeCouponCode('');
+                  setRechargeCouponPricing(null);
                 }
               }}>
                 <DialogTrigger asChild>
@@ -603,6 +611,19 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                           {selectedNewPlanObj.active_jobs === 0 ? 'Unlimited' : selectedNewPlanObj.active_jobs}
                         </div>
                       </div>
+                    )}
+
+                    {/* Coupon field — company_id is known here so per-company cap is enforced at preview time */}
+                    {selectedNewPlanObj && (
+                      <CouponField
+                        planId={selectedNewPlanObj.plan_id}
+                        planCost={Number(selectedNewPlanObj.plan_cost)}
+                        companyId={company?.company_id}
+                        onChange={(code, pricing) => {
+                          setRechargeCouponCode(code);
+                          setRechargeCouponPricing(pricing);
+                        }}
+                      />
                     )}
 
                     {/* Action buttons */}
@@ -762,6 +783,13 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
                         <p>Receipt Reference: {getReceiptReference(purchase)}</p>
                         <p>Date Paid: {formatReceiptDate(purchase.payment_date || purchase.purchased_at)}</p>
                         <p>Total Paid: {formatReceiptCurrency(purchase.amount_paid)}</p>
+                        {/* Coupon line — only shown when a coupon actually reduced the price */}
+                        {(purchase as any).metadata?.coupon_code && Number(purchase.gross_amount) > Number(purchase.amount_paid) && (
+                          <p className="text-green-700">
+                            Coupon applied: {(purchase as any).metadata.coupon_code} (
+                            −{formatReceiptCurrency(Number(purchase.gross_amount) - Number(purchase.amount_paid))})
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">

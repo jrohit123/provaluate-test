@@ -316,7 +316,7 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
           <CardHeader>
             <CardTitle className="text-[#094D7B]">Quick Stats</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col items-center justify-center pt-12 pb-1 px-6">
+          <CardContent className="flex flex-col items-center justify-center pt-2 sm:pt-12 pb-4 sm:pb-1 px-6 min-h-[110px] sm:min-h-0">
             <div className="flex flex-row flex-nowrap gap-6 sm:gap-8 w-full max-w-4xl justify-center items-stretch">
               {/* CV-only: CV JDs, Evaluation criteria, Assessments */}
               {(planType === 'cv' || planType === 'combo') && (
@@ -325,19 +325,28 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                     <div className="text-lg sm:text-2xl font-bold text-[#094D7B]">
                       {loading ? '...' : animatedJobDescriptions}
                     </div>
-                    <div className="text-xs sm:text-sm text-[#094D7B] min-h-[2.5rem] flex items-center justify-center break-words">CV JDs CREATED</div>
+                    <div className="text-xs sm:text-sm text-[#094D7B] min-h-[2.5rem] flex items-center justify-center break-words">
+                      <span className="sm:hidden">CV JDs</span>
+                      <span className="hidden sm:inline">CV JDs CREATED</span>
+                    </div>
                   </div>
                   <div className="flex-1 min-w-0 flex flex-col items-center text-center">
                     <div className="text-lg sm:text-2xl font-bold text-[#094D7B]">
                       {loading ? '...' : animatedCriteriaSets}
                     </div>
-                    <div className="text-xs sm:text-sm text-[#094D7B] min-h-[2.5rem] flex items-center justify-center break-words">EVALUATION CRITERIA</div>
+                    <div className="text-xs sm:text-sm text-[#094D7B] min-h-[2.5rem] flex items-center justify-center break-words">
+                      <span className="sm:hidden">CRITERIA</span>
+                      <span className="hidden sm:inline">EVALUATION CRITERIA</span>
+                    </div>
                   </div>
                   <div className="flex-1 min-w-0 flex flex-col items-center text-center">
                     <div className="text-lg sm:text-2xl font-bold text-[#094D7B]">
                       {loading ? '...' : animatedAssessments}
                     </div>
-                    <div className="text-xs sm:text-sm text-[#094D7B] min-h-[2.5rem] flex items-center justify-center break-words">ASSESSMENTS</div>
+                    <div className="text-xs sm:text-sm text-[#094D7B] min-h-[2.5rem] flex items-center justify-center break-words">
+                      <span className="sm:hidden">CVs ASSESSED</span>
+                      <span className="hidden sm:inline">ASSESSMENTS</span>
+                    </div>
                   </div>
                 </>
               )}
@@ -348,13 +357,19 @@ export function MainDashboard({ onSectionChange, onStartTour, onDashboardReady }
                     <div className="text-lg sm:text-2xl font-bold text-[#094D7B]">
                       {loading ? '...' : animatedInterviewJds}
                     </div>
-                    <div className="text-xs sm:text-sm text-[#094D7B] min-h-[2.5rem] flex items-center justify-center break-words">INTERVIEW JDs CREATED</div>
+                    <div className="text-xs sm:text-sm text-[#094D7B] min-h-[2.5rem] flex items-center justify-center break-words">
+                      <span className="sm:hidden">INT. JDs</span>
+                      <span className="hidden sm:inline">INTERVIEW JDs CREATED</span>
+                    </div>
                   </div>
                   <div className="flex-1 min-w-0 flex flex-col items-center text-center">
                     <div className="text-lg sm:text-2xl font-bold text-[#094D7B]">
                       {loading ? '...' : animatedInterviewsCompleted}
                     </div>
-                    <div className="text-xs sm:text-sm text-[#094D7B] min-h-[2.5rem] flex items-center justify-center break-words">INTERVIEWS COMPLETED</div>
+                    <div className="text-xs sm:text-sm text-[#094D7B] min-h-[2.5rem] flex items-center justify-center break-words">
+                      <span className="sm:hidden">INTERVIEWS DONE</span>
+                      <span className="hidden sm:inline">INTERVIEWS COMPLETED</span>
+                    </div>
                   </div>
                 </>
               )}

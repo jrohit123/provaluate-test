@@ -62,6 +62,8 @@ export const API_CONFIG = {
     RECRUITER_PLANS: '/api/plans',
     RECRUITER_CREATE_ORDER: '/payments/create-order',
     RECRUITER_VERIFY_PAYMENT: '/payments/verify',
+    RECRUITER_VALIDATE_COUPON: '/payments/validate-coupon',
+    RECRUITER_CANCEL_ORDER: '/payments/cancel-order',
     CANDIDATE_ONBOARDING_COMPLETE: '/api/candidate/onboarding/complete',
     CANDIDATE_REFERRAL_LINK_GENERATE: '/api/candidate/referral-link/generate',
     CANDIDATE_REFERRAL_LINK: '/api/candidate/referral-link',
