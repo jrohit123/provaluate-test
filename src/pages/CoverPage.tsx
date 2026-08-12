@@ -176,6 +176,7 @@ export default function CoverPage() {
   const [activeTab, setActiveTab] = useState<'cv-screening' | 'resume-ingestion' | 'dynamic-interview' | 'sample-report'>('cv-screening');
   const [activeTestimonial, setActiveTestimonial] = useState<Testimonial | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showWhatIsModal, setShowWhatIsModal] = useState(false);
 
   const go = (route: string) => {
     navigate(route);
@@ -420,6 +421,15 @@ export default function CoverPage() {
                       >
                         Customer Stories
                       </Link>
+                      <button
+                        onClick={() => {
+                          setShowWhatIsModal(true);
+                          setIsMenuOpen(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm font-medium text-[#0a3a5a] hover:bg-[#f0f9ff] transition-colors"
+                      >
+                        What is ProValuate?
+                      </button>
                       <a
                         href="https://aitamate.com/contact.html"
                         target="_blank"
@@ -455,6 +465,13 @@ export default function CoverPage() {
                   <span className="sm:hidden">Stories</span>
                   <span className="hidden sm:inline">Customer Stories</span>
                 </Link>
+                <button
+                  onClick={() => setShowWhatIsModal(true)}
+                  className="shrink-0 text-right text-sm font-semibold text-[#0d6ea3] no-underline transition-colors hover:text-[#042C53] sm:text-base lg:text-lg"
+                >
+                  <span className="sm:hidden">What Is</span>
+                  <span className="hidden sm:inline">What is ProValuate?</span>
+                </button>
                 <a
                   href="https://aitamate.com/contact.html"
                   target="_blank"
@@ -783,6 +800,38 @@ export default function CoverPage() {
               <p className="mt-3 border-t border-slate-100 pt-3 text-xs italic leading-relaxed text-slate-500">
                 "{activeTestimonial.quote}"
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+      {showWhatIsModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(10,30,50,0.85)] p-4 backdrop-blur-sm"
+          onClick={() => setShowWhatIsModal(false)}
+        >
+          <div
+            className="relative w-full max-w-3xl sm:max-w-4xl lg:max-w-6xl overflow-hidden rounded-2xl bg-black shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Floating close button */}
+            <button
+              type="button"
+              className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white text-lg leading-none hover:bg-black/80 transition-colors"
+              onClick={() => setShowWhatIsModal(false)}
+              aria-label="Close video"
+            >
+              ✕
+            </button>
+
+            {/* YouTube video - full space, no header bar */}
+            <div className="relative aspect-video bg-black">
+              <iframe
+                src="https://www.youtube.com/embed/Hu-RLiVAK_c?autoplay=1"
+                title="What is ProValuate?"
+                className="h-full w-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
             </div>
           </div>
         </div>

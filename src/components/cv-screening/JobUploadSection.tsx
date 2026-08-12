@@ -110,6 +110,8 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
   const [editorDraft, setEditorDraft] = useState<JDEditingAttributes>({});
   const [openEditorAttributes, setOpenEditorAttributes] = useState<Record<string, boolean>>({});
   const [editorTagInput, setEditorTagInput] = useState<Record<string, string>>({});
+  const [pendingNewAttrKeys, setPendingNewAttrKeys] = useState<Set<string>>(new Set());
+  const [pendingNewSubKeys, setPendingNewSubKeys] = useState<Set<string>>(new Set());
   const [isSavingEditor, setIsSavingEditor] = useState(false);
 
   // Get JD status configuration based on usage
@@ -1136,22 +1138,38 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
     });
     setOpenEditorAttributes(initialOpenState);
     setEditorTagInput({});
+    setPendingNewAttrKeys(new Set());
+    setPendingNewSubKeys(new Set());
     setIsEditingResolvedJD(true);
   };
 
   const addEditorAttribute = () => {
-    const newKey = makeUniqueKey(Object.keys(editorDraft), 'New Attribute');
-    setEditorDraft((prev) => ({ ...prev, [newKey]: { _type: 'text', _value: '' } }));
-    setOpenEditorAttributes((prev) => ({ ...prev, [newKey]: true }));
+    const internalKey = `newsection_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    setEditorDraft((prev) => ({ ...prev, [internalKey]: { _type: 'text', _value: '' } }));
+    setOpenEditorAttributes((prev) => ({ ...prev, [internalKey]: true }));
+    setPendingNewAttrKeys((prev) => new Set(prev).add(internalKey));
   };
 
   const renameEditorAttribute = (oldKey: string, newKeyRaw: string) => {
-    const newKey = newKeyRaw.trim();
+    const trimmed = newKeyRaw.trim();
+    const newKey = trimmed || (pendingNewAttrKeys.has(oldKey) ? null : oldKey);
+    // Blank name on a still-pending (never-named) section = discard it entirely
+    if (!trimmed && pendingNewAttrKeys.has(oldKey)) {
+      removeEditorAttribute(oldKey);
+      return;
+    }
+    setPendingNewAttrKeys((prev) => {
+      if (!prev.has(oldKey)) return prev;
+      const next = new Set(prev);
+      next.delete(oldKey);
+      return next;
+    });
     if (!newKey || newKey === oldKey) return;
+
     setEditorDraft((prev) => {
       if (Object.prototype.hasOwnProperty.call(prev, newKey)) {
         toast({
-          title: "Duplicate attribute",
+          title: "Duplicate section",
           description: `"${newKey}" already exists.`,
           variant: "destructive",
         });
@@ -1186,25 +1204,39 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
   };
 
   const addEditorSubAttribute = (attrKey: string) => {
+    const internalSubKey = `newfield_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     setEditorDraft((prev) => {
       const attr = prev[attrKey];
       if (!attr || attr._type !== 'object') return prev;
-      const subKeys = Object.keys(attr).filter((key) => !key.startsWith('_'));
-      const newSubKey = makeUniqueKey(subKeys, 'Sub-attribute');
-      const nextAttr = { ...attr, [newSubKey]: { _type: 'text', _value: '' } as JDSubAttrValue };
-      return { ...prev, [attrKey]: nextAttr };
+      return { ...prev, [attrKey]: { ...attr, [internalSubKey]: { _type: 'text', _value: '' } as JDSubAttrValue } };
     });
+    setPendingNewSubKeys((prev) => new Set(prev).add(`${attrKey}::${internalSubKey}`));
   };
 
   const renameEditorSubAttribute = (attrKey: string, oldSubKey: string, newSubKeyRaw: string) => {
-    const newSubKey = newSubKeyRaw.trim();
-    if (!newSubKey || newSubKey === oldSubKey) return;
+    const pendingId = `${attrKey}::${oldSubKey}`;
+    const trimmed = newSubKeyRaw.trim();
+
+    if (!trimmed && pendingNewSubKeys.has(pendingId)) {
+      removeEditorSubAttribute(attrKey, oldSubKey);
+      setPendingNewSubKeys((prev) => { const n = new Set(prev); n.delete(pendingId); return n; });
+      return;
+    }
+    const newSubKey = trimmed || oldSubKey;
+    setPendingNewSubKeys((prev) => {
+      if (!prev.has(pendingId)) return prev;
+      const next = new Set(prev);
+      next.delete(pendingId);
+      return next;
+    });
+    if (newSubKey === oldSubKey) return;
+
     setEditorDraft((prev) => {
       const attr = prev[attrKey];
       if (!attr || attr._type !== 'object') return prev;
       if (Object.prototype.hasOwnProperty.call(attr, newSubKey)) {
         toast({
-          title: "Duplicate sub-attribute",
+          title: "Duplicate field",
           description: `"${newSubKey}" already exists in ${attrKey}.`,
           variant: "destructive",
         });
@@ -1227,6 +1259,18 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
       delete nextAttr[subKey];
       return { ...prev, [attrKey]: nextAttr as JDAttrValue };
     });
+  };
+
+  const convertAttributeToFields = (attrKey: string) => {
+    setEditorDraft((prev) => {
+      const attr = prev[attrKey];
+      if (!attr || attr._type !== 'text') return prev;
+      const nextAttr: JDAttrValue = attr._value
+        ? { _type: 'object', Details: { _type: 'text', _value: attr._value } }
+        : { _type: 'object' };
+      return { ...prev, [attrKey]: nextAttr };
+    });
+    addEditorSubAttribute(attrKey); // opens a second, blank field ready to be named
   };
 
   const handleEditorSave = async () => {
@@ -1716,15 +1760,15 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
         <Dialog open={isEditingResolvedJD} onOpenChange={setIsEditingResolvedJD}>
           <DialogContent className="max-w-[96vw] sm:max-w-5xl max-h-[88vh] overflow-hidden p-0">
             <DialogHeader className="px-4 sm:px-5 pt-4 sm:pt-5 pb-2 border-b border-gray-200">
-              <DialogTitle className="text-base sm:text-lg text-[#094D7B]">Edit Resolved JD</DialogTitle>
+              <DialogTitle className="text-base sm:text-lg text-[#094D7B]">Edit Job Requirements</DialogTitle>
               <DialogDescription className="text-xs sm:text-sm">
-                Rename keys inline, switch sub-attribute type between text/list, and save once done.
+                Rename sections and fields, switch a field between plain text and a tag list, then save.
               </DialogDescription>
             </DialogHeader>
 
             <div className="overflow-y-auto max-h-[72vh] px-4 sm:px-5 pb-5 pt-2">
               <div className="sticky top-0 z-30 bg-white border-b border-gray-200 py-2 mb-3 flex items-center justify-between gap-2">
-                <div className="text-xs sm:text-sm font-semibold text-[#094D7B]">Editing Resolved Attributes</div>
+                <div className="text-xs sm:text-sm font-semibold text-[#094D7B]">Job Description Details</div>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" onClick={() => setIsEditingResolvedJD(false)} disabled={isSavingEditor}>
                     Discard
@@ -1748,14 +1792,15 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                   const isOpen = !!openEditorAttributes[attrKey];
 
                   return (
-                    <div key={attrKey} className={`rounded-lg border overflow-hidden ${isOpen ? 'border-blue-200' : 'border-gray-200'}`}>
+                    <div key={attrKey} className={`rounded-lg border overflow-hidden ${isOpen ? 'border-blue-200' : 'border-gray-200'}`} data-pending-section={pendingNewAttrKeys.has(attrKey) ? 'true' : undefined}>
                       <div
                         className="flex items-center gap-2 px-3 py-2.5 bg-blue-50/60 hover:bg-blue-50 cursor-pointer transition-colors"
                         onClick={() => setOpenEditorAttributes((prev) => ({ ...prev, [attrKey]: !prev[attrKey] }))}
                       >
-                        <ChevronRight className={`w-4 h-4 text-blue-600 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                        <ChevronRight className={`w-4 h-4 text-blue-600 transition-transform flex-shrink-0 ${isOpen ? 'rotate-90' : ''}`} />
                         <Input
-                          defaultValue={attrKey}
+                          defaultValue={pendingNewAttrKeys.has(attrKey) ? '' : attrKey}
+                          placeholder="e.g. Technical Skills, Location, Experience"
                           onBlur={(e) => renameEditorAttribute(attrKey, e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === 'Tab') {
@@ -1764,22 +1809,23 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                             }
                           }}
                           onClick={(e) => e.stopPropagation()}
-                          title="Click to rename this attribute"
-                          className="h-8 text-sm font-semibold text-[#094D7B] border-transparent bg-transparent hover:bg-white hover:border-gray-300 focus:bg-white focus:border-[#094D7B]"
+                          title="Click to rename this section"
+                          className="h-8 text-sm font-semibold text-[#094D7B] border-transparent bg-transparent hover:bg-white hover:border-gray-300 focus:bg-white focus:border-[#094D7B] flex-1 min-w-0"
                         />
-                        <Pencil className="w-3.5 h-3.5 text-gray-400" />
-                        <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                          {isObject ? `${subKeys.length} sub-attr${subKeys.length !== 1 ? 's' : ''}` : 'text'}
+                        <Pencil className="w-3.5 h-3.5 text-gray-400 flex-shrink-0 hidden sm:block" />
+                        <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 whitespace-nowrap flex-shrink-0">
+                          {isObject ? `${subKeys.length} field${subKeys.length !== 1 ? 's' : ''}` : 'Text'}
                         </span>
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-7 px-2 text-gray-500 hover:text-red-500"
+                          className="h-7 px-2 text-gray-500 hover:text-red-500 flex-shrink-0"
                           onClick={(e) => {
                             e.stopPropagation();
                             removeEditorAttribute(attrKey);
                           }}
+                          title="Delete section"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
@@ -1788,18 +1834,27 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                       {isOpen && (
                         <div className="p-3 space-y-2">
                           {!isObject ? (
-                            <Textarea
-                              value={(attrValue as { _type: 'text'; _value: string })._value}
-                              onChange={(e) =>
-                                setEditorDraft((prev) => ({
-                                  ...prev,
-                                  [attrKey]: { _type: 'text', _value: e.target.value },
-                                }))
-                              }
-                              rows={2}
-                              className="w-full resize-none text-sm min-h-[72px] max-h-[220px] bg-gray-50 focus:bg-white"
-                              placeholder={`Enter ${attrKey.replace(/_/g, ' ')}...`}
-                            />
+                            <>
+                              <Textarea
+                                value={(attrValue as { _type: 'text'; _value: string })._value}
+                                onChange={(e) =>
+                                  setEditorDraft((prev) => ({
+                                    ...prev,
+                                    [attrKey]: { _type: 'text', _value: e.target.value },
+                                  }))
+                                }
+                                rows={2}
+                                className="w-full resize-none text-sm min-h-[72px] max-h-[220px] bg-gray-50 focus:bg-white"
+                                placeholder="Enter section details..."
+                              />
+                              <button
+                                type="button"
+                                onClick={() => convertAttributeToFields(attrKey)}
+                                className="text-xs text-blue-600 hover:text-blue-800 mt-1 underline underline-offset-2"
+                              >
+                                + Break this into multiple fields
+                              </button>
+                            </>
                           ) : (
                             <>
                               {subKeys.map((subKey) => {
@@ -1812,7 +1867,8 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                                   <div key={`${attrKey}-${subKey}`} className="rounded-md border border-gray-200 overflow-hidden">
                                     <div className="flex items-center gap-2 px-2.5 py-1.5 bg-gray-50 border-b border-gray-200">
                                       <Input
-                                        defaultValue={subKey}
+                                        defaultValue={pendingNewSubKeys.has(`${attrKey}::${subKey}`) ? '' : subKey}
+                                        placeholder="e.g. Required, Preferred"
                                         onBlur={(e) => renameEditorSubAttribute(attrKey, subKey, e.target.value)}
                                         onKeyDown={(e) => {
                                           if (e.key === 'Enter' || e.key === 'Tab') {
@@ -1820,11 +1876,11 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                                             (e.target as HTMLInputElement).blur();
                                           }
                                         }}
-                                        title="Click to rename"
-                                        className="h-7 text-xs font-medium border-transparent bg-transparent hover:bg-white hover:border-gray-300 focus:bg-white focus:border-[#094D7B]"
+                                        title="Click to rename this field"
+                                        className="h-7 text-xs font-medium border-transparent bg-transparent hover:bg-white hover:border-gray-300 focus:bg-white focus:border-[#094D7B] flex-1 min-w-0"
                                       />
 
-                                      <div className="flex items-center gap-1 border border-gray-200 rounded p-0.5 bg-white">
+                                      <div className="flex items-center gap-1 border border-gray-200 rounded p-0.5 bg-white flex-shrink-0">
                                         <Button
                                           type="button"
                                           size="sm"
@@ -1870,8 +1926,9 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                                         type="button"
                                         variant="ghost"
                                         size="sm"
-                                        className="h-7 px-2 text-gray-500 hover:text-red-500"
+                                        className="h-7 px-2 text-gray-500 hover:text-red-500 flex-shrink-0"
                                         onClick={() => removeEditorSubAttribute(attrKey, subKey)}
+                                        title="Delete field"
                                       >
                                         <X className="w-3.5 h-3.5" />
                                       </Button>
@@ -1976,7 +2033,7 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                                           }
                                           rows={2}
                                           className="w-full resize-none text-sm min-h-[64px] max-h-[220px] bg-gray-50 focus:bg-white"
-                                          placeholder={`Describe "${subKey}" requirement...`}
+                                          placeholder="Enter details..."
                                         />
                                       )}
                                     </div>
@@ -1989,10 +2046,19 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
                                 variant="outline"
                                 size="sm"
                                 className="h-8 text-xs"
-                                onClick={() => addEditorSubAttribute(attrKey)}
+                                onClick={() => {
+                                  addEditorSubAttribute(attrKey);
+                                  // find the newest pending sub-key and focus it after render
+                                  requestAnimationFrame(() => {
+                                    const inputs = document.querySelectorAll('[data-pending-section] input');
+                                    const last = inputs[inputs.length - 1] as HTMLInputElement | undefined;
+                                    last?.focus();
+                                    last?.select();
+                                  });
+                                }}
                               >
                                 <Plus className="w-3.5 h-3.5 mr-1.5" />
-                                Add Sub-attribute
+                                Add Field
                               </Button>
                             </>
                           )}
@@ -2004,13 +2070,22 @@ export const JobUploadSection = ({ onSectionReady }: JobUploadSectionProps) => {
 
                 <button
                   type="button"
-                  onClick={addEditorAttribute}
+                  onClick={() => {
+                    addEditorAttribute();
+                    // find the newest pending key and focus it after render
+                    requestAnimationFrame(() => {
+                      const inputs = document.querySelectorAll('[data-pending-section] input');
+                      const last = inputs[inputs.length - 1] as HTMLInputElement | undefined;
+                      last?.focus();
+                      last?.select();
+                    });
+                  }}
                   className="w-full rounded-lg border-2 border-dashed border-blue-200 p-4 text-center hover:border-[#094D7B] hover:bg-blue-50/40 transition-colors"
                 >
                   <div className="mx-auto mb-1 flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-[#094D7B]">
                     <Plus className="w-4 h-4" />
                   </div>
-                  <p className="text-sm text-gray-600">Add a new attribute</p>
+                  <p className="text-sm text-gray-600">Add section</p>
                 </button>
               </div>
             </div>

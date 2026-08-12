@@ -8,7 +8,6 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { API_CONFIG, buildApiUrl } from '@/constants/api';
 import { LogIn, Menu, UserPlus, Eye, EyeOff } from 'lucide-react';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 type TpoMeResponse = {
   requires_onboarding: boolean;
@@ -340,24 +339,30 @@ const TpoLogin = () => {
                   <img src={`${import.meta.env.BASE_URL}Logo_Transparent_BG.png`} alt="ProValuate" className="h-12 w-auto sm:h-14 lg:h-16 cursor-pointer hover:opacity-80 transition-opacity" />
                 </Link>
 
-                <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-                  <SheetTrigger asChild>
-                    <button
-                      type="button"
-                      className="sm:hidden inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                      aria-label="Open menu"
-                    >
-                      <Menu className="h-5 w-5" />
-                    </button>
-                  </SheetTrigger>
-                  <SheetContent side="right" className="w-64">
-                    <div className="pt-8 space-y-2">
-                      <Link to="/" className="block rounded-lg px-3 py-2 text-base text-slate-700 hover:bg-slate-50 hover:text-slate-900" onClick={() => setMobileMenuOpen(false)}>
-                        Choose sign-in role
-                      </Link>
+                <div className="relative sm:hidden">
+                  <button
+                    type="button"
+                    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    aria-label="Open menu"
+                  >
+                    <Menu className={`h-5 w-5 transition-transform duration-200 ${mobileMenuOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {mobileMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-48 rounded-lg border border-slate-200 bg-white shadow-lg z-50">
+                      <div className="py-2">
+                        <Link
+                          to="/"
+                          className="block px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          Choose sign-in role
+                        </Link>
+                      </div>
                     </div>
-                  </SheetContent>
-                </Sheet>
+                  )}
+                </div>
 
                 <nav className="hidden items-center gap-1 sm:flex">
                   <Link to="/" className="rounded-md px-2.5 py-1.5 text-sm font-medium text-[#042C53] transition-colors hover:bg-slate-50 hover:text-[#020f1a] sm:text-base">

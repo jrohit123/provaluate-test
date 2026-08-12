@@ -107,9 +107,9 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
   const { isMobile, setOpenMobile } = useSidebar();
   
   // State for collapsible sections
-  const [isCvScreeningOpen, setIsCvScreeningOpen] = useState(true);
-  const [isInterviewManagementOpen, setIsInterviewManagementOpen] = useState(true);
-  const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(true);
+  const [isCvScreeningOpen, setIsCvScreeningOpen] = useState(false);
+  const [isInterviewManagementOpen, setIsInterviewManagementOpen] = useState(false);
+  const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
   const [companyPlanType, setCompanyPlanType] = useState<string | null>(null);
   
   // Check if user can access settings
@@ -204,7 +204,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                 <SidebarMenuButton
                   onClick={() => handleSectionChange(mainDashboardItem.section)}
                   isActive={activeSection === mainDashboardItem.section}
-                  className="group relative"
+                  className={`group relative ${activeSection === mainDashboardItem.section ? 'bg-blue-50 data-[active=true]:bg-blue-50' : ''}`}
                   tooltip={mainDashboardItem.title}
                   data-tour={`section-${mainDashboardItem.section}`}
                 >
@@ -242,7 +242,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                           <SidebarMenuButton
                             onClick={() => handleSectionChange(item.section)}
                             isActive={activeSection === item.section}
-                            className="group relative ml-4 w-full flex items-center"
+                            className={`group relative ml-4 w-full flex items-center ${activeSection === item.section ? 'bg-blue-50 data-[active=true]:bg-blue-50' : ''}`}
                             tooltip={item.title}
                             data-tour={`section-${item.section}`}
                           >
@@ -288,7 +288,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                         <SidebarMenuButton
                           onClick={() => handleSectionChange(item.section)}
                           isActive={activeSection === item.section}
-                          className="group relative ml-4"
+                          className={`group relative ml-4 ${activeSection === item.section ? 'bg-blue-50 data-[active=true]:bg-blue-50' : ''}`}
                           tooltip={item.title}
                           data-tour={`section-${item.section}`}
                         >
@@ -328,7 +328,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                         <SidebarMenuButton
                           onClick={() => handleSectionChange(careerPortalItem.section)}
                           isActive={activeSection === careerPortalItem.section}
-                          className="group relative ml-4"
+                          className={`group relative ml-4 ${activeSection === careerPortalItem.section ? 'bg-blue-50 data-[active=true]:bg-blue-50' : ''}`}
                           tooltip={careerPortalItem.title}
                           data-tour="section-career-portal"
                         >
@@ -342,7 +342,7 @@ export function AppSidebar({ activeSection, onSectionChange }: AppSidebarProps) 
                       <SidebarMenuButton
                         onClick={() => handleSectionChange(settingsItem.section)}
                         isActive={activeSection === settingsItem.section}
-                        className="group relative ml-4"
+                        className={`group relative ml-4 ${activeSection === settingsItem.section ? 'bg-blue-50 data-[active=true]:bg-blue-50' : ''}`}
                         tooltip={settingsItem.title}
                         data-tour="section-settings"
                       >

@@ -8,7 +8,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { UserPlus, LogIn, Menu, Eye, EyeOff } from "lucide-react";
 import { SessionManager } from '@/utils/sessionManager';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { hasTpoProfile } from '@/lib/authPortalQueries';
 
 const PYTHON_API_BASE = import.meta.env.VITE_PYTHON_URL || 'https://devprovaluate_py.aitamate.com';
@@ -421,44 +420,46 @@ const Login = () => {
                     />
                   </Link>
 
-                  {/* Mobile: slide-over sidebar menu */}
-                  <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-                    <SheetTrigger asChild>
-                      <button
-                        type="button"
-                        className="sm:hidden inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                        aria-label="Open menu"
-                      >
-                        <Menu className="h-5 w-5" />
-                      </button>
-                    </SheetTrigger>
-                    <SheetContent side="right" className="w-64">
-                      <div className="pt-8 space-y-2">
-                        <Link
-                          to="/pricing"
-                          className="block rounded-lg px-3 py-2 text-base font-medium text-[#0d6ea3] hover:bg-slate-50 hover:text-[#042C53]"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Pricing
-                        </Link>
-                        <Link
-                          to="/impact"
-                          className="block rounded-lg px-3 py-2 text-base font-medium text-[#0d6ea3] hover:bg-slate-50 hover:text-[#042C53]"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Impact
-                        </Link>
-                        <div className="my-3 h-px bg-slate-200" />
-                        <Link
-                          to="/"
-                          className="block rounded-lg px-3 py-2 text-base font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Choose sign-in role
-                        </Link>
+                  {/* Mobile: dropdown menu */}
+                  <div className="relative sm:hidden">
+                    <button
+                      type="button"
+                      onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      aria-label="Open menu"
+                    >
+                      <Menu className={`h-5 w-5 transition-transform duration-200 ${mobileMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {mobileMenuOpen && (
+                      <div className="absolute right-0 top-full mt-2 w-48 rounded-lg border border-slate-200 bg-white shadow-lg z-50">
+                        <div className="py-2">
+                          <Link
+                            to="/pricing"
+                            className="block px-4 py-2 text-sm font-medium text-[#0d6ea3] hover:bg-slate-50 hover:text-[#042C53]"
+                            onClick={() => setMobileMenuOpen(false)}
+                          >
+                            Pricing
+                          </Link>
+                          <Link
+                            to="/impact"
+                            className="block px-4 py-2 text-sm font-medium text-[#0d6ea3] hover:bg-slate-50 hover:text-[#042C53]"
+                            onClick={() => setMobileMenuOpen(false)}
+                          >
+                            Impact
+                          </Link>
+                          <div className="my-1 h-px bg-slate-200" />
+                          <Link
+                            to="/"
+                            className="block px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                            onClick={() => setMobileMenuOpen(false)}
+                          >
+                            Choose sign-in role
+                          </Link>
+                        </div>
                       </div>
-                    </SheetContent>
-                  </Sheet>
+                    )}
+                  </div>
 
                   {/* Desktop: inline nav */}
                   <nav className="hidden items-center gap-1 sm:flex">
