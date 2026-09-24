@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import PostgrestClient from '@supabase/postgrest-js';
+// deploy check: 2026-09-24
 
 // Initialize Supabase client
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
