@@ -132,6 +132,8 @@ const fetchInterviewPhrase = async (
   questionIndex?: number,
   totalQuestions?: number,
   keyphrases?: string[],
+  candidateClaims?: string[],
+  answerClass?: string,
 ): Promise<string> => {
   try {
     const response = await apiCall(API_CONFIG.ENDPOINTS.GENERATE_INTERVIEW_PHRASE, {
@@ -144,6 +146,8 @@ const fetchInterviewPhrase = async (
         ...(questionIndex != null && { question_index: questionIndex }),
         ...(totalQuestions != null && { total_questions: totalQuestions }),
         ...(keyphrases && keyphrases.length > 0 && { keyphrases }),
+        ...(candidateClaims && candidateClaims.length > 0 && { candidate_claims: candidateClaims }),
+        ...(answerClass && { answer_class: answerClass }),
       }),
     }, 10000);
     if (response.ok) {
@@ -157,14 +161,17 @@ const fetchInterviewPhrase = async (
 };
 
 // Fallback phrases when API fails
+// Kept intentionally neutral — these fire only when the phrase API call fails, so they
+// must not claim to react to content that was never actually read (see conversational_phrases_prompt.txt's
+// anti_examples for the "transition" type, which these used to duplicate almost verbatim).
 const FALLBACK_TRANSITION_POOL = [
   "Let's keep the momentum going with the next one.",
-  "Got it! Let's shift gears slightly for this next part.",
-  "That makes a lot of sense. Moving right along.",
-  "Really interesting perspective — here's the next one.",
+  "Got it — let's shift gears slightly for this next part.",
+  "Okay, let's keep going.",
+  "Right, on to the next one.",
   "Noted! Let's move on to the next question.",
   "Good stuff. Let's keep going.",
-  "Alright, let's build on that with the next one.",
+  "Alright, let's move on to the next one.",
   "Thanks for sharing that. On to the next question.",
 ];
 
@@ -2766,6 +2773,11 @@ const ConversationalInterview = () => {
                const nextQuestionIndex = currentQuestionIndex + 1;
                const isLastQuestion = totalQuestionsRef.current != null && nextQuestionIndex >= totalQuestionsRef.current;
                const capturedKeyphrases = Array.isArray(result.keyphrases) ? result.keyphrases : [];
+               // Richer signal for the reaction phrase: full-sentence claims (not just tool names)
+               // plus the evaluator's answer_class, so the phrase can react to what actually happened
+               // instead of always sounding equally impressed.
+               const capturedClaims = Array.isArray(result.candidate_claims) ? result.candidate_claims : [];
+               const capturedAnswerClass = typeof result.answer_class === 'string' ? result.answer_class : undefined;
                if (isLastQuestion) {
                  // Last answer — pre-fetch personalised completion phrase with keyphrases.
                  // Stored in pendingCompletionPhraseRef so finishInterview uses it instead
@@ -2777,6 +2789,8 @@ const ConversationalInterview = () => {
                    nextQuestionIndex,
                    totalQuestionsRef.current ?? undefined,
                    capturedKeyphrases,
+                   capturedClaims,
+                   capturedAnswerClass,
                  ).then(p => {
                    pendingCompletionPhraseRef.current = p || FALLBACK_PHRASES.completion(
                      interviewData.candidateName || 'there',
@@ -2786,7 +2800,7 @@ const ConversationalInterview = () => {
                    // finishInterview will fall back to its own fetch
                  });
                } else if (nextQuestionIndex >= 1) {
-                 // Normal transition — personalised with keyphrases
+                 // Normal transition — personalised with claims (falls back to keyphrases) and answer_class
                  logTiming('transition-phrase-fetch-start');
                  pendingTransitionPhraseRef.current = fetchInterviewPhrase(
                    'transition',
@@ -2795,6 +2809,8 @@ const ConversationalInterview = () => {
                    nextQuestionIndex,
                    totalQuestionsRef.current ?? undefined,
                    capturedKeyphrases,
+                   capturedClaims,
+                   capturedAnswerClass,
                  ).then(p => {
                    logTiming('transition-phrase-text-resolved');
                    const text = p || FALLBACK_PHRASES.transition();

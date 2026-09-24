@@ -1,14 +1,26 @@
 import { createClient } from '@supabase/supabase-js';
+import PostgrestClient from '@supabase/postgrest-js';
 
 // Initialize Supabase client
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Optional: direct Postgrest URL, used only when the gateway can't reach
+// Postgrest (e.g. the Railway Envoy routing issue). Leave unset elsewhere.
+const supabaseRestUrl = import.meta.env.VITE_SUPABASE_REST_URL;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Missing Supabase environment variables');
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+if (supabaseRestUrl) {
+  supabase.rest = new PostgrestClient(supabaseRestUrl, {
+    headers: supabase.headers,
+    schema: 'public',
+    fetch: supabase.fetch,
+  });
+}
 
 // Interview service functions
 export const interviewService = {
