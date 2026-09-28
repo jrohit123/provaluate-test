@@ -6,6 +6,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 console.log("main function router started");
 
+// Port 9000 is explicit: Envoy's `functions` cluster is hard-configured to
+// connect on 9000, but serve() defaults to 9999 when no port is given.
 serve(async (req: Request) => {
   const url = new URL(req.url);
   const [, serviceName] = url.pathname.split("/");
@@ -38,4 +40,4 @@ serve(async (req: Request) => {
       headers: { "Content-Type": "application/json" },
     });
   }
-});
+}, { port: 9000 });
