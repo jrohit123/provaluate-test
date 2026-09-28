@@ -9,6 +9,10 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as strin
 // Optional: direct Postgrest URL, used only when the gateway can't reach
 // Postgrest (e.g. the Railway Envoy routing issue). Leave unset elsewhere.
 const SUPABASE_REST_URL = import.meta.env.VITE_SUPABASE_REST_URL as string | undefined;
+// Optional: direct Edge Functions URL, used to bypass Envoy's /functions/v1/*
+// routing entirely when Envoy can't reach the functions container (same class
+// of Railway routing issue as SUPABASE_REST_URL above). Leave unset elsewhere.
+const SUPABASE_FUNCTIONS_URL = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL as string | undefined;
 
 // Optional: fail fast if missing
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
@@ -23,4 +27,41 @@ if (SUPABASE_REST_URL) {
 		schema: 'public',
 		fetch: (supabase as unknown as { fetch: typeof fetch }).fetch,
 	});
+}
+
+// Calls an edge function directly at SUPABASE_FUNCTIONS_URL when set, bypassing
+// supabase-js's functions.invoke() (which always goes through SUPABASE_URL's
+// gateway). Falls back to the normal gateway path when unset. Mirrors
+// functions.invoke()'s { data, error } return shape.
+export async function invokeEdgeFunction<T = unknown>(
+	name: string,
+	body: unknown,
+	options?: { authToken?: string }
+): Promise<{ data: T | null; error: { message: string } | null }> {
+	const base = SUPABASE_FUNCTIONS_URL ?? `${SUPABASE_URL}/functions/v1`;
+	let bearerToken = options?.authToken;
+	if (!bearerToken) {
+		const { data: { session } } = await supabase.auth.getSession();
+		bearerToken = session?.access_token ?? SUPABASE_PUBLISHABLE_KEY;
+	}
+
+	try {
+		const res = await fetch(`${base}/${name}`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				apikey: SUPABASE_PUBLISHABLE_KEY,
+				Authorization: `Bearer ${bearerToken}`,
+			},
+			body: JSON.stringify(body),
+		});
+		const json = await res.json().catch(() => null);
+
+		if (!res.ok) {
+			return { data: null, error: { message: json?.error || `Request failed with status ${res.status}` } };
+		}
+		return { data: json as T, error: null };
+	} catch (e) {
+		return { data: null, error: { message: e instanceof Error ? e.message : 'Network error' } };
+	}
 }

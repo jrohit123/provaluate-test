@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/use-auth';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, invokeEdgeFunction } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { UsageTrackingService } from '@/services/usageTrackingService';
 import { startRecruiterPlanCheckout, type CouponPreviewResult } from '@/utils/recruiterPayment';
@@ -256,13 +256,11 @@ export default function AdminUserManagement({ onSectionReady }: AdminUserManagem
     try {
       console.log('Inviting user:', { email: inviteForm.email, firstName: inviteForm.firstName, lastName: inviteForm.lastName, role: inviteForm.role });
       
-      const { data, error } = await supabase.functions.invoke('invite-user', {
-        body: { 
-          email: inviteForm.email,
-          first_name: inviteForm.firstName,
-          last_name: inviteForm.lastName,
-          role: inviteForm.role 
-        }
+      const { data, error } = await invokeEdgeFunction<{ success: boolean; error?: string }>('invite-user', {
+        email: inviteForm.email,
+        first_name: inviteForm.firstName,
+        last_name: inviteForm.lastName,
+        role: inviteForm.role
       });
 
       console.log('Edge function response:', { data, error });

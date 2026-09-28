@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, invokeEdgeFunction } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -237,12 +237,11 @@ const ResetPassword = () => {
       }
 
       // ✅ Use the invite/reset token, not the current session
-      const { data, error } = await supabase.functions.invoke('confirm-password', {
-        body: { password },
-        headers: {
-          Authorization: `Bearer ${tokenToUse}`,
-        },
-      });
+      const { data, error } = await invokeEdgeFunction<{ success: boolean; isCandidate?: boolean; error?: string }>(
+        'confirm-password',
+        { password },
+        { authToken: tokenToUse }
+      );
 
       console.log('📥 Edge function response:', { data, error });
 
