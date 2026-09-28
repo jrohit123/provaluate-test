@@ -8,6 +8,8 @@
 // throughout, so functions run as plain imported modules instead.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
+// Handlers are cached in `handlers` (below) after first import per servicePath.
+
 console.log("main function router started");
 
 type Handler = (req: Request) => Promise<Response>;
