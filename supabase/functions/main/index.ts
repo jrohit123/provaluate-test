@@ -1,10 +1,29 @@
 // Router for Supabase's self-hosted Edge Runtime.
 // The edge-runtime container is a single process; this file is its one entrypoint.
-// It reads the function name out of the incoming path (/<name>/...) and hands the
-// request off to that function's own index.ts as an isolated worker.
+// It reads the function name out of the incoming path (/<name>/...) and calls
+// that function's handler directly, in-process — NOT via EdgeRuntime.userWorkers
+// (sandboxed isolates), whose outbound networking back through Envoy proved
+// unreliable ("remote connection failure" on every REST/Auth call made from
+// inside a spawned worker). This router's own context has been reliable
+// throughout, so functions run as plain imported modules instead.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 console.log("main function router started");
+
+type Handler = (req: Request) => Promise<Response>;
+const handlers = new Map<string, Handler>();
+
+async function loadHandler(serviceName: string): Promise<Handler | null> {
+  if (handlers.has(serviceName)) return handlers.get(serviceName)!;
+  try {
+    const mod = await import(`file:///home/deno/functions/${serviceName}/index.ts`);
+    const handler = mod.default as Handler;
+    handlers.set(serviceName, handler);
+    return handler;
+  } catch {
+    return null;
+  }
+}
 
 // Port 9000 is explicit: Envoy's `functions` cluster is hard-configured to
 // connect on 9000, but serve() defaults to 9999 when no port is given.
@@ -19,26 +38,16 @@ serve(async (req: Request) => {
     });
   }
 
-  const servicePath = `/home/deno/functions/${serviceName}`;
-
-  const envVarsObj = Deno.env.toObject();
-  const envVars = Object.keys(envVarsObj).map((k) => [k, envVarsObj[k]]);
+  const handler = await loadHandler(serviceName);
+  if (!handler) {
+    return new Response(JSON.stringify({ error: `unknown function: ${serviceName}` }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   try {
-    const worker = await EdgeRuntime.userWorkers.create({
-      servicePath,
-      memoryLimitMb: 150,
-      // Under Railway's per_worker policy, this is the worker's total
-      // cumulative lifetime across all requests it handles (workers get
-      // pooled/reused by servicePath), not a per-request timeout. 5 minutes
-      // was too short and caused "early termination" kills mid-request
-      // during normal repeated use.
-      workerTimeoutMs: 60 * 60 * 1000,
-      noModuleCache: false,
-      importMapPath: null,
-      envVars,
-    });
-    return await worker.fetch(req);
+    return await handler(req);
   } catch (e) {
     return new Response(JSON.stringify({ error: e.toString() }), {
       status: 500,

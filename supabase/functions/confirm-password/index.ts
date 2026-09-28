@@ -1,5 +1,7 @@
 // Supabase Edge Function: Confirm Password (for invited users and password reset)
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// Imported and called directly by main/index.ts's router in-process (not run
+// as a sandboxed EdgeRuntime.userWorkers instance) — see invite-user/index.ts
+// for why.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.7";
 
 // CORS headers helper
@@ -30,7 +32,7 @@ function getUserIdFromToken(token: string): { userId: string | null; email: stri
   }
 }
 
-serve(async (req) => {
+export default async function handler(req: Request): Promise<Response> {
   try {
     // CORS handling
     if (req.method === "OPTIONS") {
@@ -356,4 +358,4 @@ serve(async (req) => {
       },
     });
   }
-});
+}

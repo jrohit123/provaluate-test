@@ -1,5 +1,9 @@
 // Supabase Edge Function: Invite User (Simplified)
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// Imported and called directly by main/index.ts's router in-process (not run
+// as a sandboxed EdgeRuntime.userWorkers instance) — that sandbox's outbound
+// networking back through Envoy was unreliable; the router's own trusted
+// context has been reliable throughout, so this exports a handler instead of
+// calling serve() itself.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.7";
 
 // CORS headers helper
@@ -9,7 +13,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-serve(async (req) => {
+export default async function handler(req: Request): Promise<Response> {
   try {
     // CORS handling
     if (req.method === "OPTIONS") {
@@ -240,10 +244,10 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("Edge function error:", error);
-    return new Response(JSON.stringify({ 
-      success: false, 
-      error: error.message || "Internal server error" 
-    }), { 
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message || "Internal server error"
+    }), {
       status: 500,
       headers: {
         ...corsHeaders,
@@ -251,4 +255,4 @@ serve(async (req) => {
       },
     });
   }
-}); 
+}
