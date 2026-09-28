@@ -6,6 +6,7 @@
 // calling serve() itself.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.7";
 import { PostgrestClient } from "https://esm.sh/@supabase/postgrest-js@1.9.2";
+import { sendTemplatedEmail } from "../_shared/email.ts";
 
 // CORS headers helper
 const corsHeaders = {
@@ -173,27 +174,35 @@ export default async function handler(req: Request): Promise<Response> {
       console.log(`User ${email} does not exist yet, proceeding with invitation`);
     }
 
-    // 7. Send invitation email via Supabase Auth
+    // 7. Generate the invite link via GoTrue's admin API (does NOT attempt
+    // SMTP — Railway blocks outbound SMTP entirely, confirmed via nc timing
+    // out on smtp-relay.brevo.com from inside this Railway network), then
+    // send the actual email ourselves over HTTPS via Brevo.
     const siteUrl = Deno.env.get("SITE_URL") ?? "http://localhost:8080";
+    const redirectTo = `${siteUrl}/reset-password`;
     console.log("DEBUG SITE_URL =", JSON.stringify(siteUrl));
-    console.log("DEBUG redirectTo =", JSON.stringify(`${siteUrl}/reset-password`));
+    console.log("DEBUG redirectTo =", JSON.stringify(redirectTo));
 
-    const { data: inviteData, error: inviteError } = await client.auth.admin.inviteUserByEmail(email, {
-      data: {
-        first_name: first_name,
-        last_name: last_name,
-        company_id: userRecord.company_id,
-        role: role || 'user',
+    const { data: inviteData, error: inviteError } = await client.auth.admin.generateLink({
+      type: "invite",
+      email,
+      options: {
+        data: {
+          first_name: first_name,
+          last_name: last_name,
+          company_id: userRecord.company_id,
+          role: role || 'user',
+        },
+        redirectTo,
       },
-      redirectTo: `${siteUrl}/reset-password`,
     });
 
-    if (inviteError || !inviteData?.user) {
+    if (inviteError || !inviteData?.user || !inviteData?.properties?.action_link) {
       console.error("Invite error:", inviteError);
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: inviteError?.message || "Failed to send invitation email" 
-      }), { 
+      return new Response(JSON.stringify({
+        success: false,
+        error: inviteError?.message || "Failed to generate invitation link"
+      }), {
         status: 500,
         headers: {
           ...corsHeaders,
@@ -202,7 +211,27 @@ export default async function handler(req: Request): Promise<Response> {
       });
     }
 
-    console.log(`✅ Auth invitation sent for ${email}, user ID: ${inviteData.user.id}`);
+    console.log(`✅ Invite link generated for ${email}, user ID: ${inviteData.user.id}`);
+
+    // 7b. Send the actual email ourselves via Brevo (see _shared/email.ts).
+    // Non-fatal: the account and link already exist even if this send fails.
+    let emailSent = true;
+    const templateUrl = Deno.env.get("MAILER_TEMPLATES_INVITE");
+    try {
+      if (!templateUrl) throw new Error("Missing MAILER_TEMPLATES_INVITE");
+      await sendTemplatedEmail({
+        templateUrl,
+        toEmail: email,
+        toName: `${first_name} ${last_name}`,
+        subject: `You've been invited to ProValuate`,
+        confirmationUrl: inviteData.properties.action_link,
+        siteUrl,
+      });
+      console.log(`✅ Invite email sent to ${email} via Brevo`);
+    } catch (emailErr) {
+      emailSent = false;
+      console.error("Invite email send failed:", emailErr);
+    }
 
     // 8. Create user record in database
     const now = new Date().toISOString();
@@ -239,9 +268,12 @@ export default async function handler(req: Request): Promise<Response> {
     // 9. Return success
     console.log(`✅ Admin ${user.email} successfully invited: ${email} (${first_name} ${last_name}) with role: ${role || 'user'} to company: ${userRecord.company_id}`);
     
-    return new Response(JSON.stringify({ 
-      success: true, 
-      message: `Invitation sent successfully to ${email}`,
+    return new Response(JSON.stringify({
+      success: true,
+      message: emailSent
+        ? `Invitation sent successfully to ${email}`
+        : `User created, but the invitation email failed to send. Please share the invite link manually or retry.`,
+      emailSent,
       email: email,
       first_name: first_name,
       last_name: last_name,

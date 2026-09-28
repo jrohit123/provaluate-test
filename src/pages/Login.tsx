@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, invokeEdgeFunction } from '@/integrations/supabase/client';
 import { UserPlus, LogIn, Menu, Eye, EyeOff } from "lucide-react";
 import { SessionManager } from '@/utils/sessionManager';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -192,12 +192,13 @@ const Login = () => {
       // Get the current origin for the redirect URL (user=recruiter so ResetPassword redirects back to main login)
       const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}reset-password?user=recruiter`;
       
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-        redirectTo: redirectTo,
+      const { error } = await invokeEdgeFunction('forgot-password', {
+        email: resetEmail,
+        redirectTo,
       });
-      
+
       if (error) {
-        throw error;
+        throw new Error(error.message);
       }
       
       setResetMessage('Password reset email sent! Please check your inbox and spam folder.');

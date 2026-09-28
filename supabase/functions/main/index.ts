@@ -13,6 +13,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // imports resolve fine, the same way the router's own entrypoint loads.
 import inviteUser from "../invite-user/index.ts";
 import confirmPassword from "../confirm-password/index.ts";
+import forgotPassword from "../forgot-password/index.ts";
 
 console.log("main function router started");
 
@@ -20,6 +21,7 @@ type Handler = (req: Request) => Promise<Response>;
 const handlers: Record<string, Handler> = {
   "invite-user": inviteUser,
   "confirm-password": confirmPassword,
+  "forgot-password": forgotPassword,
 };
 
 // Port 9000 is explicit: Envoy's `functions` cluster is hard-configured to

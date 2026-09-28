@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, invokeEdgeFunction } from '@/integrations/supabase/client';
 import { API_CONFIG, buildApiUrl } from '@/constants/api';
 import { LogIn, Menu, UserPlus, Eye, EyeOff } from 'lucide-react';
 
@@ -212,10 +212,11 @@ const TpoLogin = () => {
         throw new Error('Please enter a valid email address.');
       }
       const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}reset-password?user=tpo`;
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      const { error } = await invokeEdgeFunction('forgot-password', {
+        email: resetEmail,
         redirectTo,
       });
-      if (error) throw error;
+      if (error) throw new Error(error.message);
       setResetMessage('Password reset email sent! Please check your inbox and spam folder.');
       setResetEmail('');
     } catch (err: unknown) {

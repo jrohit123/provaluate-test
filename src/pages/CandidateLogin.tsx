@@ -8,7 +8,7 @@ import { SessionManager } from '@/utils/sessionManager';
 import { ClipboardList, FileText, LogIn, Menu, User, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, invokeEdgeFunction } from '@/integrations/supabase/client';
 
 const CandidateLogin = () => {
   const [email, setEmail] = useState('');
@@ -119,10 +119,11 @@ const CandidateLogin = () => {
         throw new Error('Please enter a valid email address.');
       }
       const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}reset-password?user=candidate`;
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      const { error } = await invokeEdgeFunction('forgot-password', {
+        email: resetEmail,
         redirectTo,
       });
-      if (error) throw error;
+      if (error) throw new Error(error.message);
       setResetMessage('Password reset email sent! Please check your inbox and spam folder.');
       setResetEmail('');
     } catch (err: unknown) {
