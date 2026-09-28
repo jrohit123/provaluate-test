@@ -42,20 +42,19 @@ export type ProgressItem = {
   speech_metrics?: SpeechMetrics | null;
 };
 
+/** overall_score is the canonical interview score everywhere — total_score (a flat,
+ * unweighted average with no recency-weighting or consistency-capping) is only a
+ * fallback for the rare case where overall_score hasn't been computed yet. Not a
+ * function of competency count. */
 function resolveDisplayScore(
   progressItem: ProgressItem | undefined,
   interviewRow: PerformanceInterviewRow
 ): number | null {
   if (progressItem) {
-    if (progressItem.score_for_display != null) return progressItem.score_for_display;
-    const scoreCount = typeof progressItem.competency_count === 'number'
-      ? progressItem.competency_count
-      : Object.values(progressItem.competency_scores || {}).filter((v) => v != null).length;
-    if (scoreCount <= 1 && progressItem.total_score != null) return progressItem.total_score;
     if (progressItem.overall_score != null) return progressItem.overall_score;
     if (progressItem.total_score != null) return progressItem.total_score;
   }
-  return interviewRow.overall_score != null ? interviewRow.overall_score : null;
+  return interviewRow.overall_score ?? interviewRow.total_score ?? null;
 }
 
 const CHART_OVERALL = 'overall' as const;
@@ -148,14 +147,7 @@ export function StudentPerformanceReportView({
       progress
         .map((p) => ({
           ...p,
-          _display_score:
-            p.score_for_display != null
-              ? p.score_for_display
-              : ((typeof p.competency_count === 'number'
-                  ? p.competency_count
-                  : Object.values(p.competency_scores || {}).filter((v) => v != null).length) <= 1 && p.total_score != null)
-                ? p.total_score
-                : p.overall_score,
+          _display_score: p.overall_score ?? p.total_score ?? null,
         }))
         .filter((p) => p._display_score != null)
         .sort((a, b) => new Date(a.completed_at || 0).getTime() - new Date(b.completed_at || 0).getTime())
@@ -239,7 +231,7 @@ export function StudentPerformanceReportView({
     const roleLabel = latest.position || list.find((i) => i.position)?.position || 'Interview role';
 
     const scores = progressSortedByDate
-      .map((p) => p.score_for_display ?? p.overall_score ?? p.total_score ?? null)
+      .map((p) => p.overall_score ?? p.total_score ?? null)
       .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
     const avgOverall = scores.length > 0 ? Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1)) : null;
     const attempts = progressSortedByDate.length;

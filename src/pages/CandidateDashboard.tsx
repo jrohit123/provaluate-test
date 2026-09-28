@@ -365,47 +365,16 @@ function PersonalInterviewsSection({
           }
         }
       }
-      if (merged.length > 0) {
-        try {
-          const ids = merged.map((r) => r.id).filter(Boolean);
-          const { data: psRows } = await supabase
-            .from('interview_parameter_scores')
-            .select('interview_id, parameter_scores')
-            .in('interview_id', ids);
-          const psByInterview = new Map<string, Record<string, unknown>>();
-          for (const row of (psRows || []) as Array<{ interview_id?: string; parameter_scores?: Record<string, unknown> }>) {
-            if (!row?.interview_id) continue;
-            psByInterview.set(row.interview_id, row.parameter_scores || {});
-          }
-          const nextDisplay: Record<string, number> = {};
-          for (const row of merged) {
-            const ps = psByInterview.get(row.id) || {};
-            let competencyCount = 0;
-            for (const v of Object.values(ps)) {
-              if (v && typeof v === 'object') {
-                const vv = (v as Record<string, unknown>).final_score ?? (v as Record<string, unknown>).score;
-                if (typeof vv === 'number' && Number.isFinite(vv)) competencyCount += 1;
-              } else if (typeof v === 'number' && Number.isFinite(v)) {
-                competencyCount += 1;
-              }
-            }
-            const total = row.total_score;
-            const overall = row.overall_score;
-            const sc =
-              competencyCount <= 1
-                ? (total ?? overall ?? null)
-                : (overall ?? total ?? null);
-            if (typeof sc === 'number' && Number.isFinite(sc)) {
-              nextDisplay[row.id] = sc;
-            }
-          }
-          setDisplayScoreByInterviewId(nextDisplay);
-        } catch {
-          setDisplayScoreByInterviewId({});
+      // overall_score is the canonical score regardless of competency count — total_score
+      // (a flat, unweighted average) is only a fallback for when overall_score is missing.
+      const nextDisplay: Record<string, number> = {};
+      for (const row of merged) {
+        const sc = row.overall_score ?? row.total_score ?? null;
+        if (typeof sc === 'number' && Number.isFinite(sc)) {
+          nextDisplay[row.id] = sc;
         }
-      } else {
-        setDisplayScoreByInterviewId({});
       }
+      setDisplayScoreByInterviewId(nextDisplay);
       merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setList(merged);
       setLoading(false);

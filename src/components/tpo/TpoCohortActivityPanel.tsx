@@ -123,21 +123,15 @@ type AttemptScoreFields = {
 };
 
 /**
- * Primary score per attempt for cohort: total_score when ≤1 competency, else overall_score
- * (same rule as candidate final-results / score_for_display).
+ * Primary score per attempt for cohort: overall_score (the canonical, weighted,
+ * recency-aware score) everywhere, regardless of competency count. total_score
+ * (a flat, unweighted average) is only a fallback for when overall_score hasn't
+ * been computed yet.
  */
 function displayScoreForAttemptFields(fields: AttemptScoreFields): number | null {
-  const n = competencyCountForBreakdown(fields.parameter_breakdown);
   const total = toFiniteNumber(fields.total_score);
   const overall = toFiniteNumber(fields.overall_score);
-  if (n <= 1) {
-    if (total != null) return total;
-    if (overall != null) return overall;
-    return null;
-  }
-  if (overall != null) return overall;
-  if (total != null) return total;
-  return null;
+  return overall ?? total;
 }
 
 function displayScoreForCohortRow(row: CohortActivityRow): number | null {
@@ -150,20 +144,13 @@ function displayScoreForCohortRow(row: CohortActivityRow): number | null {
 
 /**
  * Batch / cohort-level stats (batch average, distribution, readiness fallbacks):
- * if this role has ≤1 competency use total_score per attempt, else overall_score.
- * Distinct from {@link displayScoreForCohortRow} which uses per-attempt breakdown count (ranking).
+ * overall_score everywhere, regardless of competency count — total_score is only
+ * a fallback for when overall_score hasn't been computed yet.
  */
-function displayScoreForCohortStatContext(row: CohortActivityRow, cohortCompetencyCount: number): number | null {
+function displayScoreForCohortStatContext(row: CohortActivityRow, _cohortCompetencyCount: number): number | null {
   const total = toFiniteNumber(row.total_score);
   const overall = toFiniteNumber(row.overall_score);
-  if (cohortCompetencyCount <= 1) {
-    if (total != null) return total;
-    if (overall != null) return overall;
-    return null;
-  }
-  if (overall != null) return overall;
-  if (total != null) return total;
-  return null;
+  return overall ?? total;
 }
 
 /** One mean stat-context score per candidate (mean across attempts), then used for batch avg / bands / readiness. */

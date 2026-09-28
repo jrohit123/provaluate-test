@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Download, 
   Share2, 
@@ -40,9 +40,11 @@ function formatOverallScore(score: number | string | null | undefined): string {
   return (Math.round(n * 10) / 10).toFixed(1);
 }
 
+/** overall_score is the canonical interview score everywhere — total_score (a flat,
+ * unweighted average with no recency-weighting or consistency-capping) is only a
+ * fallback for the rare case where overall_score hasn't been computed yet. */
 function resolveDisplayInterviewScore(
-  interview: { overall_score?: number | string | null; total_score?: number | string | null } | null | undefined,
-  competencyCount: number
+  interview: { overall_score?: number | string | null; total_score?: number | string | null } | null | undefined
 ): number | null {
   if (!interview) return null;
   const total = interview.total_score == null || interview.total_score === '' ? null : Number(interview.total_score);
@@ -50,7 +52,6 @@ function resolveDisplayInterviewScore(
   const safeTotal = total != null && Number.isFinite(total) ? total : null;
   const safeOverall = overall != null && Number.isFinite(overall) ? overall : null;
 
-  if (competencyCount <= 1) return safeTotal ?? safeOverall;
   return safeOverall ?? safeTotal;
 }
 
@@ -819,10 +820,11 @@ function drawFormattedReportText(
 const FinalResults = () => {
   const { interviewId } = useParams();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const reportVariant = searchParams.get('variant') || 'candidate'; // 'recruiter' = report ends at speech scores
   const [loading, setLoading] = useState(true);
   const [reportData, setReportData] = useState(null);
+  // Fixed by how the interview was created (server-derived) — never from the URL,
+  // so a shared link can't be edited to unlock a different view.
+  const reportVariant = reportData?.interview?.created_by_role || 'candidate'; // 'recruiter' = report ends at speech scores
   const [selectedCompetencyKey, setSelectedCompetencyKey] = useState(null);
   const [expandedQuestions, setExpandedQuestions] = useState(new Set());
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -1449,7 +1451,7 @@ const FinalResults = () => {
     : competenciesReport
       ? Object.keys(competenciesReport).length
       : 0;
-  const displayInterviewScore = resolveDisplayInterviewScore(interview, competencyCount);
+  const displayInterviewScore = resolveDisplayInterviewScore(interview);
 
   // PDF Generation Function
   const generatePDFReport = async () => {
@@ -1912,7 +1914,7 @@ const FinalResults = () => {
         doc.setTextColor(0, 0, 0);
 
         // Overall circular score indicator between header and competency bars.
-        const overallDisplayScore = resolveDisplayInterviewScore(reportData?.interview, competencyBreakdownRows.length);
+        const overallDisplayScore = resolveDisplayInterviewScore(reportData?.interview);
         const ringCenterX = leftMargin + (contentWidth / 2);
         const ringCenterY = titleBoxY + titleBoxH + 27;
         const ringRadius = 18;
@@ -3280,7 +3282,7 @@ const FinalResults = () => {
                   stroke={isCandidateReport ? 'url(#scoreRingGradient)' : accentHex}
                   strokeWidth="10"
                   strokeLinecap="round"
-                  strokeDasharray={`${(Math.min(10, Math.max(0, Number(interview?.overall_score) || 0)) / 10) * 263} 263`}
+                  strokeDasharray={`${(Math.min(10, Math.max(0, displayInterviewScore ?? 0)) / 10) * 263} 263`}
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">

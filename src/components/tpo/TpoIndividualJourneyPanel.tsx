@@ -75,25 +75,11 @@ function mean(nums: number[]): number | null {
   return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
 
-function competencyCountForBreakdown(pb: TpoJourneyParameterScore[] | undefined): number {
-  const list = pb || [];
-  const seen = new Set<string>();
-  for (const p of list) {
-    const sc = p.score;
-    if (typeof sc !== 'number' || !Number.isFinite(sc)) continue;
-    const id = String(p.key || p.name || '').trim();
-    if (!id) continue;
-    seen.add(id);
-  }
-  if (seen.size > 0) return seen.size;
-  return list.length;
-}
-
+/** overall_score is the canonical score regardless of competency count — total_score
+ * (a flat, unweighted average) is only a fallback for when overall_score is missing. */
 function displayScoreForJourneyAttempt(a: TpoJourneyInterview): number | null {
-  const n = competencyCountForBreakdown(a.parameter_breakdown);
   const total = typeof a.total_score === 'number' && Number.isFinite(a.total_score) ? a.total_score : null;
   const overall = typeof a.overall_score === 'number' && Number.isFinite(a.overall_score) ? a.overall_score : null;
-  if (n <= 1) return total ?? overall;
   return overall ?? total;
 }
 
