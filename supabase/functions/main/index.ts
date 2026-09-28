@@ -7,25 +7,20 @@
 // inside a spawned worker). This router's own context has been reliable
 // throughout, so functions run as plain imported modules instead.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
-// Handlers are cached in `handlers` (below) after first import per servicePath.
+// Static imports, not dynamic per-request import() — this sandbox doesn't
+// permit dynamic runtime import() of arbitrary file paths (every attempt
+// silently failed and fell through to a 404), but statically-declared
+// imports resolve fine, the same way the router's own entrypoint loads.
+import inviteUser from "../invite-user/index.ts";
+import confirmPassword from "../confirm-password/index.ts";
 
 console.log("main function router started");
 
 type Handler = (req: Request) => Promise<Response>;
-const handlers = new Map<string, Handler>();
-
-async function loadHandler(serviceName: string): Promise<Handler | null> {
-  if (handlers.has(serviceName)) return handlers.get(serviceName)!;
-  try {
-    const mod = await import(`file:///home/deno/functions/${serviceName}/index.ts`);
-    const handler = mod.default as Handler;
-    handlers.set(serviceName, handler);
-    return handler;
-  } catch {
-    return null;
-  }
-}
+const handlers: Record<string, Handler> = {
+  "invite-user": inviteUser,
+  "confirm-password": confirmPassword,
+};
 
 // Port 9000 is explicit: Envoy's `functions` cluster is hard-configured to
 // connect on 9000, but serve() defaults to 9999 when no port is given.
@@ -40,7 +35,7 @@ serve(async (req: Request) => {
     });
   }
 
-  const handler = await loadHandler(serviceName);
+  const handler = handlers[serviceName];
   if (!handler) {
     return new Response(JSON.stringify({ error: `unknown function: ${serviceName}` }), {
       status: 404,
