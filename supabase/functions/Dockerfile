@@ -1,4 +1,4 @@
-FROM supabase/edge-runtime:v1.77.1
+FROM supabase/edge-runtime:v1.76.2
 
 # Copies invite-user/, confirm-password/, and main/ (the router) into the
 # runtime's functions directory. Railway builds this with build context set
