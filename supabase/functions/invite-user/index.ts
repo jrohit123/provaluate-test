@@ -5,6 +5,7 @@
 // context has been reliable throughout, so this exports a handler instead of
 // calling serve() itself.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.7";
+import { PostgrestClient } from "https://esm.sh/@supabase/postgrest-js@1.9.2";
 
 // CORS headers helper
 const corsHeaders = {
@@ -42,6 +43,17 @@ export default async function handler(req: Request): Promise<Response> {
     }
     
     const client = createClient(supabaseUrl, supabaseKey);
+
+    // Auth calls (getUser, admin.*) go through SUPABASE_URL/Envoy fine, but
+    // REST (.from()) calls made from this container get "remote connection
+    // failure" via Envoy specifically. SUPABASE_REST_URL, when set, points
+    // straight at Postgrest's internal address, bypassing Envoy for these.
+    const restUrl = Deno.env.get("SUPABASE_REST_URL");
+    const rest = restUrl
+      ? new PostgrestClient(restUrl, {
+          headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+        })
+      : client;
 
     // 2. Get auth token
     const authHeader = req.headers.get("Authorization") || "";
@@ -108,7 +120,7 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     // 5. Get admin's user record (to verify permissions)
-    const { data: userRecord, error: userRecordError } = await client
+    const { data: userRecord, error: userRecordError } = await rest
       .from("users")
       .select("user_id, company_id, role")
       .eq("user_id", user.id)
@@ -194,7 +206,7 @@ export default async function handler(req: Request): Promise<Response> {
 
     // 8. Create user record in database
     const now = new Date().toISOString();
-    const { error: userInsertError } = await client
+    const { error: userInsertError } = await rest
       .from("users")
       .insert({
         user_id: inviteData.user.id,

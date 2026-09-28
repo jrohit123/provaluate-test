@@ -3,6 +3,7 @@
 // as a sandboxed EdgeRuntime.userWorkers instance) — see invite-user/index.ts
 // for why.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.7";
+import { PostgrestClient } from "https://esm.sh/@supabase/postgrest-js@1.9.2";
 
 // CORS headers helper
 const corsHeaders = {
@@ -66,6 +67,17 @@ export default async function handler(req: Request): Promise<Response> {
         persistSession: false
       }
     });
+
+    // Auth calls go through SUPABASE_URL/Envoy fine, but REST (.from()) calls
+    // made from this container get "remote connection failure" via Envoy
+    // specifically. SUPABASE_REST_URL, when set, points straight at
+    // Postgrest's internal address, bypassing Envoy for these.
+    const restUrl = Deno.env.get("SUPABASE_REST_URL");
+    const rest = restUrl
+      ? new PostgrestClient(restUrl, {
+          headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+        })
+      : client;
 
     // 2. Get the user's access token from the request
     const authHeader = req.headers.get("Authorization") || "";
@@ -311,7 +323,7 @@ export default async function handler(req: Request): Promise<Response> {
     // 9. Check if user is a candidate (for redirect: candidate-login vs main login)
     let isCandidate = false;
     try {
-      const { data: candidateRow } = await client
+      const { data: candidateRow } = await rest
         .from("candidates")
         .select("candidate_id")
         .eq("auth_user_id", verifiedUser.id)
