@@ -28,7 +28,12 @@ serve(async (req: Request) => {
     const worker = await EdgeRuntime.userWorkers.create({
       servicePath,
       memoryLimitMb: 150,
-      workerTimeoutMs: 5 * 60 * 1000,
+      // Under Railway's per_worker policy, this is the worker's total
+      // cumulative lifetime across all requests it handles (workers get
+      // pooled/reused by servicePath), not a per-request timeout. 5 minutes
+      // was too short and caused "early termination" kills mid-request
+      // during normal repeated use.
+      workerTimeoutMs: 60 * 60 * 1000,
       noModuleCache: false,
       importMapPath: null,
       envVars,
